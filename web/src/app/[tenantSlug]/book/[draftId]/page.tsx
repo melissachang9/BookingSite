@@ -35,7 +35,7 @@ async function loadDraft(slug: string, draftId: string) {
     admin.from("providers").select("id, name").eq("id", draft.provider_id).maybeSingle(),
     admin
       .from("booking_form_requirements")
-      .select("id, form_id, form_version_id, satisfied_by_response_id, forms(name, description), form_versions(schema_json)")
+      .select("id, form_id, form_version_id, satisfied_by_response_id, draft_answers_json, draft_saved_at, forms(name, description), form_versions(schema_json)")
       .eq("booking_draft_id", draftId)
       .order("id", { ascending: true }),
   ]);
@@ -229,6 +229,7 @@ export default async function BookingReviewPage({
                 />
               ) : pendingForms.length > 0 ? (
                 <FormRuntime
+                  key={`${pendingForms[0].id}:${JSON.stringify((pendingForms[0] as { draft_answers_json?: Record<string, unknown> | null }).draft_answers_json ?? {})}:${(pendingForms[0] as { draft_saved_at?: string | null }).draft_saved_at ?? ""}`}
                   draftId={draft.id}
                   requirement={{
                     id: pendingForms[0].id,
@@ -237,6 +238,12 @@ export default async function BookingReviewPage({
                       ((pendingForms[0].form_versions as unknown as { schema_json: FormSchema } | null)?.schema_json) ??
                       { fields: [] },
                   }}
+                  initialAnswers={
+                    ((pendingForms[0] as { draft_answers_json?: Record<string, unknown> | null }).draft_answers_json ?? {})
+                  }
+                  initialSavedAt={
+                    (pendingForms[0] as { draft_saved_at?: string | null }).draft_saved_at ?? null
+                  }
                   totalPending={pendingForms.length}
                 />
               ) : (

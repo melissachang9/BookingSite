@@ -6,6 +6,7 @@
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  DISPLAY_ONLY_TYPES,
   normalizeFileUploadConfig,
   normalizeAttachmentAnswers,
   validateAnswers,
@@ -21,7 +22,85 @@ const SubmitInput = z.object({
   answersJson: z.string(),
 });
 
+const DraftProgressInput = z.object({
+  draftId: z.string().uuid(),
+  requirementId: z.string().uuid(),
+  answersJson: z.string(),
+});
+
 export type SubmitFormResult = { ok: boolean; error?: string };
+export type SaveDraftProgressResult = { ok: boolean; error?: string; savedAt?: string };
+
+export async function saveFormDraftProgressAction(
+  input: z.infer<typeof DraftProgressInput>
+): Promise<SaveDraftProgressResult> {
+  const parsed = DraftProgressInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid input" };
+
+  let answers: Record<string, unknown>;
+  try {
+    const candidate = JSON.parse(parsed.data.answersJson);
+    if (!candidate || Array.isArray(candidate) || typeof candidate !== "object") {
+      return { ok: false, error: "Invalid answers" };
+    }
+    answers = candidate as Record<string, unknown>;
+  } catch {
+    return { ok: false, error: "Invalid answers" };
+  }
+
+  const admin = createAdminClient();
+  const { data: draft } = await admin
+    .from("booking_drafts")
+    .select("id, tenant_id, expires_at")
+    .eq("id", parsed.data.draftId)
+    .maybeSingle();
+  if (!draft) return { ok: false, error: "Booking not found" };
+  if (new Date(draft.expires_at) < new Date()) {
+    return { ok: false, error: "Your hold has expired. Please pick a new time." };
+  }
+
+  const { data: requirement } = await admin
+    .from("booking_form_requirements")
+    .select("id, tenant_id, booking_draft_id, form_version_id, satisfied_by_response_id")
+    .eq("id", parsed.data.requirementId)
+    .maybeSingle();
+  if (!requirement || requirement.booking_draft_id !== parsed.data.draftId) {
+    return { ok: false, error: "Form not required for this booking" };
+  }
+  if (requirement.tenant_id !== draft.tenant_id) {
+    return { ok: false, error: "Tenant mismatch" };
+  }
+  if (requirement.satisfied_by_response_id) {
+    return { ok: false, error: "This intake form has already been submitted" };
+  }
+
+  const { data: version } = await admin
+    .from("form_versions")
+    .select("schema_json")
+    .eq("id", requirement.form_version_id)
+    .maybeSingle();
+  if (!version) return { ok: false, error: "Form version not found" };
+
+  const nextAnswers = sanitizeDraftAnswers(version.schema_json as FormSchema, answers);
+  const hasSavedAnswers = Object.keys(nextAnswers).length > 0;
+  const draftSavedAt = hasSavedAnswers ? new Date().toISOString() : null;
+
+  const { data: updated, error } = await admin
+    .from("booking_form_requirements")
+    .update({
+      draft_answers_json: hasSavedAnswers ? nextAnswers : null,
+      draft_saved_at: draftSavedAt,
+    })
+    .eq("id", requirement.id)
+    .eq("booking_draft_id", parsed.data.draftId)
+    .select("draft_saved_at")
+    .single();
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  return { ok: true, savedAt: updated?.draft_saved_at ?? undefined };
+}
 
 export async function submitFormResponseAction(
   input: z.infer<typeof SubmitInput>
@@ -110,7 +189,11 @@ export async function submitFormResponseAction(
 
   await admin
     .from("booking_form_requirements")
-    .update({ satisfied_by_response_id: response.id })
+    .update({
+      satisfied_by_response_id: response.id,
+      draft_answers_json: null,
+      draft_saved_at: null,
+    })
     .eq("id", requirement.id);
 
   // If all requirements for this draft are now satisfied, advance status.
@@ -546,5 +629,80 @@ export async function deleteFormAttachmentAction(
   }
 
   return { ok: true };
+}
+
+function sanitizeDraftAnswers(schema: FormSchema, answers: Record<string, unknown>) {
+  const sanitized: Record<string, unknown> = {};
+
+  for (const field of schema.fields) {
+    if (DISPLAY_ONLY_TYPES.has(field.type)) {
+      continue;
+    }
+
+    const value = answers[field.id];
+
+    switch (field.type) {
+      case "short_text":
+      case "long_text":
+      case "date":
+      case "select": {
+        if (typeof value === "string" && value.length > 0) {
+          sanitized[field.id] = value;
+        }
+        break;
+      }
+      case "number": {
+        if (typeof value === "number" && Number.isFinite(value)) {
+          sanitized[field.id] = value;
+        } else if (typeof value === "string" && value.trim().length > 0) {
+          const parsed = Number(value);
+          if (Number.isFinite(parsed)) {
+            sanitized[field.id] = parsed;
+          }
+        }
+        break;
+      }
+      case "multi_select": {
+        if (Array.isArray(value)) {
+          const allowedOptions = new Set(field.options ?? []);
+          const nextValues = value
+            .map((entry) => String(entry))
+            .filter((entry) => allowedOptions.size === 0 || allowedOptions.has(entry));
+          if (nextValues.length > 0) {
+            sanitized[field.id] = nextValues;
+          }
+        }
+        break;
+      }
+      case "checkbox": {
+        if (typeof value === "boolean") {
+          sanitized[field.id] = value;
+        }
+        break;
+      }
+      case "yes_no": {
+        if (value === "yes" || value === "no") {
+          sanitized[field.id] = value;
+        }
+        break;
+      }
+      case "file_upload": {
+        const attachments = normalizeAttachmentAnswers(value);
+        if (attachments.length > 0) {
+          sanitized[field.id] = attachments;
+        }
+        break;
+      }
+      case "signature": {
+        const signature = normalizeAttachmentAnswers(value)[0];
+        if (signature) {
+          sanitized[field.id] = signature;
+        }
+        break;
+      }
+    }
+  }
+
+  return sanitized;
 }
 

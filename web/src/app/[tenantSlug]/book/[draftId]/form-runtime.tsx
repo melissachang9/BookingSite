@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   deleteFormAttachmentAction,
+  saveFormDraftProgressAction,
   submitFormResponseAction,
   uploadFormAttachmentAction,
 } from "./actions";
@@ -36,6 +37,8 @@ const INPUT_CLASS =
 export function FormRuntime({
   draftId,
   requirement,
+  initialAnswers,
+  initialSavedAt,
   totalPending,
 }: {
   draftId: string;
@@ -44,16 +47,81 @@ export function FormRuntime({
     formName: string;
     schema: FormSchema;
   };
+  initialAnswers: Record<string, unknown>;
+  initialSavedAt: string | null;
   totalPending: number;
 }) {
   const router = useRouter();
-  const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  const initialAnswersJson = serializeAnswers(initialAnswers);
+  const [answers, setAnswers] = useState<Record<string, unknown>>(initialAnswers);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
+  const [draftSaveState, setDraftSaveState] = useState<"idle" | "saving" | "saved" | "error">(
+    initialSavedAt ? "saved" : "idle"
+  );
+  const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(initialSavedAt);
   const [pending, startTransition] = useTransition();
+  const lastSavedAnswersRef = useRef(initialAnswersJson);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autosaveRequestRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const answersJson = serializeAnswers(answers);
+
+    if (answersJson === lastSavedAnswersRef.current || pending) {
+      return;
+    }
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    const requestId = ++autosaveRequestRef.current;
+    saveTimeoutRef.current = setTimeout(async () => {
+      setDraftSaveState("saving");
+      const res = await saveFormDraftProgressAction({
+        draftId,
+        requirementId: requirement.id,
+        answersJson,
+      });
+
+      if (requestId !== autosaveRequestRef.current) {
+        return;
+      }
+
+      if (!res.ok) {
+        setDraftSaveState("error");
+        setDraftSaveError(res.error ?? "Could not save your progress");
+        return;
+      }
+
+      lastSavedAnswersRef.current = answersJson;
+      setDraftSaveError(null);
+      setDraftSaveState("saved");
+      setLastSavedAt(res.savedAt ?? new Date().toISOString());
+    }, 600);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+    };
+  }, [answers, draftId, pending, requirement.id]);
 
   function setAnswer(id: string, value: unknown) {
     setAnswers((prev) => ({ ...prev, [id]: value }));
+    setDraftSaveError(null);
     if (errors[id]) {
       setErrors((prev) => {
         const next = { ...prev };
@@ -66,6 +134,10 @@ export function FormRuntime({
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setServerError(null);
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
     const validation = validateAnswers(requirement.schema, answers);
     if (!validation.ok) {
       setErrors(validation.errors);
@@ -100,7 +172,16 @@ export function FormRuntime({
           </p>
         </div>
         <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600 shadow-sm">
-          {totalPending > 1 ? `${totalPending} forms still pending` : "Submit once to continue"}
+          <p>{totalPending > 1 ? `${totalPending} forms still pending` : "Submit once to continue"}</p>
+          <p className="mt-1 text-xs leading-5 text-stone-500">
+            {draftSaveState === "saving"
+              ? "Saving your progress..."
+              : draftSaveState === "saved" && lastSavedAt
+                ? `Saved ${formatDraftSavedAt(lastSavedAt)}`
+                : draftSaveState === "error"
+                  ? draftSaveError ?? "Could not save your progress"
+                  : "Your answers will still be here if you refresh."}
+          </p>
         </div>
       </div>
 
@@ -129,6 +210,17 @@ export function FormRuntime({
       </button>
     </form>
   );
+}
+
+function serializeAnswers(value: Record<string, unknown>) {
+  return JSON.stringify(value);
+}
+
+function formatDraftSavedAt(iso: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
 }
 
 function FieldRenderer({
@@ -550,8 +642,20 @@ function SignatureField({
 
   function start(e: React.PointerEvent<HTMLCanvasElement>) {
     if (value?.attachment_id) return;
+    const ctx = canvasRef.current?.getContext("2d");
+    const point = getPoint(e);
+
+    if (ctx) {
+      ctx.fillStyle = "#111";
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     drawingRef.current = true;
-    lastRef.current = getPoint(e);
+    lastRef.current = point;
+    setErr(null);
+    if (empty) setEmpty(false);
     canvasRef.current?.setPointerCapture(e.pointerId);
   }
 
