@@ -29,6 +29,7 @@ type NextAvailableSlot = {
   ends_at: string;
   provider_id: string;
   provider_name: string;
+  candidate_provider_ids: string[];
 };
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -39,6 +40,7 @@ export function SlotPicker({
   tenantSlug,
   timeZone,
   serviceId,
+  locationId,
   providers,
   initialProviderId,
   showProviderSelector = true,
@@ -47,6 +49,7 @@ export function SlotPicker({
   tenantSlug: string;
   timeZone: string;
   serviceId: string;
+  locationId: string;
   providers: Provider[];
   initialProviderId?: string;
   showProviderSelector?: boolean;
@@ -61,6 +64,7 @@ export function SlotPicker({
   const [monthAvailability, setMonthAvailability] = useState<Record<string, number>>({});
   const [loadedAvailabilityKey, setLoadedAvailabilityKey] = useState<string | null>(null);
   const [nextAvailableSlot, setNextAvailableSlot] = useState<NextAvailableSlot | null>(null);
+  const [jumpAvailableSlot, setJumpAvailableSlot] = useState<NextAvailableSlot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [availabilityError, setAvailabilityError] = useState<string | null>(null);
   const [nextAvailableError, setNextAvailableError] = useState<string | null>(null);
@@ -78,6 +82,7 @@ export function SlotPicker({
     const res = await loadSlotsAction({
       tenantId,
       serviceId,
+      locationId,
       providerId: toActionProviderId(nextProviderId),
       date: nextDate,
     });
@@ -89,6 +94,7 @@ export function SlotPicker({
     const res = await loadMonthAvailabilityAction({
       tenantId,
       serviceId,
+      locationId,
       providerId: toActionProviderId(nextProviderId),
       month: nextMonth,
     });
@@ -114,17 +120,20 @@ export function SlotPicker({
     const res = await loadNextAvailableAction({
       tenantId,
       serviceId,
+      locationId,
       providerId: toActionProviderId(nextProviderId),
     });
 
     if (!res.ok) {
       setNextAvailableError(res.error ?? "Failed to load the next available time");
       setNextAvailableSlot(null);
+      setJumpAvailableSlot(null);
       return;
     }
 
     setNextAvailableError(null);
     setNextAvailableSlot(res.nextSlot ?? null);
+    setJumpAvailableSlot(res.jumpSlot ?? null);
   });
 
   useEffect(() => {
@@ -170,29 +179,45 @@ export function SlotPicker({
     }
   }, [highlightedSlotStartAt, slotOptions, loading, slots]);
 
-  function onPickSlot(slotOption: SlotOption) {
-    const selectedProvider = slotOption.providers[0];
-    if (!selectedProvider) {
-      setError("Failed to identify the provider for that slot. Please try again.");
-      return;
-    }
+  function holdSuggestedSlot(opts: {
+    providerId: string;
+    startsAt: string;
+    endsAt: string;
+    candidateProviderIds?: string[];
+  }) {
     setError(null);
     startHolding(async () => {
       const res = await createBookingDraftAction({
         tenantId,
         serviceId,
-        providerId: selectedProvider.id,
-        candidateProviderIds: isNoPreference
-          ? slotOption.providers.map((provider) => provider.id)
-          : undefined,
-        startsAt: slotOption.starts_at,
-        endsAt: slotOption.ends_at,
+        locationId,
+        providerId: opts.providerId,
+        candidateProviderIds: opts.candidateProviderIds,
+        startsAt: opts.startsAt,
+        endsAt: opts.endsAt,
       });
       if (!res.ok || !res.draftId) {
         setError(res.error ?? "Failed to hold slot");
         return;
       }
       router.push(`/${tenantSlug}/book/${res.draftId}`);
+    });
+  }
+
+  function onPickSlot(slotOption: SlotOption) {
+    const selectedProvider = slotOption.providers[0];
+    if (!selectedProvider) {
+      setError("Failed to identify the provider for that slot. Please try again.");
+      return;
+    }
+
+    holdSuggestedSlot({
+      providerId: selectedProvider.id,
+      candidateProviderIds: isNoPreference
+        ? slotOption.providers.map((provider) => provider.id)
+        : undefined,
+      startsAt: slotOption.starts_at,
+      endsAt: slotOption.ends_at,
     });
   }
 
@@ -222,16 +247,39 @@ export function SlotPicker({
   }
 
   function onJumpToNextAvailable() {
-    if (!nextAvailableSlot) return;
-    const nextDate = parseLocalDate(nextAvailableSlot.date);
+    if (!jumpAvailableSlot) return;
+
+    if (jumpAvailableSlot.date === date) {
+      setError(null);
+      setHighlightedSlotStartAt(jumpAvailableSlot.starts_at);
+      pendingJumpTargetRef.current = jumpAvailableSlot.starts_at;
+      slotListRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+
+    const nextDate = parseLocalDate(jumpAvailableSlot.date);
     const nextMonth = startOfMonth(nextDate);
     resetMonthAvailability();
     setError(null);
     setSlots(null);
-    setHighlightedSlotStartAt(nextAvailableSlot.starts_at);
-    pendingJumpTargetRef.current = nextAvailableSlot.starts_at;
+    setHighlightedSlotStartAt(jumpAvailableSlot.starts_at);
+    pendingJumpTargetRef.current = jumpAvailableSlot.starts_at;
     setMonthDate(nextMonth);
-    setDate(nextAvailableSlot.date);
+    setDate(jumpAvailableSlot.date);
+  }
+
+  function onChooseNextAvailableSlot() {
+    if (!nextAvailableSlot) return;
+
+    holdSuggestedSlot({
+      providerId: nextAvailableSlot.provider_id,
+      candidateProviderIds:
+        nextAvailableSlot.candidate_provider_ids.length > 1
+          ? nextAvailableSlot.candidate_provider_ids
+          : undefined,
+      startsAt: nextAvailableSlot.starts_at,
+      endsAt: nextAvailableSlot.ends_at,
+    });
   }
 
   return (
@@ -313,14 +361,24 @@ export function SlotPicker({
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={onJumpToNextAvailable}
-              disabled={!nextAvailableSlot || loadingNextAvailable}
-              className="rounded-full border border-stone-300 bg-stone-950 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-200 disabled:text-stone-500"
-            >
-              Jump to next time
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={onChooseNextAvailableSlot}
+                disabled={!nextAvailableSlot || loadingNextAvailable || holding}
+                className="rounded-full border border-stone-300 bg-stone-950 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-200 disabled:text-stone-500"
+              >
+                {holding ? "Reserving..." : "Choose this time slot"}
+              </button>
+              <button
+                type="button"
+                onClick={onJumpToNextAvailable}
+                disabled={!jumpAvailableSlot || loadingNextAvailable || holding}
+                className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-900 hover:bg-stone-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-100 disabled:text-stone-400"
+              >
+                Jump to next time
+              </button>
+            </div>
           </div>
 
           <div className="mb-4 flex items-center justify-between gap-3">
@@ -449,7 +507,7 @@ export function SlotPicker({
 
       <aside ref={slotListRef} className="rounded-[1.75rem] border border-stone-200 bg-white p-6 shadow-[0_18px_55px_rgba(41,24,12,0.08)]">
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
-          Selected date
+          Choose a time
         </p>
         <h2 className="mt-2 text-2xl font-semibold tracking-tight text-stone-950">
           {formatSelectedDate(date)}
@@ -461,6 +519,7 @@ export function SlotPicker({
               ? `Showing times for ${selectedProvider.name}.`
               : "Choose a provider to continue."}
         </p>
+
         {isNoPreference ? (
           <p className="mt-2 text-xs uppercase tracking-[0.18em] text-stone-500">
             Each time groups matching openings together and assigns the first available provider.

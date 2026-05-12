@@ -14,15 +14,23 @@ export type ServiceRow = {
   buffer_before_minutes: number;
   buffer_after_minutes: number;
   is_active: boolean;
+  location_ids: string[];
+};
+
+export type LocationOption = {
+  id: string;
+  name: string;
 };
 
 export function ServiceForm({
   service,
   defaultDepositCents = 0,
+  locations,
   onDone,
 }: {
   service?: ServiceRow;
   defaultDepositCents?: number;
+  locations: LocationOption[];
   onDone?: () => void;
 }) {
   const [state, formAction, pending] = useActionState(upsertServiceAction, initialActionState);
@@ -95,6 +103,29 @@ export function ServiceForm({
           defaultValue={service?.description ?? ""}
           className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950"
         />
+      </div>
+      <div className="space-y-1">
+        <span className="text-sm font-medium">Locations</span>
+        {locations.length === 0 ? (
+          <p className="text-sm text-neutral-500">Add locations first to place this service on the booking site.</p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {locations.map((location) => (
+              <label key={location.id} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  name="location_ids"
+                  value={location.id}
+                  defaultChecked={service ? service.location_ids.includes(location.id) : true}
+                />
+                {location.name}
+              </label>
+            ))}
+          </div>
+        )}
+        <p className="text-xs text-neutral-500">
+          Customers will only be able to book this service in the selected locations.
+        </p>
       </div>
       <label className="flex items-center gap-2 text-sm">
         <input

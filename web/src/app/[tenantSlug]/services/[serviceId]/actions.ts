@@ -20,6 +20,7 @@ import {
 const SlotsInput = z.object({
   tenantId: z.string().uuid(),
   serviceId: z.string().uuid(),
+  locationId: z.string().uuid(),
   providerId: z.string().uuid().optional(),
   // YYYY-MM-DD (UTC day window).
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -46,6 +47,7 @@ export async function loadSlotsAction(input: z.infer<typeof SlotsInput>): Promis
   const providers = await loadBookableProviders(admin, {
     tenantId: parsed.data.tenantId,
     serviceId: parsed.data.serviceId,
+    locationId: parsed.data.locationId,
     providerId: parsed.data.providerId,
   });
 
@@ -56,6 +58,7 @@ export async function loadSlotsAction(input: z.infer<typeof SlotsInput>): Promis
   const slots = await loadSlotsForProviders({
     tenantId: parsed.data.tenantId,
     serviceId: parsed.data.serviceId,
+    locationId: parsed.data.locationId,
     providers,
     rangeStart: dayRange.start,
     rangeEnd: dayRange.end,
@@ -67,6 +70,7 @@ export async function loadSlotsAction(input: z.infer<typeof SlotsInput>): Promis
 const MonthAvailabilityInput = z.object({
   tenantId: z.string().uuid(),
   serviceId: z.string().uuid(),
+  locationId: z.string().uuid(),
   providerId: z.string().uuid().optional(),
   // YYYY-MM-DD month anchor. The UI always sends the first day of the month.
   month: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -90,6 +94,7 @@ export async function loadMonthAvailabilityAction(
   const providers = await loadBookableProviders(admin, {
     tenantId: parsed.data.tenantId,
     serviceId: parsed.data.serviceId,
+    locationId: parsed.data.locationId,
     providerId: parsed.data.providerId,
   });
 
@@ -100,6 +105,7 @@ export async function loadMonthAvailabilityAction(
   const slots = await loadSlotsForProviders({
     tenantId: parsed.data.tenantId,
     serviceId: parsed.data.serviceId,
+    locationId: parsed.data.locationId,
     providers,
     rangeStart: monthRange.start,
     rangeEnd: monthRange.end,
@@ -126,6 +132,7 @@ export async function loadMonthAvailabilityAction(
 const NextAvailableInput = z.object({
   tenantId: z.string().uuid(),
   serviceId: z.string().uuid(),
+  locationId: z.string().uuid(),
   providerId: z.string().uuid().optional(),
 });
 
@@ -138,6 +145,15 @@ export type LoadNextAvailableResult = {
     ends_at: string;
     provider_id: string;
     provider_name: string;
+    candidate_provider_ids: string[];
+  };
+  jumpSlot?: {
+    date: string;
+    starts_at: string;
+    ends_at: string;
+    provider_id: string;
+    provider_name: string;
+    candidate_provider_ids: string[];
   };
 };
 
@@ -152,6 +168,7 @@ export async function loadNextAvailableAction(
   const providers = await loadBookableProviders(admin, {
     tenantId: parsed.data.tenantId,
     serviceId: parsed.data.serviceId,
+    locationId: parsed.data.locationId,
     providerId: parsed.data.providerId,
   });
 
@@ -161,6 +178,11 @@ export async function loadNextAvailableAction(
 
   const todayLocalDate = getLocalDateString(new Date(), timeZone);
   const currentMonthAnchor = `${todayLocalDate.slice(0, 7)}-01`;
+  const orderedAvailability: Array<{
+    starts_at: string;
+    ends_at: string;
+    providers: { id: string; name: string }[];
+  }> = [];
 
   // Search across the current month plus the next 3 months, which covers the
   // default 90-day booking horizon without hammering the database day-by-day.
@@ -170,6 +192,7 @@ export async function loadNextAvailableAction(
     const slots = await loadSlotsForProviders({
       tenantId: parsed.data.tenantId,
       serviceId: parsed.data.serviceId,
+      locationId: parsed.data.locationId,
       providers,
       rangeStart: monthRange.start,
       rangeEnd: monthRange.end,
@@ -179,25 +202,33 @@ export async function loadNextAvailableAction(
       continue;
     }
 
-    const nextSlot = slots[0];
-    return {
-      ok: true,
-      nextSlot: {
-        date: getLocalDateString(nextSlot.starts_at, timeZone),
-        starts_at: nextSlot.starts_at,
-        ends_at: nextSlot.ends_at,
-        provider_id: nextSlot.provider_id,
-        provider_name: nextSlot.provider_name,
-      },
-    };
+    orderedAvailability.push(...groupSlotsByTime(slots));
+    if (orderedAvailability.length >= 2) {
+      break;
+    }
   }
 
-  return { ok: true };
+  if (orderedAvailability.length === 0) {
+    return { ok: true };
+  }
+
+  const nextSlot = formatAvailableSlot(orderedAvailability[0], timeZone);
+  const jumpSlot = orderedAvailability[1]
+    ? formatAvailableSlot(orderedAvailability[1], timeZone)
+    : undefined;
+
+  return {
+    ok: true,
+    nextSlot,
+    jumpSlot,
+  };
+
 }
 
 const HoldInput = z.object({
   tenantId: z.string().uuid(),
   serviceId: z.string().uuid(),
+  locationId: z.string().uuid(),
   providerId: z.string().uuid(),
   candidateProviderIds: z.array(z.string().uuid()).min(1).optional(),
   startsAt: z.string().datetime(),
@@ -241,6 +272,7 @@ export async function createBookingDraftAction(input: z.infer<typeof HoldInput>)
   const bookableProviders = await loadBookableProviders(admin, {
     tenantId: parsed.data.tenantId,
     serviceId: parsed.data.serviceId,
+    locationId: parsed.data.locationId,
     providerIds: providerIdsToTry,
   });
 
@@ -257,6 +289,7 @@ export async function createBookingDraftAction(input: z.infer<typeof HoldInput>)
     const fresh = await getAvailableSlots({
       tenantId: parsed.data.tenantId,
       serviceId: parsed.data.serviceId,
+        locationId: parsed.data.locationId,
       providerId: provider.id,
       rangeStart: dayRange.start,
       rangeEnd: dayRange.end,
@@ -289,6 +322,7 @@ export async function createBookingDraftAction(input: z.infer<typeof HoldInput>)
     .insert({
       tenant_id: parsed.data.tenantId,
       service_id: parsed.data.serviceId,
+      location_id: parsed.data.locationId,
       provider_id: selectedProvider.id,
       starts_at: apptStart.toISOString(),
       ends_at: apptEnd.toISOString(),
@@ -304,6 +338,7 @@ export async function createBookingDraftAction(input: z.infer<typeof HoldInput>)
 
   const { error: holdErr } = await admin.from("slot_holds").insert({
     tenant_id: parsed.data.tenantId,
+    location_id: parsed.data.locationId,
     provider_id: selectedProvider.id,
     booking_draft_id: draft.id,
     starts_at: outerStart.toISOString(),
@@ -372,23 +407,55 @@ type ProviderOption = {
 
 async function loadBookableProviders(
   admin: ReturnType<typeof createAdminClient>,
-  opts: { tenantId: string; serviceId: string; providerId?: string; providerIds?: string[] }
+  opts: { tenantId: string; serviceId: string; locationId: string; providerId?: string; providerIds?: string[] }
 ) {
-  let query = admin
-    .from("provider_services")
-    .select("provider_id, price_cents_override, deposit_cents_override, duration_minutes_override, providers!inner(id, name, is_active, sort_order, tenant_id)")
+  const { data: serviceLocation } = await admin
+    .from("service_locations")
+    .select("location_id")
     .eq("tenant_id", opts.tenantId)
-    .eq("service_id", opts.serviceId);
+    .eq("service_id", opts.serviceId)
+    .eq("location_id", opts.locationId)
+    .maybeSingle();
+  if (!serviceLocation) {
+    return [];
+  }
+
+  let providerLocationIdsQuery = admin
+    .from("provider_locations")
+    .select("provider_id")
+    .eq("tenant_id", opts.tenantId)
+    .eq("location_id", opts.locationId);
 
   if (opts.providerId) {
-    query = query.eq("provider_id", opts.providerId);
+    providerLocationIdsQuery = providerLocationIdsQuery.eq("provider_id", opts.providerId);
   }
 
   if (opts.providerIds && opts.providerIds.length > 0) {
-    query = query.in("provider_id", opts.providerIds);
+    providerLocationIdsQuery = providerLocationIdsQuery.in("provider_id", opts.providerIds);
   }
 
-  const { data: providerLinks } = await query;
+  const { data: providerLocationRows } = await providerLocationIdsQuery;
+  let candidateProviderIds = dedupeProviderIds((providerLocationRows ?? []).map((row) => row.provider_id));
+
+  if (opts.providerId) {
+    candidateProviderIds = candidateProviderIds.filter((providerId) => providerId === opts.providerId);
+  }
+
+  if (opts.providerIds && opts.providerIds.length > 0) {
+    const requestedIds = new Set(opts.providerIds);
+    candidateProviderIds = candidateProviderIds.filter((providerId) => requestedIds.has(providerId));
+  }
+
+  if (candidateProviderIds.length === 0) {
+    return [];
+  }
+
+  const { data: providerLinks } = await admin
+    .from("provider_services")
+    .select("provider_id, price_cents_override, deposit_cents_override, duration_minutes_override, providers!inner(id, name, is_active, sort_order, tenant_id)")
+    .eq("tenant_id", opts.tenantId)
+    .eq("service_id", opts.serviceId)
+    .in("provider_id", candidateProviderIds);
 
   const providers = (providerLinks ?? [])
     .map((row) => {
@@ -435,6 +502,7 @@ async function loadBookableProviders(
 async function loadSlotsForProviders(opts: {
   tenantId: string;
   serviceId: string;
+  locationId: string;
   providers: ProviderOption[];
   rangeStart: Date;
   rangeEnd: Date;
@@ -444,6 +512,7 @@ async function loadSlotsForProviders(opts: {
       const slots = await getAvailableSlots({
         tenantId: opts.tenantId,
         serviceId: opts.serviceId,
+        locationId: opts.locationId,
         providerId: provider.id,
         rangeStart: opts.rangeStart,
         rangeEnd: opts.rangeEnd,
@@ -472,6 +541,58 @@ async function loadSlotsForProviders(opts: {
       provider_id: slot.provider_id,
       provider_name: slot.provider_name,
     }));
+}
+
+function groupSlotsByTime(slots: {
+  starts_at: string;
+  ends_at: string;
+  provider_id: string;
+  provider_name: string;
+}[]) {
+  const grouped = new Map<
+    string,
+    {
+      starts_at: string;
+      ends_at: string;
+      providers: { id: string; name: string }[];
+    }
+  >();
+
+  for (const slot of slots) {
+    const key = `${slot.starts_at}:${slot.ends_at}`;
+    const existing = grouped.get(key);
+
+    if (existing) {
+      existing.providers.push({ id: slot.provider_id, name: slot.provider_name });
+      continue;
+    }
+
+    grouped.set(key, {
+      starts_at: slot.starts_at,
+      ends_at: slot.ends_at,
+      providers: [{ id: slot.provider_id, name: slot.provider_name }],
+    });
+  }
+
+  return Array.from(grouped.values());
+}
+
+function formatAvailableSlot(
+  slot: {
+    starts_at: string;
+    ends_at: string;
+    providers: { id: string; name: string }[];
+  },
+  timeZone: string
+) {
+  return {
+    date: getLocalDateString(slot.starts_at, timeZone),
+    starts_at: slot.starts_at,
+    ends_at: slot.ends_at,
+    provider_id: slot.providers[0]?.id ?? "",
+    provider_name: slot.providers[0]?.name ?? "",
+    candidate_provider_ids: slot.providers.map((provider) => provider.id),
+  };
 }
 
 function dedupeProviderIds(providerIds: string[]) {

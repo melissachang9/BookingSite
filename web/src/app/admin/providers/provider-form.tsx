@@ -15,27 +15,33 @@ export type ProviderRow = {
   bio: string | null;
   is_active: boolean;
   service_ids: string[];
+  location_ids: string[];
   schedules: ScheduleBlock[];
 };
 
 export type ScheduleBlock = {
   id: string;
+  location_id: string;
+  location_name: string | null;
   weekday: number;
   start_time: string; // "HH:MM:SS"
   end_time: string;
 };
 
 export type ServiceOption = { id: string; name: string };
+export type LocationOption = { id: string; name: string };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export function ProviderForm({
   provider,
   services,
+  locations,
   onDone,
 }: {
   provider?: ProviderRow;
   services: ServiceOption[];
+  locations: LocationOption[];
   onDone?: () => void;
 }) {
   const [state, formAction, pending] = useActionState(upsertProviderAction, initialActionState);
@@ -79,6 +85,30 @@ export function ProviderForm({
         )}
       </div>
 
+      <div className="space-y-1">
+        <span className="text-sm font-medium">Locations</span>
+        {locations.length === 0 ? (
+          <p className="text-sm text-neutral-500">Add locations first to place this provider on the calendar.</p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {locations.map((location) => (
+              <label key={location.id} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  name="location_ids"
+                  value={location.id}
+                  defaultChecked={provider ? provider.location_ids.includes(location.id) : true}
+                />
+                {location.name}
+              </label>
+            ))}
+          </div>
+        )}
+        <p className="text-xs text-neutral-500">
+          Providers only appear in locations assigned here. Location-specific hours are managed in the schedule editor.
+        </p>
+      </div>
+
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" name="is_active" defaultChecked={provider?.is_active ?? true} />
         Active
@@ -109,8 +139,15 @@ export function ProviderForm({
   );
 }
 
-export function ScheduleEditor({ provider }: { provider: ProviderRow }) {
+export function ScheduleEditor({
+  provider,
+  locations,
+}: {
+  provider: ProviderRow;
+  locations: LocationOption[];
+}) {
   const [state, formAction, pending] = useActionState(addScheduleBlockAction, initialActionState);
+  const providerLocations = locations.filter((location) => provider.location_ids.includes(location.id));
 
   return (
     <div className="space-y-3 rounded-md border border-neutral-200 p-4 dark:border-neutral-800">
@@ -125,6 +162,7 @@ export function ScheduleEditor({ provider }: { provider: ProviderRow }) {
               <span>
                 <span className="font-medium">{WEEKDAYS[b.weekday]}</span>{" "}
                 {b.start_time.slice(0, 5)} – {b.end_time.slice(0, 5)}
+                {b.location_name ? <span className="text-neutral-500"> · {b.location_name}</span> : null}
               </span>
               <form action={deleteScheduleBlockAction}>
                 <input type="hidden" name="id" value={b.id} />
@@ -141,8 +179,24 @@ export function ScheduleEditor({ provider }: { provider: ProviderRow }) {
         </ul>
       )}
 
-      <form action={formAction} className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
+      {providerLocations.length === 0 ? (
+        <p className="text-sm text-neutral-500">Assign the provider to at least one location before adding schedule blocks.</p>
+      ) : null}
+
+      <form action={formAction} className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_1fr_auto] sm:items-end">
         <input type="hidden" name="provider_id" value={provider.id} />
+        <div className="space-y-1">
+          <label className="text-xs font-medium">Location</label>
+          <select
+            name="location_id"
+            defaultValue={providerLocations[0]?.id}
+            className="w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+          >
+            {providerLocations.map((location) => (
+              <option key={location.id} value={location.id}>{location.name}</option>
+            ))}
+          </select>
+        </div>
         <div className="space-y-1">
           <label className="text-xs font-medium">Day</label>
           <select
@@ -177,7 +231,7 @@ export function ScheduleEditor({ provider }: { provider: ProviderRow }) {
         </div>
         <button
           type="submit"
-          disabled={pending}
+          disabled={pending || providerLocations.length === 0}
           className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
         >
           {pending ? "Adding…" : "Add"}

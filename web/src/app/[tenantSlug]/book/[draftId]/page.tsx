@@ -24,13 +24,14 @@ async function loadDraft(slug: string, draftId: string) {
 
   const { data: draft } = await admin
     .from("booking_drafts")
-    .select("id, tenant_id, service_id, provider_id, starts_at, ends_at, status, expires_at, customer_email, customer_name, customer_phone, price_cents, deposit_cents, duration_minutes")
+    .select("id, tenant_id, service_id, location_id, provider_id, starts_at, ends_at, status, expires_at, customer_email, customer_name, customer_phone, price_cents, deposit_cents, duration_minutes")
     .eq("id", draftId)
     .maybeSingle();
   if (!draft || draft.tenant_id !== tenant.id) return null;
 
-  const [{ data: service }, { data: provider }, { data: requirements }] = await Promise.all([
+  const [{ data: service }, { data: location }, { data: provider }, { data: requirements }] = await Promise.all([
     admin.from("services").select("id, name").eq("id", draft.service_id).maybeSingle(),
+    admin.from("locations").select("id, name").eq("id", draft.location_id).maybeSingle(),
     admin.from("providers").select("id, name").eq("id", draft.provider_id).maybeSingle(),
     admin
       .from("booking_form_requirements")
@@ -39,7 +40,7 @@ async function loadDraft(slug: string, draftId: string) {
       .order("id", { ascending: true }),
   ]);
 
-  return { tenant, draft, service, provider, requirements: requirements ?? [] };
+  return { tenant, draft, service, location, provider, requirements: requirements ?? [] };
 }
 
 export default async function BookingReviewPage({
@@ -50,7 +51,7 @@ export default async function BookingReviewPage({
   const { tenantSlug, draftId } = await params;
   const data = await loadDraft(tenantSlug, draftId);
   if (!data || !data.service || !data.provider) notFound();
-  const { tenant, draft, service, provider, requirements } = data;
+  const { tenant, draft, service, location, provider, requirements } = data;
   const tenantSettings = normalizeTenantSettings(
     (tenant.settings_json ?? null) as Partial<Record<string, unknown>> | null
   );
@@ -202,7 +203,10 @@ export default async function BookingReviewPage({
                   body={
                     <>
                       Please{" "}
-                      <a className="underline decoration-stone-400 underline-offset-4" href={`/${tenant.slug}/services/${service.id}`}>
+                      <a
+                        className="underline decoration-stone-400 underline-offset-4"
+                        href={`/${tenant.slug}/services/${service.id}?location=${draft.location_id}`}
+                      >
                         pick a new time
                       </a>
                       {" "}to reopen the flow.
@@ -262,13 +266,14 @@ export default async function BookingReviewPage({
                   {service.name}
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-stone-600">
-                  Reserved with {provider.name} at {tenant.name}.
+                  Reserved with {provider.name} at {location?.name ?? tenant.name}.
                 </p>
               </div>
 
               <div className="space-y-5 px-6 py-6 text-sm text-stone-700">
                 <div className="grid gap-4 rounded-2xl bg-white/75 p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                   <Metric label="When" value={formatWhen(draft.starts_at, draft.ends_at, tenant.timezone)} />
+                  {location ? <Metric label="Where" value={location.name} /> : null}
                   <Metric label="Duration" value={`${draft.duration_minutes} minutes`} />
                   <Metric label="Due now" value={formatMoney(paymentDueCents)} />
                   <Metric

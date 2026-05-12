@@ -1,18 +1,19 @@
 import { requireTenant } from "@/lib/admin/require-tenant";
 import { normalizeTenantSettings } from "@/lib/tenants/settings";
 import { ServicesList } from "./services-list";
-import type { ServiceRow } from "./service-form";
+import type { LocationOption, ServiceRow } from "./service-form";
 
 export const metadata = { title: "Services — BookingSite" };
 
 export default async function ServicesPage() {
   const { supabase, tenantId } = await requireTenant();
-  const [{ data, error }, { data: forms }, { data: links }, { data: tenant }] = await Promise.all([
+  const [{ data, error }, { data: forms }, { data: links }, { data: tenant }, { data: locations }] = await Promise.all([
     supabase
       .from("services")
       .select(
-        "id, name, description, duration_minutes, price_cents, deposit_cents, buffer_before_minutes, buffer_after_minutes, is_active"
+        "id, name, description, duration_minutes, price_cents, deposit_cents, buffer_before_minutes, buffer_after_minutes, is_active, service_locations(location_id)"
       )
+      .eq("tenant_id", tenantId)
       .order("is_active", { ascending: false })
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true }),
@@ -27,6 +28,13 @@ export default async function ServicesPage() {
       .select("service_id, form_id")
       .eq("tenant_id", tenantId),
     supabase.from("tenants").select("settings_json").eq("id", tenantId).maybeSingle(),
+    supabase
+      .from("locations")
+      .select("id, name, is_active")
+      .eq("tenant_id", tenantId)
+      .order("is_active", { ascending: false })
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true }),
   ]);
 
   const serviceFormIds = new Map<string, string[]>();
@@ -37,8 +45,12 @@ export default async function ServicesPage() {
   }
   const services = (data ?? []).map((s) => ({
     ...(s as ServiceRow),
+    location_ids: (s.service_locations ?? []).map((location) => location.location_id),
     form_ids: serviceFormIds.get(s.id) ?? [],
   }));
+  const locationOptions: LocationOption[] = (locations ?? [])
+    .filter((location) => location.is_active)
+    .map((location) => ({ id: location.id, name: location.name }));
   const tenantSettings = normalizeTenantSettings(
     (tenant?.settings_json ?? null) as Partial<Record<string, unknown>> | null
   );
@@ -60,6 +72,7 @@ export default async function ServicesPage() {
         services={services}
         forms={forms ?? []}
         defaultDepositCents={tenantSettings.default_deposit_cents}
+        locations={locationOptions}
       />
     </div>
   );

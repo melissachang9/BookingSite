@@ -13,6 +13,10 @@ const providerSchema = z.object({
   is_active: z.preprocess((v) => v === "on" || v === true || v === "true", z.boolean()).default(true),
 });
 
+function dedupeIds(values: FormDataEntryValue[]) {
+  return Array.from(new Set(values.filter((value): value is string => typeof value === "string")));
+}
+
 export async function upsertProviderAction(
   _prev: ActionState,
   formData: FormData
@@ -30,6 +34,26 @@ export async function upsertProviderAction(
   }
 
   const { supabase, tenantId } = await requireTenant();
+  const locationIds = dedupeIds(formData.getAll("location_ids"));
+  if (locationIds.length === 0) {
+    return { error: "Select at least one location." };
+  }
+
+  const { data: allowedLocations } = await supabase
+    .from("locations")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .in("id", locationIds);
+  if ((allowedLocations ?? []).length !== locationIds.length) {
+    return { error: "One or more selected locations are invalid." };
+  }
+
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("default_location_id")
+    .eq("id", tenantId)
+    .maybeSingle();
+
   const row = {
     tenant_id: tenantId,
     name: parsed.data.name,
@@ -57,7 +81,7 @@ export async function upsertProviderAction(
   }
 
   // Sync services offered: incoming as service_ids[]
-  const serviceIds = formData.getAll("service_ids").filter((v): v is string => typeof v === "string");
+  const serviceIds = dedupeIds(formData.getAll("service_ids"));
   await supabase.from("provider_services").delete().eq("provider_id", providerId);
   if (serviceIds.length > 0) {
     const { error: insErr } = await supabase
@@ -65,6 +89,21 @@ export async function upsertProviderAction(
       .insert(serviceIds.map((sid) => ({ provider_id: providerId!, service_id: sid, tenant_id: tenantId })));
     if (insErr) return { error: insErr.message };
   }
+
+  // Sync locations offered.
+  const primaryLocationId = locationIds.includes(tenant?.default_location_id ?? "")
+    ? tenant?.default_location_id ?? locationIds[0]
+    : locationIds[0];
+  await supabase.from("provider_locations").delete().eq("provider_id", providerId);
+  const { error: locationErr } = await supabase.from("provider_locations").insert(
+    locationIds.map((locationId) => ({
+      provider_id: providerId!,
+      location_id: locationId,
+      tenant_id: tenantId,
+      is_primary: locationId === primaryLocationId,
+    }))
+  );
+  if (locationErr) return { error: locationErr.message };
 
   revalidatePath("/admin/providers");
   return { success: parsed.data.id ? "Provider updated." : "Provider created." };
@@ -99,6 +138,7 @@ export async function restoreProviderAction(formData: FormData) {
 // =========================================================================
 const scheduleSchema = z.object({
   provider_id: z.string().uuid(),
+  location_id: z.string().uuid(),
   weekday: z.coerce.number().int().min(0).max(6),
   start_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, "Invalid start time"),
   end_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, "Invalid end time"),
@@ -110,6 +150,7 @@ export async function addScheduleBlockAction(
 ): Promise<ActionState> {
   const parsed = scheduleSchema.safeParse({
     provider_id: formData.get("provider_id"),
+    location_id: formData.get("location_id"),
     weekday: formData.get("weekday"),
     start_time: formData.get("start_time"),
     end_time: formData.get("end_time"),
@@ -121,9 +162,21 @@ export async function addScheduleBlockAction(
   }
 
   const { supabase, tenantId } = await requireTenant();
+  const { data: providerLocation } = await supabase
+    .from("provider_locations")
+    .select("provider_id")
+    .eq("tenant_id", tenantId)
+    .eq("provider_id", parsed.data.provider_id)
+    .eq("location_id", parsed.data.location_id)
+    .maybeSingle();
+  if (!providerLocation) {
+    return { error: "Assign this provider to the location before adding schedule blocks there." };
+  }
+
   const { error } = await supabase.from("provider_schedules").insert({
     tenant_id: tenantId,
     provider_id: parsed.data.provider_id,
+    location_id: parsed.data.location_id,
     weekday: parsed.data.weekday,
     start_time: parsed.data.start_time,
     end_time: parsed.data.end_time,

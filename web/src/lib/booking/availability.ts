@@ -57,6 +57,7 @@ const SLOT_STEP_MINUTES = 15;
 export async function getAvailableSlots(opts: {
   tenantId: string;
   serviceId: string;
+  locationId: string;
   providerId: string;
   /** Start of the day-range (in tenant's local day boundary, but passed as ISO UTC). */
   rangeStart: Date;
@@ -97,17 +98,20 @@ export async function getAvailableSlots(opts: {
       .from("provider_schedules")
       .select("weekday, start_time, end_time")
       .eq("provider_id", opts.providerId)
+      .eq("location_id", opts.locationId)
       .eq("tenant_id", opts.tenantId),
     admin
       .from("provider_time_off")
       .select("starts_at, ends_at")
       .eq("provider_id", opts.providerId)
+      .eq("location_id", opts.locationId)
       .lt("starts_at", opts.rangeEnd.toISOString())
       .gt("ends_at", opts.rangeStart.toISOString()),
     admin
       .from("bookings")
       .select("starts_at, ends_at, status")
       .eq("provider_id", opts.providerId)
+      .eq("location_id", opts.locationId)
       .in("status", ["confirmed", "completed"])
       .lt("starts_at", opts.rangeEnd.toISOString())
       .gt("ends_at", opts.rangeStart.toISOString()),
@@ -115,6 +119,7 @@ export async function getAvailableSlots(opts: {
       .from("slot_holds")
       .select("starts_at, ends_at, expires_at")
       .eq("provider_id", opts.providerId)
+      .eq("location_id", opts.locationId)
       .gt("expires_at", new Date().toISOString())
       .lt("starts_at", opts.rangeEnd.toISOString())
       .gt("ends_at", opts.rangeStart.toISOString()),

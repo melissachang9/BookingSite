@@ -5,6 +5,7 @@ import { archiveProviderAction, restoreProviderAction } from "./actions";
 import {
   ProviderForm,
   ScheduleEditor,
+  type LocationOption,
   type ProviderRow,
   type ServiceOption,
 } from "./provider-form";
@@ -12,9 +13,11 @@ import {
 export function ProvidersList({
   providers,
   services,
+  locations,
 }: {
   providers: ProviderRow[];
   services: ServiceOption[];
+  locations: LocationOption[];
 }) {
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
   const [openScheduleId, setOpenScheduleId] = useState<string | null>(null);
@@ -33,7 +36,7 @@ export function ProvidersList({
       </div>
 
       {editingId === "new" && (
-        <ProviderForm services={services} onDone={() => setEditingId(null)} />
+        <ProviderForm services={services} locations={locations} onDone={() => setEditingId(null)} />
       )}
 
       {providers.length === 0 && editingId !== "new" && (
@@ -50,6 +53,7 @@ export function ProvidersList({
                 <ProviderForm
                   provider={p}
                   services={services}
+                  locations={locations}
                   onDone={() => setEditingId(null)}
                 />
               </div>
@@ -66,7 +70,7 @@ export function ProvidersList({
                       )}
                     </div>
                     <div className="text-sm text-neutral-600 dark:text-neutral-400">
-                      {p.email ?? "—"} · {p.service_ids.length} service{p.service_ids.length === 1 ? "" : "s"} · {p.schedules.length} schedule block{p.schedules.length === 1 ? "" : "s"}
+                      {p.email ?? "—"} · {p.location_ids.length} location{p.location_ids.length === 1 ? "" : "s"} · {p.service_ids.length} service{p.service_ids.length === 1 ? "" : "s"} · {p.schedules.length} schedule block{p.schedules.length === 1 ? "" : "s"}
                     </div>
                   </div>
                   <div className="flex gap-2 shrink-0">
@@ -97,7 +101,7 @@ export function ProvidersList({
                     </form>
                   </div>
                 </div>
-                {openScheduleId === p.id && <ScheduleEditor provider={p} />}
+                {openScheduleId === p.id && <ScheduleEditor provider={p} locations={locations} />}
               </div>
             )}
           </li>

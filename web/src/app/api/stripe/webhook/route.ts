@@ -49,7 +49,7 @@ export async function POST(req: Request) {
   // Idempotency: check if already promoted.
   const { data: draft } = await admin
     .from("booking_drafts")
-    .select("id, tenant_id, customer_id, customer_email, customer_name, customer_phone, service_id, provider_id, starts_at, ends_at, status, promoted_booking_id, price_cents, deposit_cents")
+    .select("id, tenant_id, customer_id, customer_email, customer_name, customer_phone, service_id, location_id, provider_id, starts_at, ends_at, status, promoted_booking_id, price_cents, deposit_cents")
     .eq("id", draftId)
     .maybeSingle();
   if (!draft) {
@@ -129,6 +129,7 @@ export async function POST(req: Request) {
       tenant_id: draft.tenant_id,
       customer_id: customerId,
       service_id: draft.service_id,
+      location_id: draft.location_id,
       provider_id: draft.provider_id,
       starts_at: draft.starts_at,
       ends_at: draft.ends_at,

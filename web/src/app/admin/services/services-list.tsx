@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { archiveServiceAction, restoreServiceAction } from "./actions";
-import { ServiceForm, type ServiceRow } from "./service-form";
+import { ServiceForm, type LocationOption, type ServiceRow } from "./service-form";
 import { ServiceFormsEditor } from "./service-forms-editor";
 
 type ServiceWithForms = ServiceRow & { form_ids: string[] };
@@ -11,10 +11,12 @@ export function ServicesList({
   services,
   forms,
   defaultDepositCents,
+  locations,
 }: {
   services: ServiceWithForms[];
   forms: { id: string; name: string }[];
   defaultDepositCents: number;
+  locations: LocationOption[];
 }) {
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
   const [formsOpenId, setFormsOpenId] = useState<string | null>(null);
@@ -35,6 +37,7 @@ export function ServicesList({
       {editingId === "new" && (
         <ServiceForm
           defaultDepositCents={defaultDepositCents}
+          locations={locations}
           onDone={() => setEditingId(null)}
         />
       )}
@@ -53,7 +56,7 @@ export function ServicesList({
           >
             {editingId === s.id ? (
               <div className="p-2">
-                <ServiceForm service={s} onDone={() => setEditingId(null)} />
+                <ServiceForm service={s} locations={locations} onDone={() => setEditingId(null)} />
               </div>
             ) : (
               <div className="flex items-center justify-between gap-4 p-4">
@@ -69,6 +72,7 @@ export function ServicesList({
                   <div className="text-sm text-neutral-600 dark:text-neutral-400">
                     {s.duration_minutes} min · ${(s.price_cents / 100).toFixed(2)}
                     {s.deposit_cents > 0 && ` · $${(s.deposit_cents / 100).toFixed(2)} deposit`}
+                    {` · ${s.location_ids.length} location${s.location_ids.length === 1 ? "" : "s"}`}
                   </div>
                 </div>
                 <div className="flex gap-2 shrink-0">

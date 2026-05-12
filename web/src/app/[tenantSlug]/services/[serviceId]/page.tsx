@@ -25,6 +25,15 @@ type ProviderSelectionOption = {
   schedule_days: number[];
 };
 
+type LocationSelectionOption = {
+  id: string;
+  name: string;
+  timezone: string;
+  address_line1: string | null;
+  city: string | null;
+  state_region: string | null;
+};
+
 type ServiceFlowConfig = {
   providerSelectionStepEnabled: boolean;
 };
@@ -57,13 +66,59 @@ async function loadServiceContext(slug: string, serviceId: string) {
     .maybeSingle();
   if (!service || service.tenant_id !== tenant.id || !service.is_active) return null;
 
+  const { data: serviceLocationRows } = await admin
+    .from("service_locations")
+    .select("location_id")
+    .eq("service_id", serviceId)
+    .eq("tenant_id", tenant.id);
+
+  const locationIds = (serviceLocationRows ?? []).map((row) => row.location_id);
+  let locations: LocationSelectionOption[] = [];
+
+  if (locationIds.length > 0) {
+    const { data: locationRows } = await admin
+      .from("locations")
+      .select("id, name, timezone, address_line1, city, state_region, is_active")
+      .eq("tenant_id", tenant.id)
+      .in("id", locationIds)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    locations = (locationRows ?? []).map((location) => ({
+      id: location.id,
+      name: location.name,
+      timezone: location.timezone,
+      address_line1: location.address_line1,
+      city: location.city,
+      state_region: location.state_region,
+    }));
+  }
+
+  return {
+    tenant,
+    service,
+    locations,
+    flowConfig: normalizeServiceFlowConfig(
+      (tenant.branding_json ?? null) as Partial<Record<string, unknown>> | null
+    ),
+  };
+}
+
+async function loadProvidersForLocation(tenantId: string, service: {
+  id: string;
+  price_cents: number;
+  deposit_cents: number;
+  duration_minutes: number;
+}, locationId: string) {
+  const admin = createAdminClient();
   const { data: providerLinks } = await admin
     .from("provider_services")
     .select(
       "provider_id, price_cents_override, deposit_cents_override, duration_minutes_override, providers!inner(id, name, bio, avatar_url, is_active, sort_order)"
     )
-    .eq("service_id", serviceId)
-    .eq("tenant_id", tenant.id);
+    .eq("service_id", service.id)
+    .eq("tenant_id", tenantId);
 
   const activeLinks = (providerLinks ?? []).filter((row) => {
     const provider = row.providers as
@@ -79,12 +134,32 @@ async function loadServiceContext(slug: string, serviceId: string) {
     return Boolean(provider?.is_active);
   });
 
-  const providerIds = activeLinks.map((row) => row.provider_id);
+  const allProviderIds = activeLinks.map((row) => row.provider_id);
+  if (allProviderIds.length === 0) {
+    return [] as ProviderSelectionOption[];
+  }
+
+  const { data: providerLocationRows } = await admin
+    .from("provider_locations")
+    .select("provider_id")
+    .eq("tenant_id", tenantId)
+    .eq("location_id", locationId)
+    .in("provider_id", allProviderIds);
+
+  const providerIdsAtLocation = new Set((providerLocationRows ?? []).map((row) => row.provider_id));
+  if (providerIdsAtLocation.size === 0) {
+    return [] as ProviderSelectionOption[];
+  }
+
+  const filteredLinks = activeLinks.filter((row) => providerIdsAtLocation.has(row.provider_id));
+  const providerIds = filteredLinks.map((row) => row.provider_id);
   let scheduleRows: { provider_id: string; weekday: number }[] = [];
   if (providerIds.length > 0) {
     const { data } = await admin
       .from("provider_schedules")
       .select("provider_id, weekday")
+      .eq("tenant_id", tenantId)
+      .eq("location_id", locationId)
       .in("provider_id", providerIds);
     scheduleRows = data ?? [];
   }
@@ -96,7 +171,7 @@ async function loadServiceContext(slug: string, serviceId: string) {
     weekdaysByProvider.set(row.provider_id, weekdays);
   }
 
-  const providers = activeLinks
+  return filteredLinks
     .map((row) => {
       const provider = row.providers as {
         id: string;
@@ -129,15 +204,6 @@ async function loadServiceContext(slug: string, serviceId: string) {
       } satisfies ProviderSelectionOption;
     })
     .sort((left, right) => left.sort_order - right.sort_order || left.name.localeCompare(right.name));
-
-  return {
-    tenant,
-    service,
-    providers,
-    flowConfig: normalizeServiceFlowConfig(
-      (tenant.branding_json ?? null) as Partial<Record<string, unknown>> | null
-    ),
-  };
 }
 
 export default async function ServiceBookingPage({
@@ -152,7 +218,69 @@ export default async function ServiceBookingPage({
   const data = await loadServiceContext(tenantSlug, serviceId);
   if (!data) notFound();
 
-  const { tenant, service, providers, flowConfig } = data;
+  const { tenant, service, locations, flowConfig } = data;
+  const locationQuery = firstQueryValue(resolvedSearchParams.location);
+  const selectedLocation =
+    locations.find((location) => location.id === locationQuery) ??
+    (locations.length === 1 ? locations[0] : null);
+  const showLocationSelectionStep = locations.length > 1 && !selectedLocation;
+
+  if (locations.length === 0) {
+    return (
+      <div className="mx-auto w-full max-w-6xl px-6 py-10 lg:px-8 lg:py-12">
+        <div className="rounded-[1.75rem] border border-neutral-200 bg-neutral-50 p-8 text-center text-neutral-600">
+          This service is not available at any active location right now.
+        </div>
+      </div>
+    );
+  }
+
+  if (showLocationSelectionStep) {
+    return (
+      <div className="mx-auto w-full max-w-5xl px-6 py-10 lg:px-8 lg:py-12">
+        <header className="mb-8 overflow-hidden rounded-[2rem] border border-stone-200 bg-[linear-gradient(180deg,#fffdf9_0%,#f6efe6_100%)] shadow-[0_22px_65px_rgba(41,24,12,0.08)]">
+          <div className="px-6 py-7 sm:px-8 sm:py-8">
+            <Link
+              href={`/${tenant.slug}`}
+              className="text-sm text-stone-500 transition hover:text-stone-950"
+            >
+              ← Back to {tenant.name}
+            </Link>
+            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
+              Choose a location
+            </p>
+            <h1 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-stone-950 sm:text-5xl">
+              Where should {service.name} happen?
+            </h1>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-stone-600">
+              Providers and availability can change by location. Pick the location first so the rest of the booking flow stays accurate.
+            </p>
+          </div>
+        </header>
+
+        <div className="overflow-hidden rounded-[2rem] border border-stone-200 bg-white shadow-[0_22px_65px_rgba(41,24,12,0.08)]">
+          <ul className="divide-y divide-stone-200">
+            {locations.map((location) => (
+              <li key={location.id}>
+                <LocationRow
+                  href={buildServiceHref(tenant.slug, service.id, { location: location.id })}
+                  name={location.name}
+                  summary={formatLocationSummary(location)}
+                  timezone={location.timezone}
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    );
+  }
+
+  if (!selectedLocation) {
+    notFound();
+  }
+
+  const providers = await loadProvidersForLocation(tenant.id, service, selectedLocation.id);
   const providerQuery = firstQueryValue(resolvedSearchParams.provider);
   const hasSpecificProvider = providers.some((provider) => provider.id === providerQuery);
   const hasValidProviderSelection = providerQuery === ANY_PROVIDER_PARAM || hasSpecificProvider;
@@ -168,7 +296,14 @@ export default async function ServiceBookingPage({
     return (
       <div className="mx-auto w-full max-w-6xl px-6 py-10 lg:px-8 lg:py-12">
         <div className="rounded-[1.75rem] border border-neutral-200 bg-neutral-50 p-8 text-center text-neutral-600">
-          No providers are available for this service.
+          No providers are available for this service at {selectedLocation.name}.
+          {locations.length > 1 ? (
+            <div className="mt-4">
+              <Link href={`/${tenant.slug}/services/${service.id}`} className="text-stone-700 underline underline-offset-4">
+                Choose a different location
+              </Link>
+            </div>
+          ) : null}
         </div>
       </div>
     );
@@ -180,16 +315,16 @@ export default async function ServiceBookingPage({
         <header className="mb-8 overflow-hidden rounded-[2rem] border border-stone-200 bg-[linear-gradient(180deg,#fffdf9_0%,#f6efe6_100%)] shadow-[0_22px_65px_rgba(41,24,12,0.08)]">
           <div className="px-6 py-7 sm:px-8 sm:py-8">
             <Link
-              href={`/${tenant.slug}`}
+              href={buildServiceHref(tenant.slug, service.id)}
               className="text-sm text-stone-500 transition hover:text-stone-950"
             >
-              ← Back to {tenant.name}
+              ← Change selection
             </Link>
             <p className="mt-4 text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
-              Step 2 of 3
+              Choose a provider
             </p>
             <h1 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-stone-950 sm:text-5xl">
-              Choose who you&apos;d like to book for {service.name}
+              Choose who you&apos;d like to book at {selectedLocation.name}
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-stone-600">
               Providers can have different pricing and timing for this service. Choose a specific provider or continue with no preference.
@@ -201,7 +336,10 @@ export default async function ServiceBookingPage({
           <ul className="divide-y divide-stone-200">
             <li>
               <ProviderRow
-                href={`/${tenant.slug}/services/${service.id}?provider=${ANY_PROVIDER_PARAM}`}
+                href={buildServiceHref(tenant.slug, service.id, {
+                  location: selectedLocation.id,
+                  provider: ANY_PROVIDER_PARAM,
+                })}
                 name="Anyone"
                 priceLabel={formatMoneyRange(providers.map((provider) => provider.price_cents))}
                 scheduleLabel={summarizeWeekdays(collectUniqueWeekdays(providers.flatMap((provider) => provider.schedule_days)))}
@@ -212,7 +350,10 @@ export default async function ServiceBookingPage({
             {providers.map((provider) => (
               <li key={provider.id}>
                 <ProviderRow
-                  href={`/${tenant.slug}/services/${service.id}?provider=${provider.id}`}
+                  href={buildServiceHref(tenant.slug, service.id, {
+                    location: selectedLocation.id,
+                    provider: provider.id,
+                  })}
                   name={provider.name}
                   priceLabel={formatMoney(provider.price_cents)}
                   scheduleLabel={summarizeWeekdays(provider.schedule_days)}
@@ -238,12 +379,12 @@ export default async function ServiceBookingPage({
     ? formatDepositSummary(selectedProvider.deposit_cents)
     : formatDepositRange(providers.map((provider) => provider.deposit_cents));
   const topLinkHref =
-    flowConfig.providerSelectionStepEnabled && providers.length > 1
-      ? `/${tenant.slug}/services/${service.id}`
+    locations.length > 1 || (flowConfig.providerSelectionStepEnabled && providers.length > 1)
+      ? buildServiceHref(tenant.slug, service.id)
       : `/${tenant.slug}`;
   const topLinkLabel =
-    flowConfig.providerSelectionStepEnabled && providers.length > 1
-      ? "Change provider"
+    locations.length > 1 || (flowConfig.providerSelectionStepEnabled && providers.length > 1)
+      ? "Change selection"
       : tenant.name;
 
   return (
@@ -255,7 +396,7 @@ export default async function ServiceBookingPage({
               ← {topLinkLabel}
             </Link>
             <p className="mt-4 text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
-              Step 3 of 3
+              Choose a date
             </p>
             <h1 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-stone-950 sm:text-5xl">
               {selectedProvider ? `Choose a date with ${selectedProvider.name}` : `Choose a date for ${service.name}`}
@@ -275,6 +416,7 @@ export default async function ServiceBookingPage({
               Booking summary
             </p>
             <div className="mt-4 flex flex-wrap gap-2 text-sm text-stone-700">
+              <SummaryChip>{selectedLocation.name}</SummaryChip>
               <SummaryChip>{summaryDuration}</SummaryChip>
               <SummaryChip>{summaryPrice}</SummaryChip>
               <SummaryChip>{summaryDeposit}</SummaryChip>
@@ -293,11 +435,45 @@ export default async function ServiceBookingPage({
         tenantSlug={tenant.slug}
         timeZone={tenant.timezone}
         serviceId={service.id}
+        locationId={selectedLocation.id}
         providers={providers.map((provider) => ({ id: provider.id, name: provider.name }))}
         initialProviderId={selectedProvider?.id}
         showProviderSelector={!flowConfig.providerSelectionStepEnabled}
       />
     </div>
+  );
+}
+
+function LocationRow({
+  href,
+  name,
+  summary,
+  timezone,
+}: {
+  href: string;
+  name: string;
+  summary: string;
+  timezone: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group flex items-center justify-between gap-4 px-6 py-5 transition hover:bg-stone-50 sm:px-8 sm:py-6"
+    >
+      <div className="min-w-0">
+        <p className="text-2xl font-semibold tracking-[-0.03em] text-stone-950">{name}</p>
+        <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">
+          {timezone}
+        </p>
+        <p className="mt-2 max-w-xl text-sm text-stone-500">{summary}</p>
+      </div>
+
+      <div className="shrink-0 text-right">
+        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-stone-500 transition group-hover:text-stone-700">
+          View availability
+        </p>
+      </div>
+    </Link>
   );
 }
 
@@ -396,6 +572,33 @@ function normalizeServiceFlowConfig(
 function firstQueryValue(value: string | string[] | undefined) {
   if (Array.isArray(value)) return value[0] ?? undefined;
   return value;
+}
+
+function buildServiceHref(
+  tenantSlug: string,
+  serviceId: string,
+  params?: { location?: string; provider?: string }
+) {
+  const search = new URLSearchParams();
+
+  if (params?.location) {
+    search.set("location", params.location);
+  }
+
+  if (params?.provider) {
+    search.set("provider", params.provider);
+  }
+
+  const query = search.toString();
+  return query.length > 0
+    ? `/${tenantSlug}/services/${serviceId}?${query}`
+    : `/${tenantSlug}/services/${serviceId}`;
+}
+
+function formatLocationSummary(location: LocationSelectionOption) {
+  const locality = [location.city, location.state_region].filter(Boolean).join(", ");
+  const parts = [location.address_line1, locality].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : "Location details available after you select this site.";
 }
 
 function formatMoney(cents: number) {

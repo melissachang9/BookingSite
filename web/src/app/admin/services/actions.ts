@@ -25,6 +25,10 @@ function dollarsToCents(formData: FormData, key: string) {
   return Math.round(dollars * 100);
 }
 
+function dedupeIds(values: FormDataEntryValue[]) {
+  return Array.from(new Set(values.filter((value): value is string => typeof value === "string")));
+}
+
 export async function upsertServiceAction(
   _prev: ActionState,
   formData: FormData
@@ -50,6 +54,19 @@ export async function upsertServiceAction(
   }
 
   const { supabase, tenantId } = await requireTenant();
+  const locationIds = dedupeIds(formData.getAll("location_ids"));
+  if (locationIds.length === 0) {
+    return { error: "Select at least one location." };
+  }
+
+  const { data: allowedLocations } = await supabase
+    .from("locations")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .in("id", locationIds);
+  if ((allowedLocations ?? []).length !== locationIds.length) {
+    return { error: "One or more selected locations are invalid." };
+  }
 
   const row = {
     tenant_id: tenantId,
@@ -63,6 +80,8 @@ export async function upsertServiceAction(
     is_active: parsed.data.is_active,
   };
 
+  let serviceId = parsed.data.id;
+
   if (parsed.data.id) {
     const { error } = await supabase
       .from("services")
@@ -71,9 +90,20 @@ export async function upsertServiceAction(
       .eq("tenant_id", tenantId);
     if (error) return { error: error.message };
   } else {
-    const { error } = await supabase.from("services").insert(row);
+    const { data, error } = await supabase.from("services").insert(row).select("id").single();
     if (error) return { error: error.message };
+    serviceId = data.id;
   }
+
+  await supabase.from("service_locations").delete().eq("service_id", serviceId);
+  const { error: locationErr } = await supabase.from("service_locations").insert(
+    locationIds.map((locationId) => ({
+      service_id: serviceId!,
+      location_id: locationId,
+      tenant_id: tenantId,
+    }))
+  );
+  if (locationErr) return { error: locationErr.message };
 
   revalidatePath("/admin/services");
   return { success: parsed.data.id ? "Service updated." : "Service created." };
