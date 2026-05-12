@@ -606,7 +606,55 @@ const SubmitDetailsInput = z.object({
   phone: z.string().min(7).max(40),
 });
 
+const SaveDetailsDraftInput = z.object({
+  draftId: z.string().uuid(),
+  name: z.string().max(120),
+  email: z.string().max(240),
+  phone: z.string().max(40),
+});
+
 export type SubmitDetailsResult = { ok: boolean; error?: string };
+export type SaveDetailsDraftResult = { ok: boolean; error?: string; savedAt?: string };
+
+export async function saveBookingDetailsDraftAction(
+  input: z.infer<typeof SaveDetailsDraftInput>
+): Promise<SaveDetailsDraftResult> {
+  const parsed = SaveDetailsDraftInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid input" };
+
+  const admin = createAdminClient();
+  const { data: draft } = await admin
+    .from("booking_drafts")
+    .select("id, status, expires_at")
+    .eq("id", parsed.data.draftId)
+    .maybeSingle();
+  if (!draft) return { ok: false, error: "Booking not found" };
+  if (new Date(draft.expires_at) < new Date()) {
+    return { ok: false, error: "Your hold has expired. Please pick a new time." };
+  }
+  if (draft.status === "promoted") return { ok: false, error: "Already booked" };
+
+  const nextDraftDetails = {
+    name: parsed.data.name.trim(),
+    email: parsed.data.email.trim(),
+    phone: parsed.data.phone.trim(),
+  };
+  const hasDraftDetails = Object.values(nextDraftDetails).some((value) => value.length > 0);
+  const savedAt = hasDraftDetails ? new Date().toISOString() : null;
+
+  const { data: updated, error } = await admin
+    .from("booking_drafts")
+    .update({
+      draft_contact_details_json: hasDraftDetails ? nextDraftDetails : null,
+      draft_contact_details_saved_at: savedAt,
+    })
+    .eq("id", parsed.data.draftId)
+    .select("draft_contact_details_saved_at")
+    .single();
+  if (error) return { ok: false, error: error.message };
+
+  return { ok: true, savedAt: updated?.draft_contact_details_saved_at ?? undefined };
+}
 
 /**
  * Phase 2 ends here: the customer enters name/email/phone and we mark the draft as
@@ -661,6 +709,8 @@ export async function submitBookingDetailsAction(
       customer_name: parsed.data.name,
       customer_email: parsed.data.email,
       customer_phone: parsed.data.phone,
+      draft_contact_details_json: null,
+      draft_contact_details_saved_at: null,
       status: "awaiting_payment",
     })
     .eq("id", parsed.data.draftId);

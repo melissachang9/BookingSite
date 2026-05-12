@@ -1,20 +1,25 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { submitBookingDetailsAction } from "../../services/[serviceId]/actions";
+import {
+  saveBookingDetailsDraftAction,
+  submitBookingDetailsAction,
+} from "../../services/[serviceId]/actions";
 
 export function BookingDetailsForm({
   draftId,
   defaultName,
   defaultEmail,
   defaultPhone,
+  initialSavedAt,
   hasPendingForms,
 }: {
   draftId: string;
   defaultName: string;
   defaultEmail: string;
   defaultPhone: string;
+  initialSavedAt: string | null;
   hasPendingForms: boolean;
 }) {
   const router = useRouter();
@@ -22,11 +27,77 @@ export function BookingDetailsForm({
   const [email, setEmail] = useState(defaultEmail);
   const [phone, setPhone] = useState(defaultPhone);
   const [error, setError] = useState<string | null>(null);
+  const [draftSaveState, setDraftSaveState] = useState<"idle" | "saving" | "saved" | "error">(
+    initialSavedAt ? "saved" : "idle"
+  );
+  const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(initialSavedAt);
   const [pending, startTransition] = useTransition();
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveRequestRef = useRef(0);
+  const lastSavedDetailsRef = useRef(serializeContactDetails(defaultName, defaultEmail, defaultPhone));
+
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const detailsJson = serializeContactDetails(name, email, phone);
+
+    if (detailsJson === lastSavedDetailsRef.current || pending) {
+      return;
+    }
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    const requestId = ++saveRequestRef.current;
+    saveTimeoutRef.current = setTimeout(async () => {
+      setDraftSaveState("saving");
+      const res = await saveBookingDetailsDraftAction({
+        draftId,
+        name,
+        email,
+        phone,
+      });
+
+      if (requestId !== saveRequestRef.current) {
+        return;
+      }
+
+      if (!res.ok) {
+        setDraftSaveState("error");
+        setDraftSaveError(res.error ?? "Could not save your progress");
+        return;
+      }
+
+      lastSavedDetailsRef.current = detailsJson;
+      setDraftSaveError(null);
+      setDraftSaveState("saved");
+      setLastSavedAt(res.savedAt ?? new Date().toISOString());
+    }, 600);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+    };
+  }, [draftId, email, name, pending, phone]);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
     startTransition(async () => {
       const res = await submitBookingDetailsAction({ draftId, name, email, phone });
       if (!res.ok) setError(res.error ?? "Failed to save details");
@@ -52,7 +123,16 @@ export function BookingDetailsForm({
           </p>
         </div>
         <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600 shadow-sm">
-          {hasPendingForms ? "Intake comes next." : "Payment comes next."}
+          <p>{hasPendingForms ? "Intake comes next." : "Payment comes next."}</p>
+          <p className="mt-1 text-xs leading-5 text-stone-500">
+            {draftSaveState === "saving"
+              ? "Saving your progress..."
+              : draftSaveState === "saved" && lastSavedAt
+                ? `Saved ${formatSavedAt(lastSavedAt)}`
+                : draftSaveState === "error"
+                  ? draftSaveError ?? "Could not save your progress"
+                  : "Your details will still be here if you refresh."}
+          </p>
         </div>
       </div>
 
@@ -104,6 +184,17 @@ export function BookingDetailsForm({
       </button>
     </form>
   );
+}
+
+function serializeContactDetails(name: string, email: string, phone: string) {
+  return JSON.stringify({ name, email, phone });
+}
+
+function formatSavedAt(iso: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
 }
 
 function Field({

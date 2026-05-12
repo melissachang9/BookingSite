@@ -24,7 +24,7 @@ async function loadDraft(slug: string, draftId: string) {
 
   const { data: draft } = await admin
     .from("booking_drafts")
-    .select("id, tenant_id, service_id, location_id, provider_id, starts_at, ends_at, status, expires_at, customer_email, customer_name, customer_phone, price_cents, deposit_cents, duration_minutes")
+    .select("id, tenant_id, service_id, location_id, provider_id, starts_at, ends_at, status, expires_at, customer_email, customer_name, customer_phone, draft_contact_details_json, draft_contact_details_saved_at, price_cents, deposit_cents, duration_minutes")
     .eq("id", draftId)
     .maybeSingle();
   if (!draft || draft.tenant_id !== tenant.id) return null;
@@ -57,6 +57,7 @@ export default async function BookingReviewPage({
   );
 
   const expired = new Date(draft.expires_at) < new Date();
+  const draftContactDetails = normalizeDraftContactDetails(draft.draft_contact_details_json);
   const pendingForms = requirements.filter((r) => !r.satisfied_by_response_id);
   const hasContactDetails = Boolean(draft.customer_email);
   const hasForms = requirements.length > 0;
@@ -222,9 +223,10 @@ export default async function BookingReviewPage({
               ) : !draft.customer_email ? (
                 <BookingDetailsForm
                   draftId={draft.id}
-                  defaultName={draft.customer_name ?? ""}
-                  defaultEmail={draft.customer_email ?? ""}
-                  defaultPhone={draft.customer_phone ?? ""}
+                  defaultName={draft.customer_name ?? draftContactDetails.name}
+                  defaultEmail={draft.customer_email ?? draftContactDetails.email}
+                  defaultPhone={draft.customer_phone ?? draftContactDetails.phone}
+                  initialSavedAt={draft.draft_contact_details_saved_at ?? null}
                   hasPendingForms={pendingForms.length > 0}
                 />
               ) : pendingForms.length > 0 ? (
@@ -329,6 +331,19 @@ export default async function BookingReviewPage({
       </div>
     </div>
   );
+}
+
+function normalizeDraftContactDetails(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { name: "", email: "", phone: "" };
+  }
+
+  const candidate = value as { name?: unknown; email?: unknown; phone?: unknown };
+  return {
+    name: typeof candidate.name === "string" ? candidate.name : "",
+    email: typeof candidate.email === "string" ? candidate.email : "",
+    phone: typeof candidate.phone === "string" ? candidate.phone : "",
+  };
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
