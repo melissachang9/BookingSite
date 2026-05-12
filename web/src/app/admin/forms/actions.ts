@@ -9,11 +9,29 @@ import type { FormField, FormSchema } from "@/lib/forms/schema";
 
 const fieldSchema = z.object({
   id: z.string().min(1),
-  type: z.enum(["short_text", "long_text", "select", "checkbox"]),
-  label: z.string().trim().min(1).max(300),
+  type: z.enum([
+    "short_text",
+    "long_text",
+    "select",
+    "multi_select",
+    "checkbox",
+    "yes_no",
+    "date",
+    "number",
+    "file_upload",
+    "signature",
+    "section",
+    "static_text",
+  ]),
+  label: z.string().trim().max(300),
   required: z.boolean(),
   options: z.array(z.string().trim().min(1).max(120)).optional(),
   help_text: z.string().trim().max(500).optional(),
+  min: z.number().finite().optional(),
+  max: z.number().finite().optional(),
+  upload_kind: z.enum(["photo", "document"]).optional(),
+  max_files: z.number().int().min(1).max(20).optional(),
+  body: z.string().trim().max(5000).optional(),
 });
 
 const upsertFormSchema = z.object({
@@ -42,10 +60,29 @@ export async function upsertFormAction(
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
-  // Reject select fields with no options.
+  // Field-specific validation.
   for (const f of parsed.data.fields) {
-    if (f.type === "select" && (!f.options || f.options.length === 0)) {
-      return { error: `Dropdown "${f.label}" needs at least one option.` };
+    if (f.type === "static_text") {
+      if (!f.body) return { error: "Static text fields need body content." };
+      continue;
+    }
+
+    if (!f.label) {
+      return { error: "Every field except static text needs a label." };
+    }
+
+    if ((f.type === "select" || f.type === "multi_select") && (!f.options || f.options.length === 0)) {
+      return {
+        error: `${f.type === "multi_select" ? "Multi-select" : "Dropdown"} "${f.label}" needs at least one option.`,
+      };
+    }
+
+    if (f.type === "number" && typeof f.min === "number" && typeof f.max === "number" && f.min > f.max) {
+      return { error: `Number field "${f.label}" has min greater than max.` };
+    }
+
+    if (f.type === "file_upload" && typeof f.max_files === "number" && (f.max_files < 1 || f.max_files > 20)) {
+      return { error: `File upload field "${f.label}" must allow between 1 and 20 files.` };
     }
   }
 

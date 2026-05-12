@@ -174,7 +174,15 @@ export default async function BookingsPage({
                       </Link>
                     </td>
                     <td className="px-3 py-2">
-                      <div>{c?.name ?? "—"}</div>
+                      <div>
+                        {c?.name ? (
+                          <Link href={`/admin/customers/${b.customer_id}`} className="hover:underline">
+                            {c.name}
+                          </Link>
+                        ) : (
+                          "—"
+                        )}
+                      </div>
                       <div className="text-xs text-neutral-500">{c?.email}</div>
                     </td>
                     <td className="px-3 py-2">{s?.name ?? "—"}</td>
@@ -189,7 +197,9 @@ export default async function BookingsPage({
                               ? "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
                               : b.status === "completed"
                                 ? "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300"
-                                : "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300")
+                                : b.status === "no_show"
+                                  ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                                  : "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300")
                         }
                       >
                         {b.status}

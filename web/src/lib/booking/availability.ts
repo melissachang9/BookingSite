@@ -16,6 +16,15 @@
  */
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { applyProviderServiceOverrides } from "@/lib/services/provider-service";
+import {
+  addDaysToDateOnly,
+  getLocalDateString,
+  getUtcRangeForLocalDate,
+  getWeekdayInTimeZone,
+  parseDateOnly,
+  zonedDateTimeToUtc,
+} from "@/lib/datetime/timezone";
 
 export type AvailableSlot = {
   starts_at: string; // ISO
@@ -24,14 +33,11 @@ export type AvailableSlot = {
 
 type Service = {
   id: string;
+  price_cents: number;
+  deposit_cents: number;
   duration_minutes: number;
   buffer_before_minutes: number;
   buffer_after_minutes: number;
-};
-
-type Provider = {
-  id: string;
-  tenant_id: string;
 };
 
 type Schedule = {
@@ -63,6 +69,7 @@ export async function getAvailableSlots(opts: {
   const [
     { data: service },
     { data: provider },
+    { data: providerService },
     { data: schedules },
     { data: timeOff },
     { data: bookings },
@@ -71,13 +78,20 @@ export async function getAvailableSlots(opts: {
   ] = await Promise.all([
     admin
       .from("services")
-      .select("id, duration_minutes, buffer_before_minutes, buffer_after_minutes, is_active, tenant_id")
+      .select("id, price_cents, deposit_cents, duration_minutes, buffer_before_minutes, buffer_after_minutes, is_active, tenant_id")
       .eq("id", opts.serviceId)
       .maybeSingle(),
     admin
       .from("providers")
       .select("id, tenant_id, is_active")
       .eq("id", opts.providerId)
+      .maybeSingle(),
+    admin
+      .from("provider_services")
+      .select("price_cents_override, deposit_cents_override, duration_minutes_override")
+      .eq("tenant_id", opts.tenantId)
+      .eq("service_id", opts.serviceId)
+      .eq("provider_id", opts.providerId)
       .maybeSingle(),
     admin
       .from("provider_schedules")
@@ -106,7 +120,7 @@ export async function getAvailableSlots(opts: {
       .gt("ends_at", opts.rangeStart.toISOString()),
     admin
       .from("tenants")
-      .select("settings_json")
+      .select("settings_json, timezone")
       .eq("id", opts.tenantId)
       .maybeSingle(),
   ]);
@@ -114,10 +128,16 @@ export async function getAvailableSlots(opts: {
   if (!service || service.is_active === false || service.tenant_id !== opts.tenantId) return [];
   if (!provider || provider.is_active === false || provider.tenant_id !== opts.tenantId) return [];
 
+  const effectiveService = applyProviderServiceOverrides(
+    service as Service,
+    providerService
+  );
+
   const settings = (tenant?.settings_json ?? {}) as {
     min_lead_time_minutes?: number;
     max_advance_booking_days?: number;
   };
+  const timeZone = tenant?.timezone ?? "America/Los_Angeles";
   const minLead = settings.min_lead_time_minutes ?? 60;
   const maxAdvance = settings.max_advance_booking_days ?? 90;
 
@@ -146,20 +166,21 @@ export async function getAvailableSlots(opts: {
   // Walk each day in the range and apply the weekly schedule for that weekday.
   const slots: AvailableSlot[] = [];
   const totalMinutes =
-    (service as Service).duration_minutes +
-    (service as Service).buffer_before_minutes +
-    (service as Service).buffer_after_minutes;
+    effectiveService.duration_minutes +
+    effectiveService.buffer_before_minutes +
+    effectiveService.buffer_after_minutes;
 
-  // Iterate UTC days. (For v1 we approximate tenant timezone as UTC for slotting; tenant
-  // timezone work is a v1.x improvement when we add multi-tz.)
-  const dayCursor = new Date(rangeStart);
-  dayCursor.setUTCHours(0, 0, 0, 0);
-  while (dayCursor < rangeEnd) {
-    const weekday = dayCursor.getUTCDay();
+  let localDate = getLocalDateString(rangeStart, timeZone);
+  const lastLocalDate = getLocalDateString(new Date(rangeEnd.getTime() - 1), timeZone);
+
+  while (localDate <= lastLocalDate) {
+    const localDayRange = getUtcRangeForLocalDate(localDate, timeZone);
+    const weekday = getWeekdayInTimeZone(localDayRange.start, timeZone);
     const todaysBlocks = (schedules ?? []).filter((s: Schedule) => s.weekday === weekday);
+    const dayParts = parseDateOnly(localDate);
     for (const block of todaysBlocks) {
-      const blockStart = parseTimeOnDay(dayCursor, block.start_time);
-      const blockEnd = parseTimeOnDay(dayCursor, block.end_time);
+      const blockStart = parseTimeOnLocalDate(dayParts, block.start_time, timeZone);
+      const blockEnd = parseTimeOnLocalDate(dayParts, block.end_time, timeZone);
       // Walk slot boundaries inside the block.
       for (
         let cursor = new Date(blockStart);
@@ -179,23 +200,28 @@ export async function getAvailableSlots(opts: {
         if (conflict) continue;
 
         // The customer-visible appointment is the inner window (without buffers).
-        const apptStart = new Date(slotStart.getTime() + (service as Service).buffer_before_minutes * 60_000);
-        const apptEnd = new Date(apptStart.getTime() + (service as Service).duration_minutes * 60_000);
+        const apptStart = new Date(slotStart.getTime() + effectiveService.buffer_before_minutes * 60_000);
+        const apptEnd = new Date(apptStart.getTime() + effectiveService.duration_minutes * 60_000);
         slots.push({
           starts_at: apptStart.toISOString(),
           ends_at: apptEnd.toISOString(),
         });
       }
     }
-    dayCursor.setUTCDate(dayCursor.getUTCDate() + 1);
+    localDate = addDaysToDateOnly(localDate, 1);
   }
 
   return slots;
 }
 
-function parseTimeOnDay(day: Date, hms: string): Date {
+function parseTimeOnLocalDate(
+  day: { year: number; month: number; day: number },
+  hms: string,
+  timeZone: string
+): Date {
   const [h, m] = hms.split(":").map(Number);
-  const d = new Date(day);
-  d.setUTCHours(h, m, 0, 0);
-  return d;
+  return zonedDateTimeToUtc(
+    { year: day.year, month: day.month, day: day.day, hour: h, minute: m, second: 0 },
+    timeZone
+  );
 }

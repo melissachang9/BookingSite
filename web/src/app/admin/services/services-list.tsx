@@ -10,9 +10,11 @@ type ServiceWithForms = ServiceRow & { form_ids: string[] };
 export function ServicesList({
   services,
   forms,
+  defaultDepositCents,
 }: {
   services: ServiceWithForms[];
   forms: { id: string; name: string }[];
+  defaultDepositCents: number;
 }) {
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
   const [formsOpenId, setFormsOpenId] = useState<string | null>(null);
@@ -30,7 +32,12 @@ export function ServicesList({
         </button>
       </div>
 
-      {editingId === "new" && <ServiceForm onDone={() => setEditingId(null)} />}
+      {editingId === "new" && (
+        <ServiceForm
+          defaultDepositCents={defaultDepositCents}
+          onDone={() => setEditingId(null)}
+        />
+      )}
 
       {services.length === 0 && editingId !== "new" && (
         <p className="rounded-md border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-500 dark:border-neutral-700">

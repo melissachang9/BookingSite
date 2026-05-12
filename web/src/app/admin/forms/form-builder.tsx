@@ -4,6 +4,10 @@ import { useActionState, useState } from "react";
 import { initialActionState } from "@/lib/admin/action-state";
 import { upsertFormAction } from "./actions";
 import {
+  DEFAULT_FILE_UPLOAD_KIND,
+  DEFAULT_MAX_UPLOAD_FILES,
+  DISPLAY_ONLY_TYPES,
+  FILE_UPLOAD_KIND_LABELS,
   FIELD_TYPE_LABELS,
   type FormField,
   type FormFieldType,
@@ -32,9 +36,15 @@ export function FormBuilder({
       {
         id: newFieldId(),
         type,
-        label: "",
+        label: type === "section" ? "Section" : type === "static_text" ? "" : "",
         required: false,
-        ...(type === "select" ? { options: ["Option 1"] } : {}),
+        ...(type === "select" || type === "multi_select"
+          ? { options: ["Option 1"] }
+          : {}),
+        ...(type === "file_upload"
+          ? { upload_kind: DEFAULT_FILE_UPLOAD_KIND, max_files: DEFAULT_MAX_UPLOAD_FILES }
+          : {}),
+        ...(type === "static_text" || type === "section" ? { body: "" } : {}),
       },
     ]);
   }
@@ -93,9 +103,7 @@ export function FormBuilder({
           <p className="text-sm font-medium">Fields</p>
         </div>
         {fields.length === 0 ? (
-          <p className="px-5 py-6 text-sm text-neutral-500">
-            No fields yet. Add one below.
-          </p>
+          <p className="px-5 py-6 text-sm text-neutral-500">No fields yet. Add one below.</p>
         ) : (
           <ul className="divide-y divide-neutral-200">
             {fields.map((f, i) => (
@@ -107,26 +115,122 @@ export function FormBuilder({
                         {FIELD_TYPE_LABELS[f.type]}
                       </span>
                     </div>
-                    <input
-                      value={f.label}
-                      onChange={(e) => updateField(f.id, { label: e.target.value })}
-                      placeholder="Field label"
-                      className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-                    />
-                    {f.type === "select" ? (
+
+                    {f.type === "static_text" ? (
+                      <textarea
+                        value={f.body ?? ""}
+                        onChange={(e) => updateField(f.id, { body: e.target.value })}
+                        placeholder="Static text shown to the customer (e.g. consent paragraph)"
+                        rows={3}
+                        className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+                      />
+                    ) : (
+                      <input
+                        value={f.label}
+                        onChange={(e) => updateField(f.id, { label: e.target.value })}
+                        placeholder={f.type === "section" ? "Section heading" : "Field label"}
+                        className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+                      />
+                    )}
+
+                    {(f.type === "select" || f.type === "multi_select") && (
                       <SelectOptionsEditor
                         options={f.options ?? []}
                         onChange={(options) => updateField(f.id, { options })}
                       />
-                    ) : null}
-                    <label className="flex items-center gap-2 text-sm text-neutral-700">
+                    )}
+
+                    {f.type === "number" && (
+                      <div className="flex gap-2">
+                        <label className="flex-1 text-xs text-neutral-600">
+                          Min
+                          <input
+                            type="number"
+                            value={f.min ?? ""}
+                            onChange={(e) =>
+                              updateField(f.id, {
+                                min: e.target.value === "" ? undefined : Number(e.target.value),
+                              })
+                            }
+                            className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1 text-sm"
+                          />
+                        </label>
+                        <label className="flex-1 text-xs text-neutral-600">
+                          Max
+                          <input
+                            type="number"
+                            value={f.max ?? ""}
+                            onChange={(e) =>
+                              updateField(f.id, {
+                                max: e.target.value === "" ? undefined : Number(e.target.value),
+                              })
+                            }
+                            className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1 text-sm"
+                          />
+                        </label>
+                      </div>
+                    )}
+
+                    {f.type === "file_upload" && (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="text-xs text-neutral-600">
+                          Upload type
+                          <select
+                            value={f.upload_kind ?? DEFAULT_FILE_UPLOAD_KIND}
+                            onChange={(e) =>
+                              updateField(f.id, {
+                                upload_kind: e.target.value as FormField["upload_kind"],
+                              })
+                            }
+                            className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1 text-sm"
+                          >
+                            {Object.entries(FILE_UPLOAD_KIND_LABELS).map(([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="text-xs text-neutral-600">
+                          Max files
+                          <input
+                            type="number"
+                            min={1}
+                            max={20}
+                            value={f.max_files ?? DEFAULT_MAX_UPLOAD_FILES}
+                            onChange={(e) =>
+                              updateField(f.id, {
+                                max_files:
+                                  e.target.value === ""
+                                    ? undefined
+                                    : Number(e.target.value),
+                              })
+                            }
+                            className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1 text-sm"
+                          />
+                        </label>
+                      </div>
+                    )}
+
+                    {!DISPLAY_ONLY_TYPES.has(f.type) && (
                       <input
-                        type="checkbox"
-                        checked={f.required}
-                        onChange={(e) => updateField(f.id, { required: e.target.checked })}
+                        value={f.help_text ?? ""}
+                        onChange={(e) => updateField(f.id, { help_text: e.target.value })}
+                        placeholder="Help text (optional)"
+                        className="w-full rounded-md border border-neutral-300 px-3 py-2 text-xs text-neutral-600"
                       />
-                      Required
-                    </label>
+                    )}
+
+                    {!DISPLAY_ONLY_TYPES.has(f.type) && (
+                      <label className="flex items-center gap-2 text-sm text-neutral-700">
+                        <input
+                          type="checkbox"
+                          checked={f.required}
+                          onChange={(e) => updateField(f.id, { required: e.target.checked })}
+                        />
+                        Required
+                      </label>
+                    )}
                   </div>
                   <div className="flex flex-col gap-1">
                     <button

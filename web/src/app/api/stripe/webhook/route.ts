@@ -49,7 +49,7 @@ export async function POST(req: Request) {
   // Idempotency: check if already promoted.
   const { data: draft } = await admin
     .from("booking_drafts")
-    .select("id, tenant_id, customer_id, customer_email, customer_name, customer_phone, service_id, provider_id, starts_at, ends_at, status, promoted_booking_id")
+    .select("id, tenant_id, customer_id, customer_email, customer_name, customer_phone, service_id, provider_id, starts_at, ends_at, status, promoted_booking_id, price_cents, deposit_cents")
     .eq("id", draftId)
     .maybeSingle();
   if (!draft) {
@@ -90,10 +90,37 @@ export async function POST(req: Request) {
 
   const { data: service } = await admin
     .from("services")
-    .select("price_cents, deposit_cents, name")
+    .select("name")
     .eq("id", draft.service_id)
     .maybeSingle();
   if (!service) return NextResponse.json({ error: "Service missing" }, { status: 500 });
+
+  const paymentIntentId =
+    typeof session.payment_intent === "string"
+      ? session.payment_intent
+      : session.payment_intent?.id ?? null;
+  const stripeCustomerId =
+    typeof session.customer === "string" ? session.customer : session.customer?.id ?? null;
+
+  let noShowFeePaymentMethodId: string | null = null;
+  if (session.metadata?.auto_charge_no_show_fee === "true" && paymentIntentId) {
+    try {
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      noShowFeePaymentMethodId =
+        typeof paymentIntent.payment_method === "string"
+          ? paymentIntent.payment_method
+          : paymentIntent.payment_method?.id ?? null;
+    } catch (error) {
+      console.error("Failed to retrieve payment method for no-show charging", error);
+    }
+  }
+
+  if (stripeCustomerId) {
+    await admin
+      .from("customers")
+      .update({ stripe_customer_id: stripeCustomerId })
+      .eq("id", customerId);
+  }
 
   // Insert the confirmed booking.
   const { data: booking, error: bErr } = await admin
@@ -106,11 +133,12 @@ export async function POST(req: Request) {
       starts_at: draft.starts_at,
       ends_at: draft.ends_at,
       status: "confirmed",
-      price_cents: service.price_cents,
-      deposit_cents: service.deposit_cents,
+      price_cents: draft.price_cents,
+      deposit_cents: draft.deposit_cents,
       stripe_session_id: session.id,
-      stripe_payment_intent_id:
-        typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id,
+      stripe_payment_intent_id: paymentIntentId,
+      stripe_customer_id: stripeCustomerId,
+      no_show_fee_payment_method_id: noShowFeePaymentMethodId,
     })
     .select("id, cancel_token, starts_at, ends_at")
     .single();
@@ -127,6 +155,10 @@ export async function POST(req: Request) {
     .from("booking_form_requirements")
     .update({ booking_id: booking.id, booking_draft_id: null })
     .eq("booking_draft_id", draftId);
+  await admin
+    .from("form_response_attachments")
+    .update({ booking_id: booking.id, booking_draft_id: null })
+    .eq("booking_draft_id", draftId);
 
   // Mark the draft promoted, drop the slot hold.
   await admin
@@ -139,7 +171,7 @@ export async function POST(req: Request) {
   if (draft.customer_email && draft.customer_name) {
     const { data: tenant } = await admin
       .from("tenants")
-      .select("name, slug")
+      .select("name, slug, timezone")
       .eq("id", draft.tenant_id)
       .maybeSingle();
     if (tenant) {
@@ -148,10 +180,11 @@ export async function POST(req: Request) {
           to: draft.customer_email,
           customerName: draft.customer_name,
           tenantName: tenant.name,
+          tenantTimeZone: tenant.timezone,
           serviceName: service.name,
           startsAt: booking.starts_at,
           endsAt: booking.ends_at,
-          cancelUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/${tenant.slug}/bookings/${booking.id}?token=${booking.cancel_token}`,
+          cancelUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/cancel/${booking.cancel_token}`,
         });
       } catch (err) {
         console.error("Failed to send confirmation email", err);

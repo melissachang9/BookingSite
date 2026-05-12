@@ -18,9 +18,11 @@ export type ServiceRow = {
 
 export function ServiceForm({
   service,
+  defaultDepositCents = 0,
   onDone,
 }: {
   service?: ServiceRow;
+  defaultDepositCents?: number;
   onDone?: () => void;
 }) {
   const [state, formAction, pending] = useActionState(upsertServiceAction, initialActionState);
@@ -63,7 +65,7 @@ export function ServiceForm({
           type="number"
           min={0}
           step="0.01"
-          defaultValue={service ? (service.deposit_cents / 100).toFixed(2) : "0.00"}
+          defaultValue={service ? (service.deposit_cents / 100).toFixed(2) : (defaultDepositCents / 100).toFixed(2)}
         />
         <Field
           label="Buffer before (min)"
@@ -102,6 +104,11 @@ export function ServiceForm({
         />
         Active (bookable)
       </label>
+      {!service && defaultDepositCents > 0 ? (
+        <p className="text-xs text-neutral-500">
+          New services start with your business default deposit. You can override it per service.
+        </p>
+      ) : null}
       {state.error && <p className="text-sm text-red-600" role="alert">{state.error}</p>}
       {state.success && <p className="text-sm text-green-600">{state.success}</p>}
       <div className="flex gap-2">

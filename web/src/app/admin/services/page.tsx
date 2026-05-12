@@ -1,4 +1,5 @@
 import { requireTenant } from "@/lib/admin/require-tenant";
+import { normalizeTenantSettings } from "@/lib/tenants/settings";
 import { ServicesList } from "./services-list";
 import type { ServiceRow } from "./service-form";
 
@@ -6,7 +7,7 @@ export const metadata = { title: "Services — BookingSite" };
 
 export default async function ServicesPage() {
   const { supabase, tenantId } = await requireTenant();
-  const [{ data, error }, { data: forms }, { data: links }] = await Promise.all([
+  const [{ data, error }, { data: forms }, { data: links }, { data: tenant }] = await Promise.all([
     supabase
       .from("services")
       .select(
@@ -25,6 +26,7 @@ export default async function ServicesPage() {
       .from("service_forms")
       .select("service_id, form_id")
       .eq("tenant_id", tenantId),
+    supabase.from("tenants").select("settings_json").eq("id", tenantId).maybeSingle(),
   ]);
 
   const serviceFormIds = new Map<string, string[]>();
@@ -37,13 +39,16 @@ export default async function ServicesPage() {
     ...(s as ServiceRow),
     form_ids: serviceFormIds.get(s.id) ?? [],
   }));
+  const tenantSettings = normalizeTenantSettings(
+    (tenant?.settings_json ?? null) as Partial<Record<string, unknown>> | null
+  );
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Services</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          The catalog customers can book from. Add duration, price, deposit, and buffer time.
+          The catalog customers can book from. New services start with your business default deposit of ${(tenantSettings.default_deposit_cents / 100).toFixed(2)}.
         </p>
       </div>
       {error && (
@@ -51,7 +56,11 @@ export default async function ServicesPage() {
           {error.message}
         </p>
       )}
-      <ServicesList services={services} forms={forms ?? []} />
+      <ServicesList
+        services={services}
+        forms={forms ?? []}
+        defaultDepositCents={tenantSettings.default_deposit_cents}
+      />
     </div>
   );
 }

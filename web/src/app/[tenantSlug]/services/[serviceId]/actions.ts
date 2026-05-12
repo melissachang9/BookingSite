@@ -9,11 +9,18 @@
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAvailableSlots } from "@/lib/booking/availability";
+import { applyProviderServiceOverrides } from "@/lib/services/provider-service";
+import {
+  addMonthsToDateOnly,
+  getLocalDateString,
+  getUtcRangeForLocalDate,
+  getUtcRangeForLocalMonth,
+} from "@/lib/datetime/timezone";
 
 const SlotsInput = z.object({
   tenantId: z.string().uuid(),
   serviceId: z.string().uuid(),
-  providerId: z.string().uuid(),
+  providerId: z.string().uuid().optional(),
   // YYYY-MM-DD (UTC day window).
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
@@ -21,32 +28,180 @@ const SlotsInput = z.object({
 export type LoadSlotsResult = {
   ok: boolean;
   error?: string;
-  slots?: { starts_at: string; ends_at: string }[];
+  slots?: {
+    starts_at: string;
+    ends_at: string;
+    provider_id: string;
+    provider_name: string;
+  }[];
 };
 
 export async function loadSlotsAction(input: z.infer<typeof SlotsInput>): Promise<LoadSlotsResult> {
   const parsed = SlotsInput.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid input" };
 
-  const day = new Date(`${parsed.data.date}T00:00:00.000Z`);
-  const dayEnd = new Date(day.getTime() + 24 * 60 * 60_000);
-
-  const slots = await getAvailableSlots({
+  const admin = createAdminClient();
+  const timeZone = await loadTenantTimeZone(admin, parsed.data.tenantId);
+  const dayRange = getUtcRangeForLocalDate(parsed.data.date, timeZone);
+  const providers = await loadBookableProviders(admin, {
     tenantId: parsed.data.tenantId,
     serviceId: parsed.data.serviceId,
     providerId: parsed.data.providerId,
-    rangeStart: day,
-    rangeEnd: dayEnd,
+  });
+
+  if (providers.length === 0) {
+    return { ok: true, slots: [] };
+  }
+
+  const slots = await loadSlotsForProviders({
+    tenantId: parsed.data.tenantId,
+    serviceId: parsed.data.serviceId,
+    providers,
+    rangeStart: dayRange.start,
+    rangeEnd: dayRange.end,
   });
 
   return { ok: true, slots };
+}
+
+const MonthAvailabilityInput = z.object({
+  tenantId: z.string().uuid(),
+  serviceId: z.string().uuid(),
+  providerId: z.string().uuid().optional(),
+  // YYYY-MM-DD month anchor. The UI always sends the first day of the month.
+  month: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+export type LoadMonthAvailabilityResult = {
+  ok: boolean;
+  error?: string;
+  availability?: { date: string; slotCount: number }[];
+};
+
+export async function loadMonthAvailabilityAction(
+  input: z.infer<typeof MonthAvailabilityInput>
+): Promise<LoadMonthAvailabilityResult> {
+  const parsed = MonthAvailabilityInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid input" };
+
+  const admin = createAdminClient();
+  const timeZone = await loadTenantTimeZone(admin, parsed.data.tenantId);
+  const monthRange = getUtcRangeForLocalMonth(parsed.data.month, timeZone);
+  const providers = await loadBookableProviders(admin, {
+    tenantId: parsed.data.tenantId,
+    serviceId: parsed.data.serviceId,
+    providerId: parsed.data.providerId,
+  });
+
+  if (providers.length === 0) {
+    return { ok: true, availability: [] };
+  }
+
+  const slots = await loadSlotsForProviders({
+    tenantId: parsed.data.tenantId,
+    serviceId: parsed.data.serviceId,
+    providers,
+    rangeStart: monthRange.start,
+    rangeEnd: monthRange.end,
+  });
+
+  const uniqueSlotsByDate = new Map<string, Set<string>>();
+  for (const slot of slots) {
+    const date = getLocalDateString(slot.starts_at, timeZone);
+    const slotKey = `${slot.starts_at}:${slot.ends_at}`;
+    const existing = uniqueSlotsByDate.get(date) ?? new Set<string>();
+    existing.add(slotKey);
+    uniqueSlotsByDate.set(date, existing);
+  }
+
+  return {
+    ok: true,
+    availability: Array.from(uniqueSlotsByDate.entries()).map(([date, slotKeys]) => ({
+      date,
+      slotCount: slotKeys.size,
+    })),
+  };
+}
+
+const NextAvailableInput = z.object({
+  tenantId: z.string().uuid(),
+  serviceId: z.string().uuid(),
+  providerId: z.string().uuid().optional(),
+});
+
+export type LoadNextAvailableResult = {
+  ok: boolean;
+  error?: string;
+  nextSlot?: {
+    date: string;
+    starts_at: string;
+    ends_at: string;
+    provider_id: string;
+    provider_name: string;
+  };
+};
+
+export async function loadNextAvailableAction(
+  input: z.infer<typeof NextAvailableInput>
+): Promise<LoadNextAvailableResult> {
+  const parsed = NextAvailableInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid input" };
+
+  const admin = createAdminClient();
+  const timeZone = await loadTenantTimeZone(admin, parsed.data.tenantId);
+  const providers = await loadBookableProviders(admin, {
+    tenantId: parsed.data.tenantId,
+    serviceId: parsed.data.serviceId,
+    providerId: parsed.data.providerId,
+  });
+
+  if (providers.length === 0) {
+    return { ok: true };
+  }
+
+  const todayLocalDate = getLocalDateString(new Date(), timeZone);
+  const currentMonthAnchor = `${todayLocalDate.slice(0, 7)}-01`;
+
+  // Search across the current month plus the next 3 months, which covers the
+  // default 90-day booking horizon without hammering the database day-by-day.
+  for (let monthOffset = 0; monthOffset < 4; monthOffset += 1) {
+    const monthAnchor = addMonthsToDateOnly(currentMonthAnchor, monthOffset);
+    const monthRange = getUtcRangeForLocalMonth(monthAnchor, timeZone);
+    const slots = await loadSlotsForProviders({
+      tenantId: parsed.data.tenantId,
+      serviceId: parsed.data.serviceId,
+      providers,
+      rangeStart: monthRange.start,
+      rangeEnd: monthRange.end,
+    });
+
+    if (slots.length === 0) {
+      continue;
+    }
+
+    const nextSlot = slots[0];
+    return {
+      ok: true,
+      nextSlot: {
+        date: getLocalDateString(nextSlot.starts_at, timeZone),
+        starts_at: nextSlot.starts_at,
+        ends_at: nextSlot.ends_at,
+        provider_id: nextSlot.provider_id,
+        provider_name: nextSlot.provider_name,
+      },
+    };
+  }
+
+  return { ok: true };
 }
 
 const HoldInput = z.object({
   tenantId: z.string().uuid(),
   serviceId: z.string().uuid(),
   providerId: z.string().uuid(),
+  candidateProviderIds: z.array(z.string().uuid()).min(1).optional(),
   startsAt: z.string().datetime(),
+  endsAt: z.string().datetime(),
 });
 
 export type HoldResult = { ok: boolean; error?: string; draftId?: string };
@@ -60,57 +215,70 @@ export async function createBookingDraftAction(input: z.infer<typeof HoldInput>)
   if (!parsed.success) return { ok: false, error: "Invalid input" };
 
   const admin = createAdminClient();
+  const timeZone = await loadTenantTimeZone(admin, parsed.data.tenantId);
+  const providerIdsToTry = dedupeProviderIds([
+    ...(parsed.data.candidateProviderIds ?? []),
+    parsed.data.providerId,
+  ]);
 
-  // Re-validate: service active, belongs to tenant, provider active, link exists.
+  // Re-validate: service active, belongs to tenant.
   const { data: service } = await admin
     .from("services")
-    .select("id, tenant_id, duration_minutes, buffer_before_minutes, buffer_after_minutes, is_active")
+    .select("id, tenant_id, price_cents, deposit_cents, duration_minutes, buffer_before_minutes, buffer_after_minutes, is_active")
     .eq("id", parsed.data.serviceId)
     .maybeSingle();
   if (!service || service.tenant_id !== parsed.data.tenantId || !service.is_active) {
     return { ok: false, error: "Service unavailable" };
   }
 
-  const { data: provider } = await admin
-    .from("providers")
-    .select("id, tenant_id, is_active")
-    .eq("id", parsed.data.providerId)
-    .maybeSingle();
-  if (!provider || provider.tenant_id !== parsed.data.tenantId || !provider.is_active) {
+  const apptStart = new Date(parsed.data.startsAt);
+  const apptEnd = new Date(parsed.data.endsAt);
+
+  if (!(apptStart < apptEnd)) {
+    return { ok: false, error: "Invalid time selection" };
+  }
+
+  const bookableProviders = await loadBookableProviders(admin, {
+    tenantId: parsed.data.tenantId,
+    serviceId: parsed.data.serviceId,
+    providerIds: providerIdsToTry,
+  });
+
+  if (bookableProviders.length === 0) {
     return { ok: false, error: "Provider unavailable" };
   }
 
-  const { data: link } = await admin
-    .from("provider_services")
-    .select("provider_id")
-    .eq("provider_id", parsed.data.providerId)
-    .eq("service_id", parsed.data.serviceId)
-    .maybeSingle();
-  if (!link) return { ok: false, error: "Provider does not offer this service" };
+  // Verify the slot is still available right now for the first provider candidate that can take it.
+  const localDate = getLocalDateString(apptStart, timeZone);
+  const dayRange = getUtcRangeForLocalDate(localDate, timeZone);
+  let selectedProvider: ProviderOption | null = null;
 
-  // Recompute slot bounds server-side. Outer = buffer_before + duration + buffer_after.
-  const apptStart = new Date(parsed.data.startsAt);
-  const apptEnd = new Date(apptStart.getTime() + service.duration_minutes * 60_000);
-  const outerStart = new Date(apptStart.getTime() - service.buffer_before_minutes * 60_000);
-  const outerEnd = new Date(apptEnd.getTime() + service.buffer_after_minutes * 60_000);
+  for (const provider of bookableProviders) {
+    const fresh = await getAvailableSlots({
+      tenantId: parsed.data.tenantId,
+      serviceId: parsed.data.serviceId,
+      providerId: provider.id,
+      rangeStart: dayRange.start,
+      rangeEnd: dayRange.end,
+    });
 
-  // Verify the slot is still available right now.
-  const dayStart = new Date(apptStart);
-  dayStart.setUTCHours(0, 0, 0, 0);
-  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
-  const fresh = await getAvailableSlots({
-    tenantId: parsed.data.tenantId,
-    serviceId: parsed.data.serviceId,
-    providerId: parsed.data.providerId,
-    rangeStart: dayStart,
-    rangeEnd: dayEnd,
-  });
-  const stillAvailable = fresh.some(
-    (s) => s.starts_at === apptStart.toISOString() && s.ends_at === apptEnd.toISOString()
-  );
-  if (!stillAvailable) {
+    const stillAvailable = fresh.some(
+      (slot) => slot.starts_at === apptStart.toISOString() && slot.ends_at === apptEnd.toISOString()
+    );
+
+    if (stillAvailable) {
+      selectedProvider = provider;
+      break;
+    }
+  }
+
+  if (!selectedProvider) {
     return { ok: false, error: "Slot is no longer available. Please pick another time." };
   }
+
+  const effectiveService = applyProviderServiceOverrides(service, selectedProvider);
+  const outerStart = new Date(apptStart.getTime() - service.buffer_before_minutes * 60_000);
+  const outerEnd = new Date(apptEnd.getTime() + service.buffer_after_minutes * 60_000);
 
   // 15-minute hold TTL — long enough to fill the form + checkout, short enough to release if abandoned.
   const HOLD_MINUTES = 15;
@@ -121,9 +289,12 @@ export async function createBookingDraftAction(input: z.infer<typeof HoldInput>)
     .insert({
       tenant_id: parsed.data.tenantId,
       service_id: parsed.data.serviceId,
-      provider_id: parsed.data.providerId,
+      provider_id: selectedProvider.id,
       starts_at: apptStart.toISOString(),
       ends_at: apptEnd.toISOString(),
+      price_cents: effectiveService.price_cents,
+      deposit_cents: effectiveService.deposit_cents,
+      duration_minutes: effectiveService.duration_minutes,
       status: "draft",
       expires_at: expiresAt.toISOString(),
     })
@@ -133,7 +304,7 @@ export async function createBookingDraftAction(input: z.infer<typeof HoldInput>)
 
   const { error: holdErr } = await admin.from("slot_holds").insert({
     tenant_id: parsed.data.tenantId,
-    provider_id: parsed.data.providerId,
+    provider_id: selectedProvider.id,
     booking_draft_id: draft.id,
     starts_at: outerStart.toISOString(),
     ends_at: outerEnd.toISOString(),
@@ -179,6 +350,132 @@ export async function createBookingDraftAction(input: z.infer<typeof HoldInput>)
   }
 
   return { ok: true, draftId: draft.id };
+}
+
+async function loadTenantTimeZone(admin: ReturnType<typeof createAdminClient>, tenantId: string) {
+  const { data: tenant } = await admin
+    .from("tenants")
+    .select("timezone")
+    .eq("id", tenantId)
+    .maybeSingle();
+  return tenant?.timezone ?? "America/Los_Angeles";
+}
+
+type ProviderOption = {
+  id: string;
+  name: string;
+  sort_order: number;
+  price_cents_override: number | null;
+  deposit_cents_override: number | null;
+  duration_minutes_override: number | null;
+};
+
+async function loadBookableProviders(
+  admin: ReturnType<typeof createAdminClient>,
+  opts: { tenantId: string; serviceId: string; providerId?: string; providerIds?: string[] }
+) {
+  let query = admin
+    .from("provider_services")
+    .select("provider_id, price_cents_override, deposit_cents_override, duration_minutes_override, providers!inner(id, name, is_active, sort_order, tenant_id)")
+    .eq("tenant_id", opts.tenantId)
+    .eq("service_id", opts.serviceId);
+
+  if (opts.providerId) {
+    query = query.eq("provider_id", opts.providerId);
+  }
+
+  if (opts.providerIds && opts.providerIds.length > 0) {
+    query = query.in("provider_id", opts.providerIds);
+  }
+
+  const { data: providerLinks } = await query;
+
+  const providers = (providerLinks ?? [])
+    .map((row) => {
+      const provider = row.providers as unknown as {
+        id: string;
+        name: string;
+        is_active: boolean;
+        sort_order: number | null;
+        tenant_id: string;
+      };
+
+      if (!provider || !provider.is_active || provider.tenant_id !== opts.tenantId) {
+        return null;
+      }
+
+      return {
+        id: provider.id,
+        name: provider.name,
+        sort_order: provider.sort_order ?? 0,
+        price_cents_override:
+          typeof row.price_cents_override === "number" ? row.price_cents_override : null,
+        deposit_cents_override:
+          typeof row.deposit_cents_override === "number" ? row.deposit_cents_override : null,
+        duration_minutes_override:
+          typeof row.duration_minutes_override === "number" ? row.duration_minutes_override : null,
+      } satisfies ProviderOption;
+    })
+    .filter((provider): provider is ProviderOption => provider !== null)
+    .sort(
+      (left, right) =>
+        (left.sort_order ?? 0) - (right.sort_order ?? 0) || left.name.localeCompare(right.name)
+    );
+
+  if (!opts.providerIds || opts.providerIds.length === 0) {
+    return providers;
+  }
+
+  const providersById = new Map(providers.map((provider) => [provider.id, provider]));
+  return opts.providerIds
+    .map((providerId) => providersById.get(providerId))
+    .filter((provider): provider is ProviderOption => provider !== undefined);
+}
+
+async function loadSlotsForProviders(opts: {
+  tenantId: string;
+  serviceId: string;
+  providers: ProviderOption[];
+  rangeStart: Date;
+  rangeEnd: Date;
+}) {
+  const slotGroups = await Promise.all(
+    opts.providers.map(async (provider) => {
+      const slots = await getAvailableSlots({
+        tenantId: opts.tenantId,
+        serviceId: opts.serviceId,
+        providerId: provider.id,
+        rangeStart: opts.rangeStart,
+        rangeEnd: opts.rangeEnd,
+      });
+
+      return slots.map((slot) => ({
+        ...slot,
+        provider_id: provider.id,
+        provider_name: provider.name,
+        provider_sort_order: provider.sort_order,
+      }));
+    })
+  );
+
+  return slotGroups
+    .flat()
+    .sort(
+      (left, right) =>
+        left.starts_at.localeCompare(right.starts_at) ||
+        left.provider_sort_order - right.provider_sort_order ||
+        left.provider_name.localeCompare(right.provider_name)
+    )
+    .map((slot) => ({
+      starts_at: slot.starts_at,
+      ends_at: slot.ends_at,
+      provider_id: slot.provider_id,
+      provider_name: slot.provider_name,
+    }));
+}
+
+function dedupeProviderIds(providerIds: string[]) {
+  return Array.from(new Set(providerIds));
 }
 
 const SubmitDetailsInput = z.object({

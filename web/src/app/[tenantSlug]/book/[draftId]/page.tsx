@@ -8,6 +8,8 @@ import { BookingDetailsForm } from "./booking-details-form";
 import { FormRuntime } from "./form-runtime";
 import { PayButton } from "./pay-button";
 import type { FormSchema } from "@/lib/forms/schema";
+import { normalizeTenantSettings } from "@/lib/tenants/settings";
+import { formatInTimeZone } from "@/lib/datetime/timezone";
 
 type Params = { tenantSlug: string; draftId: string };
 
@@ -15,20 +17,20 @@ async function loadDraft(slug: string, draftId: string) {
   const admin = createAdminClient();
   const { data: tenant } = await admin
     .from("tenants")
-    .select("id, name, slug")
+    .select("id, name, slug, timezone, settings_json")
     .eq("slug", slug)
     .maybeSingle();
   if (!tenant) return null;
 
   const { data: draft } = await admin
     .from("booking_drafts")
-    .select("id, tenant_id, service_id, provider_id, starts_at, ends_at, status, expires_at, customer_email, customer_name, customer_phone")
+    .select("id, tenant_id, service_id, provider_id, starts_at, ends_at, status, expires_at, customer_email, customer_name, customer_phone, price_cents, deposit_cents, duration_minutes")
     .eq("id", draftId)
     .maybeSingle();
   if (!draft || draft.tenant_id !== tenant.id) return null;
 
   const [{ data: service }, { data: provider }, { data: requirements }] = await Promise.all([
-    admin.from("services").select("id, name, price_cents, deposit_cents, duration_minutes").eq("id", draft.service_id).maybeSingle(),
+    admin.from("services").select("id, name").eq("id", draft.service_id).maybeSingle(),
     admin.from("providers").select("id, name").eq("id", draft.provider_id).maybeSingle(),
     admin
       .from("booking_form_requirements")
@@ -49,99 +51,334 @@ export default async function BookingReviewPage({
   const data = await loadDraft(tenantSlug, draftId);
   if (!data || !data.service || !data.provider) notFound();
   const { tenant, draft, service, provider, requirements } = data;
+  const tenantSettings = normalizeTenantSettings(
+    (tenant.settings_json ?? null) as Partial<Record<string, unknown>> | null
+  );
 
   const expired = new Date(draft.expires_at) < new Date();
   const pendingForms = requirements.filter((r) => !r.satisfied_by_response_id);
+  const hasContactDetails = Boolean(draft.customer_email);
+  const hasForms = requirements.length > 0;
+  const paymentDueCents = draft.deposit_cents > 0 ? draft.deposit_cents : draft.price_cents;
+  const balanceDueLaterCents = Math.max(0, draft.price_cents - paymentDueCents);
 
-  return (
-    <div className="mx-auto w-full max-w-xl px-6 py-12">
-      <header className="mb-6">
-        <a
-          href={`/${tenant.slug}`}
-          className="text-sm text-neutral-500 hover:text-neutral-900"
-        >
-          ← {tenant.name}
-        </a>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight">Confirm your booking</h1>
-      </header>
+  const steps = [
+    {
+      label: "Details",
+      description: "Contact and confirmation",
+      state: expired
+        ? "disabled"
+        : hasContactDetails || draft.status === "promoted"
+          ? "complete"
+          : "current",
+    },
+    {
+      label: hasForms ? "Intake" : "Prep",
+      description: hasForms ? `${requirements.length} required form${requirements.length === 1 ? "" : "s"}` : "No form required",
+      state: expired
+        ? "disabled"
+        : !hasForms
+          ? hasContactDetails || draft.status === "promoted"
+            ? "complete"
+            : "disabled"
+          : hasContactDetails && pendingForms.length === 0
+            ? "complete"
+            : hasContactDetails && pendingForms.length > 0
+              ? "current"
+              : "disabled",
+    },
+    {
+      label: "Payment",
+      description: draft.deposit_cents > 0 ? "Deposit checkout" : "Full payment",
+      state: expired
+        ? "disabled"
+        : draft.status === "promoted"
+          ? "complete"
+          : hasContactDetails && pendingForms.length === 0
+            ? "current"
+            : "disabled",
+    },
+  ] as const;
 
-      <div className="mb-6 rounded-lg border border-neutral-200 bg-white p-5 text-sm">
-        <dl className="space-y-2">
-          <Row label="Service" value={service.name} />
-          <Row label="Provider" value={provider.name} />
-          <Row label="When" value={formatWhen(draft.starts_at, draft.ends_at)} />
-          <Row
-            label="Price"
-            value={
-              service.deposit_cents > 0
-                ? `$${(service.price_cents / 100).toFixed(0)} (${(service.deposit_cents / 100).toFixed(0)} due now)`
-                : `$${(service.price_cents / 100).toFixed(0)}`
+  const stage = expired
+    ? {
+        eyebrow: "Hold expired",
+        title: "This reservation needs a new time",
+        description:
+          "Your temporary hold ran out before checkout finished. Pick another slot and the same flow will reopen.",
+      }
+    : draft.status === "promoted"
+      ? {
+          eyebrow: "Booking confirmed",
+          title: "This appointment is already locked in",
+          description:
+            "The secure hold has already been converted into a confirmed booking, so no further action is needed here.",
+        }
+      : !hasContactDetails
+        ? {
+            eyebrow: "Step 1",
+            title: "Tell the studio where to send everything",
+            description:
+              "Start with your contact details so confirmations, reminders, and updates reach the right place.",
+          }
+        : pendingForms.length > 0
+          ? {
+              eyebrow: "Step 2",
+              title: "Complete the intake before checkout",
+              description:
+                "Answer the required form so the provider has everything needed before your appointment is confirmed.",
             }
-          />
-        </dl>
-      </div>
+          : {
+              eyebrow: "Final step",
+              title: "Secure the appointment",
+              description:
+                "Your time is still on hold. Finish payment now to convert it into a confirmed booking.",
+            };
 
-      {expired ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-5 text-sm text-red-800">
-          Your hold has expired. Please{" "}
-          <a className="underline" href={`/${tenant.slug}/services/${service.id}`}>
-            pick a new time
-          </a>
-          .
-        </div>
-      ) : draft.status === "promoted" ? (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-800">
-          This booking is already confirmed.
-        </div>
-      ) : !draft.customer_email ? (
-        <BookingDetailsForm
-          draftId={draft.id}
-          defaultName={draft.customer_name ?? ""}
-          defaultEmail={draft.customer_email ?? ""}
-          defaultPhone={draft.customer_phone ?? ""}
-          hasPendingForms={pendingForms.length > 0}
-        />
-      ) : pendingForms.length > 0 ? (
-        <FormRuntime
-          draftId={draft.id}
-          requirement={{
-            id: pendingForms[0].id,
-            formName: (pendingForms[0].forms as unknown as { name: string } | null)?.name ?? "Intake form",
-            schema: ((pendingForms[0].form_versions as unknown as { schema_json: FormSchema } | null)?.schema_json) ?? { fields: [] },
-          }}
-          totalPending={pendingForms.length}
-        />
-      ) : (
-        <PayButton
-          draftId={draft.id}
-          tenantSlug={tenant.slug}
-          amountCents={service.deposit_cents > 0 ? service.deposit_cents : service.price_cents}
-          isDeposit={service.deposit_cents > 0}
-          totalCents={service.price_cents}
-        />
-      )}
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-4">
-      <dt className="text-neutral-500">{label}</dt>
-      <dd className="font-medium text-right">{value}</dd>
+    <div
+      className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(255,244,223,0.95),_rgba(252,247,240,0.92)_38%,_rgba(255,255,255,1)_72%)]"
+      style={{ fontFamily: '"Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif' }}
+    >
+      <div className="mx-auto w-full max-w-6xl px-6 py-10 lg:py-14">
+        <header className="mb-8 max-w-4xl">
+          <a
+            href={`/${tenant.slug}`}
+            className="text-sm font-medium uppercase tracking-[0.18em] text-stone-500 transition hover:text-stone-900"
+          >
+            ← Back to {tenant.name}
+          </a>
+          <div className="mt-5 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-2xl space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-stone-500">
+                {stage.eyebrow}
+              </p>
+              <h1
+                className="text-4xl leading-none tracking-[-0.04em] text-stone-950 sm:text-5xl"
+                style={{ fontFamily: '"Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif' }}
+              >
+                {stage.title}
+              </h1>
+              <p className="max-w-xl text-base leading-7 text-stone-600 sm:text-lg">
+                {stage.description}
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[28rem]">
+              {steps.map((step) => (
+                <div
+                  key={step.label}
+                  className={
+                    "rounded-2xl border px-4 py-4 shadow-sm transition " +
+                    (step.state === "complete"
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+                      : step.state === "current"
+                        ? "border-stone-900 bg-stone-900 text-white shadow-[0_20px_45px_rgba(35,21,10,0.18)]"
+                        : "border-stone-200 bg-white/80 text-stone-500")
+                  }
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em]">
+                    {step.state === "complete"
+                      ? "Complete"
+                      : step.state === "current"
+                        ? "Current"
+                        : "Upcoming"}
+                  </p>
+                  <p className="mt-3 text-base font-semibold">{step.label}</p>
+                  <p className="mt-1 text-sm opacity-80">{step.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </header>
+
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)] lg:items-start">
+          <section className="order-2 space-y-6 lg:order-1">
+            <div className="rounded-[2rem] border border-stone-200 bg-white/90 p-6 shadow-[0_24px_70px_rgba(53,35,18,0.1)] backdrop-blur">
+              {expired ? (
+                <StatusPanel
+                  tone="expired"
+                  title="Your hold has expired"
+                  body={
+                    <>
+                      Please{" "}
+                      <a className="underline decoration-stone-400 underline-offset-4" href={`/${tenant.slug}/services/${service.id}`}>
+                        pick a new time
+                      </a>
+                      {" "}to reopen the flow.
+                    </>
+                  }
+                />
+              ) : draft.status === "promoted" ? (
+                <StatusPanel
+                  tone="confirmed"
+                  title="This booking is already confirmed"
+                  body="You can close this page or return to the main booking site."
+                />
+              ) : !draft.customer_email ? (
+                <BookingDetailsForm
+                  draftId={draft.id}
+                  defaultName={draft.customer_name ?? ""}
+                  defaultEmail={draft.customer_email ?? ""}
+                  defaultPhone={draft.customer_phone ?? ""}
+                  hasPendingForms={pendingForms.length > 0}
+                />
+              ) : pendingForms.length > 0 ? (
+                <FormRuntime
+                  draftId={draft.id}
+                  requirement={{
+                    id: pendingForms[0].id,
+                    formName: (pendingForms[0].forms as unknown as { name: string } | null)?.name ?? "Intake form",
+                    schema:
+                      ((pendingForms[0].form_versions as unknown as { schema_json: FormSchema } | null)?.schema_json) ??
+                      { fields: [] },
+                  }}
+                  totalPending={pendingForms.length}
+                />
+              ) : (
+                <PayButton
+                  draftId={draft.id}
+                  tenantSlug={tenant.slug}
+                  amountCents={paymentDueCents}
+                  isDeposit={draft.deposit_cents > 0}
+                  totalCents={draft.price_cents}
+                  noShowFeeCents={tenantSettings.no_show_fee_cents}
+                  autoChargeNoShowFee={tenantSettings.auto_charge_no_show_fee}
+                />
+              )}
+            </div>
+          </section>
+
+          <aside className="order-1 lg:order-2 lg:sticky lg:top-8">
+            <div className="overflow-hidden rounded-[2rem] border border-stone-200 bg-[linear-gradient(180deg,#fffdf8_0%,#f4ebdc_100%)] shadow-[0_26px_80px_rgba(53,35,18,0.12)]">
+              <div className="border-b border-stone-200 px-6 py-6">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
+                  Booking summary
+                </p>
+                <h2
+                  className="mt-3 text-3xl tracking-[-0.03em] text-stone-950"
+                  style={{ fontFamily: '"Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif' }}
+                >
+                  {service.name}
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-stone-600">
+                  Reserved with {provider.name} at {tenant.name}.
+                </p>
+              </div>
+
+              <div className="space-y-5 px-6 py-6 text-sm text-stone-700">
+                <div className="grid gap-4 rounded-2xl bg-white/75 p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                  <Metric label="When" value={formatWhen(draft.starts_at, draft.ends_at, tenant.timezone)} />
+                  <Metric label="Duration" value={`${draft.duration_minutes} minutes`} />
+                  <Metric label="Due now" value={formatMoney(paymentDueCents)} />
+                  <Metric
+                    label={draft.deposit_cents > 0 ? "Remaining later" : "Total value"}
+                    value={draft.deposit_cents > 0 ? formatMoney(balanceDueLaterCents) : formatMoney(draft.price_cents)}
+                  />
+                </div>
+
+                {!expired && draft.status !== "promoted" ? (
+                  <div className="rounded-2xl border border-stone-200 bg-white/80 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+                      Hold expires
+                    </p>
+                    <p className="mt-2 text-base font-semibold text-stone-950">
+                      {formatExpiry(draft.expires_at, tenant.timezone)}
+                    </p>
+                    <p className="mt-1 text-sm text-stone-600">
+                      Finish this flow before the hold releases back to the calendar.
+                    </p>
+                  </div>
+                ) : null}
+
+                <div className="rounded-2xl border border-stone-200 bg-white/80 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+                    Payment structure
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-stone-700">
+                    {draft.deposit_cents > 0
+                      ? `${formatMoney(paymentDueCents)} is collected now to secure the appointment. The remaining ${formatMoney(balanceDueLaterCents)} is paid at the visit.`
+                      : `${formatMoney(paymentDueCents)} is collected today to confirm the booking.`}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-stone-200 bg-stone-950 px-4 py-5 text-stone-100">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-400">
+                    What happens next
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-stone-200">
+                    You&apos;ll receive a confirmation with a secure manage link, and reminders follow the studio&apos;s timing settings.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
     </div>
   );
 }
 
-function formatWhen(starts: string, ends: string) {
-  const s = new Date(starts);
-  const e = new Date(ends);
-  const day = s.toLocaleDateString(undefined, {
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">{label}</p>
+      <p className="mt-2 text-sm font-semibold text-stone-950">{value}</p>
+    </div>
+  );
+}
+
+function StatusPanel({
+  tone,
+  title,
+  body,
+}: {
+  tone: "expired" | "confirmed";
+  title: string;
+  body: React.ReactNode;
+}) {
+  return (
+    <div
+      className={
+        "rounded-[1.5rem] border px-6 py-6 text-sm " +
+        (tone === "expired"
+          ? "border-red-200 bg-red-50 text-red-900"
+          : "border-emerald-200 bg-emerald-50 text-emerald-900")
+      }
+    >
+      <h2 className="text-xl font-semibold">{title}</h2>
+      <div className="mt-3 leading-7">{body}</div>
+    </div>
+  );
+}
+
+function formatMoney(cents: number) {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+function formatExpiry(iso: string, timeZone: string) {
+  const day = formatInTimeZone(
+    iso,
+    timeZone,
+    { weekday: "short", month: "short", day: "numeric" },
+    "en-US"
+  );
+  const time = formatInTimeZone(
+    iso,
+    timeZone,
+    { hour: "numeric", minute: "2-digit", timeZoneName: "short" },
+    "en-US"
+  );
+  return `${day} at ${time}`;
+}
+
+function formatWhen(starts: string, ends: string, timeZone: string) {
+  const day = formatInTimeZone(starts, timeZone, {
     weekday: "long",
     month: "long",
     day: "numeric",
   });
-  const t1 = s.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  const t2 = e.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const t1 = formatInTimeZone(starts, timeZone, { hour: "numeric", minute: "2-digit" });
+  const t2 = formatInTimeZone(ends, timeZone, { hour: "numeric", minute: "2-digit" });
   return `${day}, ${t1} – ${t2}`;
 }

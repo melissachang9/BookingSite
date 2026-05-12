@@ -4,7 +4,7 @@ import { requireTenant } from "@/lib/admin/require-tenant";
 export default async function AdminHome() {
   const { supabase, tenantId } = await requireTenant();
 
-  const [{ count: serviceCount }, { count: providerCount }, { count: upcomingCount }, { count: formCount }] =
+  const [{ count: serviceCount }, { count: providerCount }, { count: upcomingCount }, { count: formCount }, { count: customerCount }] =
     await Promise.all([
       supabase
         .from("services")
@@ -27,6 +27,10 @@ export default async function AdminHome() {
         .select("id", { count: "exact", head: true })
         .eq("tenant_id", tenantId)
         .eq("is_archived", false),
+      supabase
+        .from("customers")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId),
     ]);
 
   return (
@@ -40,9 +44,12 @@ export default async function AdminHome() {
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Card href="/admin/calendar" title="Calendar" desc="Week view" />
         <Card href="/admin/bookings" title="Bookings" desc={`${upcomingCount ?? 0} upcoming`} />
+        <Card href="/admin/onboarding" title="Onboarding" desc="Launch checklist" />
+        <Card href="/admin/customers" title="Customers" desc={`${customerCount ?? 0} records`} />
         <Card href="/admin/services" title="Services" desc={`${serviceCount ?? 0} active`} />
         <Card href="/admin/providers" title="Providers" desc={`${providerCount ?? 0} active`} />
         <Card href="/admin/forms" title="Forms" desc={`${formCount ?? 0} active`} />
+        <Card href="/admin/settings" title="Settings" desc="Policies and reminders" />
       </ul>
     </div>
   );

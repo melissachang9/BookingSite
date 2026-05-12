@@ -35,61 +35,91 @@ export function BookingDetailsForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4 rounded-lg border border-neutral-200 bg-white p-5">
-      <div className="border-b border-neutral-200 pb-3">
-        <h2 className="text-lg font-semibold">Your details</h2>
-        {hasPendingForms ? (
-          <p className="mt-1 text-sm text-neutral-600">
-            Next, you&apos;ll fill out a quick intake form.
+    <form onSubmit={onSubmit} className="space-y-6">
+      <div className="flex flex-col gap-4 border-b border-stone-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
+        <div className="max-w-2xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+            Contact details
           </p>
-        ) : null}
+          <h2
+            className="mt-2 text-3xl tracking-[-0.03em] text-stone-950"
+            style={{ fontFamily: '"Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif' }}
+          >
+            Where should the studio send updates?
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-stone-600 sm:text-base">
+            These details power confirmations, reminders, and any last-minute booking updates.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600 shadow-sm">
+          {hasPendingForms ? "Intake comes next." : "Payment comes next."}
+        </div>
       </div>
 
-      <Field label="Your name">
+      <Field label="Your name" hint="This appears on the confirmation and the customer record.">
         <input
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          placeholder="Full name"
+          className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-stone-900 shadow-[0_12px_24px_rgba(40,23,9,0.06)] outline-none transition placeholder:text-stone-400 focus:border-stone-900"
         />
       </Field>
-      <Field label="Email">
-        <input
-          required
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-      </Field>
-      <Field label="Phone">
-        <input
-          required
-          type="tel"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-      </Field>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Email" hint="Used for confirmations, receipts, and reminder emails.">
+          <input
+            required
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-stone-900 shadow-[0_12px_24px_rgba(40,23,9,0.06)] outline-none transition placeholder:text-stone-400 focus:border-stone-900"
+          />
+        </Field>
+        <Field label="Phone" hint="Used only if the business needs to reach you quickly.">
+          <input
+            required
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="(555) 555-5555"
+            className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-stone-900 shadow-[0_12px_24px_rgba(40,23,9,0.06)] outline-none transition placeholder:text-stone-400 focus:border-stone-900"
+          />
+        </Field>
+      </div>
+
+      <div className="rounded-[1.5rem] border border-stone-200 bg-stone-50/80 p-4 text-sm leading-6 text-stone-600">
+        This booking keeps moving as soon as you continue. We only use these details for appointment communication and business records.
+      </div>
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+        className="w-full rounded-2xl bg-stone-900 px-5 py-4 text-sm font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-stone-800 disabled:opacity-50"
       >
-        {pending ? "Saving…" : "Continue"}
+        {pending ? "Saving…" : hasPendingForms ? "Continue to intake" : "Continue to payment"}
       </button>
     </form>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <label className="block">
-      <span className="mb-1 block text-sm font-medium text-neutral-700">{label}</span>
-      {children}
+    <label className="block rounded-[1.5rem] border border-stone-200 bg-stone-50/80 p-4 shadow-sm">
+      <span className="block text-sm font-semibold text-stone-900">{label}</span>
+      {hint ? <span className="mt-1 block text-xs leading-5 text-stone-500">{hint}</span> : null}
+      <div className="mt-3">{children}</div>
     </label>
   );
 }

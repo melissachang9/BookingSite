@@ -58,6 +58,9 @@ export default async function AdminLayout({
               <Link href="/admin/bookings" className="text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100">
                 Bookings
               </Link>
+              <Link href="/admin/customers" className="text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100">
+                Customers
+              </Link>
               <Link href="/admin/services" className="text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100">
                 Services
               </Link>
@@ -66,6 +69,9 @@ export default async function AdminLayout({
               </Link>
               <Link href="/admin/forms" className="text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100">
                 Forms
+              </Link>
+              <Link href="/admin/settings" className="text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100">
+                Settings
               </Link>
             </nav>
           </div>

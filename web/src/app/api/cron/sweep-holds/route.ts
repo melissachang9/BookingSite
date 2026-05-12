@@ -5,22 +5,17 @@
  * the time becomes bookable again. Idempotent — safe to run repeatedly.
  *
  * Trigger: Vercel Cron / external scheduler hits this every 1–5 minutes.
- * Auth: requires header `x-cron-secret` matching CRON_SECRET env var.
+ * Auth: accepts either `Authorization: Bearer <CRON_SECRET>` or `x-cron-secret`.
  */
 import { NextResponse } from "next/server";
+import { requireCronAuth } from "@/lib/cron/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
-  }
-  const headerSecret = req.headers.get("x-cron-secret");
-  if (headerSecret !== secret) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+async function handleSweep(req: Request) {
+  const authError = requireCronAuth(req);
+  if (authError) return authError;
 
   const admin = createAdminClient();
   const now = new Date().toISOString();
@@ -46,4 +41,12 @@ export async function POST(req: Request) {
     ok: true,
     abandoned_drafts: expiredDrafts?.length ?? 0,
   });
+}
+
+export async function GET(req: Request) {
+  return handleSweep(req);
+}
+
+export async function POST(req: Request) {
+  return handleSweep(req);
 }
