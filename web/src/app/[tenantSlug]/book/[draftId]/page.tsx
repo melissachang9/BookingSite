@@ -4,6 +4,7 @@
  */
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getStripe } from "@/lib/stripe";
 import { BookingDetailsForm } from "./booking-details-form";
 import { FormRuntime } from "./form-runtime";
 import { PayButton } from "./pay-button";
@@ -12,6 +13,39 @@ import { normalizeTenantSettings } from "@/lib/tenants/settings";
 import { formatInTimeZone } from "@/lib/datetime/timezone";
 
 type Params = { tenantSlug: string; draftId: string };
+
+type CheckoutSessionState = {
+  status: "open" | "complete" | "expired";
+  expiresAt: string | null;
+};
+
+async function loadCheckoutSessionState(
+  stripeSessionId: string | null
+): Promise<CheckoutSessionState | null> {
+  if (!stripeSessionId) return null;
+
+  try {
+    const stripe = getStripe();
+    const session = await stripe.checkout.sessions.retrieve(stripeSessionId);
+    if (
+      session.status !== "open" &&
+      session.status !== "complete" &&
+      session.status !== "expired"
+    ) {
+      return null;
+    }
+
+    return {
+      status: session.status,
+      expiresAt: session.expires_at
+        ? new Date(session.expires_at * 1000).toISOString()
+        : null,
+    };
+  } catch (error) {
+    console.error("Failed to load checkout session state", error);
+    return null;
+  }
+}
 
 async function loadDraft(slug: string, draftId: string) {
   const admin = createAdminClient();
@@ -24,12 +58,12 @@ async function loadDraft(slug: string, draftId: string) {
 
   const { data: draft } = await admin
     .from("booking_drafts")
-    .select("id, tenant_id, service_id, location_id, provider_id, starts_at, ends_at, status, expires_at, customer_email, customer_name, customer_phone, draft_contact_details_json, draft_contact_details_saved_at, price_cents, deposit_cents, duration_minutes")
+    .select("id, tenant_id, service_id, location_id, provider_id, starts_at, ends_at, status, expires_at, stripe_session_id, customer_email, customer_name, customer_phone, draft_contact_details_json, draft_contact_details_saved_at, price_cents, deposit_cents, duration_minutes")
     .eq("id", draftId)
     .maybeSingle();
   if (!draft || draft.tenant_id !== tenant.id) return null;
 
-  const [{ data: service }, { data: location }, { data: provider }, { data: requirements }] = await Promise.all([
+  const [{ data: service }, { data: location }, { data: provider }, { data: requirements }, checkoutSession] = await Promise.all([
     admin.from("services").select("id, name").eq("id", draft.service_id).maybeSingle(),
     admin.from("locations").select("id, name").eq("id", draft.location_id).maybeSingle(),
     admin.from("providers").select("id, name").eq("id", draft.provider_id).maybeSingle(),
@@ -38,9 +72,20 @@ async function loadDraft(slug: string, draftId: string) {
       .select("id, form_id, form_version_id, satisfied_by_response_id, draft_answers_json, draft_saved_at, forms(name, description), form_versions(schema_json)")
       .eq("booking_draft_id", draftId)
       .order("id", { ascending: true }),
+    draft.status === "promoted"
+      ? Promise.resolve(null)
+      : loadCheckoutSessionState(draft.stripe_session_id ?? null),
   ]);
 
-  return { tenant, draft, service, location, provider, requirements: requirements ?? [] };
+  return {
+    tenant,
+    draft,
+    service,
+    location,
+    provider,
+    requirements: requirements ?? [],
+    checkoutSession,
+  };
 }
 
 export default async function BookingReviewPage({
@@ -51,7 +96,7 @@ export default async function BookingReviewPage({
   const { tenantSlug, draftId } = await params;
   const data = await loadDraft(tenantSlug, draftId);
   if (!data || !data.service || !data.provider) notFound();
-  const { tenant, draft, service, location, provider, requirements } = data;
+  const { tenant, draft, service, location, provider, requirements, checkoutSession } = data;
   const tenantSettings = normalizeTenantSettings(
     (tenant.settings_json ?? null) as Partial<Record<string, unknown>> | null
   );
@@ -257,6 +302,12 @@ export default async function BookingReviewPage({
                   totalCents={draft.price_cents}
                   noShowFeeCents={tenantSettings.no_show_fee_cents}
                   autoChargeNoShowFee={tenantSettings.auto_charge_no_show_fee}
+                  checkoutSessionStatus={checkoutSession?.status ?? null}
+                  checkoutSessionExpiresLabel={
+                    checkoutSession?.expiresAt
+                      ? formatExpiry(checkoutSession.expiresAt, tenant.timezone)
+                      : null
+                  }
                 />
               )}
             </div>

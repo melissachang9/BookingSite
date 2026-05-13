@@ -220,6 +220,67 @@ const CheckoutInput = z.object({
 
 export type CheckoutResult = { ok: boolean; error?: string; url?: string };
 
+const CHECKOUT_SESSION_MINUTES = 30;
+const REUSABLE_CHECKOUT_BUFFER_MINUTES = 5;
+
+function getCheckoutExpiryDate(currentDraftExpiry: string) {
+  return new Date(
+    Math.max(
+      new Date(currentDraftExpiry).getTime(),
+      Date.now() + CHECKOUT_SESSION_MINUTES * 60_000
+    )
+  );
+}
+
+function isReusableCheckoutSession(session: Awaited<ReturnType<ReturnType<typeof getStripe>["checkout"]["sessions"]["retrieve"]>>) {
+  if (session.status !== "open" || !session.url || !session.expires_at) return false;
+
+  return (
+    session.expires_at * 1000 <=
+    Date.now() + (CHECKOUT_SESSION_MINUTES + REUSABLE_CHECKOUT_BUFFER_MINUTES) * 60_000
+  );
+}
+
+async function persistCheckoutWindow(opts: {
+  admin: ReturnType<typeof createAdminClient>;
+  draftId: string;
+  stripeSessionId: string;
+  expiresAt: Date;
+}) {
+  const expiresAtIso = opts.expiresAt.toISOString();
+
+  const { data: updatedDraft, error: draftErr } = await opts.admin
+    .from("booking_drafts")
+    .update({
+      stripe_session_id: opts.stripeSessionId,
+      status: "awaiting_payment",
+      expires_at: expiresAtIso,
+    })
+    .eq("id", opts.draftId)
+    .select("id")
+    .maybeSingle();
+  if (draftErr || !updatedDraft) {
+    return { ok: false as const, error: draftErr?.message ?? "Booking not found" };
+  }
+
+  const { data: updatedHold, error: holdErr } = await opts.admin
+    .from("slot_holds")
+    .update({ expires_at: expiresAtIso })
+    .eq("booking_draft_id", opts.draftId)
+    .select("id")
+    .maybeSingle();
+  if (holdErr || !updatedHold) {
+    return {
+      ok: false as const,
+      error:
+        holdErr?.message ??
+        "Your reservation could not be extended for checkout. Please pick a new time.",
+    };
+  }
+
+  return { ok: true as const };
+}
+
 /**
  * Create a Stripe Checkout session for the deposit (or full price if no deposit).
  * Webhook on `checkout.session.completed` promotes the draft to a confirmed booking.
@@ -233,13 +294,10 @@ export async function createCheckoutSessionAction(
   const admin = createAdminClient();
   const { data: draft } = await admin
     .from("booking_drafts")
-    .select("id, tenant_id, service_id, customer_id, customer_email, customer_name, customer_phone, status, expires_at, price_cents, deposit_cents, duration_minutes")
+    .select("id, tenant_id, service_id, customer_id, customer_email, customer_name, customer_phone, status, expires_at, stripe_session_id, price_cents, deposit_cents, duration_minutes")
     .eq("id", parsed.data.draftId)
     .maybeSingle();
   if (!draft) return { ok: false, error: "Booking not found" };
-  if (new Date(draft.expires_at) < new Date()) {
-    return { ok: false, error: "Your hold has expired. Please pick a new time." };
-  }
   if (draft.status === "promoted") return { ok: false, error: "Already booked" };
   if (!draft.customer_email) return { ok: false, error: "Please enter your contact details first" };
 
@@ -278,10 +336,60 @@ export async function createCheckoutSessionAction(
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const successUrl = `${appUrl}/${parsed.data.tenantSlug}/book/${draft.id}/success?session_id={CHECKOUT_SESSION_ID}`;
-  const cancelUrl = `${appUrl}/${parsed.data.tenantSlug}/book/${draft.id}`;
+  const draftUrl = `${appUrl}/${parsed.data.tenantSlug}/book/${draft.id}`;
+  const successBaseUrl = `${draftUrl}/success`;
+  const successUrl = `${successBaseUrl}?session_id={CHECKOUT_SESSION_ID}`;
+  const cancelUrl = draftUrl;
 
   const stripe = getStripe();
+
+  if (draft.stripe_session_id) {
+    try {
+      const existingSession = await stripe.checkout.sessions.retrieve(draft.stripe_session_id);
+
+      if (existingSession.status === "complete") {
+        return {
+          ok: true,
+          url: `${successBaseUrl}?session_id=${existingSession.id}`,
+        };
+      }
+
+      if (existingSession.status === "open") {
+        if (isReusableCheckoutSession(existingSession)) {
+          const syncResult = await persistCheckoutWindow({
+            admin,
+            draftId: draft.id,
+            stripeSessionId: existingSession.id,
+            expiresAt: new Date(existingSession.expires_at! * 1000),
+          });
+          if (!syncResult.ok) {
+            return { ok: false, error: syncResult.error };
+          }
+
+          return { ok: true, url: existingSession.url ?? undefined };
+        }
+
+        try {
+          await stripe.checkout.sessions.expire(existingSession.id);
+        } catch (error) {
+          console.error("Failed to expire stale checkout session", error);
+          return {
+            ok: false,
+            error:
+              "Your previous checkout session is still active and could not be refreshed yet. Please try again in a moment.",
+          };
+        }
+      }
+    } catch (error) {
+      console.error("Failed to retrieve existing checkout session", error);
+    }
+  }
+
+  if (new Date(draft.expires_at) < new Date()) {
+    return { ok: false, error: "Your hold has expired. Please pick a new time." };
+  }
+
+  const checkoutExpiresAt = getCheckoutExpiryDate(draft.expires_at);
   let stripeCustomerId: string | null = null;
 
   if (shouldAutoChargeNoShowFee) {
@@ -358,6 +466,7 @@ export async function createCheckoutSessionAction(
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     payment_method_types: ["card"],
+    expires_at: Math.floor(checkoutExpiresAt.getTime() / 1000),
     ...(stripeCustomerId ? { customer: stripeCustomerId } : { customer_email: draft.customer_email }),
     ...(shouldAutoChargeNoShowFee
       ? { payment_intent_data: { setup_future_usage: "off_session" as const } }
@@ -387,10 +496,20 @@ export async function createCheckoutSessionAction(
     },
   });
 
-  await admin
-    .from("booking_drafts")
-    .update({ stripe_session_id: session.id, status: "awaiting_payment" })
-    .eq("id", draft.id);
+  const syncResult = await persistCheckoutWindow({
+    admin,
+    draftId: draft.id,
+    stripeSessionId: session.id,
+    expiresAt: checkoutExpiresAt,
+  });
+  if (!syncResult.ok) {
+    try {
+      await stripe.checkout.sessions.expire(session.id);
+    } catch (error) {
+      console.error("Failed to expire checkout session after sync failure", error);
+    }
+    return { ok: false, error: syncResult.error };
+  }
 
   if (!session.url) return { ok: false, error: "Failed to create checkout session" };
   return { ok: true, url: session.url };

@@ -251,9 +251,20 @@ export function SlotPicker({
 
     if (jumpAvailableSlot.date === date) {
       setError(null);
+      setSlots(null);
       setHighlightedSlotStartAt(jumpAvailableSlot.starts_at);
       pendingJumpTargetRef.current = jumpAvailableSlot.starts_at;
-      slotListRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      startLoading(async () => {
+        const res = await loadSlotsAction({
+          tenantId,
+          serviceId,
+          locationId,
+          providerId: toActionProviderId(providerId),
+          date: jumpAvailableSlot.date,
+        });
+        if (!res.ok) setError(res.error ?? "Failed to load slots");
+        else setSlots(res.slots ?? []);
+      });
       return;
     }
 

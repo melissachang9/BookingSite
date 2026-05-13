@@ -3,12 +3,15 @@
  * promoting the draft — this page just shows a friendly state based on whether
  * the promotion has happened yet (it usually has by the time the redirect lands).
  */
+import { unstable_noStore as noStore } from "next/cache";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { PendingStatusRefresh } from "./pending-status-refresh";
 
 type Params = { tenantSlug: string; draftId: string };
 
 async function loadStatus(slug: string, draftId: string) {
+  noStore();
   const admin = createAdminClient();
   const { data: tenant } = await admin
     .from("tenants")
@@ -66,6 +69,7 @@ export default async function SuccessPage({
         </div>
       ) : (
         <div className="rounded-lg border border-neutral-200 bg-white p-5 text-sm text-neutral-700">
+          <PendingStatusRefresh />
           <p className="font-medium">Almost there…</p>
           <p className="mt-1">
             Your payment is processing. This page will update automatically when it&apos;s done.

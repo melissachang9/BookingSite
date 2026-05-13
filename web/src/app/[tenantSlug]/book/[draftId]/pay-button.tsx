@@ -11,6 +11,8 @@ export function PayButton({
   totalCents,
   noShowFeeCents,
   autoChargeNoShowFee,
+  checkoutSessionStatus,
+  checkoutSessionExpiresLabel,
 }: {
   draftId: string;
   tenantSlug: string;
@@ -19,9 +21,15 @@ export function PayButton({
   totalCents: number;
   noShowFeeCents: number;
   autoChargeNoShowFee: boolean;
+  checkoutSessionStatus: "open" | "complete" | "expired" | null;
+  checkoutSessionExpiresLabel: string | null;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const hasOpenCheckout = checkoutSessionStatus === "open";
+  const isProcessing = checkoutSessionStatus === "complete";
+  const previousSessionExpired = checkoutSessionStatus === "expired";
 
   function onClick() {
     setError(null);
@@ -83,6 +91,40 @@ export function PayButton({
         </p>
       </div>
 
+      {hasOpenCheckout ? (
+        <div className="rounded-[1.5rem] border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+          <p className="font-semibold text-amber-950">Your checkout is still open</p>
+          <p className="mt-1">
+            Resume the same Stripe session without re-entering your booking details.
+            {checkoutSessionExpiresLabel
+              ? ` Finish payment before ${checkoutSessionExpiresLabel}.`
+              : ""}
+          </p>
+        </div>
+      ) : null}
+
+      {previousSessionExpired ? (
+        <div className="rounded-[1.5rem] border border-stone-200 bg-stone-50 p-4 text-sm leading-6 text-stone-700">
+          <p className="font-semibold text-stone-900">Your previous checkout session ended</p>
+          <p className="mt-1">Start a fresh secure checkout below to finish confirming this booking.</p>
+        </div>
+      ) : null}
+
+      {isProcessing ? (
+        <div className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900">
+          <p className="font-semibold text-emerald-950">Payment submitted</p>
+          <p className="mt-1">
+            Stripe has your payment. We&apos;re finalizing the booking now.
+          </p>
+          <a
+            href={`/${tenantSlug}/book/${draftId}/success`}
+            className="mt-3 inline-flex text-sm font-semibold text-emerald-900 underline decoration-emerald-300 underline-offset-4"
+          >
+            Refresh confirmation status
+          </a>
+        </div>
+      ) : null}
+
       {autoChargeNoShowFee && noShowFeeCents > 0 ? (
         <div className="rounded-[1.5rem] border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
           This business has enabled optional automatic no-show charging. Stripe will securely save this card for this booking and may charge the $${(noShowFeeCents / 100).toFixed(2)} no-show fee if you miss the appointment.
@@ -91,17 +133,25 @@ export function PayButton({
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={pending}
-        className="w-full rounded-2xl bg-stone-900 px-5 py-4 text-sm font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-stone-800 disabled:opacity-50"
-      >
-        {pending ? "Opening secure checkout…" : `Pay $${(amountCents / 100).toFixed(2)} securely`}
-      </button>
+      {isProcessing ? null : (
+        <button
+          type="button"
+          onClick={onClick}
+          disabled={pending}
+          className="w-full rounded-2xl bg-stone-900 px-5 py-4 text-sm font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-stone-800 disabled:opacity-50"
+        >
+          {pending
+            ? "Opening secure checkout…"
+            : hasOpenCheckout
+              ? "Resume secure checkout"
+              : `Pay $${(amountCents / 100).toFixed(2)} securely`}
+        </button>
+      )}
 
       <p className="text-xs uppercase tracking-[0.18em] text-stone-500">
-        Card processing runs through Stripe. You&apos;ll return here automatically if checkout is interrupted.
+        {hasOpenCheckout
+          ? "Stripe will reopen the same secure checkout session."
+          : "Card processing runs through Stripe. You&apos;ll return here automatically if checkout is interrupted."}
       </p>
     </div>
   );
