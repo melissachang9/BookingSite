@@ -1,0 +1,84 @@
+:root {
+  color-scheme: light;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  background: #f5f1e8;
+  color: #1f1f1a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(227, 200, 158, 0.5), transparent 28%),
+    linear-gradient(180deg, #f8f4ec 0%, #efe6d7 100%);
+}
+
+.dashboard-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+}
+
+.dashboard-panel {
+  width: min(720px, 100%);
+  padding: 2rem;
+  border-radius: 28px;
+  background: rgba(255, 251, 245, 0.92);
+  border: 1px solid rgba(68, 55, 31, 0.12);
+  box-shadow: 0 22px 60px rgba(68, 55, 31, 0.12);
+}
+
+.dashboard-eyebrow {
+  margin: 0 0 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.8rem;
+  color: #8a5b28;
+}
+
+.dashboard-panel h1 {
+  margin: 0;
+  font-size: clamp(2.2rem, 4vw, 3.5rem);
+  line-height: 1;
+}
+
+.dashboard-copy {
+  margin: 1rem 0 1.5rem;
+  max-width: 58ch;
+  line-height: 1.6;
+}
+
+.dashboard-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin: 0 0 1.5rem;
+}
+
+.dashboard-meta div {
+  padding: 1rem;
+  border-radius: 18px;
+  background: #fff7ea;
+}
+
+.dashboard-meta dt {
+  margin: 0 0 0.4rem;
+  font-weight: 700;
+}
+
+.dashboard-meta dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.dashboard-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.65rem;
+}

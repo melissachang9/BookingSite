@@ -20,12 +20,21 @@ async function handleSweep(req: Request) {
   const admin = createAdminClient();
   const now = new Date().toISOString();
 
-  // Mark expired drafts that aren't already promoted/abandoned.
+  // Mark expired payment drafts separately so staff can distinguish timed-out payment links.
+  const { data: expiredPaymentDrafts, error: paymentErr } = await admin
+    .from("booking_drafts")
+    .update({ status: "abandoned", deposit_status: "expired_unpaid" })
+    .lt("expires_at", now)
+    .eq("status", "awaiting_payment")
+    .select("id");
+  if (paymentErr) return NextResponse.json({ error: paymentErr.message }, { status: 500 });
+
+  // Mark other expired drafts abandoned.
   const { data: expiredDrafts, error: dErr } = await admin
     .from("booking_drafts")
     .update({ status: "abandoned" })
     .lt("expires_at", now)
-    .in("status", ["draft", "awaiting_form", "awaiting_payment"])
+    .in("status", ["draft", "awaiting_form"])
     .select("id");
   if (dErr) return NextResponse.json({ error: dErr.message }, { status: 500 });
 
@@ -39,7 +48,7 @@ async function handleSweep(req: Request) {
 
   return NextResponse.json({
     ok: true,
-    abandoned_drafts: expiredDrafts?.length ?? 0,
+    abandoned_drafts: (expiredDrafts?.length ?? 0) + (expiredPaymentDrafts?.length ?? 0),
   });
 }
 

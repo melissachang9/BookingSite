@@ -38,6 +38,8 @@ const upsertFormSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(2000).optional().or(z.literal("")),
+  scope: z.enum(["customer", "internal"]),
+  customerPromptTiming: z.enum(["pre_booking", "pre_visit", "post_visit"]).optional().nullable(),
   fields: z.array(fieldSchema).max(50),
 });
 
@@ -56,9 +58,16 @@ export async function upsertFormAction(
     id: formData.get("id") || undefined,
     name: formData.get("name"),
     description: formData.get("description") ?? "",
+    scope: formData.get("scope"),
+    customerPromptTiming: formData.get("customerPromptTiming") ?? null,
     fields: parsedFields,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+
+  const customerPromptTiming =
+    parsed.data.scope === "customer"
+      ? (parsed.data.customerPromptTiming ?? "pre_booking")
+      : null;
 
   // Field-specific validation.
   for (const f of parsed.data.fields) {
@@ -96,6 +105,8 @@ export async function upsertFormAction(
         tenant_id: tenantId,
         name: parsed.data.name,
         description: parsed.data.description || null,
+        scope: parsed.data.scope,
+        customer_prompt_timing: customerPromptTiming,
       })
       .select("id")
       .single();
@@ -107,6 +118,8 @@ export async function upsertFormAction(
       .update({
         name: parsed.data.name,
         description: parsed.data.description || null,
+        scope: parsed.data.scope,
+        customer_prompt_timing: customerPromptTiming,
       })
       .eq("id", formId)
       .eq("tenant_id", tenantId);
@@ -144,6 +157,7 @@ export async function upsertFormAction(
 
   revalidatePath("/admin/forms");
   revalidatePath(`/admin/forms/${formId}`);
+  revalidatePath("/admin/services");
 
   if (!parsed.data.id) {
     redirect(`/admin/forms/${formId}`);
@@ -199,11 +213,14 @@ export async function setServiceFormsAction(
   if (parsed.data.form_ids.length > 0) {
     const { data: forms } = await supabase
       .from("forms")
-      .select("id")
+      .select("id, scope")
       .in("id", parsed.data.form_ids)
       .eq("tenant_id", tenantId);
     if ((forms?.length ?? 0) !== parsed.data.form_ids.length) {
       return { error: "Form not found in this tenant." };
+    }
+    if ((forms ?? []).some((form) => form.scope !== "customer")) {
+      return { error: "Only customer-facing forms can be attached to services." };
     }
   }
 

@@ -42,7 +42,7 @@ export async function sendBookingReminderEmail(opts: {
           <p style="margin: 0 0 4px; color: #555;">${escape(when)}</p>
           ${providerLine}
         </div>
-        <p>If you need to cancel, use your secure link here: <a href="${opts.cancelUrl}">Manage your booking</a>.</p>
+        <p>Use your secure link here to manage your booking, complete any pending forms, or cancel if needed: <a href="${opts.cancelUrl}">Manage your booking</a>.</p>
         <p style="color: #888; font-size: 12px; margin-top: 32px;">— ${escape(opts.tenantName)}</p>
       </div>
     `,

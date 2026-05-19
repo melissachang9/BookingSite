@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { CancelBookingForm } from "./cancel-form";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getBookingByCancelToken } from "@/lib/bookings/cancel";
 import { formatInTimeZone } from "@/lib/datetime/timezone";
+import type { FormSchema } from "@/lib/forms/schema";
+import { ManageBookingFormRuntime } from "./manage-form-runtime";
 
-export const metadata = { title: "Cancel Booking — BookingSite" };
+export const metadata = { title: "Manage Booking — BookingSite" };
 
 function formatMoney(cents: number | null | undefined) {
   if (!cents || cents <= 0) return null;
@@ -66,6 +69,33 @@ export default async function CancelBookingPage({
   }
 
   const refundedText = formatMoney(booking.refundedAmountCents);
+  const admin = createAdminClient();
+  const { data: requirements } = await admin
+    .from("booking_form_requirements")
+    .select(
+      "id, form_id, form_version_id, satisfied_by_response_id, draft_answers_json, draft_saved_at, forms!inner(name, description, customer_prompt_timing, scope), form_versions(schema_json)"
+    )
+    .eq("booking_id", booking.id)
+    .order("created_at", { ascending: true });
+
+  const now = new Date();
+  const visiblePendingForms = (requirements ?? []).filter((requirement) => {
+    if (requirement.satisfied_by_response_id) return false;
+    const form = requirement.forms as unknown as {
+      scope: string;
+      customer_prompt_timing: string | null;
+    } | null;
+    if (!form || form.scope !== "customer") return false;
+
+    const timing = form.customer_prompt_timing ?? "pre_booking";
+    if (timing === "pre_visit") {
+      return booking.status === "confirmed" && new Date(booking.endsAt) > now;
+    }
+    if (timing === "post_visit") {
+      return booking.status !== "canceled" && new Date(booking.endsAt) <= now;
+    }
+    return false;
+  });
 
   return (
     <main className="mx-auto max-w-xl px-4 py-16">
@@ -90,6 +120,41 @@ export default async function CancelBookingPage({
             <p className="mt-1 text-sm text-neutral-600">Provider: {booking.providerName}</p>
           ) : null}
         </section>
+
+        {visiblePendingForms.length > 0 ? (
+          <section className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+              {visiblePendingForms.length > 1 ? `${visiblePendingForms.length} forms pending` : "Pending form"}
+            </p>
+            <div className="mt-4">
+              <ManageBookingFormRuntime
+                token={token}
+                requirement={{
+                  id: visiblePendingForms[0].id,
+                  formName:
+                    (visiblePendingForms[0].forms as unknown as { name: string } | null)?.name ??
+                    "Required form",
+                  formDescription:
+                    (visiblePendingForms[0].forms as unknown as { description?: string | null } | null)
+                      ?.description ?? null,
+                  schema:
+                    ((visiblePendingForms[0].form_versions as unknown as {
+                      schema_json: FormSchema;
+                    } | null)?.schema_json) ?? { fields: [] },
+                }}
+                initialAnswers={
+                  ((visiblePendingForms[0] as {
+                    draft_answers_json?: Record<string, unknown> | null;
+                  }).draft_answers_json ?? {})
+                }
+                initialSavedAt={
+                  (visiblePendingForms[0] as { draft_saved_at?: string | null }).draft_saved_at ?? null
+                }
+                totalPending={visiblePendingForms.length}
+              />
+            </div>
+          </section>
+        ) : null}
 
         {booking.status === "confirmed" ? (
           <CancelBookingForm

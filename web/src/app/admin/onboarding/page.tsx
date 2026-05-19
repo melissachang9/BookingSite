@@ -186,6 +186,10 @@ export default async function OnboardingPage() {
               <dd>{tenantSettings.auto_charge_no_show_fee ? "Enabled" : "Disabled"}</dd>
             </div>
             <div className="flex justify-between gap-4">
+              <dt className="text-neutral-500">Payment link hold</dt>
+              <dd>{tenantSettings.payment_link_expiry_minutes} min</dd>
+            </div>
+            <div className="flex justify-between gap-4">
               <dt className="text-neutral-500">Edit defaults</dt>
               <dd>
                 <Link href="/admin/settings" className="text-blue-600 hover:underline">

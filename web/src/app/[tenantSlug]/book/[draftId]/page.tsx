@@ -104,6 +104,9 @@ export default async function BookingReviewPage({
   const expired = new Date(draft.expires_at) < new Date();
   const draftContactDetails = normalizeDraftContactDetails(draft.draft_contact_details_json);
   const pendingForms = requirements.filter((r) => !r.satisfied_by_response_id);
+  const currentPendingForm = pendingForms[0]
+    ? ((pendingForms[0].forms as unknown as { name: string; description?: string | null } | null) ?? null)
+    : null;
   const hasContactDetails = Boolean(draft.customer_email);
   const hasForms = requirements.length > 0;
   const paymentDueCents = draft.deposit_cents > 0 ? draft.deposit_cents : draft.price_cents;
@@ -120,7 +123,7 @@ export default async function BookingReviewPage({
           : "current",
     },
     {
-      label: hasForms ? "Intake" : "Prep",
+      label: hasForms ? "Forms" : "Prep",
       description: hasForms ? `${requirements.length} required form${requirements.length === 1 ? "" : "s"}` : "No form required",
       state: expired
         ? "disabled"
@@ -171,9 +174,13 @@ export default async function BookingReviewPage({
         : pendingForms.length > 0
           ? {
               eyebrow: "Step 2",
-              title: "Complete the intake before checkout",
+              title:
+                pendingForms.length === 1
+                  ? currentPendingForm?.name ?? "Complete the required form before checkout"
+                  : `Complete ${pendingForms.length} forms before checkout`,
               description:
-                "Answer the required form so the provider has everything needed before your appointment is confirmed.",
+                currentPendingForm?.description?.trim() ??
+                "Answer the required form so the business has what it needs before your appointment is confirmed.",
             }
           : {
               eyebrow: "Final step",
@@ -280,7 +287,10 @@ export default async function BookingReviewPage({
                   draftId={draft.id}
                   requirement={{
                     id: pendingForms[0].id,
-                    formName: (pendingForms[0].forms as unknown as { name: string } | null)?.name ?? "Intake form",
+                    formName:
+                      (pendingForms[0].forms as unknown as { name: string } | null)?.name ?? "Required form",
+                    formDescription:
+                      (pendingForms[0].forms as unknown as { description?: string | null } | null)?.description ?? null,
                     schema:
                       ((pendingForms[0].form_versions as unknown as { schema_json: FormSchema } | null)?.schema_json) ??
                       { fields: [] },

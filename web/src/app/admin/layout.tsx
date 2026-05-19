@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { canManageBookingCheckout } from "@/lib/admin/roles";
 import { createClient } from "@/lib/supabase/server";
 import { logoutAction } from "./login/actions";
 
@@ -36,6 +37,7 @@ export default async function AdminLayout({
   }
 
   const tenant = Array.isArray(profile.tenants) ? profile.tenants[0] : profile.tenants;
+  const showPaymentsNav = canManageBookingCheckout(profile.role);
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
@@ -58,6 +60,11 @@ export default async function AdminLayout({
               <Link href="/admin/bookings" className="text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100">
                 Bookings
               </Link>
+              {showPaymentsNav ? (
+                <Link href="/admin/payments" className="text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100">
+                  Payments
+                </Link>
+              ) : null}
               <Link href="/admin/customers" className="text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100">
                 Customers
               </Link>

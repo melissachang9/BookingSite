@@ -18,15 +18,23 @@ export function FormBuilder({
   formId,
   defaultName = "",
   defaultDescription = "",
+  defaultScope = "customer",
+  defaultCustomerPromptTiming = "pre_booking",
   defaultFields = [],
 }: {
   formId?: string;
   defaultName?: string;
   defaultDescription?: string;
+  defaultScope?: "customer" | "internal";
+  defaultCustomerPromptTiming?: "pre_booking" | "pre_visit" | "post_visit";
   defaultFields?: FormField[];
 }) {
   const [name, setName] = useState(defaultName);
   const [description, setDescription] = useState(defaultDescription);
+  const [scope, setScope] = useState<"customer" | "internal">(defaultScope);
+  const [customerPromptTiming, setCustomerPromptTiming] = useState<
+    "pre_booking" | "pre_visit" | "post_visit"
+  >(defaultCustomerPromptTiming);
   const [fields, setFields] = useState<FormField[]>(defaultFields);
   const [state, formAction, pending] = useActionState(upsertFormAction, initialActionState);
 
@@ -96,6 +104,49 @@ export function FormBuilder({
             className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
           />
         </label>
+        <p className="text-xs text-neutral-500">
+          {scope === "customer"
+            ? "For customer-facing forms, this description is shown to customers when the form opens."
+            : "For internal forms, this description helps staff understand when to use the form."}
+        </p>
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-neutral-700">Form scope</span>
+            <select
+              name="scope"
+              value={scope}
+              onChange={(e) => setScope(e.target.value as "customer" | "internal")}
+              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            >
+              <option value="customer">Customer-facing</option>
+              <option value="internal">Internal-only</option>
+            </select>
+          </label>
+          {scope === "customer" ? (
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-neutral-700">Customer timing</span>
+              <select
+                name="customerPromptTiming"
+                value={customerPromptTiming}
+                onChange={(e) =>
+                  setCustomerPromptTiming(
+                    e.target.value as "pre_booking" | "pre_visit" | "post_visit"
+                  )
+                }
+                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+              >
+                <option value="pre_booking">Pre-booking gate</option>
+                <option value="pre_visit">Pre-visit prompt</option>
+                <option value="post_visit">Post-visit follow-up</option>
+              </select>
+            </label>
+          ) : null}
+        </div>
+        <p className="text-xs text-neutral-500">
+          {scope === "customer"
+            ? "Customer-facing forms can be attached to services and shown during the booking or visit lifecycle."
+            : "Internal-only forms stay in staff workflows and should not be attached to services or surfaced in the public booking flow."}
+        </p>
       </div>
 
       <div className="rounded-lg border border-neutral-200 bg-white">

@@ -9,7 +9,9 @@ export default async function FormsPage() {
   const { supabase, tenantId } = await requireTenant();
   const { data: forms } = await supabase
     .from("forms")
-    .select("id, name, description, is_archived, updated_at, current_version_id")
+    .select(
+      "id, name, description, scope, customer_prompt_timing, is_archived, updated_at, current_version_id"
+    )
     .eq("tenant_id", tenantId)
     .order("is_archived", { ascending: true })
     .order("updated_at", { ascending: false });
@@ -18,9 +20,9 @@ export default async function FormsPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Intake forms</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Forms</h1>
           <p className="mt-1 text-sm text-neutral-600">
-            Forms customers fill out before their appointment. Required forms gate the booking.
+            Build customer-facing and internal forms from the same versioned builder.
           </p>
         </div>
         <Link
@@ -33,7 +35,7 @@ export default async function FormsPage() {
 
       {!forms || forms.length === 0 ? (
         <div className="rounded-lg border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-600">
-          No forms yet. Create one to start collecting intake info.
+          No forms yet. Create one to start collecting customer or staff form data.
         </div>
       ) : (
         <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-white">
@@ -49,6 +51,16 @@ export default async function FormsPage() {
                 {f.description ? (
                   <p className="mt-0.5 text-sm text-neutral-600">{f.description}</p>
                 ) : null}
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+                  <span className="rounded-full bg-neutral-100 px-2 py-0.5">
+                    {f.scope === "internal" ? "Internal-only" : "Customer-facing"}
+                  </span>
+                  {f.scope === "customer" && f.customer_prompt_timing ? (
+                    <span className="rounded-full bg-neutral-100 px-2 py-0.5">
+                      {formatCustomerPromptTiming(f.customer_prompt_timing)}
+                    </span>
+                  ) : null}
+                </div>
                 {!f.current_version_id ? (
                   <p className="mt-1 text-xs text-amber-600">No published version yet</p>
                 ) : null}
@@ -71,4 +83,10 @@ export default async function FormsPage() {
       )}
     </div>
   );
+}
+
+function formatCustomerPromptTiming(value: string) {
+  if (value === "pre_visit") return "Pre-visit";
+  if (value === "post_visit") return "Post-visit";
+  return "Pre-booking gate";
 }

@@ -4,6 +4,7 @@
 "use server";
 
 import { z } from "zod";
+import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   DISPLAY_ONLY_TYPES,
@@ -30,6 +31,25 @@ const DraftProgressInput = z.object({
 
 export type SubmitFormResult = { ok: boolean; error?: string };
 export type SaveDraftProgressResult = { ok: boolean; error?: string; savedAt?: string };
+
+async function getRequestAppUrl() {
+  const fallbackUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+  try {
+    const requestHeaders = await headers();
+    const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+
+    if (!host) return fallbackUrl;
+
+    const protocol =
+      requestHeaders.get("x-forwarded-proto") ??
+      (host.includes("localhost") || host.startsWith("127.") ? "http" : "https");
+
+    return `${protocol}://${host}`;
+  } catch {
+    return fallbackUrl;
+  }
+}
 
 export async function saveFormDraftProgressAction(
   input: z.infer<typeof DraftProgressInput>
@@ -71,7 +91,7 @@ export async function saveFormDraftProgressAction(
     return { ok: false, error: "Tenant mismatch" };
   }
   if (requirement.satisfied_by_response_id) {
-    return { ok: false, error: "This intake form has already been submitted" };
+    return { ok: false, error: "This form has already been submitted" };
   }
 
   const { data: version } = await admin
@@ -220,24 +240,26 @@ const CheckoutInput = z.object({
 
 export type CheckoutResult = { ok: boolean; error?: string; url?: string };
 
-const CHECKOUT_SESSION_MINUTES = 30;
 const REUSABLE_CHECKOUT_BUFFER_MINUTES = 5;
 
-function getCheckoutExpiryDate(currentDraftExpiry: string) {
+function getCheckoutExpiryDate(currentDraftExpiry: string, checkoutSessionMinutes: number) {
   return new Date(
     Math.max(
       new Date(currentDraftExpiry).getTime(),
-      Date.now() + CHECKOUT_SESSION_MINUTES * 60_000
+      Date.now() + checkoutSessionMinutes * 60_000
     )
   );
 }
 
-function isReusableCheckoutSession(session: Awaited<ReturnType<ReturnType<typeof getStripe>["checkout"]["sessions"]["retrieve"]>>) {
+function isReusableCheckoutSession(
+  session: Awaited<ReturnType<ReturnType<typeof getStripe>["checkout"]["sessions"]["retrieve"]>>,
+  checkoutSessionMinutes: number
+) {
   if (session.status !== "open" || !session.url || !session.expires_at) return false;
 
   return (
     session.expires_at * 1000 <=
-    Date.now() + (CHECKOUT_SESSION_MINUTES + REUSABLE_CHECKOUT_BUFFER_MINUTES) * 60_000
+    Date.now() + (checkoutSessionMinutes + REUSABLE_CHECKOUT_BUFFER_MINUTES) * 60_000
   );
 }
 
@@ -254,6 +276,7 @@ async function persistCheckoutWindow(opts: {
     .update({
       stripe_session_id: opts.stripeSessionId,
       status: "awaiting_payment",
+      deposit_status: "awaiting_payment",
       expires_at: expiresAtIso,
     })
     .eq("id", opts.draftId)
@@ -308,7 +331,7 @@ export async function createCheckoutSessionAction(
     .eq("booking_draft_id", parsed.data.draftId)
     .is("satisfied_by_response_id", null);
   if ((pending?.length ?? 0) > 0) {
-    return { ok: false, error: "Please complete the required intake forms first" };
+    return { ok: false, error: "Please complete the required forms first" };
   }
 
   const { data: service } = await admin
@@ -328,6 +351,7 @@ export async function createCheckoutSessionAction(
   );
   const shouldAutoChargeNoShowFee =
     tenantSettings.auto_charge_no_show_fee && tenantSettings.no_show_fee_cents > 0;
+  const checkoutSessionMinutes = tenantSettings.payment_link_expiry_minutes;
 
   const amount = draft.deposit_cents > 0 ? draft.deposit_cents : draft.price_cents;
   if (amount <= 0) {
@@ -335,7 +359,7 @@ export async function createCheckoutSessionAction(
     return { ok: false, error: "Free bookings not yet supported" };
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = await getRequestAppUrl();
   const draftUrl = `${appUrl}/${parsed.data.tenantSlug}/book/${draft.id}`;
   const successBaseUrl = `${draftUrl}/success`;
   const successUrl = `${successBaseUrl}?session_id={CHECKOUT_SESSION_ID}`;
@@ -355,7 +379,7 @@ export async function createCheckoutSessionAction(
       }
 
       if (existingSession.status === "open") {
-        if (isReusableCheckoutSession(existingSession)) {
+        if (isReusableCheckoutSession(existingSession, checkoutSessionMinutes)) {
           const syncResult = await persistCheckoutWindow({
             admin,
             draftId: draft.id,
@@ -389,7 +413,7 @@ export async function createCheckoutSessionAction(
     return { ok: false, error: "Your hold has expired. Please pick a new time." };
   }
 
-  const checkoutExpiresAt = getCheckoutExpiryDate(draft.expires_at);
+  const checkoutExpiresAt = getCheckoutExpiryDate(draft.expires_at, checkoutSessionMinutes);
   let stripeCustomerId: string | null = null;
 
   if (shouldAutoChargeNoShowFee) {

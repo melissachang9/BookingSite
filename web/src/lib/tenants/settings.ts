@@ -1,3 +1,4 @@
+
 export type TenantSettings = {
   cancellation_window_hours: number;
   refund_inside_window: boolean;
@@ -7,6 +8,8 @@ export type TenantSettings = {
   min_lead_time_minutes: number;
   max_advance_booking_days: number;
   auto_charge_no_show_fee: boolean;
+  payment_link_expiry_minutes: number;
+  tax_rate_percent: number;
 };
 
 export const DEFAULT_TENANT_SETTINGS: TenantSettings = {
@@ -18,6 +21,8 @@ export const DEFAULT_TENANT_SETTINGS: TenantSettings = {
   min_lead_time_minutes: 60,
   max_advance_booking_days: 90,
   auto_charge_no_show_fee: false,
+  payment_link_expiry_minutes: 45,
+  tax_rate_percent: 0,
 };
 
 function numberSetting(value: unknown, fallback: number) {
@@ -62,6 +67,22 @@ export function normalizeTenantSettings(
       typeof raw.auto_charge_no_show_fee === "boolean"
         ? raw.auto_charge_no_show_fee
         : DEFAULT_TENANT_SETTINGS.auto_charge_no_show_fee,
+    payment_link_expiry_minutes: Math.max(
+      5,
+      Math.round(
+        numberSetting(
+          raw.payment_link_expiry_minutes,
+          DEFAULT_TENANT_SETTINGS.payment_link_expiry_minutes
+        )
+      )
+    ),
+    tax_rate_percent: Math.min(
+      100,
+      Math.max(
+        0,
+        numberSetting(raw.tax_rate_percent, DEFAULT_TENANT_SETTINGS.tax_rate_percent)
+      )
+    ),
   };
 }
 

@@ -174,6 +174,7 @@ async function cancelBookingInternal(options: CancelInternalOptions): Promise<Ca
     canceled_at: string;
     canceled_by_user_id: string | null;
     cancel_reason: string | null;
+    deposit_status?: string;
     stripe_refund_id?: string;
     refunded_at?: string;
     refunded_amount_cents?: number;
@@ -185,6 +186,7 @@ async function cancelBookingInternal(options: CancelInternalOptions): Promise<Ca
   };
 
   if (refund) {
+    updatePayload.deposit_status = "refunded";
     updatePayload.stripe_refund_id = refund.refundId;
     updatePayload.refunded_at = now;
     updatePayload.refunded_amount_cents = refund.refundedAmountCents;

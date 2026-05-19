@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireTenant } from "@/lib/admin/require-tenant";
 import type { ActionState } from "@/lib/admin/action-state";
+import { getReviewUrlFromBranding } from "@/lib/tenants/branding";
 import { normalizeTenantSettings } from "@/lib/tenants/settings";
 
 function parseIntegerField(
@@ -47,6 +48,32 @@ function parseMoneyField(
   }
 
   return { value: cents } as const;
+}
+
+function parseDecimalField(
+  formData: FormData,
+  name: string,
+  label: string,
+  min: number,
+  max: number
+) {
+  const value = formData.get(name);
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed)) {
+    return { error: `${label} must be a valid number.` } as const;
+  }
+  if (parsed < min || parsed > max) {
+    return { error: `${label} must be between ${min} and ${max}.` } as const;
+  }
+
+  return { value: parsed } as const;
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 export async function updateTenantSettingsAction(
@@ -113,9 +140,38 @@ export async function updateTenantSettingsAction(
   );
   if ("error" in noShowFee) return { error: noShowFee.error };
 
+  const paymentLinkExpiryMinutes = parseIntegerField(
+    formData,
+    "payment_link_expiry_minutes",
+    "Payment link expiry",
+    5,
+    1440
+  );
+  if ("error" in paymentLinkExpiryMinutes) {
+    return { error: paymentLinkExpiryMinutes.error };
+  }
+
+  const taxRatePercent = parseDecimalField(
+    formData,
+    "tax_rate_percent",
+    "Tax rate",
+    0,
+    100
+  );
+  if ("error" in taxRatePercent) {
+    return { error: taxRatePercent.error };
+  }
+
+  const reviewUrlRaw = formData.get("review_url");
+  const reviewUrlInput = typeof reviewUrlRaw === "string" ? reviewUrlRaw.trim() : "";
+  const reviewUrl = reviewUrlInput.length > 0 ? getReviewUrlFromBranding({ review_url: reviewUrlInput }) : null;
+  if (reviewUrlInput.length > 0 && !reviewUrl) {
+    return { error: "Review link must be a valid http(s) URL." };
+  }
+
   const { data: tenant, error: tenantError } = await supabase
     .from("tenants")
-    .select("settings_json")
+    .select("settings_json, branding_json")
     .eq("id", tenantId)
     .maybeSingle();
 
@@ -126,6 +182,7 @@ export async function updateTenantSettingsAction(
   const currentSettings = normalizeTenantSettings(
     (tenant.settings_json ?? null) as Partial<Record<string, unknown>> | null
   );
+  const currentBranding = toRecord(tenant.branding_json);
 
   const nextSettings = {
     ...currentSettings,
@@ -137,11 +194,25 @@ export async function updateTenantSettingsAction(
     min_lead_time_minutes: minLeadTime.value,
     max_advance_booking_days: maxAdvanceBooking.value,
     auto_charge_no_show_fee: formData.get("auto_charge_no_show_fee") === "on",
+    payment_link_expiry_minutes: paymentLinkExpiryMinutes.value,
+    tax_rate_percent: taxRatePercent.value,
   };
+
+  const nextBranding = {
+    ...currentBranding,
+    review_url: reviewUrl,
+  };
+
+  if (!reviewUrl) {
+    delete nextBranding.review_url;
+    delete nextBranding.reviewUrl;
+    delete nextBranding.google_review_url;
+    delete nextBranding.googleReviewUrl;
+  }
 
   const { error: updateError } = await supabase
     .from("tenants")
-    .update({ settings_json: nextSettings })
+    .update({ settings_json: nextSettings, branding_json: nextBranding })
     .eq("id", tenantId);
 
   if (updateError) {

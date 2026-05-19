@@ -1,11 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import { initialActionState } from "@/lib/admin/action-state";
 import { setServiceFormsAction } from "../forms/actions";
 
 /**
- * Inline editor for the set of intake forms required for a service.
+ * Inline editor for the set of customer-facing forms required for a service.
  * Submits a multipart form with form_ids[] checkboxes.
  */
 export function ServiceFormsEditor({
@@ -33,10 +34,10 @@ export function ServiceFormsEditor({
     return (
       <p className="text-sm text-neutral-600">
         No active forms.{" "}
-        <a href="/admin/forms/new" className="underline">
-          Create a form
-        </a>{" "}
-        to require intake on this service.
+        <Link href="/admin/forms/new" className="underline">
+          Create a customer form
+        </Link>{" "}
+        to require it before booking this service.
       </p>
     );
   }
@@ -44,7 +45,7 @@ export function ServiceFormsEditor({
   return (
     <form action={formAction} className="space-y-3">
       <input type="hidden" name="service_id" value={serviceId} />
-      <p className="text-sm font-medium">Required forms before booking</p>
+      <p className="text-sm font-medium">Required customer forms before booking</p>
       <ul className="space-y-1">
         {forms.map((f) => (
           <li key={f.id}>

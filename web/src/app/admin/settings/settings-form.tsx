@@ -14,6 +14,9 @@ type SettingsFormProps = {
     min_lead_time_minutes: number;
     max_advance_booking_days: number;
     auto_charge_no_show_fee: boolean;
+    payment_link_expiry_minutes: number;
+    tax_rate_percent: number;
+    review_url: string;
   };
   canEdit: boolean;
 };
@@ -91,6 +94,26 @@ export function SettingsForm({ initialSettings, canEdit }: SettingsFormProps) {
             required
           />
         </div>
+        <div className="grid gap-4 sm:grid-cols-2 mt-2">
+          <Field
+            label="Tax rate (%)"
+            name="tax_rate_percent"
+            type="number"
+            min={0}
+            step="0.01"
+            defaultValue={initialSettings.tax_rate_percent.toString()}
+            disabled={!canEdit || pending}
+            required
+          />
+        </div>
+        <Field
+          label="Review link (optional)"
+          name="review_url"
+          type="url"
+          placeholder="https://..."
+          defaultValue={initialSettings.review_url}
+          disabled={!canEdit || pending}
+        />
         <label className="flex items-start gap-3 rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800">
           <input
             type="checkbox"
@@ -106,6 +129,21 @@ export function SettingsForm({ initialSettings, canEdit }: SettingsFormProps) {
             </span>
           </span>
         </label>
+        <div className="space-y-2 rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+          <Field
+            label="Payment link expiry (minutes)"
+            name="payment_link_expiry_minutes"
+            type="number"
+            min={5}
+            max={1440}
+            defaultValue={initialSettings.payment_link_expiry_minutes}
+            disabled={!canEdit || pending}
+            required
+          />
+          <p className="text-neutral-600 dark:text-neutral-400">
+            Hosted checkout keeps the slot reserved for this many minutes before the payment link expires.
+          </p>
+        </div>
       </section>
 
       <section className="space-y-4">

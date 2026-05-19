@@ -30,7 +30,7 @@ const INPUT_CLASS =
   "mt-3 w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-stone-900 shadow-[0_12px_24px_rgba(40,23,9,0.06)] outline-none transition placeholder:text-stone-400 focus:border-stone-900";
 
 /**
- * Renders a single intake form requirement and submits answers.
+ * Renders a single customer-facing form requirement and submits answers.
  * After a successful submit we refresh the page so the next requirement (or contact
  * details form) renders.
  */
@@ -45,6 +45,7 @@ export function FormRuntime({
   requirement: {
     id: string;
     formName: string;
+    formDescription?: string | null;
     schema: FormSchema;
   };
   initialAnswers: Record<string, unknown>;
@@ -162,13 +163,15 @@ export function FormRuntime({
       <div className="flex flex-col gap-4 border-b border-stone-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="max-w-2xl">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
-            {totalPending > 1 ? `Form 1 of ${totalPending}` : "Required intake"}
+            {totalPending > 1 ? `${totalPending} forms pending` : "Required form"}
           </p>
           <h2 className="mt-2 text-3xl tracking-[-0.03em] text-stone-950" style={DISPLAY_FONT_STYLE}>
             {requirement.formName}
           </h2>
           <p className="mt-2 text-sm leading-6 text-stone-600 sm:text-base">
-            Complete this intake before checkout so the provider has everything they need ahead of your appointment.
+            {requirement.formDescription?.trim()
+              ? requirement.formDescription
+              : "Complete this form before checkout so the business has what it needs before your appointment is confirmed."}
           </p>
         </div>
         <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600 shadow-sm">
@@ -206,7 +209,7 @@ export function FormRuntime({
         disabled={pending}
         className="w-full rounded-2xl bg-stone-900 px-5 py-4 text-sm font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-stone-800 disabled:opacity-50"
       >
-        {pending ? "Submitting..." : "Submit intake"}
+        {pending ? "Submitting..." : "Submit form"}
       </button>
     </form>
   );

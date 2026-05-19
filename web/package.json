@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:calendar": "tsx --test src/app/admin/calendar/booking-drawer-state.test.ts",
+    "test:checkout": "tsx --test src/lib/payments/booking-checkout.test.ts",
     "bootstrap:owner": "tsx scripts/bootstrap-owner.ts"
   },
   "dependencies": {
@@ -23,12 +25,13 @@
     "resend": "^6.12.3",
     "stripe": "^22.1.1",
     "tailwind-merge": "^3.5.0",
+    "ts-node": "^10.9.2",
     "twilio": "^6.0.2",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20.19.40",
+    "@types/node": "^20.19.41",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^17.4.2",
@@ -36,6 +39,6 @@
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
-    "typescript": "^5"
+    "typescript": "^5.9.3"
   }
 }

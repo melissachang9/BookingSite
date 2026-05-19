@@ -18,9 +18,9 @@ export default async function NewFormPage({
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">New intake form</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">New form</h1>
         <p className="mt-1 text-sm text-neutral-600">
-          Start blank or load a starter template. Your first save publishes version 1.
+          Start blank or load a starter template. Choose whether this form is customer-facing or internal-only before you save.
         </p>
       </div>
       <div className="mb-6 rounded-lg border border-neutral-200 bg-white p-5">

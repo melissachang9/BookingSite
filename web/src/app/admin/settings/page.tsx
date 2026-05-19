@@ -1,4 +1,5 @@
 import { requireTenant } from "@/lib/admin/require-tenant";
+import { getReviewUrlFromBranding } from "@/lib/tenants/branding";
 import { normalizeTenantSettings } from "@/lib/tenants/settings";
 import { SettingsForm } from "./settings-form";
 
@@ -8,7 +9,7 @@ export default async function SettingsPage() {
   const { supabase, tenantId, role } = await requireTenant();
   const { data: tenant, error } = await supabase
     .from("tenants")
-    .select("name, slug, settings_json")
+    .select("name, slug, settings_json, branding_json")
     .eq("id", tenantId)
     .maybeSingle();
 
@@ -19,6 +20,9 @@ export default async function SettingsPage() {
   const settings = normalizeTenantSettings(
     (tenant.settings_json ?? null) as Partial<Record<string, unknown>> | null
   );
+
+  const reviewUrl = getReviewUrlFromBranding(tenant.branding_json) ?? "";
+
   const canEdit = role === "owner" || role === "manager";
   const publicUrlBase = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
@@ -28,7 +32,7 @@ export default async function SettingsPage() {
         <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Business settings</p>
         <h1 className="text-2xl font-semibold tracking-tight">Policies and booking controls</h1>
         <p className="max-w-3xl text-sm text-neutral-600 dark:text-neutral-400">
-          These settings apply only to {tenant.name}. Cancellation policy, deposits, no-show fees, reminder timing, booking limits, and no-show auto-charging are stored per business rather than hard-coded across the platform.
+          These settings apply only to {tenant.name}. Cancellation policy, deposits, hosted checkout timing, no-show fees, reminder timing, and booking limits are stored per business rather than hard-coded across the platform.
         </p>
       </div>
 
@@ -43,6 +47,9 @@ export default async function SettingsPage() {
             min_lead_time_minutes: settings.min_lead_time_minutes,
             max_advance_booking_days: settings.max_advance_booking_days,
             auto_charge_no_show_fee: settings.auto_charge_no_show_fee,
+            payment_link_expiry_minutes: settings.payment_link_expiry_minutes,
+            tax_rate_percent: settings.tax_rate_percent ?? 0,
+            review_url: reviewUrl,
           }}
           canEdit={canEdit}
         />
@@ -80,6 +87,18 @@ export default async function SettingsPage() {
                 <dd>{settings.auto_charge_no_show_fee ? "Enabled" : "Disabled"}</dd>
               </div>
               <div className="flex justify-between gap-4">
+                <dt>Payment link hold</dt>
+                <dd>{settings.payment_link_expiry_minutes} min</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt>Tax rate</dt>
+                <dd>{(settings.tax_rate_percent ?? 0).toFixed(2)}%</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt>Review link</dt>
+                <dd className="max-w-[260px] truncate text-right">{reviewUrl || "Not set"}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
                 <dt>Minimum lead time</dt>
                 <dd>{settings.min_lead_time_minutes} min</dd>
               </div>
@@ -91,7 +110,7 @@ export default async function SettingsPage() {
           </div>
 
           <div className="rounded-lg border border-neutral-200 bg-white p-4 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400">
-            Customer self-service cancellation stays available through the secure link. New services start with the business default deposit, and no-show auto-charging stays optional per business.
+            Customer self-service cancellation stays available through the secure link. New services start with the business default deposit, hosted checkout keeps the slot reserved for the configured payment-link window, and no-show auto-charging stays optional per business.
           </div>
         </aside>
       </div>

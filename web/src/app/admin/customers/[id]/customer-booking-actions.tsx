@@ -13,11 +13,16 @@ type CustomerBookingActionsProps = {
   startsAt: string;
   endsAt: string;
   durationMinutes: number;
+  priceCents: number;
   depositCents: number;
+  depositStatus: string | null;
+  taxRatePercent: number;
   stripePaymentIntentId: string | null;
   stripeRefundId: string | null;
   refundedAmountCents: number | null;
   refundedAt: string | null;
+  walletBalanceCents: number;
+  canManageCheckout: boolean;
 };
 
 export function CustomerBookingActions({
@@ -26,11 +31,16 @@ export function CustomerBookingActions({
   startsAt,
   endsAt,
   durationMinutes,
+  priceCents,
   depositCents,
+  depositStatus,
+  taxRatePercent,
   stripePaymentIntentId,
   stripeRefundId,
   refundedAmountCents,
   refundedAt,
+  walletBalanceCents,
+  canManageCheckout,
 }: CustomerBookingActionsProps) {
   const [open, setOpen] = useState(false);
   const [refundState, refundAction, refundPending] = useActionState(
@@ -39,7 +49,7 @@ export function CustomerBookingActions({
   );
 
   const canManage = status === "confirmed";
-  const canRefund = Boolean(stripePaymentIntentId) && !stripeRefundId;
+  const canRefund = canManageCheckout && Boolean(stripePaymentIntentId) && !stripeRefundId;
   const refundLabel = depositCents > 0 ? "Refund deposit" : "Refund payment";
 
   return (
@@ -89,7 +99,16 @@ export function CustomerBookingActions({
               durationMinutes={durationMinutes}
             />
           </div>
-          <StatusButtons bookingId={bookingId} />
+          <StatusButtons
+            bookingId={bookingId}
+            priceCents={priceCents}
+            depositCents={depositCents}
+            depositStatus={depositStatus}
+            refundedAmountCents={refundedAmountCents}
+            taxRatePercent={taxRatePercent}
+            walletBalanceCents={walletBalanceCents}
+            canManageCheckout={canManageCheckout}
+          />
         </div>
       ) : null}
     </div>

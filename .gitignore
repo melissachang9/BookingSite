@@ -41,6 +41,11 @@ yarn-error.log*
 # Misc
 *.tsbuildinfo
 next-env.d.ts
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.venv/
 
 # Supabase local
 supabase/.branches

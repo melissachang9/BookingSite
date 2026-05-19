@@ -16,7 +16,7 @@ export async function sendBookingReminderSms(opts: {
   const body = `Reminder: ${opts.serviceName}${provider} at ${opts.tenantName} on ${formatWhen(
     opts.startsAt,
     opts.tenantTimeZone
-  )}. Need to cancel? ${opts.cancelUrl}`;
+  )}. Manage booking or forms: ${opts.cancelUrl}`;
 
   const result = await getTwilioClient().messages.create({
     to: opts.to,

@@ -18,7 +18,7 @@ export default async function EditFormPage({
 
   const { data: form } = await supabase
     .from("forms")
-    .select("id, name, description, current_version_id, tenant_id")
+    .select("id, name, description, scope, customer_prompt_timing, current_version_id, tenant_id")
     .eq("id", formId)
     .maybeSingle();
   if (!form || form.tenant_id !== tenantId) notFound();
@@ -47,6 +47,13 @@ export default async function EditFormPage({
         formId={form.id}
         defaultName={form.name}
         defaultDescription={form.description ?? ""}
+        defaultScope={form.scope === "internal" ? "internal" : "customer"}
+        defaultCustomerPromptTiming={
+          form.customer_prompt_timing === "pre_visit" ||
+          form.customer_prompt_timing === "post_visit"
+            ? form.customer_prompt_timing
+            : "pre_booking"
+        }
         defaultFields={schema.fields}
       />
     </div>

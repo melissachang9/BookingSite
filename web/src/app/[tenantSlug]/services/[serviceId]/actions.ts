@@ -11,6 +11,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getAvailableSlots } from "@/lib/booking/availability";
 import { applyProviderServiceOverrides } from "@/lib/services/provider-service";
 import {
+  filterServiceCustomerFormsByTiming,
+  loadServiceCustomerForms,
+  toBookingFormRequirementRows,
+} from "@/lib/forms/service-customer-forms";
+import {
   addMonthsToDateOnly,
   getLocalDateString,
   getUtcRangeForLocalDate,
@@ -329,6 +334,10 @@ export async function createBookingDraftAction(input: z.infer<typeof HoldInput>)
       price_cents: effectiveService.price_cents,
       deposit_cents: effectiveService.deposit_cents,
       duration_minutes: effectiveService.duration_minutes,
+      booking_method: "customer_self_service",
+      source_channel: "online_booking",
+      deposit_status: "unpaid",
+      confirmation_requested: true,
       status: "draft",
       expires_at: expiresAt.toISOString(),
     })
@@ -351,29 +360,28 @@ export async function createBookingDraftAction(input: z.infer<typeof HoldInput>)
     return { ok: false, error: holdErr.message };
   }
 
-  // Generate booking_form_requirements for any forms attached to this service.
-  const { data: requiredForms } = await admin
-    .from("service_forms")
-    .select("form_id, forms!inner(id, current_version_id, is_archived)")
-    .eq("service_id", parsed.data.serviceId)
-    .eq("tenant_id", parsed.data.tenantId);
+  let serviceCustomerForms;
+  try {
+    serviceCustomerForms = await loadServiceCustomerForms(admin, {
+      tenantId: parsed.data.tenantId,
+      serviceId: parsed.data.serviceId,
+    });
+  } catch (error) {
+    await admin.from("slot_holds").delete().eq("booking_draft_id", draft.id);
+    await admin.from("booking_drafts").delete().eq("id", draft.id);
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Failed to load service forms",
+    };
+  }
 
-  const reqRows = (requiredForms ?? [])
-    .map((row) => {
-      const form = row.forms as unknown as {
-        id: string;
-        current_version_id: string | null;
-        is_archived: boolean;
-      };
-      if (!form || form.is_archived || !form.current_version_id) return null;
-      return {
-        tenant_id: parsed.data.tenantId,
-        booking_draft_id: draft.id,
-        form_id: form.id,
-        form_version_id: form.current_version_id,
-      };
-    })
-    .filter((r): r is NonNullable<typeof r> => r !== null);
+  const reqRows = toBookingFormRequirementRows(
+    filterServiceCustomerFormsByTiming(serviceCustomerForms, "pre_booking"),
+    {
+      tenantId: parsed.data.tenantId,
+      bookingDraftId: draft.id,
+    }
+  );
 
   if (reqRows.length > 0) {
     await admin.from("booking_form_requirements").insert(reqRows);

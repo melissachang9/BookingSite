@@ -38,7 +38,7 @@ export async function sendBookingConfirmationEmail(opts: {
         <p style="margin: 0; color: #555;">${escape(when)}</p>
       </div>
       <p>A calendar invite is attached so you can save this appointment.</p>
-      <p>If you need to cancel, use your secure link here: <a href="${opts.cancelUrl}">Cancel this booking</a>.</p>
+      <p>Use your secure link here to manage your booking, complete any pending forms, or cancel if needed: <a href="${opts.cancelUrl}">Manage your booking</a>.</p>
       <p style="color: #888; font-size: 12px; margin-top: 32px;">— ${escape(opts.tenantName)}</p>
     </div>
   `;
@@ -79,8 +79,8 @@ function buildCalendarInvite(opts: {
     `DTSTART:${formatIcsDate(opts.startsAt)}`,
     `DTEND:${formatIcsDate(opts.endsAt)}`,
     `SUMMARY:${escapeIcsText(`${opts.tenantName} - ${opts.serviceName}`)}`,
-    `DESCRIPTION:${escapeIcsText(
-      `Booking confirmed for ${opts.customerName} with ${opts.tenantName}. Cancel link: ${opts.cancelUrl}`
+      `DESCRIPTION:${escapeIcsText(
+      `Booking confirmed for ${opts.customerName} with ${opts.tenantName}. Manage link: ${opts.cancelUrl}`
     )}`,
     `LOCATION:${escapeIcsText(opts.tenantName)}`,
     "END:VEVENT",

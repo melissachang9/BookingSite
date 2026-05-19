@@ -1,5 +1,13 @@
 import Link from "next/link";
+import { canManageBookingCheckout } from "@/lib/admin/roles";
 import { requireTenant } from "@/lib/admin/require-tenant";
+import { calculateBookingPaymentBreakdown } from "@/lib/payments/booking-checkout";
+import { normalizeTenantSettings } from "@/lib/tenants/settings";
+import {
+  DayWeekSchedule,
+  type CalendarScheduleBooking,
+} from "./day-week-schedule";
+import { CalendarBookingDrawer } from "./new-booking-drawer";
 import { MiniMonth } from "./mini-month";
 import {
   DAY_MS,
@@ -23,15 +31,82 @@ type Booking = {
   starts_at: string;
   ends_at: string;
   status: string;
+  price_cents: number;
+  deposit_cents: number;
+  deposit_status: string | null;
+  refunded_amount_cents: number | null;
   provider_id: string;
-  customers: { name: string | null } | { name: string | null }[] | null;
+  customers:
+    | {
+        id: string | null;
+        name: string | null;
+        email: string | null;
+        phone: string | null;
+        created_at: string | null;
+      }
+    | {
+        id: string | null;
+        name: string | null;
+        email: string | null;
+        phone: string | null;
+        created_at: string | null;
+      }[]
+    | null;
   services: { name: string | null } | { name: string | null }[] | null;
   providers: { name: string | null } | { name: string | null }[] | null;
 };
 
+type CalendarProviderRow = {
+  id: string;
+  name: string;
+  provider_locations: { location_id: string }[] | null;
+  provider_services:
+    | {
+        service_id: string;
+        price_cents_override: number | null;
+        deposit_cents_override: number | null;
+        duration_minutes_override: number | null;
+      }[]
+    | null;
+};
+
+type CalendarServiceRow = {
+  id: string;
+  name: string;
+  price_cents: number;
+  deposit_cents: number;
+  duration_minutes: number;
+  service_locations: { location_id: string }[] | null;
+  service_forms:
+    | {
+        form_id: string;
+        forms:
+          | { customer_prompt_timing: string | null }
+          | { customer_prompt_timing: string | null }[]
+          | null;
+      }[]
+    | null;
+};
+
+type CalendarLocationRow = {
+  id: string;
+  name: string;
+};
+
+type CalendarCustomerRow = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+};
+
 function getName<T extends { name: string | null }>(v: T | T[] | null): string | null {
-  const x = Array.isArray(v) ? v[0] : v;
-  return x?.name ?? null;
+  return normalizeRelation(v)?.name ?? null;
+}
+
+function normalizeRelation<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null;
+  return Array.isArray(value) ? (value[0] ?? null) : value;
 }
 
 export default async function CalendarPage({
@@ -43,10 +118,13 @@ export default async function CalendarPage({
     month?: string;
     provider?: string;
     view?: string;
+    drawer?: string;
+    rebookCustomerId?: string;
   }>;
 }) {
   const params = await searchParams;
-  const { supabase, tenantId } = await requireTenant();
+  const { supabase, tenantId, role } = await requireTenant();
+  const canManageCheckout = canManageBookingCheckout(role);
 
   const view: View =
     params.view === "day" ? "day" : params.view === "week" ? "week" : "month";
@@ -82,7 +160,7 @@ export default async function CalendarPage({
   let q = supabase
     .from("bookings")
     .select(
-      "id, starts_at, ends_at, status, provider_id, customers(name), services(name), providers(name)"
+      "id, starts_at, ends_at, status, price_cents, deposit_cents, deposit_status, refunded_amount_cents, provider_id, customers(id, name, email, phone, created_at), services(name), providers(name)"
     )
     .eq("tenant_id", tenantId)
     .gte("starts_at", fetchStart.toISOString())
@@ -90,21 +168,149 @@ export default async function CalendarPage({
     .neq("status", "canceled")
     .order("starts_at", { ascending: true });
 
-  if (view !== "day" && providerFilter) {
+  if (providerFilter) {
     q = q.eq("provider_id", providerFilter);
   }
 
-  const [bookingsRes, providersRes] = await Promise.all([
+  const [bookingsRes, providersRes, servicesRes, locationsRes, customersRes, tenantRes] = await Promise.all([
     q,
     supabase
       .from("providers")
-      .select("id, name")
+      .select(
+        "id, name, provider_locations(location_id), provider_services(service_id, price_cents_override, deposit_cents_override, duration_minutes_override)"
+      )
       .eq("tenant_id", tenantId)
       .eq("is_active", true)
       .order("name"),
+    supabase
+      .from("services")
+      .select(
+        "id, name, price_cents, deposit_cents, duration_minutes, service_locations(location_id), service_forms(form_id, forms(customer_prompt_timing))"
+      )
+      .eq("tenant_id", tenantId)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .order("name"),
+    supabase
+      .from("locations")
+      .select("id, name")
+      .eq("tenant_id", tenantId)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .order("name"),
+    supabase
+      .from("customers")
+      .select("id, name, email, phone")
+      .eq("tenant_id", tenantId)
+      .order("updated_at", { ascending: false })
+      .limit(300),
+    supabase.from("tenants").select("settings_json").eq("id", tenantId).maybeSingle(),
   ]);
 
+  const taxRatePercent = normalizeTenantSettings(
+    (tenantRes.data?.settings_json ?? null) as Partial<Record<string, unknown>> | null
+  ).tax_rate_percent;
   const allBookings = (bookingsRes.data ?? []) as Booking[];
+  const scheduleBookings: CalendarScheduleBooking[] = allBookings.map((booking) => {
+    const customer = normalizeRelation(booking.customers);
+    const service = normalizeRelation(booking.services);
+    const provider = normalizeRelation(booking.providers);
+    const paymentBreakdown = calculateBookingPaymentBreakdown({
+      priceCents: booking.price_cents,
+      depositCents: booking.deposit_cents,
+      depositStatus: booking.deposit_status,
+      refundedAmountCents: booking.refunded_amount_cents,
+      taxRatePercent,
+    });
+
+    return {
+      id: booking.id,
+      startsAt: booking.starts_at,
+      endsAt: booking.ends_at,
+      status: booking.status,
+      priceCents: booking.price_cents,
+      depositStatus: booking.deposit_status,
+      balanceDueCents: paymentBreakdown.balanceDueCents,
+      providerId: booking.provider_id,
+      customer: customer
+        ? {
+            id: customer.id,
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone,
+            createdAt: customer.created_at,
+          }
+        : null,
+      service: service
+        ? {
+            name: service.name,
+          }
+        : null,
+      provider: provider
+        ? {
+            name: provider.name,
+          }
+        : null,
+    };
+  });
+  const providerRows = (providersRes.data ?? []) as CalendarProviderRow[];
+  const providers = providerRows.map((provider) => ({ id: provider.id, name: provider.name }));
+  const providerOptions = providerRows.map((provider) => ({
+    id: provider.id,
+    name: provider.name,
+    locationIds: (provider.provider_locations ?? []).map((location) => location.location_id),
+    serviceIds: (provider.provider_services ?? []).map((service) => service.service_id),
+    serviceOverrides: Object.fromEntries(
+      (provider.provider_services ?? []).map((service) => [
+        service.service_id,
+        {
+          priceCentsOverride: service.price_cents_override,
+          depositCentsOverride: service.deposit_cents_override,
+          durationMinutesOverride: service.duration_minutes_override,
+        },
+      ])
+    ),
+  }));
+  const serviceOptions = ((servicesRes.data ?? []) as CalendarServiceRow[]).map((service) => ({
+    id: service.id,
+    name: service.name,
+    locationIds: (service.service_locations ?? []).map((location) => location.location_id),
+    priceCents: service.price_cents,
+    depositCents: service.deposit_cents,
+    durationMinutes: service.duration_minutes,
+    requiresPreBookingForms: (service.service_forms ?? []).some((serviceForm) => {
+      const form = Array.isArray(serviceForm.forms) ? serviceForm.forms[0] : serviceForm.forms;
+      return (form?.customer_prompt_timing ?? "pre_booking") === "pre_booking";
+    }),
+  }));
+  const locationOptions = ((locationsRes.data ?? []) as CalendarLocationRow[]).map((location) => ({
+    id: location.id,
+    name: location.name,
+  }));
+  let customerOptions = ((customersRes.data ?? []) as CalendarCustomerRow[]).map((customer) => ({
+    id: customer.id,
+    name: customer.name,
+    email: customer.email,
+    phone: customer.phone,
+  }));
+  let rebookCustomer =
+    params.rebookCustomerId
+      ? customerOptions.find((customer) => customer.id === params.rebookCustomerId) ?? null
+      : null;
+
+  if (params.rebookCustomerId && !rebookCustomer) {
+    const { data: exactCustomer } = await supabase
+      .from("customers")
+      .select("id, name, email, phone")
+      .eq("tenant_id", tenantId)
+      .eq("id", params.rebookCustomerId)
+      .maybeSingle();
+
+    if (exactCustomer) {
+      rebookCustomer = exactCustomer;
+      customerOptions = [exactCustomer, ...customerOptions.filter((customer) => customer.id !== exactCustomer.id)];
+    }
+  }
 
   // Bucket by local YYYY-MM-DD for grid rendering.
   const bookingsByDay = new Map<string, Booking[]>();
@@ -120,6 +326,12 @@ export default async function CalendarPage({
   for (const [k, v] of bookingsByDay) countsByDay.set(k, v.length);
 
   const todayStr = fmtLocalDate(new Date());
+  const drawerStateKey = [
+    fmtLocalDate(baseDate),
+    providerFilter ?? "all",
+    params.drawer ?? "closed",
+    rebookCustomer?.id ?? "none",
+  ].join(":");
 
   const buildHref = (overrides: {
     view?: View;
@@ -173,17 +385,18 @@ export default async function CalendarPage({
             year: "numeric",
           });
 
+  const showMonthSidebar = view === "month";
+
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_1fr]">
-      {/* Sidebar */}
-      <aside className="space-y-4">
-        <MiniMonth
-          monthDate={monthAnchor}
-          selectedDate={baseDate}
-          hrefFor={(o) => buildHref({ ...o })}
-          countsByDay={countsByDay}
-        />
-        {view !== "day" && (
+    <div className={showMonthSidebar ? "grid grid-cols-1 gap-6 lg:grid-cols-[260px_1fr]" : "space-y-4"}>
+      {showMonthSidebar ? (
+        <aside className="space-y-4">
+          <MiniMonth
+            monthDate={monthAnchor}
+            selectedDate={baseDate}
+            hrefFor={(o) => buildHref({ ...o })}
+            countsByDay={countsByDay}
+          />
           <div className="rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800">
             <div className="mb-2 text-xs font-semibold uppercase text-neutral-500">
               Provider
@@ -219,17 +432,27 @@ export default async function CalendarPage({
               ))}
             </ul>
           </div>
-        )}
-      </aside>
+        </aside>
+      ) : null}
 
-      {/* Main */}
       <div className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Calendar</h1>
             <p className="text-sm text-neutral-600 dark:text-neutral-400">{heading}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <CalendarBookingDrawer
+              key={drawerStateKey}
+              initialStartsAtLocal={`${fmtLocalDate(baseDate)}T09:00`}
+              initialProviderId={providerFilter}
+              initialCustomerId={rebookCustomer?.id ?? null}
+              autoOpen={params.drawer === "new-booking"}
+              providers={providerOptions}
+              services={serviceOptions}
+              locations={locationOptions}
+              customers={customerOptions}
+            />
             <div className="flex items-center overflow-hidden rounded-md border border-neutral-300 text-sm dark:border-neutral-700">
               <Link
                 href={buildHref({
@@ -295,26 +518,65 @@ export default async function CalendarPage({
           </div>
         </div>
 
-        {bookingsRes.error && (
+        {(bookingsRes.error || providersRes.error || servicesRes.error || locationsRes.error || customersRes.error) && (
           <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">
-            {bookingsRes.error.message}
+            {bookingsRes.error?.message ?? providersRes.error?.message ?? servicesRes.error?.message ?? locationsRes.error?.message ?? customersRes.error?.message}
           </p>
         )}
 
+        {!showMonthSidebar ? (
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={buildHref({ provider: null })}
+              className={
+                "rounded-full border px-4 py-2 text-sm font-medium " +
+                (!providerFilter
+                  ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
+                  : "border-neutral-300 text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900")
+              }
+            >
+              All providers
+            </Link>
+            {providers.map((provider) => (
+              <Link
+                key={provider.id}
+                href={buildHref({ provider: provider.id })}
+                className={
+                  "rounded-full border px-4 py-2 text-sm font-medium " +
+                  (providerFilter === provider.id
+                    ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
+                    : "border-neutral-300 text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900")
+                }
+              >
+                {provider.name}
+              </Link>
+            ))}
+          </div>
+        ) : null}
+
         {view === "day" ? (
-          <DayView
-            date={baseDate}
-            providers={providersRes.data ?? []}
-            bookings={(bookingsByDay.get(fmtLocalDate(baseDate)) ?? []).filter(
-              (b) => !providerFilter || b.provider_id === providerFilter
+          <DayWeekSchedule
+            key={`day:${fmtLocalDate(baseDate)}:${providerFilter ?? "all"}`}
+            view="day"
+            baseDateKey={fmtLocalDate(baseDate)}
+            todayKey={todayStr}
+            providerFilter={providerFilter}
+            providers={providers}
+            bookings={scheduleBookings.filter(
+              (booking) => fmtLocalDate(new Date(booking.startsAt)) === fmtLocalDate(baseDate)
             )}
+            canManageCheckout={canManageCheckout}
           />
         ) : view === "week" ? (
-          <WeekGrid
-            weekStart={startOfWeek(baseDate)}
-            bookingsByDay={bookingsByDay}
-            showProvider={!providerFilter}
-            todayStr={todayStr}
+          <DayWeekSchedule
+            key={`week:${fmtLocalDate(startOfWeek(baseDate))}:${providerFilter ?? "all"}`}
+            view="week"
+            baseDateKey={fmtLocalDate(baseDate)}
+            todayKey={todayStr}
+            providerFilter={providerFilter}
+            providers={providers}
+            bookings={scheduleBookings}
+            canManageCheckout={canManageCheckout}
           />
         ) : (
           <MonthGrid
@@ -333,155 +595,6 @@ export default async function CalendarPage({
           />
         )}
       </div>
-    </div>
-  );
-}
-
-function DayView({
-  date,
-  providers,
-  bookings,
-}: {
-  date: Date;
-  providers: { id: string; name: string }[];
-  bookings: Booking[];
-}) {
-  // Group bookings by provider; only show providers with at least one booking,
-  // followed by an "Off / no bookings" list of remaining providers.
-  const byProvider = new Map<string, Booking[]>();
-  for (const b of bookings) {
-    const list = byProvider.get(b.provider_id) ?? [];
-    list.push(b);
-    byProvider.set(b.provider_id, list);
-  }
-
-  if (bookings.length === 0) {
-    return (
-      <div className="rounded-md border border-neutral-200 p-8 text-center text-sm text-neutral-500 dark:border-neutral-800">
-        No bookings on{" "}
-        {date.toLocaleDateString(undefined, { month: "long", day: "numeric" })}.
-      </div>
-    );
-  }
-
-  const withBookings = providers.filter((p) => byProvider.has(p.id));
-  // Some bookings may reference inactive providers not in the providers list — group them too.
-  const knownIds = new Set(providers.map((p) => p.id));
-  const orphanProviderIds = Array.from(byProvider.keys()).filter((id) => !knownIds.has(id));
-
-  return (
-    <div className="space-y-4">
-      {withBookings.map((p) => (
-        <ProviderDayCard key={p.id} name={p.name} bookings={byProvider.get(p.id) ?? []} />
-      ))}
-      {orphanProviderIds.map((id) => {
-        const list = byProvider.get(id) ?? [];
-        const name = getName(list[0]?.providers) ?? "Provider";
-        return <ProviderDayCard key={id} name={name} bookings={list} />;
-      })}
-    </div>
-  );
-}
-
-function ProviderDayCard({ name, bookings }: { name: string; bookings: Booking[] }) {
-  return (
-    <div className="rounded-md border border-neutral-200 dark:border-neutral-800">
-      <div className="border-b border-neutral-200 bg-neutral-50 px-4 py-2 text-sm font-medium dark:border-neutral-800 dark:bg-neutral-900">
-        {name}
-        <span className="ml-2 text-xs font-normal text-neutral-500">
-          {bookings.length} booking{bookings.length === 1 ? "" : "s"}
-        </span>
-      </div>
-      <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
-        {bookings.map((b) => {
-          const c = getName(b.customers);
-          const s = getName(b.services);
-          return (
-            <li key={b.id}>
-              <Link
-                href={`/admin/bookings/${b.id}`}
-                className="flex items-center justify-between gap-4 px-4 py-3 text-sm hover:bg-neutral-50 dark:hover:bg-neutral-900"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-28 tabular-nums text-neutral-600 dark:text-neutral-400">
-                    {fmtTime(b.starts_at)} – {fmtTime(b.ends_at)}
-                  </div>
-                  <div>
-                    <div className="font-medium">{c ?? "—"}</div>
-                    <div className="text-xs text-neutral-500">{s}</div>
-                  </div>
-                </div>
-                <span className="text-xs text-neutral-400">View →</span>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
-function WeekGrid({
-  weekStart,
-  bookingsByDay,
-  showProvider,
-  todayStr,
-}: {
-  weekStart: Date;
-  bookingsByDay: Map<string, Booking[]>;
-  showProvider: boolean;
-  todayStr: string;
-}) {
-  const days: Date[] = [];
-  for (let i = 0; i < 7; i++) days.push(addDays(weekStart, i));
-  return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-7">
-      {days.map((day) => {
-        const key = fmtLocalDate(day);
-        const list = bookingsByDay.get(key) ?? [];
-        const isToday = key === todayStr;
-        return (
-          <div
-            key={key}
-            className={
-              "rounded-md border p-2 text-sm " +
-              (isToday
-                ? "border-neutral-900 dark:border-neutral-100"
-                : "border-neutral-200 dark:border-neutral-800")
-            }
-          >
-            <div className="mb-2 flex items-baseline justify-between">
-              <span className="text-xs uppercase text-neutral-500">
-                {day.toLocaleDateString(undefined, { weekday: "short" })}
-              </span>
-              <span className="font-medium">
-                {day.toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}
-              </span>
-            </div>
-            {list.length === 0 ? (
-              <p className="text-xs text-neutral-400">—</p>
-            ) : (
-              <ul className="space-y-1">
-                {list.map((b) => (
-                  <li key={b.id}>
-                    <Link
-                      href={`/admin/bookings/${b.id}`}
-                      className="block rounded-md bg-neutral-100 px-2 py-1 hover:bg-neutral-200 dark:bg-neutral-900 dark:hover:bg-neutral-800"
-                    >
-                      <div className="text-xs font-medium">{fmtTime(b.starts_at)}</div>
-                      <div className="text-xs">{getName(b.customers) ?? "—"}</div>
-                      <div className="text-xs text-neutral-500">
-                        {getName(b.services)}
-                        {showProvider && getName(b.providers) ? ` · ${getName(b.providers)}` : ""}
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -572,7 +685,7 @@ function MonthGrid({
                     {list.slice(0, 3).map((booking) => (
                       <Link
                         key={booking.id}
-                        href={`/admin/bookings/${booking.id}`}
+                        href={`/admin/bookings/${booking.id}?flow=checkout`}
                         className="block rounded-lg bg-neutral-100 px-3 py-2 text-xs hover:bg-neutral-200 dark:bg-neutral-900 dark:hover:bg-neutral-800"
                       >
                         <div className="font-medium text-neutral-900 dark:text-neutral-100">

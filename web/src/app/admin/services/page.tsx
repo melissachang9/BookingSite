@@ -21,6 +21,7 @@ export default async function ServicesPage() {
       .from("forms")
       .select("id, name")
       .eq("tenant_id", tenantId)
+      .eq("scope", "customer")
       .eq("is_archived", false)
       .order("name", { ascending: true }),
     supabase

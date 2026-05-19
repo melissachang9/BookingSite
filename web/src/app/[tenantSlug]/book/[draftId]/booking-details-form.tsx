@@ -123,7 +123,7 @@ export function BookingDetailsForm({
           </p>
         </div>
         <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600 shadow-sm">
-          <p>{hasPendingForms ? "Intake comes next." : "Payment comes next."}</p>
+          <p>{hasPendingForms ? "Forms come next." : "Payment comes next."}</p>
           <p className="mt-1 text-xs leading-5 text-stone-500">
             {draftSaveState === "saving"
               ? "Saving your progress..."
@@ -180,7 +180,7 @@ export function BookingDetailsForm({
         disabled={pending}
         className="w-full rounded-2xl bg-stone-900 px-5 py-4 text-sm font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-stone-800 disabled:opacity-50"
       >
-        {pending ? "Saving…" : hasPendingForms ? "Continue to intake" : "Continue to payment"}
+        {pending ? "Saving…" : hasPendingForms ? "Continue to forms" : "Continue to payment"}
       </button>
     </form>
   );
