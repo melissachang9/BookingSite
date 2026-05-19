@@ -1,13 +1,9 @@
-export type HealthStatus = "ok";
-
-export type ApiRootResponse = {
-  message: string;
-  environment: string;
-  version: string;
-};
-
-export type HealthResponse = {
-  status: HealthStatus;
-  service: string;
-  environment: string;
-};
+export * from "./bookings";
+export * from "./catalog";
+export * from "./common";
+export * from "./customers";
+export * from "./forms";
+export * from "./health";
+export * from "./payments";
+export * from "./permissions";
+export * from "./settings";

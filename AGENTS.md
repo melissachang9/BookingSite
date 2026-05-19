@@ -1,6 +1,6 @@
 # Booking Platform Agent Guide
 
-This file consolidates the planning and operating rules spread across the non-README project docs. It is the active instruction set for work in this repository.
+This file is the active instruction set for work in this repository. It preserves the durable product, workflow, testing, and architecture rules from the prior planning docs and legacy implementation notes.
 
 ## 1. Source Priority
 
@@ -8,33 +8,17 @@ When documents disagree, use this priority order:
 
 1. This file and the nearest repo-local `AGENTS.md`
 2. The active repo structure under `backend/`, `apps/`, `packages/`, and `docs/`
-3. Product and workflow rules from:
-	- `booking_platform_plan.md`
-	- `booking_platform_mvp_plan.md`
-	- `cofounder_review_packet.md`
-	- `booking-app-metrics-for-cac-ltv.md`
-	- `workflow-validation-checklist.md`
-	- `docs/testing/workflow-matrix.md`
-	- `alex-hormozi-booking-app-guiding-principles.md`
-4. The legacy `web/` implementation as a behavior reference only
+3. Active code, tests, schemas, migrations, and API contracts
 
 Important synthesis rules:
 
-- Preserve the product workflows and data-model truths from the planning docs.
-- Prefer the current greenfield rebuild architecture over older stack assumptions found in legacy planning docs.
-- Treat legacy implementation details as reference material, not as a mandate to repeat the old structure.
+- Preserve the product workflows and data-model truths recorded here.
+- Prefer the current greenfield architecture over older implementation assumptions.
+- If code and this guide disagree, pause and reconcile the workflow rule before expanding behavior.
 
 ## 2. Repo State
 
-This repo currently has two tracks:
-
-- The new greenfield v1 rebuild under `backend/`, `apps/`, `packages/`, and `docs/`
-- The legacy `web/` monolith, retained for workflow reference and selective maintenance
-
-Default behavior:
-
-- New product work belongs in the greenfield stack.
-- The `web/` app is not the target architecture unless the user explicitly asks to work there.
+This repo is the greenfield v1 rebuild under `backend/`, `apps/`, and `packages/`. New product work belongs in that stack.
 
 ## 3. Product Intent
 
@@ -65,11 +49,9 @@ Use this stack for the active rebuild unless the user explicitly changes directi
 - Shared contracts: `packages/shared-types`
 - Styling: Vanilla CSS or CSS Modules
 
-### Cross-cutting
+### Cross-Cutting
 - Dockerized runtime for backend, dashboard, storefront, database, and supporting services
 - `docker compose` as the primary local orchestration entry point
-
-Legacy docs may reference a different stack such as a Next.js and Supabase monolith or Tailwind-heavy implementation. Those are not the active architecture for this rebuild.
 
 ## 5. Non-Negotiable Platform Rules
 
@@ -100,6 +82,8 @@ Legacy docs may reference a different stack such as a Next.js and Supabase monol
 - Never implement direct balance mutation logic.
 - Long-term direction is wallet-ledger semantics; shorter-term deposit flows may be simpler, but they still must remain append-only in spirit and migration-safe.
 - Refunds and corrections should be represented as explicit compensating events, not silent edits.
+- Checkout/payment actions should append immutable event records. The latest payment state should be derivable from the event history, not maintained as an untraceable overwrite.
+- V1 checkout event kinds include `admin_completion` and `stripe_balance_checkout`; future wallet, gift card, and correction events should follow the same append-only pattern.
 
 ### Auditability
 - No soft deletes without audit attribution.
@@ -130,6 +114,11 @@ Rules:
 - Expired holds must be swept or released predictably.
 - Manual and public booking flows must respect the same hold rules.
 
+### Availability
+- Default slot granularity is 15 minutes unless an explicit tenant or service rule says otherwise.
+- Services may define setup and cleanup buffers; availability must block the full buffered interval, not just visible service duration.
+- Apply constraints in this order where relevant: provider schedule, provider time off, confirmed bookings, active slot holds, tenant minimum lead time, tenant maximum advance window.
+
 ### Form requirements
 - Form requirements should be modeled explicitly, not as an unstructured array stuffed onto a booking.
 - Customer-facing timing contexts matter: pre-booking, pre-visit, and post-visit.
@@ -141,6 +130,25 @@ Rules:
 - Preserve attribution fields, booking method, source channel, and acquisition facts when modifying schemas or APIs.
 - Imported customers must retain original acquisition timing and pre-platform lifetime truth.
 
+### Tenant Settings
+Tenant settings should remain explicit, validated, and portable across API/frontend contracts. Core settings include cancellation window hours, refund-inside-window behavior, reminder timing, minimum lead time, maximum advance booking window, default deposit cents, no-show fee cents, automatic no-show charging, payment link expiry minutes, and tax rate percent.
+
+Rules:
+
+- Use bounded validation for money, percentages, windows, and lead-time values.
+- Use stable defaults for seeded tenants and migrations.
+- Do not hide tenant policy in frontend-only constants.
+
+### Cancellation and refunds
+- Cancellation policy must be based on the tenant cancellation window and refund settings.
+- Refunds and cancellation decisions must record who/what canceled, when it happened, the reason if supplied, refunded amount cents, and external refund identifiers when applicable.
+- Inside-window and outside-window behavior must be testable at the boundary.
+
+### Payment calculations
+- Tax applies to the service subtotal unless a future explicit tax rule says otherwise.
+- Balance due should account for subtotal, tax, tip, paid deposit, refunded amount, and wallet/credit application.
+- Deposit states should remain explicit enough to distinguish unpaid, deposit paid, and paid in full.
+
 ### Scope interpretation
 - The long-range plan includes advanced systems such as bots, marketing automation, referrals, marketplace support, and richer analytics.
 - Do not expand into those by default when implementing core v1 flows.
@@ -150,7 +158,7 @@ Rules:
 
 Every meaningful change should satisfy these checks:
 
-1. It maps to an explicit workflow in the planning docs or documents the delta clearly.
+1. It maps to an explicit workflow in this guide or documents the delta clearly.
 2. Permission boundaries remain correct.
 3. Booking and payment state transitions remain valid and auditable.
 4. Required reporting and attribution fields are still captured.
@@ -162,7 +170,7 @@ Minimum testing expectations:
 
 - New backend routes: `pytest` coverage for success path, validation failure, and tenant isolation.
 - New frontend features: component or integration coverage for rendering, permission states, and core interaction states.
-- Workflow-critical changes: update or add API/integration/Playwright coverage from `docs/testing/workflow-matrix.md`.
+- Workflow-critical changes: update or add API, integration, component, or Playwright coverage for the affected actor path.
 
 Release blockers:
 
@@ -172,23 +180,34 @@ Release blockers:
 - Impossible booking state transitions
 - Missing audit attribution on sensitive changes
 
-## 8. What To Read Before Building
+## 8. Workflow Test Matrix
 
-Use the smallest relevant set of docs for the task, not a broad full-doc reread every time.
+Prioritize coverage for these actor paths as the rebuild grows:
 
-- `booking_platform_plan.md`: long-range principles, permissions, unified forms, and future-state constraints
-- `booking_platform_mvp_plan.md`: first-tenant wedge, canonical booking flow, state model, and cut-list reality checks
-- `cofounder_review_packet.md`: architecture principles, strategic priorities, and non-negotiables
-- `booking-app-metrics-for-cac-ltv.md`: IDs, timestamps, attribution, and unit-economics data requirements
-- `workflow-validation-checklist.md`: definition of done and manual acceptance expectations
-- `docs/testing/workflow-matrix.md`: workflow-level automated coverage targets
-- `alex-hormozi-booking-app-guiding-principles.md`: outcome-focused positioning and go-to-market framing
+| Workflow | Primary actor | Minimum automated coverage |
+| --- | --- | --- |
+| Public booking from service selection to payment | Customer | Playwright end-to-end and API integration tests |
+| Calendar-first manual booking creation | Staff | API integration tests and dashboard component tests |
+| Customer-facing forms by timing | Customer | API tests and Playwright end-to-end coverage |
+| Internal form submission from customer profile | Provider or staff | API tests and dashboard component tests |
+| Cancellation and refund decisioning | Customer or staff | Unit tests and API integration tests |
+| Booking completion and balance collection | Staff | Unit tests, API integration tests, and Playwright end-to-end coverage |
+| Multi-location availability and booking | Customer or staff | Unit tests and API integration tests |
+| Tenant isolation and role gating | All actors | API tests for every domain |
+
+First slices to preserve:
+
+1. Backend health contract tests.
+2. Tenant isolation fixtures shared across backend route tests.
+3. Booking lifecycle tests for draft, confirmed, completed, canceled, and no-show transitions.
+4. Payment ledger tests that guarantee append-only corrections.
+5. Forms scope and timing tests that lock customer-facing versus internal behavior.
 
 ## 9. Agent Workflow Expectations
 
 When implementing a feature or change:
 
-1. Identify whether the task belongs to the greenfield stack or the legacy `web/` app.
+1. Identify the owning layer in `backend/`, `apps/`, or `packages/`.
 2. Identify the governing workflow and constraints before changing structure or schema.
 3. For schema or API work, define tenant, permission, audit, timestamp, and state-transition implications up front.
 4. Build in narrow vertical slices with tests, not broad speculative scaffolding.
@@ -201,4 +220,3 @@ When implementing a feature or change:
 - `apps/dashboard/AGENTS.md` — operator UI and calendar-first workflow rules
 - `apps/storefront/AGENTS.md` — customer-facing booking flow rules
 - `packages/shared-types/AGENTS.md` — shared contracts and enum discipline
-- `web/AGENTS.md` — legacy Next.js surface rules and limitations

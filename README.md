@@ -4,12 +4,7 @@ Multi-tenant booking, forms, and payments platform for beauty studios, med spas,
 
 ## Current State
 
-This repository currently contains two tracks:
-
-- A new greenfield v1 monorepo scaffold built around FastAPI, React/Vite, Next.js, PostgreSQL, and Docker.
-- The legacy `web/` Next.js and Supabase application, kept as a workflow reference while the new stack is rebuilt.
-
-The long-range product direction is documented in [booking_platform_plan.md](booking_platform_plan.md), and the near-term rebuild constraints live in [AGENTS.md](AGENTS.md).
+This repository contains the greenfield v1 monorepo scaffold built around FastAPI, React/Vite, Next.js, PostgreSQL, and Docker. Product, workflow, testing, and architecture constraints live in [AGENTS.md](AGENTS.md) and the nearest repo-local `AGENTS.md` files.
 
 ## Docker Files
 
@@ -33,12 +28,7 @@ The root Compose file is the main entry point for running the new stack.
 ├── packages/
 │   ├── shared-types/           # Shared frontend contracts
 │   └── ui-components/          # Shared UI primitives
-├── docs/testing/               # Workflow test inventory for the rebuild
-├── web/                        # Legacy Next.js + Supabase app
 ├── docker-compose.yml          # New stack orchestration
-├── booking_platform_plan.md
-├── booking_platform_mvp_plan.md
-├── workflow-validation-checklist.md
 └── AGENTS.md
 ```
 
@@ -114,21 +104,6 @@ npm run dev
 
 Storefront runs at `http://localhost:3000` when started directly, or `http://localhost:3001` through Docker Compose.
 
-## Run The Legacy App
-
-The legacy monolith remains under [web](web) and is not part of the new v1 Compose stack.
-
-```bash
-cd web
-cp .env.example .env.local
-npm install
-npm run dev
-```
-
-Legacy app runs at `http://localhost:3000`.
-
-Use it as a reference surface while rebuilding the new stack.
-
 ## Verification Commands
 
 ### New backend
@@ -155,25 +130,26 @@ npm install
 npm run typecheck
 ```
 
-### Legacy app
+### Browser end-to-end tests
 
-Run from `web/`:
+The browser E2E suite uses Playwright from the repository root. It defaults to the Docker stack URLs: storefront at `http://127.0.0.1:3001` and API at `http://127.0.0.1:8000/api/v1`.
 
 ```bash
-npm run lint
-npm run test:calendar
-npm run test:checkout
+npm install
+npm run test:e2e:install
+npm run test:e2e
 ```
 
-## Workflow References
+Playwright reuses a running storefront in local development. If one is not already available, it starts `docker compose up --build` and waits for the storefront URL. To run against an already managed stack, set `E2E_SKIP_WEB_SERVER=1`. Override URLs with `E2E_STOREFRONT_BASE_URL` and `E2E_API_BASE_URL` when needed.
 
-- [docs/testing/workflow-matrix.md](docs/testing/workflow-matrix.md) defines the first workflow-preservation test inventory for the greenfield rebuild.
-- [workflow-validation-checklist.md](workflow-validation-checklist.md) contains the manual acceptance checklist for booking, checkout, and form workflows.
-- [booking_platform_mvp_plan.md](booking_platform_mvp_plan.md) covers the first-tenant MVP scope.
-- [booking_platform_plan.md](booking_platform_plan.md) covers the long-range product plan.
+## Product Workflow Summary
+
+- Public booking flows move through service selection, provider or location selection where applicable, slot hold, required forms, payment, and confirmation.
+- Operator booking flows begin from calendar context and preserve the same slot-hold and availability rules as public booking.
+- Forms are unified but scoped: customer-facing forms and internal forms share field infrastructure without mixing permissions or timing.
+- Payment and checkout history should be auditable through append-only events, including deposit collection, balance collection, refunds, and follow-up balances.
+- Tenant settings drive cancellation windows, refund behavior, reminders, lead time, maximum advance booking, deposits, no-show fees, payment link expiry, and tax rates.
 
 ## Notes
 
-- The new v1 stack is intentionally separate from the legacy `web/` app.
 - Docker Compose is the main way to run the new platform end-to-end.
-- The old Supabase migrations and structure are legacy reference material, not the target architecture for the rebuild.

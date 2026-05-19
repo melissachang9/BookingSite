@@ -32,6 +32,13 @@ This directory is the active backend for the greenfield rebuild.
 - Preserve attribution and reporting fields when evolving schemas.
 - Favor immutable financial and response records over in-place mutation.
 
+### Domain data specifics
+- Tenant settings need explicit defaults and validation for cancellation windows, refund behavior, reminder timing, lead time, advance booking limits, deposits, no-show fees, payment link expiry, and tax rates.
+- Slot hold release and abandoned draft cleanup should be idempotent so repeated sweeps produce the same result.
+- Form definitions are versioned. Published form versions are immutable; edits create a new version and submitted responses stay linked to the version the customer or staff member saw.
+- Provider service overrides may change price, deposit, duration, and service availability by provider/location context. Availability and booking summaries must use the resolved values consistently.
+- Checkout state should be recorded as append-only events. Derive latest payment state from the event history and use compensating events for corrections.
+
 ### Errors
 - Return structured HTTP errors.
 - Do not swallow database, payment, or permission errors.
@@ -40,6 +47,7 @@ This directory is the active backend for the greenfield rebuild.
 - Every new route needs backend tests.
 - Cover success path, validation failure, and tenant isolation.
 - Add focused unit tests for pure state-machine, payment, and slot-hold rules.
+- Add boundary tests for cancellation windows, payment math, availability buffers, hold expiry, form versioning, and idempotent payment/webhook handling.
 
 ## Current priorities
 

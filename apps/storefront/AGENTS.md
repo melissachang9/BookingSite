@@ -17,6 +17,8 @@ The storefront handles public booking, intake, payment, confirmation, and custom
 - Preserve the core sequence of service selection, provider or location selection where applicable, slot selection, required forms, payment, and confirmation.
 - Customer-facing forms must respect timing and scope rules.
 - Cancellation and manage-booking links should remain part of the customer flow when implemented.
+- If a slot hold expires while the customer is filling forms or completing payment, clearly recover by releasing the old hold and attempting a fresh hold only if the slot is still available.
+- Required pre-booking forms must gate checkout. Pre-visit forms should be reachable after booking through the customer communication/self-service path. Post-visit forms belong after completion.
 
 ### Data discipline
 - Use backend APIs as the source of business logic.
@@ -30,3 +32,4 @@ The storefront handles public booking, intake, payment, confirmation, and custom
 ### Testing
 - Add component and end-to-end coverage for public booking flows.
 - Cover form gating, payment handoff, confirmation, and recovery after interruption.
+- Cover expired hold recovery, payment resume states, and cancellation/manage-booking links when those flows are implemented.

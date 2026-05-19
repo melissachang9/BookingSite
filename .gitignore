@@ -16,6 +16,9 @@ build/
 
 # Testing
 coverage/
+playwright-report/
+test-results/
+blob-report/
 
 # Env
 .env

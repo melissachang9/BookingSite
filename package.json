@@ -10,9 +10,19 @@
     "dev:storefront": "npm --workspace @booking/storefront run dev",
     "build:dashboard": "npm --workspace @booking/dashboard run build",
     "build:storefront": "npm --workspace @booking/storefront run build",
+    "typecheck:ui-components": "npm --workspace @booking/ui-components run typecheck",
+    "typecheck:shared-types": "npm --workspace @booking/shared-types run typecheck",
+    "typecheck:api-client": "npm --workspace @booking/api-client run typecheck",
     "typecheck:dashboard": "npm --workspace @booking/dashboard run typecheck",
     "typecheck:storefront": "npm --workspace @booking/storefront run typecheck",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:install": "playwright install",
+    "test:e2e:ui": "playwright test --ui",
     "docker:up": "docker compose up --build -d",
     "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.1"
   }
 }

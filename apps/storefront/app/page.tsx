@@ -1,38 +1,56 @@
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
+import Link from "next/link";
 
-const storefrontPrinciples = [
-  {
-    title: "Booking flow",
-    value: "Service, provider, forms, payment, and confirmation will be API-driven.",
-  },
-  {
-    title: "Rendering",
-    value: "Next.js App Router remains the SEO and customer-facing shell.",
-  },
-  {
-    title: "API base",
-    value: apiBaseUrl,
-  },
+const serviceHighlights = [
+  "Brow shaping",
+  "Lamination",
+  "Tinting",
+  "Consultation",
 ];
 
+const appointmentPromises = [
+  { label: "Live openings", detail: "Appointments are held while you complete your details." },
+  { label: "Required intake", detail: "Consent and prep forms stay connected to the booking." },
+  { label: "Deposit-ready", detail: "Service deposits are calculated from studio policy." },
+];
 
 export default function HomePage() {
   return (
-    <main className="page-shell">
-      <section className="hero">
-        <p className="eyebrow">Customer storefront</p>
-        <h1>Booking Platform v1 starts from a clean public booking surface.</h1>
-        <p className="hero-copy">
-          This Next.js shell is the new public entry point for booking, forms, and
-          payment. The legacy app stays untouched while the new API-driven storefront
-          is built in parallel.
-        </p>
-        <div className="hero-grid">
-          {storefrontPrinciples.map((item) => (
-            <article className="hero-card" key={item.title}>
-              <h2>{item.title}</h2>
-              <p>{item.value}</p>
-            </article>
+    <main className="public-home">
+      <section className="studio-hero studio-hero--home">
+        <div className="studio-hero__copy">
+          <p className="store-eyebrow">Luxury beauty studio</p>
+          <h1>Brow Beauty Lab</h1>
+          <p>
+            Precision brow appointments with clear pricing, protected availability, and a polished pre-visit experience.
+          </p>
+          <div className="hero-actions">
+            <Link href="/brow-beauty-lab" className="store-button">
+              Book appointment
+            </Link>
+            <Link href="/cancel/demo-token" className="ghost-link ghost-link--light">
+              Manage booking
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <section className="policy-strip" aria-label="Booking highlights">
+        {appointmentPromises.map((item) => (
+          <article key={item.label} className="policy-card">
+            <span>{item.label}</span>
+            <p>{item.detail}</p>
+          </article>
+        ))}
+      </section>
+
+      <section className="store-section store-section--split">
+        <div>
+          <p className="store-eyebrow">Signature services</p>
+          <h2>Built for repeat visits, clean prep, and fewer day-of surprises.</h2>
+        </div>
+        <div className="service-preview-list">
+          {serviceHighlights.map((service) => (
+            <span key={service}>{service}</span>
           ))}
         </div>
       </section>

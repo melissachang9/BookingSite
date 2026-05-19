@@ -10,8 +10,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@booking/api-client": "0.1.0",
+    "@booking/ui-components": "0.1.0",
+    "@booking/shared-types": "0.1.0",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "react-router-dom": "^7.9.5"
   },
   "devDependencies": {
     "@types/react": "^19.0.7",

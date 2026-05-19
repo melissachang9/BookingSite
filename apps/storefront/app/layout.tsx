@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import "@booking/ui-components/styles.css";
 import "./globals.css";
 
 
 export const metadata: Metadata = {
-  title: "Booking Platform Storefront",
-  description: "Customer-facing storefront scaffold for Booking Platform v1.",
+  title: "Brow Beauty Lab Booking",
+  description: "Luxury beauty studio booking, intake, deposits, and appointment management.",
 };
 
 
@@ -18,7 +19,7 @@ type RootLayoutProps = {
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="storefront-body">{children}</body>
     </html>
   );
 }

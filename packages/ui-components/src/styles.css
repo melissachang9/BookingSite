@@ -1,0 +1,129 @@
+:root {
+  color-scheme: light;
+  --ui-font-sans: Inter, "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --ui-font-serif: Fraunces, "Cormorant Garamond", Georgia, serif;
+  --ui-ink: #201914;
+  --ui-ink-soft: #584b42;
+  --ui-muted: #7a6a60;
+  --ui-canvas: #f8f4ef;
+  --ui-canvas-raised: #fffdf9;
+  --ui-ivory: #fffaf3;
+  --ui-blush: #f4d8cf;
+  --ui-blush-soft: #fbebe6;
+  --ui-sage: #6f7d63;
+  --ui-sage-soft: #edf2e8;
+  --ui-gold: #b98d56;
+  --ui-rose: #9c5a45;
+  --ui-wine: #6f332d;
+  --ui-amber: #b76e35;
+  --ui-danger: #9a3d32;
+  --ui-danger-soft: #f8e5e1;
+  --ui-success: #486f4c;
+  --ui-success-soft: #e7f1e5;
+  --ui-warning: #9a6a25;
+  --ui-warning-soft: #fff0d7;
+  --ui-border: rgba(51, 37, 27, 0.12);
+  --ui-border-strong: rgba(51, 37, 27, 0.22);
+  --ui-ring: rgba(156, 90, 69, 0.32);
+  --ui-shadow-sm: 0 10px 24px rgba(52, 36, 26, 0.08);
+  --ui-shadow-md: 0 20px 52px rgba(52, 36, 26, 0.12);
+  --ui-shadow-lg: 0 32px 90px rgba(52, 36, 26, 0.16);
+  --ui-radius-xs: 6px;
+  --ui-radius-sm: 8px;
+  --ui-radius-md: 12px;
+  --ui-radius-lg: 16px;
+  --ui-space-1: 0.25rem;
+  --ui-space-2: 0.5rem;
+  --ui-space-3: 0.75rem;
+  --ui-space-4: 1rem;
+  --ui-space-5: 1.25rem;
+  --ui-space-6: 1.5rem;
+  --ui-space-8: 2rem;
+  --ui-space-10: 2.5rem;
+  --ui-space-12: 3rem;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--ui-canvas);
+  color: var(--ui-ink);
+  font-family: var(--ui-font-sans);
+  letter-spacing: 0;
+  text-rendering: geometricPrecision;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  outline-color: transparent;
+}
+
+:focus-visible {
+  outline: 3px solid var(--ui-ring);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: rgba(185, 141, 86, 0.28);
+}
+
+.ui-stack {
+  display: grid;
+  gap: var(--ui-space-4);
+}
+
+.ui-cluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ui-space-3);
+}
+
+.ui-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
