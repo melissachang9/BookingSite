@@ -9,6 +9,21 @@ export type TenantBranding = {
   accentColor?: string;
   serviceCatalogMode?: ServiceCatalogMode;
   serviceCategories?: string[];
+  bookingScreening?: {
+    enabled: boolean;
+    title: string;
+    options: Array<{
+      id: string;
+      label: string;
+      description?: string | null;
+    }>;
+  } | null;
+  bookingAd?: {
+    headline?: string | null;
+    body?: string | null;
+    imageUrl?: string | null;
+    imageAltText?: string | null;
+  } | null;
 };
 
 export type TenantSettings = {

@@ -27,22 +27,16 @@ export default async function TenantLayout({ children, params }: TenantLayoutPro
 
   return (
     <div className="tenant-shell">
-      <header className="tenant-header">
-        <div className="tenant-brand">
-          <Link href="/" className="back-link">
-            Studio directory
-          </Link>
-          <div className="brand-lockup">
-            <span className="brand-mark">BB</span>
-            <div>
-              <p className="store-eyebrow">Private booking</p>
-              <h1>{tenantName}</h1>
-            </div>
-          </div>
-        </div>
+      <header className="tenant-header tenant-header--minimal">
+        <Link href="/" className="tenant-back-link" aria-label="Back to studio directory">
+          ←
+        </Link>
 
-        <nav className="tenant-nav" aria-label="Customer booking routes">
-          <Link href={`/${tenantSlug}`}>Services</Link>
+        <Link href={`/${tenantSlug}`} className="tenant-wordmark">
+          {tenantName}
+        </Link>
+
+        <nav className="tenant-nav tenant-nav--minimal" aria-label="Customer booking routes">
           <Link href="/cancel/demo-token">Manage booking</Link>
           {homepageUrl ? (
             <a href={homepageUrl} target="_blank" rel="noreferrer">

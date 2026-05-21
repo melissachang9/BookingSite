@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy import select
@@ -23,33 +24,86 @@ DEMO_TENANT_SLUG = "brow-beauty-lab"
 DEMO_LOGIN_EMAIL = "owner@browbeautylab.test"
 DEMO_LOGIN_PASSWORD = "DemoBooking123"
 
+DEMO_BRANDING = {
+    "primaryColor": "#9f5323",
+    "accentColor": "#7a3c13",
+    "homepageUrl": "https://browbeautylab.example.com",
+    "serviceCatalogMode": "flat",
+    "serviceCategories": ["Brows", "Facials", "Consultations"],
+    "bookingScreening": {
+        "enabled": True,
+        "title": "How can we help?",
+        "options": [
+            {
+                "id": "new-client",
+                "label": "I'm new to Brow Beauty Lab",
+                "description": "Start with a consultation or first-time service.",
+            },
+            {
+                "id": "returning-client",
+                "label": "I'm returning to Brow Beauty Lab",
+                "description": "Book your next visit from the current service menu.",
+            },
+        ],
+    },
+    "bookingAd": {
+        "headline": "Quiet booking, clear next steps.",
+        "body": "Choose the visit type, location, provider preference, and time without losing context.",
+        "imageUrl": "/studio-hero.png",
+        "imageAltText": "Brow Beauty Lab reception area",
+    },
+    "serviceMedia": {
+        "Signature Facial": {
+            "imageUrl": "/service-hero.png",
+            "imageAltText": "Facial treatment setup in a calm studio room",
+        },
+        "Brow Shape and Tint": {
+            "imageUrl": "/studio-hero.png",
+            "imageAltText": "Brow studio treatment space",
+        },
+        "New Client Consultation": {
+            "imageUrl": "/manage-hero.png",
+            "imageAltText": "Consultation check-in moment",
+        },
+    },
+}
+
+DEMO_SETTINGS = {
+    "cancellationWindowHours": 24,
+    "refundInsideWindow": False,
+    "reminderHoursBefore": 24,
+    "minLeadTimeMinutes": 60,
+    "maxAdvanceBookingDays": 45,
+    "defaultDepositCents": 2500,
+    "noShowFeeCents": 5000,
+    "autoChargeNoShowFee": False,
+}
+
+
+def _with_demo_defaults(existing: dict, defaults: dict) -> dict:
+    merged = deepcopy(existing or {})
+    for key, value in defaults.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _with_demo_defaults(merged[key], value)
+        else:
+            merged.setdefault(key, deepcopy(value))
+    return merged
+
 
 async def seed_demo_data(session: AsyncSession) -> None:
     existing_tenant = await session.scalar(select(Tenant).where(Tenant.slug == DEMO_TENANT_SLUG))
     if existing_tenant is not None:
+        existing_tenant.branding_json = _with_demo_defaults(existing_tenant.branding_json, DEMO_BRANDING)
+        existing_tenant.settings_json = _with_demo_defaults(existing_tenant.settings_json, DEMO_SETTINGS)
+        await session.commit()
         return
 
     tenant = Tenant(
         slug=DEMO_TENANT_SLUG,
         name="Brow Beauty Lab",
         timezone="America/Los_Angeles",
-        branding_json={
-            "primaryColor": "#9f5323",
-            "accentColor": "#7a3c13",
-            "homepageUrl": "https://browbeautylab.example.com",
-            "serviceCatalogMode": "flat",
-            "serviceCategories": ["Brows", "Facials", "Consultations"],
-        },
-        settings_json={
-            "cancellationWindowHours": 24,
-            "refundInsideWindow": False,
-            "reminderHoursBefore": 24,
-            "minLeadTimeMinutes": 60,
-            "maxAdvanceBookingDays": 45,
-            "defaultDepositCents": 2500,
-            "noShowFeeCents": 5000,
-            "autoChargeNoShowFee": False,
-        },
+        branding_json=deepcopy(DEMO_BRANDING),
+        settings_json=deepcopy(DEMO_SETTINGS),
     )
     session.add(tenant)
     await session.flush()

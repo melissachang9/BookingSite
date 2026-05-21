@@ -18,6 +18,8 @@ export async function startBookingDraftAction(formData: FormData) {
   const serviceId = readRequiredField(formData, "serviceId");
   const providerId = readRequiredField(formData, "providerId");
   const startsAt = readRequiredField(formData, "startsAt");
+  const returnToValue = formData.get("returnTo");
+  const returnTo = typeof returnToValue === "string" && returnToValue.startsWith(`/${tenantSlug}/`) ? returnToValue : `/${tenantSlug}/services/${serviceId}`;
   const locationIdValue = formData.get("locationId");
   const locationId = typeof locationIdValue === "string" && locationIdValue.length > 0 ? locationIdValue : undefined;
 
@@ -34,7 +36,7 @@ export async function startBookingDraftAction(formData: FormData) {
 
     draftId = draft.id;
   } catch {
-    redirect(`/${tenantSlug}/services/${serviceId}?error=slot-unavailable`);
+    redirect(`${returnTo}${returnTo.includes("?") ? "&" : "?"}error=slot-unavailable`);
   }
 
   redirect(`/${tenantSlug}/book/${draftId}`);

@@ -74,6 +74,29 @@ export function slugify(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+export function pathWithQuery(path: string, params: Record<string, string | undefined | null>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) {
+      query.set(key, value);
+    }
+  }
+
+  const queryText = query.toString();
+  return queryText ? `${path}?${queryText}` : path;
+}
+
+export function formatLocationAddress(location: {
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+}): string {
+  const cityRegion = [location.city, location.state, location.postalCode].filter(Boolean).join(", ");
+  return [location.addressLine1, location.addressLine2, cityRegion].filter(Boolean).join(" ");
+}
+
 export function formatCurrency(amountCents: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -113,6 +136,15 @@ export function formatDateInTenantTime(value: string, timeZone: string): string 
     month: "short",
     day: "numeric",
   });
+}
+
+export function isoDateFromValueInTimeZone(value: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(value));
 }
 
 export function formatExpiryWindow(value: string): string {

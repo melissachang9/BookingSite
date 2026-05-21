@@ -78,6 +78,9 @@ def test_get_tenant_summary(client) -> None:
     assert payload["slug"] == "brow-beauty-lab"
     assert payload["name"] == "Brow Beauty Lab"
     assert payload["settings"]["minLeadTimeMinutes"] == 60
+    assert payload["branding"]["bookingScreening"]["enabled"] is True
+    assert payload["branding"]["bookingScreening"]["options"]
+    assert payload["branding"]["bookingAd"]["imageUrl"] == "/studio-hero.png"
 
 
 def test_list_services_returns_seeded_catalog(client) -> None:
@@ -87,6 +90,17 @@ def test_list_services_returns_seeded_catalog(client) -> None:
     payload = response.json()
     assert len(payload["services"]) >= 3
     assert payload["services"][0]["locationIds"]
+    assert payload["services"][0]["imageUrl"]
+
+
+def test_list_locations_returns_seeded_active_locations(client) -> None:
+    response = client.get("/api/v1/tenants/brow-beauty-lab/locations")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["locations"]) == 2
+    assert all(location["isActive"] for location in payload["locations"])
+    assert {location["name"] for location in payload["locations"]} == {"Downtown Studio", "Uptown Suite"}
 
 
 def test_availability_returns_slots_for_service(client) -> None:
@@ -102,6 +116,58 @@ def test_availability_returns_slots_for_service(client) -> None:
     payload = response.json()
     assert payload["days"]
     assert payload["slots"]
+    assert payload["nextAvailableSlot"] is not None
+
+
+def test_list_service_providers_returns_active_service_providers(client) -> None:
+    service = _first_service(client)
+
+    response = client.get(f"/api/v1/tenants/brow-beauty-lab/services/{service['id']}/providers")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["providers"]
+    assert all(provider["isActive"] for provider in payload["providers"])
+    assert all(service["id"] in provider["serviceIds"] for provider in payload["providers"])
+
+
+def test_list_service_providers_supports_location_filter(client) -> None:
+    service = _first_service(client)
+    location_id = service["locationIds"][0]
+
+    response = client.get(
+        f"/api/v1/tenants/brow-beauty-lab/services/{service['id']}/providers",
+        params={"locationId": location_id},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["providers"]
+    assert all(location_id in provider["locationIds"] for provider in payload["providers"])
+
+
+def test_availability_supports_monthly_window_and_provider_filter(client) -> None:
+    service = _first_service(client)
+    providers_response = client.get(f"/api/v1/tenants/brow-beauty-lab/services/{service['id']}/providers")
+    provider = providers_response.json()["providers"][0]
+    date_text = _next_weekday(0)
+
+    response = client.get(
+        "/api/v1/tenants/brow-beauty-lab/availability",
+        params={
+            "serviceId": service["id"],
+            "providerId": provider["id"],
+            "date": date_text,
+            "windowDays": 31,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["days"]) == 31
+    assert payload["nextAvailableSlot"] is not None
+    assert payload["nextAvailableSlot"]["providerId"] == provider["id"]
+    assert all(slot["providerId"] == provider["id"] for slot in payload["slots"])
 
 
 def test_create_booking_draft_holds_slot_and_blocks_conflict(client) -> None:

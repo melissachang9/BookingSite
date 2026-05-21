@@ -1,14 +1,32 @@
 from __future__ import annotations
 
-from app.db.models import BookingDraft, Customer, Provider, Service, Tenant
+from app.db.models import BookingDraft, Customer, Location, Provider, Service, Tenant
 from app.schemas.booking_drafts import BookingDraftSummaryResponse, CustomerSummaryResponse
 from app.schemas.catalog import (
+    LocationSummaryResponse,
     ProviderSummaryResponse,
     ServiceSummaryResponse,
     TenantBrandingResponse,
     TenantSettingsResponse,
     TenantSummaryResponse,
 )
+
+
+def _service_media_for(service: Service, tenant: Tenant | None) -> tuple[str | None, str | None]:
+    if tenant is None:
+        return None, None
+
+    service_media = tenant.branding_json.get("serviceMedia")
+    if not isinstance(service_media, dict):
+        return None, None
+
+    media = service_media.get(service.id) or service_media.get(service.name)
+    if not isinstance(media, dict):
+        return None, None
+
+    image_url = media.get("imageUrl") or media.get("image_url")
+    image_alt_text = media.get("imageAltText") or media.get("image_alt_text")
+    return image_url if isinstance(image_url, str) else None, image_alt_text if isinstance(image_alt_text, str) else None
 
 
 def tenant_to_summary(tenant: Tenant) -> TenantSummaryResponse:
@@ -26,7 +44,25 @@ def tenant_to_summary(tenant: Tenant) -> TenantSummaryResponse:
     )
 
 
-def service_to_summary(service: Service) -> ServiceSummaryResponse:
+def location_to_summary(location: Location) -> LocationSummaryResponse:
+    return LocationSummaryResponse(
+        id=location.id,
+        tenant_id=location.tenant_id,
+        created_at=location.created_at,
+        updated_at=location.updated_at,
+        name=location.name,
+        time_zone=location.time_zone,
+        is_active=location.is_active,
+        address_line1=location.address_line1,
+        address_line2=location.address_line2,
+        city=location.city,
+        state=location.state,
+        postal_code=location.postal_code,
+    )
+
+
+def service_to_summary(service: Service, tenant: Tenant | None = None) -> ServiceSummaryResponse:
+    image_url, image_alt_text = _service_media_for(service, tenant)
     return ServiceSummaryResponse(
         id=service.id,
         tenant_id=service.tenant_id,
@@ -38,6 +74,8 @@ def service_to_summary(service: Service) -> ServiceSummaryResponse:
         price_cents=service.price_cents,
         deposit_cents=service.deposit_cents,
         is_active=service.is_active,
+        image_url=image_url,
+        image_alt_text=image_alt_text,
         location_ids=[link.location_id for link in service.location_links],
         form_ids=[],
     )

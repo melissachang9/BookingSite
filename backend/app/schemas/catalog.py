@@ -2,7 +2,28 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from pydantic import Field
+
 from app.schemas.base import CamelModel
+
+
+class BookingScreeningOptionResponse(CamelModel):
+    id: str
+    label: str
+    description: str | None = None
+
+
+class BookingScreeningResponse(CamelModel):
+    enabled: bool = False
+    title: str = "How can we help?"
+    options: list[BookingScreeningOptionResponse] = Field(default_factory=list)
+
+
+class BookingAdResponse(CamelModel):
+    headline: str | None = None
+    body: str | None = None
+    image_url: str | None = None
+    image_alt_text: str | None = None
 
 
 class TenantBrandingResponse(CamelModel):
@@ -11,7 +32,9 @@ class TenantBrandingResponse(CamelModel):
     primary_color: str | None = None
     accent_color: str | None = None
     service_catalog_mode: str | None = None
-    service_categories: list[str] = []
+    service_categories: list[str] = Field(default_factory=list)
+    booking_screening: BookingScreeningResponse | None = None
+    booking_ad: BookingAdResponse | None = None
 
 
 class TenantSettingsResponse(CamelModel):
@@ -64,6 +87,8 @@ class ServiceSummaryResponse(CamelModel):
     price_cents: int
     deposit_cents: int
     is_active: bool
+    image_url: str | None = None
+    image_alt_text: str | None = None
     location_ids: list[str]
     form_ids: list[str]
 
@@ -83,3 +108,11 @@ class ProviderSummaryResponse(CamelModel):
 
 class ServiceListResponse(CamelModel):
     services: list[ServiceSummaryResponse]
+
+
+class ProviderListResponse(CamelModel):
+    providers: list[ProviderSummaryResponse]
+
+
+class LocationListResponse(CamelModel):
+    locations: list[LocationSummaryResponse]

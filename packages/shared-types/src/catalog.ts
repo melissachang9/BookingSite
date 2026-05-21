@@ -20,6 +20,8 @@ export type ServiceSummary = AuditFields &
     priceCents: number;
     depositCents: number;
     isActive: boolean;
+    imageUrl?: string | null;
+    imageAltText?: string | null;
     locationIds: UUID[];
     formIds: UUID[];
   };

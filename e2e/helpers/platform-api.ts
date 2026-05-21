@@ -3,6 +3,7 @@ import type { BookingDraftSummary, ErrorResponse, ServiceListResponse, TenantSum
 
 export const e2eTenantSlug = process.env.E2E_TENANT_SLUG ?? "brow-beauty-lab";
 export const e2eApiBaseURL = process.env.E2E_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
+export const e2eResetToken = process.env.E2E_RESET_TOKEN ?? "local-e2e-reset";
 
 const apiURL = (path: string) => {
   const normalizedBaseURL = e2eApiBaseURL.endsWith("/") ? e2eApiBaseURL : `${e2eApiBaseURL}/`;
@@ -26,6 +27,23 @@ export const getBookingDraft = (
   tenantSlug: string,
   bookingDraftId: string,
 ) => getApiJSON<BookingDraftSummary>(request, `tenants/${tenantSlug}/booking-drafts/${bookingDraftId}`);
+
+export async function resetE2EData(request: APIRequestContext, tenantSlug = e2eTenantSlug) {
+  const response = await request.post(apiURL("testing/e2e/reset"), {
+    data: { tenantSlug },
+    headers: {
+      "X-E2E-Reset-Token": e2eResetToken,
+    },
+  });
+
+  if (response.status() === 403 || response.status() === 404) {
+    throw new Error(
+      `E2E reset endpoint returned ${response.status()}. Restart the Docker stack so TEST_RESET_TOKEN is available, or set E2E_SKIP_RESET=1 for a one-off run.`,
+    );
+  }
+
+  await expect(response, "POST testing/e2e/reset").toBeOK();
+}
 
 export async function expectSlotConflict(
   request: APIRequestContext,

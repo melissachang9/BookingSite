@@ -27,6 +27,7 @@ services:
       APP_ENV: development
       APP_PORT: 8000
       DATABASE_URL: postgresql+asyncpg://booking:booking@db:5432/booking_platform
+      TEST_RESET_TOKEN: ${TEST_RESET_TOKEN:-local-e2e-reset}
     depends_on:
       db:
         condition: service_healthy

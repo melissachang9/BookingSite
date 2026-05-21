@@ -12,6 +12,8 @@ import type {
   CustomerLookupResponse,
   FormResponseSummary,
   HealthResponse,
+  LocationListResponse,
+  ProviderListResponse,
   SaveFormDraftRequest,
   ServiceListResponse,
   SessionResponse,
@@ -31,6 +33,13 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.post<SessionResponse, typeof body>("auth/refresh", body),
   getTenantBySlug: (tenantSlug: string) => client.get<TenantSummary>(`tenants/${tenantSlug}`),
   listServices: (tenantSlug: string) => client.get<ServiceListResponse>(`tenants/${tenantSlug}/services`),
+  listLocations: (tenantSlug: string) => client.get<LocationListResponse>(`tenants/${tenantSlug}/locations`),
+  listServiceProviders: (tenantSlug: string, serviceId: string, query: { locationId?: string } = {}) =>
+    client.get<ProviderListResponse>(`tenants/${tenantSlug}/services/${serviceId}/providers`, {
+      query: {
+        locationId: query.locationId,
+      },
+    }),
   getAvailability: (query: AvailabilityRequest) =>
     client.get<AvailabilityResponse>(`tenants/${query.tenantSlug}/availability`, {
       query: {
@@ -38,6 +47,7 @@ export const createPlatformApi = (client: ApiClient) => ({
         providerId: query.providerId,
         locationId: query.locationId,
         date: query.date,
+        windowDays: query.windowDays,
       },
     }),
   createBookingDraft: (body: CreateBookingDraftRequest) =>

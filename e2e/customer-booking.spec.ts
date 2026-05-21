@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
 
-import { e2eTenantSlug, expectSlotConflict, getBookingDraft, getTenant, listServices } from "./helpers/platform-api";
+import { e2eTenantSlug, expectSlotConflict, getBookingDraft, getTenant, listServices, resetE2EData } from "./helpers/platform-api";
+
+test.beforeEach(async ({ request }) => {
+  if (process.env.E2E_SKIP_RESET !== "1") {
+    await resetE2EData(request, e2eTenantSlug);
+  }
+});
 
 test("customer can select a service and hold an appointment slot", async ({ page, request }) => {
   const tenant = await getTenant(request, e2eTenantSlug);
@@ -14,23 +20,52 @@ test("customer can select a service and hold an appointment slot", async ({ page
 
   await page.goto(`/${tenant.slug}`);
 
-  await expect(page.getByRole("heading", { name: `Reserve your appointment at ${tenant.name}.` })).toBeVisible();
-  await expect(page.getByText(`${tenant.settings.maxAdvanceBookingDays} days ahead`)).toBeVisible();
-  await expect(page.getByText(`${tenant.settings.minLeadTimeMinutes} minutes`)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "How can we help?" })).toBeVisible();
+  await page.getByRole("link", { name: /I'm new to Brow Beauty Lab/ }).click();
 
-  const serviceCard = page.locator(".service-card").filter({
+  const locationStepHeading = page.getByRole("heading", { name: "Choose a location" });
+  const serviceStepHeading = page.getByRole("heading", { name: "Select a service" });
+  const nextStep = await Promise.race([
+    serviceStepHeading.waitFor({ state: "visible", timeout: 15_000 }).then(() => "services"),
+    locationStepHeading.waitFor({ state: "visible", timeout: 15_000 }).then(() => "locations"),
+  ]);
+
+  if (nextStep === "locations") {
+    await Promise.all([
+      page.waitForURL(new RegExp(`/${tenant.slug}/services(\\?|$)`)),
+      page.getByRole("link", { name: /Downtown Studio/ }).click(),
+    ]);
+  }
+
+  await expect(serviceStepHeading).toBeVisible({ timeout: 15_000 });
+
+  const serviceCard = page.locator(".service-row-card").filter({
     has: page.getByRole("heading", { name: service.name }),
   });
   await expect(serviceCard).toBeVisible();
 
-  await serviceCard.getByRole("link", { name: "View openings" }).click();
+  await Promise.all([
+    page.waitForURL(new RegExp(`/${tenant.slug}/services/[^/?]+(\\?|$)`)),
+    serviceCard.getByRole("link", { name: "Choose service" }).click(),
+  ]);
 
   await expect(page.getByRole("heading", { name: service.name })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Select your appointment time" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Choose your provider preference" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "No preference" })).toBeVisible();
+
+  await Promise.all([
+    page.waitForURL(new RegExp(`/${tenant.slug}/services/[^/]+/availability`)),
+    page.getByRole("link", { name: "Show next availability" }).first().click(),
+  ]);
+
+  await expect(page.getByRole("heading", { name: "Your Appointment" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Select a date" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Select a time for/ })).toBeVisible();
 
   const firstSlotButton = page.locator(".slot-button").first();
   await expect(firstSlotButton).toBeVisible();
-  const selectedProviderName = (await firstSlotButton.locator("strong").innerText()).trim();
+  const selectedProviderName = await firstSlotButton.getAttribute("data-provider-name");
+  expect(selectedProviderName).toBeTruthy();
 
   await Promise.all([
     page.waitForURL(new RegExp(`/${tenant.slug}/book/[^/]+$`)),

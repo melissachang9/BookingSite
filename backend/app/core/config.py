@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -18,6 +19,7 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://booking:booking@localhost:5433/booking_platform"
     token_secret_key: str = "change-me-for-production"
+    test_reset_token: Optional[str] = None
     access_token_ttl_minutes: int = 60
     refresh_token_ttl_days: int = 14
     cors_origins: str = (

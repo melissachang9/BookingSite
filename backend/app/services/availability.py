@@ -90,6 +90,7 @@ async def list_availability(
     provider_id: str | None,
     location_id: str | None,
     requested_date_text: str,
+    window_days: int = 7,
 ) -> AvailabilityResponse:
     tenant = await get_tenant_by_slug(session, tenant_slug)
     service = await _load_service(session, tenant.id, service_id)
@@ -104,11 +105,12 @@ async def list_availability(
 
     tenant_timezone = ZoneInfo(tenant.timezone)
     settings = _normalize_settings(tenant.settings_json)
+    resolved_window_days = max(1, min(window_days, int(settings["maxAdvanceBookingDays"])))
     min_start = datetime.now(timezone.utc) + timedelta(minutes=int(settings["minLeadTimeMinutes"]))
     max_start = datetime.now(timezone.utc) + timedelta(days=int(settings["maxAdvanceBookingDays"]))
     duration = timedelta(minutes=service.duration_minutes)
     window_start = datetime.combine(requested_date, time.min, tzinfo=tenant_timezone).astimezone(timezone.utc)
-    window_end = datetime.combine(requested_date + timedelta(days=7), time.min, tzinfo=tenant_timezone).astimezone(timezone.utc)
+    window_end = datetime.combine(requested_date + timedelta(days=resolved_window_days), time.min, tzinfo=tenant_timezone).astimezone(timezone.utc)
     provider_ids = [context.provider.id for context in provider_contexts]
 
     schedules = (
@@ -141,7 +143,7 @@ async def list_availability(
 
     all_slots_by_day: list[list[SlotAvailabilityResponse]] = []
     earliest_slot: SlotAvailabilityResponse | None = None
-    for day_offset in range(7):
+    for day_offset in range(resolved_window_days):
         current_date = requested_date + timedelta(days=day_offset)
         day_slots: list[SlotAvailabilityResponse] = []
         for context in provider_contexts:
@@ -179,6 +181,7 @@ async def list_availability(
 
     requested_day_slots = all_slots_by_day[0] if all_slots_by_day else []
     if earliest_slot is not None:
+        earliest_slot.is_next_available = True
         for slot in requested_day_slots:
             if (
                 slot.start_at == earliest_slot.start_at
@@ -197,4 +200,5 @@ async def list_availability(
             for index, day_slots in enumerate(all_slots_by_day)
         ],
         slots=requested_day_slots,
+        next_available_slot=earliest_slot,
     )

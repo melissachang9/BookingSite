@@ -5,9 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
 from app.schemas.availability import AvailabilityResponse
-from app.schemas.catalog import ServiceListResponse, TenantSummaryResponse
+from app.schemas.catalog import LocationListResponse, ProviderListResponse, ServiceListResponse, TenantSummaryResponse
 from app.services.availability import list_availability
-from app.services.tenants import get_tenant_summary, list_tenant_services
+from app.services.tenants import get_tenant_summary, list_service_providers, list_tenant_locations, list_tenant_services
 
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
@@ -34,6 +34,32 @@ async def list_services(
 
 
 @router.get(
+    "/{tenant_slug}/locations",
+    response_model=LocationListResponse,
+    summary="List active locations for a tenant storefront",
+)
+async def list_locations(
+    tenant_slug: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> LocationListResponse:
+    return await list_tenant_locations(session, tenant_slug)
+
+
+@router.get(
+    "/{tenant_slug}/services/{service_id}/providers",
+    response_model=ProviderListResponse,
+    summary="List active providers for a tenant service",
+)
+async def list_providers_for_service(
+    tenant_slug: str,
+    service_id: str,
+    location_id: str | None = Query(None, alias="locationId"),
+    session: AsyncSession = Depends(get_db_session),
+) -> ProviderListResponse:
+    return await list_service_providers(session, tenant_slug, service_id, location_id)
+
+
+@router.get(
     "/{tenant_slug}/availability",
     response_model=AvailabilityResponse,
     summary="List availability for a tenant service route",
@@ -44,6 +70,7 @@ async def get_availability(
     provider_id: str | None = Query(None, alias="providerId"),
     location_id: str | None = Query(None, alias="locationId"),
     date: str = Query(...),
+    window_days: int = Query(7, alias="windowDays", ge=1, le=62),
     session: AsyncSession = Depends(get_db_session),
 ) -> AvailabilityResponse:
     return await list_availability(
@@ -53,4 +80,5 @@ async def get_availability(
         provider_id=provider_id,
         location_id=location_id,
         requested_date_text=date,
+        window_days=window_days,
     )

@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 const storefrontBaseURL = process.env.E2E_STOREFRONT_BASE_URL ?? "http://127.0.0.1:3001";
 const shouldStartWebServer = process.env.E2E_SKIP_WEB_SERVER !== "1";
+const shouldReuseExistingServer = !process.env.CI || process.env.E2E_REUSE_EXISTING_SERVER === "1";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -25,7 +26,7 @@ export default defineConfig({
   webServer: shouldStartWebServer
     ? {
         command: process.env.E2E_WEB_SERVER_COMMAND ?? "docker compose up --build",
-        reuseExistingServer: !process.env.CI,
+        reuseExistingServer: shouldReuseExistingServer,
         timeout: 240_000,
         url: storefrontBaseURL,
       }

@@ -22,3 +22,4 @@ class AvailabilityDayResponse(CamelModel):
 class AvailabilityResponse(CamelModel):
     days: list[AvailabilityDayResponse]
     slots: list[SlotAvailabilityResponse]
+    next_available_slot: SlotAvailabilityResponse | None = None

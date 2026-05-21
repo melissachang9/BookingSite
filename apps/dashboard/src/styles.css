@@ -281,7 +281,7 @@ select:disabled {
   color: var(--ui-ivory);
   background:
     linear-gradient(90deg, rgba(32, 25, 20, 0.82), rgba(32, 25, 20, 0.38)),
-    url("https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=1800&q=80") center/cover;
+    url("/studio-ops-hero.png") center/cover;
 }
 
 .ops-hero--compact .ops-hero-copy {
@@ -654,7 +654,7 @@ select:disabled {
   padding: 1.25rem;
   background:
     linear-gradient(90deg, rgba(32, 25, 20, 0.78), rgba(32, 25, 20, 0.36)),
-    url("https://images.unsplash.com/photo-1596178065887-1198b6148b2b?auto=format&fit=crop&w=1800&q=80") center/cover;
+    url("/studio-login-hero.png") center/cover;
 }
 
 .login-panel {

@@ -46,11 +46,13 @@ export type AvailabilityRequest = {
   providerId?: UUID;
   locationId?: UUID;
   date: string;
+  windowDays?: number;
 };
 
 export type AvailabilityResponse = {
   days: AvailabilityDay[];
   slots: SlotAvailability[];
+  nextAvailableSlot?: SlotAvailability | null;
 };
 
 export type BookingDraftSummary = AuditFields &

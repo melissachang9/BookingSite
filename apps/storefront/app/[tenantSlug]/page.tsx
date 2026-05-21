@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
+import type { LocationSummary, TenantSummary } from "@booking/shared-types";
 
 import { storefrontApi, isApiClientError, isApiNotFoundError } from "../lib/storefront-api";
-import { bookingJourney, formatCurrency, formatDuration, slugify, titleFromSlug } from "../lib/storefront-shell";
+import { pathWithQuery, titleFromSlug } from "../lib/storefront-shell";
 
 type TenantPageProps = {
   params: Promise<{ tenantSlug: string }>;
@@ -12,116 +14,14 @@ export const dynamic = "force-dynamic";
 
 export default async function TenantHomePage({ params }: TenantPageProps) {
   const { tenantSlug } = await params;
+  let data: { tenant: TenantSummary; locations: LocationSummary[] } | null = null;
 
   try {
-    const [tenant, serviceResponse] = await Promise.all([
+    const [tenant, locationResponse] = await Promise.all([
       storefrontApi.getTenantBySlug(tenantSlug),
-      storefrontApi.listServices(tenantSlug),
+      storefrontApi.listLocations(tenantSlug),
     ]);
-    const services = serviceResponse.services;
-    const startingPrice = services.length > 0 ? Math.min(...services.map((service) => service.priceCents)) : 0;
-
-    return (
-      <main className="page-stack">
-        <section className="studio-hero studio-hero--tenant">
-          <div className="studio-hero__copy">
-            <p className="store-eyebrow">Online booking</p>
-            <h2>Reserve your appointment at {tenant.name}.</h2>
-            <p>
-              Choose a service, review the studio policy, and select from live openings in {tenant.timezone}.
-            </p>
-            <div className="hero-actions">
-              <a href="#services" className="store-button">
-                View services
-              </a>
-              {tenant.branding.homepageUrl ? (
-                <a href={tenant.branding.homepageUrl} target="_blank" rel="noreferrer" className="ghost-link ghost-link--light">
-                  Studio website
-                </a>
-              ) : null}
-            </div>
-          </div>
-        </section>
-
-        <section className="policy-strip" aria-label="Studio booking policy">
-          <article className="policy-card">
-            <span>Booking window</span>
-            <p>{tenant.settings.maxAdvanceBookingDays} days ahead</p>
-          </article>
-          <article className="policy-card">
-            <span>Minimum lead time</span>
-            <p>{tenant.settings.minLeadTimeMinutes} minutes</p>
-          </article>
-          <article className="policy-card">
-            <span>Cancellation window</span>
-            <p>{tenant.settings.cancellationWindowHours} hours</p>
-          </article>
-          <article className="policy-card">
-            <span>Starting at</span>
-            <p>{startingPrice > 0 ? formatCurrency(startingPrice) : "Catalog pending"}</p>
-          </article>
-        </section>
-
-        <section id="services" className="store-section">
-          <div className="section-header">
-            <div>
-              <p className="store-eyebrow">Service menu</p>
-              <h2>Select a service</h2>
-            </div>
-            <span className="panel-badge">{services.length} active</span>
-          </div>
-
-          {services.length > 0 ? (
-            <div className="service-grid">
-              {services.map((service) => (
-                <article key={service.id} className="service-card">
-                  <div className="service-card__topline">
-                    <span>{formatDuration(service.durationMinutes)}</span>
-                    <strong>{formatCurrency(service.priceCents)}</strong>
-                  </div>
-                  <h3>{service.name}</h3>
-                  <p>{service.description ?? "Personalized studio service with live appointment availability."}</p>
-                  <dl className="meta-list">
-                    <div>
-                      <dt>Deposit</dt>
-                      <dd>{service.depositCents > 0 ? formatCurrency(service.depositCents) : "Not required"}</dd>
-                    </div>
-                    <div>
-                      <dt>Forms</dt>
-                      <dd>{service.formIds.length}</dd>
-                    </div>
-                    <div>
-                      <dt>Locations</dt>
-                      <dd>{service.locationIds.length || 1}</dd>
-                    </div>
-                  </dl>
-                  <Link href={`/${tenantSlug}/services/${slugify(service.name)}`} className="card-action">
-                    View openings
-                  </Link>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-panel">
-              <strong>No services are available for online booking.</strong>
-              <span>Contact the studio directly for current availability.</span>
-            </div>
-          )}
-        </section>
-
-        <section className="journey-rail" aria-label="Booking progress">
-          {bookingJourney.slice(0, 4).map((step, index) => (
-            <article key={step.state} className="journey-step">
-              <span>{index + 1}</span>
-              <div>
-                <strong>{step.label}</strong>
-                <p>{step.detail}</p>
-              </div>
-            </article>
-          ))}
-        </section>
-      </main>
-    );
+    data = { tenant, locations: locationResponse.locations };
   } catch (error) {
     if (isApiNotFoundError(error)) {
       notFound();
@@ -140,4 +40,58 @@ export default async function TenantHomePage({ params }: TenantPageProps) {
       </main>
     );
   }
+
+  if (data === null) {
+    notFound();
+  }
+
+  const { tenant, locations } = data;
+  const activeLocations = locations.filter((location) => location.isActive);
+  const screening = tenant.branding.bookingScreening;
+  const hasScreening = Boolean(screening?.enabled && screening.options.length > 0);
+
+  if (!hasScreening) {
+    redirect(
+      activeLocations.length > 1
+        ? `/${tenantSlug}/locations`
+        : pathWithQuery(`/${tenantSlug}/services`, { locationId: activeLocations[0]?.id }),
+    );
+  }
+
+  const nextPathForScreening = (screeningId: string) =>
+    activeLocations.length > 1
+      ? pathWithQuery(`/${tenantSlug}/locations`, { screening: screeningId })
+      : pathWithQuery(`/${tenantSlug}/services`, { screening: screeningId, locationId: activeLocations[0]?.id });
+  const bookingAd = tenant.branding.bookingAd;
+
+  return (
+    <main className="booking-entry-layout">
+      <section className="booking-entry-panel">
+        <div className="booking-entry-copy">
+          <p className="store-eyebrow">Book online</p>
+          <h2>{screening?.title ?? "How can we help?"}</h2>
+        </div>
+
+        <div className="screening-option-list">
+          {screening?.options.map((option) => (
+            <Link key={option.id} href={nextPathForScreening(option.id)} className="screening-option-card">
+              <span>
+                <strong>{option.label}</strong>
+                {option.description ? <small>{option.description}</small> : null}
+              </span>
+              <b aria-hidden="true">→</b>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <aside className="booking-ad-panel" aria-label="Studio highlight">
+        {bookingAd?.imageUrl ? <img src={bookingAd.imageUrl} alt={bookingAd.imageAltText ?? tenant.name} /> : null}
+        <div>
+          {bookingAd?.headline ? <strong>{bookingAd.headline}</strong> : null}
+          {bookingAd?.body ? <p>{bookingAd.body}</p> : null}
+        </div>
+      </aside>
+    </main>
+  );
 }

@@ -140,7 +140,7 @@ npm run test:e2e:install
 npm run test:e2e
 ```
 
-Playwright reuses a running storefront in local development. If one is not already available, it starts `docker compose up --build` and waits for the storefront URL. To run against an already managed stack, set `E2E_SKIP_WEB_SERVER=1`. Override URLs with `E2E_STOREFRONT_BASE_URL` and `E2E_API_BASE_URL` when needed.
+Playwright reuses a running storefront in local development; in CI it starts the Docker stack with `docker compose up --build` and waits for the storefront URL. Before each active E2E spec, it calls the guarded `/api/v1/testing/e2e/reset` endpoint to clear volatile slot holds, booking drafts, and test customers for the seeded tenant. To run against an already managed stack without Playwright starting a web server, set `E2E_SKIP_WEB_SERVER=1`. Override URLs with `E2E_STOREFRONT_BASE_URL` and `E2E_API_BASE_URL` when needed.
 
 ## Product Workflow Summary
 
