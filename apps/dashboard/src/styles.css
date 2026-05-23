@@ -187,6 +187,39 @@ select:disabled {
   gap: 0.55rem;
 }
 
+.user-pill,
+.ghost-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.4rem;
+  border-radius: var(--ui-radius-sm);
+  border: 1px solid var(--ui-border);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.user-pill {
+  gap: 0.45rem;
+  padding: 0.5rem 0.72rem;
+  background: var(--ui-canvas-raised);
+}
+
+.user-pill span {
+  color: var(--ui-muted);
+  text-transform: uppercase;
+}
+
+.user-pill strong {
+  color: var(--ui-ink);
+}
+
+.ghost-action {
+  padding: 0.55rem 0.8rem;
+  color: var(--ui-ink);
+  background: rgba(255, 250, 243, 0.62);
+}
+
 .status-chip,
 .api-pill,
 .filter-chip,
@@ -486,6 +519,12 @@ select:disabled {
   gap: 1.25rem;
 }
 
+.catalog-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  gap: 1.25rem;
+}
+
 .calendar-panel {
   overflow: hidden;
 }
@@ -552,6 +591,12 @@ select:disabled {
   transform: translateY(-1px);
 }
 
+.calendar-slot-card--selected {
+  border-color: var(--ui-rose);
+  box-shadow: var(--ui-shadow-sm);
+  background: var(--ui-blush-soft);
+}
+
 .calendar-slot-card strong {
   font-size: 1rem;
 }
@@ -588,12 +633,18 @@ select:disabled {
   gap: 0.75rem;
 }
 
-.drawer-form-preview {
+.catalog-form {
   display: grid;
-  gap: 0.75rem;
-  margin-top: 0.35rem;
+  gap: 1rem;
 }
 
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.form-grid label,
 .drawer-form-preview label {
   display: grid;
   gap: 0.35rem;
@@ -602,6 +653,20 @@ select:disabled {
   font-weight: 800;
 }
 
+.form-grid__full {
+  grid-column: 1 / -1;
+}
+
+.form-fieldset {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.form-grid input,
+.form-grid select,
+.form-grid textarea,
 .drawer-form-preview input,
 .drawer-form-preview select {
   width: 100%;
@@ -611,6 +676,174 @@ select:disabled {
   border-radius: var(--ui-radius-sm);
   color: var(--ui-ink);
   background: var(--ui-canvas-raised);
+}
+
+.form-grid textarea {
+  min-height: 8.5rem;
+  padding: 0.75rem;
+  resize: vertical;
+}
+
+.inline-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.inline-meta span {
+  color: var(--ui-muted);
+  font-size: 0.84rem;
+}
+
+.message-banner {
+  padding: 0.8rem 0.9rem;
+  border: 1px solid rgba(72, 111, 76, 0.22);
+  border-radius: var(--ui-radius-sm);
+  color: var(--ui-success);
+  background: var(--ui-success-soft);
+  font-weight: 700;
+}
+
+.message-banner--error {
+  border-color: rgba(154, 61, 50, 0.24);
+  color: var(--ui-danger);
+  background: var(--ui-danger-soft);
+}
+
+.message-banner--muted {
+  border-color: rgba(111, 125, 99, 0.22);
+  color: var(--ui-sage);
+  background: var(--ui-sage-soft);
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.service-catalog-list {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.service-catalog-card {
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.95rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+  background: rgba(255, 250, 243, 0.62);
+}
+
+.service-catalog-card h5 {
+  margin: 0.25rem 0 0;
+  color: var(--ui-ink);
+  font-family: var(--ui-font-serif);
+  font-size: 1.15rem;
+}
+
+.service-catalog-card p {
+  margin: 0;
+}
+
+.launch-summary {
+  display: grid;
+  gap: 1rem;
+}
+
+.launch-summary-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.launch-summary-list div {
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+  background: rgba(255, 250, 243, 0.62);
+}
+
+.launch-summary-list dt {
+  color: var(--ui-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.launch-summary-list dd {
+  margin: 0.3rem 0 0;
+  color: var(--ui-ink);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.service-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0;
+}
+
+.service-stats div {
+  padding: 0.75rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+  background: rgba(255, 253, 249, 0.82);
+}
+
+.service-stats dt {
+  color: var(--ui-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.service-stats dd {
+  margin: 0.35rem 0 0;
+  color: var(--ui-ink);
+  font-weight: 800;
+}
+
+.catalog-location-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.secondary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 2.45rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+  color: var(--ui-ink);
+  background: var(--ui-canvas-raised);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.drawer-form-preview {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.35rem;
+}
+
+.drawer-selection-note {
+  padding: 0.8rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+  color: var(--ui-ink-soft);
+  background: var(--ui-blush-soft);
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.45;
 }
 
 .drawer-form-preview button,
@@ -665,8 +898,41 @@ select:disabled {
   background: rgba(255, 253, 249, 0.92);
 }
 
+.public-route-shell {
+  min-height: 100vh;
+  padding: 1.25rem;
+}
+
+.public-route-shell > .ops-page-stack {
+  width: min(100%, 1240px);
+  margin: 0 auto;
+}
+
 .login-panel h2 {
   font-size: 2.15rem;
+}
+
+.login-form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.login-form label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--ui-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.login-form input {
+  width: 100%;
+  min-height: 2.8rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+  color: var(--ui-ink);
+  background: var(--ui-canvas-raised);
 }
 
 .login-meta {
@@ -706,7 +972,8 @@ select:disabled {
 
   .ops-metric-grid,
   .ops-dashboard-grid,
-  .calendar-workspace {
+  .calendar-workspace,
+  .catalog-layout {
     grid-template-columns: 1fr;
   }
 }
@@ -736,8 +1003,14 @@ select:disabled {
 
   .ops-nav,
   .ops-metric-grid,
-  .action-grid {
+  .action-grid,
+  .form-grid,
+  .service-stats {
     grid-template-columns: 1fr;
+  }
+
+  .action-row {
+    flex-direction: column;
   }
 
   .ops-hero-copy {
