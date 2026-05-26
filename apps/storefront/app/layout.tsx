@@ -1,11 +1,10 @@
-import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import "@booking/ui-components/styles.css";
 import "./globals.css";
 
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "Brow Beauty Lab Booking",
   description: "Luxury beauty studio booking, intake, deposits, and appointment management.",
 };

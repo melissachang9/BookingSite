@@ -1,4 +1,4 @@
-import type { DepositStatus } from "./bookings";
+import type { BookingDraftSummary, DepositStatus } from "./bookings";
 import type { ActorSummary, AuditFields, ISODateString, TenantScoped, UUID } from "./common";
 
 export type PaymentStatus =
@@ -13,13 +13,16 @@ export type PaymentStatus =
 export type PaymentMethodType = "card" | "cash" | "external_pos" | "wallet_credit" | "manual";
 
 export type CheckoutSessionKind = "deposit" | "booking_balance" | "manual_payment_link";
+export type DepositPaymentLinkState = "open" | "expired" | "missing";
 
 export type PaymentEventKind =
   | "checkout_started"
   | "checkout_completed"
   | "checkout_expired"
+  | "checkout_reminder_sent"
   | "payment_recorded"
   | "refund_recorded"
+  | "deposit_forfeited"
   | "manual_credit_applied";
 
 export type PaymentEvent = {
@@ -51,6 +54,7 @@ export type PaymentSummary = AuditFields &
   };
 
 export type CreateCheckoutSessionRequest = {
+  tenantSlug: string;
   bookingDraftId?: UUID;
   bookingId?: UUID;
   kind: CheckoutSessionKind;
@@ -64,8 +68,32 @@ export type CreateCheckoutSessionResponse = {
   expiresAt?: ISODateString;
 };
 
+export type DepositPaymentFollowUpItem = {
+  bookingDraft: BookingDraftSummary;
+  paymentId?: UUID | null;
+  paymentStatus?: PaymentStatus | null;
+  checkoutSessionId?: string | null;
+  checkoutUrl?: string | null;
+  checkoutExpiresAt?: ISODateString | null;
+  linkState: DepositPaymentLinkState;
+};
+
+export type DepositPaymentFollowUpListResponse = {
+  items: DepositPaymentFollowUpItem[];
+};
+
+export type SendPaymentReminderResponse = {
+  bookingDraftId: UUID;
+  paymentId: UUID;
+  checkoutSessionId: string;
+  checkoutUrl: string;
+  recipientEmail: string;
+  provider: string;
+  providerMessageId: string;
+  sentAt: ISODateString;
+};
+
 export type RecordManualPaymentRequest = {
-  bookingId: UUID;
   amountCents: number;
   paymentMethodType: Extract<PaymentMethodType, "cash" | "external_pos" | "manual">;
   notes?: string;

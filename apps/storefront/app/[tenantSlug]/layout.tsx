@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { storefrontApi, isApiNotFoundError } from "../lib/storefront-api";
 import { titleFromSlug } from "../lib/storefront-shell";
+import { TenantBackButton } from "./tenant-back-button";
 
 type TenantLayoutProps = {
   children: ReactNode;
@@ -28,9 +29,7 @@ export default async function TenantLayout({ children, params }: TenantLayoutPro
   return (
     <div className="tenant-shell">
       <header className="tenant-header tenant-header--minimal">
-        <Link href="/" className="tenant-back-link" aria-label="Back to studio directory">
-          ←
-        </Link>
+        <TenantBackButton ariaLabel={`Back within ${tenantName} booking`} fallbackHref={`/${tenantSlug}`} />
 
         <Link href={`/${tenantSlug}`} className="tenant-wordmark">
           {tenantName}

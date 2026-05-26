@@ -3,6 +3,7 @@ import type { ErrorResponse } from "@booking/shared-types";
 export type ApiClientOptions = {
   baseUrl: string;
   getAccessToken?: () => string | null | Promise<string | null>;
+  refreshAccessToken?: () => string | null | Promise<string | null>;
   defaultHeaders?: HeadersInit;
 };
 
@@ -85,13 +86,27 @@ const parseJsonSafely = async <TValue>(response: Response): Promise<TValue | und
 };
 
 export const createApiClient = (options: ApiClientOptions) => {
-  const request = async <TResponse>(path: string, requestOptions?: RequestOptions): Promise<TResponse> => {
-    const response = await fetch(buildUrl(options.baseUrl, path, requestOptions?.query), {
+  const executeRequest = async (path: string, requestOptions?: RequestOptions): Promise<Response> =>
+    fetch(buildUrl(options.baseUrl, path, requestOptions?.query), {
       method: requestOptions?.method ?? "GET",
       headers: await buildHeaders(options, requestOptions),
       body: requestOptions?.body !== undefined ? JSON.stringify(requestOptions.body) : undefined,
       signal: requestOptions?.signal,
     });
+
+  const request = async <TResponse>(
+    path: string,
+    requestOptions?: RequestOptions,
+    allowRefresh = true,
+  ): Promise<TResponse> => {
+    let response = await executeRequest(path, requestOptions);
+
+    if (response.status === 401 && allowRefresh && options.refreshAccessToken !== undefined) {
+      const refreshedToken = await options.refreshAccessToken();
+      if (refreshedToken) {
+        response = await executeRequest(path, requestOptions);
+      }
+    }
 
     if (!response.ok) {
       const payload = await parseJsonSafely<ErrorResponse>(response);

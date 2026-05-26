@@ -100,6 +100,9 @@ export type FormRequirement = AuditFields & {
   customerPromptTiming?: CustomerPromptTiming | null;
   status: FormRequirementStatus;
   satisfiedByResponseId?: UUID | null;
+  formTitle?: string | null;
+  formDescription?: string | null;
+  schema?: FormSchema | null;
 };
 
 export type FormResponseSummary = AuditFields &
@@ -121,6 +124,10 @@ export type SubmitFormResponseRequest = {
   bookingId?: UUID;
   bookingDraftId?: UUID;
   formVersionId: UUID;
+  answers: FormAnswers;
+};
+
+export type SubmitFormRequirementRequest = {
   answers: FormAnswers;
 };
 

@@ -18,6 +18,12 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")
     monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("TOKEN_SECRET_KEY", "test-secret-key")
+    monkeypatch.delenv("TEST_RESET_TOKEN", raising=False)
+    monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
+    monkeypatch.delenv("STRIPE_WEBHOOK_SECRET", raising=False)
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    monkeypatch.delenv("RESEND_FROM_EMAIL", raising=False)
+    monkeypatch.delenv("RESEND_REPLY_TO_EMAIL", raising=False)
 
     from app.core.config import get_settings
     from app.db.session import clear_session_state

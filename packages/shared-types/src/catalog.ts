@@ -26,11 +26,25 @@ export type ServiceSummary = AuditFields &
     formIds: UUID[];
   };
 
+export type CreateServiceRequest = {
+  name: string;
+  description?: string;
+  durationMinutes: number;
+  priceCents: number;
+  depositCents: number;
+  locationIds: UUID[];
+  isActive?: boolean;
+};
+
 export type ProviderSummary = AuditFields &
   TenantScoped & {
     userId?: UUID | null;
     name: string;
     email?: string | null;
+    description?: string | null;
+    imageUrl?: string | null;
+    imageAltText?: string | null;
+    availabilityLabel?: string | null;
     isActive: boolean;
     serviceIds: UUID[];
     locationIds: UUID[];

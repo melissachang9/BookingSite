@@ -37,7 +37,7 @@ export default async function ServicesPage({ params, searchParams }: ServicesPag
 
     return (
       <main className="service-selection-layout">
-        <section className="service-selection-panel">
+        <section className="service-selection-panel service-selection-panel--editorial">
           <div className="section-header section-header--plain">
             <div>
               <Link href={activeLocations.length > 1 ? locationStepHref : `/${tenantSlug}`} className="back-link">
@@ -96,8 +96,8 @@ export default async function ServicesPage({ params, searchParams }: ServicesPag
         <aside className="booking-ad-panel booking-ad-panel--service" aria-label="Studio highlight">
           {bookingAd?.imageUrl ? <img src={bookingAd.imageUrl} alt={bookingAd.imageAltText ?? tenant.name} /> : null}
           <div>
-            <strong>{bookingAd?.headline ?? tenant.name}</strong>
-            {bookingAd?.body ? <p>{bookingAd.body}</p> : null}
+            <strong>{bookingAd?.headline ?? "Choose a treatment that matches your ritual."}</strong>
+            <p>{bookingAd?.body ?? "Clear timing, transparent deposits, and provider selection stay connected all the way to checkout."}</p>
           </div>
         </aside>
       </main>

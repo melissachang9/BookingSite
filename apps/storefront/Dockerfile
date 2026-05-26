@@ -19,4 +19,4 @@ WORKDIR /app/apps/storefront
 
 EXPOSE 3000
 
-CMD ["npm", "run", "dev"]
+CMD ["sh", "-c", "rm -rf .next && npm run build && npm run start"]

@@ -8,12 +8,10 @@ import type {
   CreateServiceRequest,
   CreateTenantRequest,
   CreateTenantResponse,
-  DepositPaymentFollowUpItem,
   HealthResponse,
   LocationSummary,
   SessionResponse,
   ServiceSummary,
-  SlotAvailability,
   TenantSummary,
 } from "@booking/shared-types";
 
@@ -31,6 +29,9 @@ import {
   writeStoredRedirectPath,
   writeStoredSession,
 } from "./platform-api";
+import { CalendarPage } from "./calendar-page";
+import { BookingsPage } from "./bookings-page";
+import { PaymentsPage } from "./payments-page";
 import "./styles.css";
 
 type BackendStatusState =
@@ -49,20 +50,9 @@ type RouteDefinition = {
   actions: string[];
 };
 
-type CalendarDataState =
-  | { kind: "loading" }
-  | { kind: "ready"; service: ServiceSummary; days: CalendarDay[] }
-  | { kind: "empty"; message: string }
-  | { kind: "error"; message: string };
-
 type ServiceCatalogState =
   | { kind: "loading" }
   | { kind: "ready"; tenant: TenantSummary; services: ServiceSummary[]; locations: LocationSummary[] }
-  | { kind: "error"; message: string };
-
-type PaymentFollowUpState =
-  | { kind: "loading" }
-  | { kind: "ready"; items: DepositPaymentFollowUpItem[] }
   | { kind: "error"; message: string };
 
 type ServiceFormState = {
@@ -77,12 +67,6 @@ type ServiceFormState = {
 type ServiceSaveState =
   | { kind: "idle" }
   | { kind: "saving" }
-  | { kind: "success"; message: string }
-  | { kind: "error"; message: string };
-
-type PaymentActionState =
-  | { kind: "idle" }
-  | { kind: "submitting"; bookingDraftId: string }
   | { kind: "success"; message: string }
   | { kind: "error"; message: string };
 
@@ -114,16 +98,6 @@ type OwnerSignInState =
   | { kind: "idle" }
   | { kind: "submitting" }
   | { kind: "error"; message: string };
-
-type CalendarDay = {
-  date: string;
-  label: string;
-  slots: SlotAvailability[];
-};
-
-type SelectedCalendarSlot = SlotAvailability & {
-  dayLabel: string;
-};
 
 const demoOwnerEmail = "owner@browbeautylab.test";
 const demoOwnerPassword = "DemoBooking123";
@@ -255,13 +229,6 @@ const operatorQueues = [
   { title: "Form tasks", count: "Soon", detail: "Pre-booking gates, pre-visit reminders, and internal forms stay distinct." },
 ];
 
-const dateFormatter = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "America/Los_Angeles",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-
 const dayLabelFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/Los_Angeles",
   weekday: "short",
@@ -279,14 +246,6 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
 });
-
-function getUpcomingDate(offsetDays: number): string {
-  return dateFormatter.format(new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000));
-}
-
-function getDateLabel(date: string): string {
-  return dayLabelFormatter.format(new Date(`${date}T12:00:00Z`));
-}
 
 function getStatusLabel(tone: RouteDefinition["tone"]): string {
   if (tone === "ready") {
@@ -323,59 +282,6 @@ function parseMoneyInput(value: string): number | null {
   return Math.round(parsedValue * 100);
 }
 
-function getPaymentLinkLabel(item: DepositPaymentFollowUpItem): string {
-  if (item.linkState === "open") {
-    return "Link ready";
-  }
-
-  if (item.linkState === "expired") {
-    return "Link expired";
-  }
-
-  return "Needs link";
-}
-
-function getPaymentLinkTone(item: DepositPaymentFollowUpItem): RouteDefinition["tone"] {
-  if (item.linkState === "open") {
-    return "ready";
-  }
-
-  if (item.linkState === "expired") {
-    return "progress";
-  }
-
-  return "planned";
-}
-
-async function copyTextToClipboard(value: string): Promise<void> {
-  if (typeof navigator === "undefined" || navigator.clipboard === undefined) {
-    throw new Error("Clipboard access is not available in this browser.");
-  }
-
-  await navigator.clipboard.writeText(value);
-}
-
-function buildDepositReminderMailto(item: DepositPaymentFollowUpItem, checkoutUrl: string): string {
-  const customerEmail = item.bookingDraft.customer?.email?.trim();
-  if (!customerEmail) {
-    throw new Error("Customer email is required before drafting a reminder.");
-  }
-
-  const customerName = item.bookingDraft.customer?.name?.trim() || "there";
-  const subject = `${item.bookingDraft.service.name} deposit link`;
-  const body = [
-    `Hi ${customerName},`,
-    "",
-    `Here is your secure link to pay the ${formatMoney(item.bookingDraft.depositCents)} deposit for your ${item.bookingDraft.service.name} appointment on ${formatDateTime(item.bookingDraft.startsAt)}.`,
-    "",
-    checkoutUrl,
-    "",
-    "Reply here if you need a different time or have any questions before checkout.",
-  ].join("\n");
-
-  return `mailto:${encodeURIComponent(customerEmail)}?${new URLSearchParams({ subject, body }).toString()}`;
-}
-
 const pageByPath = new Map(routeDefinitions.map((definition) => [definition.path.replace(/^\//, ""), definition]));
 const protectedRouteDefinitions = routeDefinitions.filter(
   (definition) => definition.path !== "/dashboard" && definition.path !== "/onboarding",
@@ -388,9 +294,8 @@ function hasPermission(user: AuthenticatedUser, key: string): boolean {
 function getAuthNoticeMessage(): string | null {
   const notice = readStoredAuthNotice();
   if (notice === "session-expired") {
-    return "Your session expired. Sign in again to continue.";
+    return "Your session has expired. Please sign in again.";
   }
-
   return null;
 }
 
@@ -435,10 +340,131 @@ function useBackendStatus(): BackendStatusState {
   return state;
 }
 
+function BackendStatusCard({ status }: { status: BackendStatusState }) {
+  if (status.kind === "loading") {
+    return (
+      <section className="api-pill" aria-live="polite">
+        <span>API</span>
+        <strong>Checking</strong>
+      </section>
+    );
+  }
+
+  if (status.kind === "error") {
+    return (
+      <section className="api-pill api-pill--error" aria-live="polite">
+        <span>API</span>
+        <strong>Offline</strong>
+      </section>
+    );
+  }
+
+  return (
+    <section className="api-pill api-pill--ready" aria-live="polite" title={`${status.root.message} at ${apiBaseUrl}`}>
+      <span>{status.root.environment}</span>
+      <strong>{status.health.status === "ok" ? "Connected" : "Degraded"}</strong>
+    </section>
+  );
+}
+
+function LoginRedirect() {
+  const redirectPathRef = useRef<string>(readStoredRedirectPath() ?? "/dashboard");
+
+  useEffect(() => {
+    clearStoredRedirectPath();
+  }, []);
+
+  return <Navigate to={redirectPathRef.current} replace />;
+}
+
+function RequireLoginRedirect() {
+  const location = useLocation();
+
+  useEffect(() => {
+    writeStoredRedirectPath(`${location.pathname}${location.search}${location.hash}`);
+  }, [location.hash, location.pathname, location.search]);
+
+  return <Navigate to="/login" replace />;
+}
+
+function AuthenticatedLayout({
+  session,
+  onSignOut,
+}: {
+  session: SessionResponse;
+  onSignOut: () => void;
+}) {
+  const location = useLocation();
+  const backendStatus = useBackendStatus();
+  const pathKey = location.pathname === "/" ? "dashboard" : location.pathname.replace(/^\//, "");
+  const currentDefinition = pageByPath.get(pathKey) ?? pageByPath.get("dashboard") ?? routeDefinitions[0];
+
+  return (
+    <div className="ops-shell">
+      <aside className="ops-sidebar">
+        <section className="ops-brand-card">
+          <span className="brand-mark">BB</span>
+          <div>
+            <p className="eyebrow">Studio OS</p>
+            <h1>{session.user.tenantSlug}</h1>
+          </div>
+          <p>Calendar-first operations for booking, payments, and launch readiness.</p>
+        </section>
+
+        <nav className="ops-nav" aria-label="Dashboard sections">
+          {routeDefinitions
+            .filter((definition) => definition.path !== "/onboarding")
+            .map((definition) => (
+              <NavLink
+                key={definition.path}
+                to={definition.path}
+                end={definition.path === "/dashboard"}
+                className={({ isActive }) => `ops-nav-link${isActive ? " ops-nav-link--active" : ""}`}
+              >
+                <span>{definition.title}</span>
+                <small>{definition.metric}</small>
+              </NavLink>
+            ))}
+        </nav>
+
+        <section className="ops-sidebar-panel">
+          <p className="eyebrow">Current route</p>
+          <strong>{currentDefinition.title}</strong>
+          <span>{currentDefinition.description}</span>
+        </section>
+      </aside>
+
+      <div className="ops-main">
+        <header className="ops-topbar">
+          <div>
+            <p className="eyebrow">{currentDefinition.eyebrow}</p>
+            <h2>{currentDefinition.title}</h2>
+          </div>
+
+          <div className="ops-topbar-actions">
+            <BackendStatusCard status={backendStatus} />
+            <div className="user-pill">
+              <span>{session.user.role}</span>
+              <strong>{session.user.name}</strong>
+            </div>
+            <a href={`${storefrontBaseUrl}/${session.user.tenantSlug}`} target="_blank" rel="noreferrer" className="ghost-action">
+              Open storefront
+            </a>
+            <button type="button" className="ghost-action" onClick={onSignOut}>
+              Sign out
+            </button>
+          </div>
+        </header>
+
+        <Outlet />
+      </div>
+    </div>
+  );
+}
+
 export function App() {
   const [session, setSession] = useState<SessionResponse | null>(() => readStoredSession());
   const onboardingDefinition = pageByPath.get("onboarding") ?? routeDefinitions[0];
-  const authenticatedSession = session;
 
   useEffect(() => {
     let isCancelled = false;
@@ -482,170 +508,47 @@ export function App() {
 
   return (
     <Routes>
+      <Route path="/" element={<Navigate to={session === null ? "/login" : "/dashboard"} replace />} />
       <Route path="/login" element={<LoginPage session={session} onSessionCreated={handleSessionCreated} />} />
       <Route
         path="/onboarding"
         element={
-          <PublicRouteFrame>
+          <div className="public-route-shell">
             <OnboardingPage definition={onboardingDefinition} onSessionCreated={handleSessionCreated} />
-          </PublicRouteFrame>
+          </div>
         }
       />
-      <Route
-        path="/"
-        element={
-          authenticatedSession !== null ? (
-            <DashboardLayout session={authenticatedSession} onSignOut={handleSignOut} />
-          ) : (
-            <ProtectedRouteGate />
-          )
-        }
-      >
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route
-          path="dashboard"
-          element={authenticatedSession !== null ? <DashboardHomePage tenantSlug={authenticatedSession.user.tenantSlug} /> : null}
-        />
-        {protectedRouteDefinitions.map((definition) => (
+
+      {session === null ? (
+        <Route path="*" element={<RequireLoginRedirect />} />
+      ) : (
+        <Route element={<AuthenticatedLayout session={session} onSignOut={handleSignOut} />}>
+          <Route path="/dashboard" element={<DashboardHomePage tenantSlug={session.user.tenantSlug} />} />
           <Route
-            key={definition.path}
-            path={definition.path.replace(/^\//, "")}
-            element={
-              authenticatedSession === null ? null : definition.path === "/calendar" ? (
-                <CalendarPage definition={definition} tenantSlug={authenticatedSession.user.tenantSlug} />
-              ) : definition.path === "/payments" ? (
-                <PaymentsPage definition={definition} currentUser={authenticatedSession.user} />
-              ) : definition.path === "/services" ? (
-                <ServicesPage definition={definition} currentUser={authenticatedSession.user} />
-              ) : (
-                <SectionPage definition={definition} />
-              )
-            }
+            path="/calendar"
+            element={<CalendarPage definition={pageByPath.get("calendar") ?? routeDefinitions[0]} tenantSlug={session.user.tenantSlug} />}
           />
-        ))}
-      </Route>
-      <Route path="*" element={<Navigate to={session !== null ? "/dashboard" : "/login"} replace />} />
+          <Route
+            path="/bookings"
+            element={<BookingsPage definition={pageByPath.get("bookings") ?? routeDefinitions[0]} currentUser={session.user} />}
+          />
+          <Route
+            path="/payments"
+            element={<PaymentsPage definition={pageByPath.get("payments") ?? routeDefinitions[0]} currentUser={session.user} />}
+          />
+          <Route
+            path="/services"
+            element={<ServicesPage definition={pageByPath.get("services") ?? routeDefinitions[0]} currentUser={session.user} />}
+          />
+          <Route path="/customers" element={<SectionPage definition={pageByPath.get("customers") ?? routeDefinitions[0]} />} />
+          <Route path="/locations" element={<SectionPage definition={pageByPath.get("locations") ?? routeDefinitions[0]} />} />
+          <Route path="/providers" element={<SectionPage definition={pageByPath.get("providers") ?? routeDefinitions[0]} />} />
+          <Route path="/forms" element={<SectionPage definition={pageByPath.get("forms") ?? routeDefinitions[0]} />} />
+          <Route path="/settings" element={<SectionPage definition={pageByPath.get("settings") ?? routeDefinitions[0]} />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Route>
+      )}
     </Routes>
-  );
-}
-
-function ProtectedRouteGate() {
-  const location = useLocation();
-
-  writeStoredRedirectPath(`${location.pathname}${location.search}${location.hash}`);
-
-  return <Navigate to="/login" replace />;
-}
-
-function LoginRedirect() {
-  const navigate = useNavigate();
-  const redirectPathRef = useRef<string>(readStoredRedirectPath() ?? "/dashboard");
-
-  useEffect(() => {
-    navigate(redirectPathRef.current, { replace: true });
-    clearStoredRedirectPath();
-  }, [navigate]);
-
-  return null;
-}
-
-function PublicRouteFrame({ children }: { children: ReactNode }) {
-  return <div className="public-route-shell">{children}</div>;
-}
-
-function DashboardLayout({ session, onSignOut }: { session: SessionResponse; onSignOut: () => void }) {
-  const backendStatus = useBackendStatus();
-  const location = useLocation();
-  const activePage = useMemo(
-    () => routeDefinitions.find((definition) => definition.path === location.pathname) ?? routeDefinitions[0],
-    [location.pathname],
-  );
-
-  return (
-    <div className="ops-shell">
-      <aside className="ops-sidebar">
-        <div className="ops-brand-card">
-          <span className="brand-mark">BB</span>
-          <div>
-            <p className="eyebrow">Booking platform</p>
-            <h1>Studio OS</h1>
-          </div>
-          <p>
-            A calm operating layer for booked calendars, clean follow-up, auditable payments, and client-ready intake.
-          </p>
-        </div>
-
-        <nav className="ops-nav" aria-label="Primary dashboard sections">
-          {routeDefinitions
-            .filter((definition) => definition.path !== "/onboarding")
-            .map((definition) => (
-            <NavLink
-              key={definition.path}
-              to={definition.path}
-              className={({ isActive }) => (isActive ? "ops-nav-link ops-nav-link--active" : "ops-nav-link")}
-            >
-              <span>{definition.title}</span>
-              <small>{definition.eyebrow}</small>
-            </NavLink>
-          ))}
-        </nav>
-
-        <section className="ops-sidebar-panel">
-          <p className="eyebrow">Today&apos;s posture</p>
-          <strong>Follow the calendar first.</strong>
-          <span>Manual booking starts from a time slot, then moves into customer, form, and payment context.</span>
-        </section>
-      </aside>
-
-      <div className="ops-main">
-        <header className="ops-topbar">
-          <div>
-            <p className="eyebrow">{activePage.eyebrow}</p>
-            <h2>{activePage.title}</h2>
-          </div>
-          <div className="ops-topbar-actions">
-            <span className={`status-chip status-chip--${activePage.tone}`}>{getStatusLabel(activePage.tone)}</span>
-            <section className="user-pill" aria-label="Signed-in operator">
-              <span>{session.user.role}</span>
-              <strong>{session.user.name}</strong>
-            </section>
-            <BackendStatusCard status={backendStatus} />
-            <button type="button" className="ghost-action" onClick={onSignOut}>
-              Sign out
-            </button>
-          </div>
-        </header>
-
-        <Outlet />
-      </div>
-    </div>
-  );
-}
-
-function BackendStatusCard({ status }: { status: BackendStatusState }) {
-  if (status.kind === "loading") {
-    return (
-      <section className="api-pill" aria-live="polite">
-        <span>API</span>
-        <strong>Checking</strong>
-      </section>
-    );
-  }
-
-  if (status.kind === "error") {
-    return (
-      <section className="api-pill api-pill--error" aria-live="polite">
-        <span>API</span>
-        <strong>Offline</strong>
-      </section>
-    );
-  }
-
-  return (
-    <section className="api-pill api-pill--ready" aria-live="polite" title={`${status.root.message} at ${apiBaseUrl}`}>
-      <span>{status.root.environment}</span>
-      <strong>{status.health.status === "ok" ? "Connected" : "Degraded"}</strong>
-    </section>
   );
 }
 
@@ -717,241 +620,6 @@ function DashboardHomePage({ tenantSlug }: { tenantSlug: string }) {
         </aside>
       </section>
     </main>
-  );
-}
-
-function CalendarPage({ definition, tenantSlug }: { definition: RouteDefinition; tenantSlug: string }) {
-  const [calendarState, setCalendarState] = useState<CalendarDataState>({ kind: "loading" });
-  const [selectedSlotKey, setSelectedSlotKey] = useState<string | null>(null);
-
-  const selectedSlot = useMemo<SelectedCalendarSlot | null>(() => {
-    if (calendarState.kind !== "ready" || selectedSlotKey === null) {
-      return null;
-    }
-
-    for (const day of calendarState.days) {
-      const slot = day.slots.find((candidate) => `${candidate.providerId}-${candidate.startAt}` === selectedSlotKey);
-      if (slot) {
-        return {
-          ...slot,
-          dayLabel: day.label,
-        };
-      }
-    }
-
-    return null;
-  }, [calendarState, selectedSlotKey]);
-
-  useEffect(() => {
-    let isCancelled = false;
-
-    setSelectedSlotKey(null);
-
-    const loadCalendar = async () => {
-      try {
-        const serviceResponse = await platformApi.listServices(tenantSlug);
-        const service = serviceResponse.services[0];
-
-        if (!service) {
-          startTransition(() => {
-            setCalendarState({ kind: "empty", message: "No active services are available for the demo tenant." });
-          });
-          return;
-        }
-
-        const availabilityResponses = await Promise.all(
-          Array.from({ length: 7 }, (_, index) => {
-            const date = getUpcomingDate(index + 1);
-            return platformApi.getAvailability({
-              tenantSlug,
-              serviceId: service.id,
-              date,
-            });
-          }),
-        );
-
-        if (isCancelled) {
-          return;
-        }
-
-        const days = availabilityResponses.map((availability, index) => {
-          const date = getUpcomingDate(index + 1);
-          return {
-            date,
-            label: getDateLabel(date),
-            slots: availability.slots.slice(0, 6),
-          };
-        });
-
-        startTransition(() => {
-          setCalendarState({ kind: "ready", service, days });
-        });
-      } catch (error) {
-        if (isCancelled) {
-          return;
-        }
-
-        startTransition(() => {
-          setCalendarState({
-            kind: "error",
-            message: error instanceof Error ? error.message : "Unable to load calendar availability.",
-          });
-        });
-      }
-    };
-
-    void loadCalendar();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [tenantSlug]);
-
-  const selectedOpeningLabel = selectedSlot ? formatDateTime(selectedSlot.startAt) : "Choose a slot";
-  const selectedProviderLabel = selectedSlot?.providerName ?? "Choose a slot";
-  const customerLookupLabel = selectedSlot ? "Search existing customer" : "Choose a slot first";
-  const serviceLabel = calendarState.kind === "ready" ? calendarState.service.name : "Load service";
-
-  return (
-    <main className="ops-page-stack">
-      <section className="calendar-command-bar">
-        <div>
-          <p className="eyebrow">{definition.eyebrow}</p>
-          <h3>Choose a real opening before creating a booking.</h3>
-          <p>{definition.description}</p>
-        </div>
-        <div className="filter-row" aria-label="Calendar filters">
-          <button type="button" className="filter-chip filter-chip--active">
-            Week
-          </button>
-          <button type="button" className="filter-chip" disabled>
-            Day
-          </button>
-          <button type="button" className="filter-chip" disabled>
-            Location
-          </button>
-          <button type="button" className="filter-chip" disabled>
-            Provider
-          </button>
-        </div>
-      </section>
-
-      <section className="calendar-workspace">
-        <article className="ops-panel calendar-panel">
-          <div className="panel-title-row">
-            <div>
-              <p className="eyebrow">Live availability</p>
-              <h4>Provider week</h4>
-            </div>
-            <span className="status-chip status-chip--ready">Backend-backed</span>
-          </div>
-          <CalendarBoard
-            state={calendarState}
-            selectedSlotKey={selectedSlotKey}
-            onSelectSlot={setSelectedSlotKey}
-          />
-        </article>
-
-        <aside className="ops-panel booking-rail">
-          <p className="eyebrow">Manual booking</p>
-          <h4>Selected-slot drawer</h4>
-          <p>
-            {selectedSlot
-              ? `Start with ${formatDateTime(selectedSlot.startAt)} with ${selectedSlot.providerName}. Customer lookup, deposit mode, and hold creation stay anchored to this opening.`
-              : "Staff booking stays anchored to calendar time. Choose an opening to load customer lookup, deposit mode, and hold creation context."}
-          </p>
-          <div className="drawer-form-preview" aria-label="Manual booking preview">
-            <div className="drawer-selection-note" aria-live="polite">
-              {selectedSlot
-                ? `Selected ${selectedSlot.dayLabel} at ${timeFormatter.format(new Date(selectedSlot.startAt))} with ${selectedSlot.providerName}.`
-                : "Select a slot from the calendar to begin the manual booking handoff."}
-            </div>
-            <label>
-              Customer
-              <input value={customerLookupLabel} readOnly />
-            </label>
-            <label>
-              Service
-              <input value={serviceLabel} readOnly />
-            </label>
-            <label>
-              Selected opening
-              <input value={selectedOpeningLabel} readOnly />
-            </label>
-            <label>
-              Provider
-              <input value={selectedProviderLabel} readOnly />
-            </label>
-            <label>
-              Payment outcome
-              <select value="deposit_link" disabled>
-                <option value="deposit_link">Send deposit link</option>
-              </select>
-            </label>
-            <button type="button" disabled>
-              Create from selected slot
-            </button>
-          </div>
-        </aside>
-      </section>
-    </main>
-  );
-}
-
-function CalendarBoard({
-  state,
-  selectedSlotKey,
-  onSelectSlot,
-}: {
-  state: CalendarDataState;
-  selectedSlotKey: string | null;
-  onSelectSlot: (slotKey: string) => void;
-}) {
-  if (state.kind === "loading") {
-    return <div className="calendar-state">Loading calendar availability...</div>;
-  }
-
-  if (state.kind === "error" || state.kind === "empty") {
-    return <div className="calendar-state calendar-state--muted">{state.message}</div>;
-  }
-
-  return (
-    <div className="calendar-board" aria-label={`Upcoming openings for ${state.service.name}`}>
-      {state.days.map((day) => (
-        <section key={day.date} className="calendar-day-column">
-          <header>
-            <span>{day.label}</span>
-            <strong>{day.slots.length > 0 ? `${day.slots.length} openings` : "No openings"}</strong>
-          </header>
-
-          <div className="calendar-slot-stack">
-            {day.slots.length > 0 ? (
-              day.slots.map((slot) => {
-                const slotKey = `${slot.providerId}-${slot.startAt}`;
-                const isSelected = slotKey === selectedSlotKey;
-
-                return (
-                  <button
-                    key={slotKey}
-                    type="button"
-                    className={`calendar-slot-card${isSelected ? " calendar-slot-card--selected" : ""}`}
-                    aria-label={`Select ${formatDateTime(slot.startAt)} with ${slot.providerName}`}
-                    aria-pressed={isSelected}
-                    onClick={() => onSelectSlot(slotKey)}
-                  >
-                    <strong>{timeFormatter.format(new Date(slot.startAt))}</strong>
-                    <span>{slot.providerName}</span>
-                    <small>{slot.locationId ? "Location selected" : state.service.name}</small>
-                  </button>
-                );
-              })
-            ) : (
-              <div className="calendar-empty-cell">Protected time</div>
-            )}
-          </div>
-        </section>
-      ))}
-    </div>
   );
 }
 
@@ -1293,348 +961,6 @@ function ServicesPage({ definition, currentUser }: { definition: RouteDefinition
               })}
             </div>
           )}
-        </aside>
-      </section>
-    </main>
-  );
-}
-
-function PaymentsPage({ definition, currentUser }: { definition: RouteDefinition; currentUser: AuthenticatedUser | null }) {
-  const [followUpState, setFollowUpState] = useState<PaymentFollowUpState>({ kind: "loading" });
-  const [actionState, setActionState] = useState<PaymentActionState>({ kind: "idle" });
-  const canViewPayments = currentUser !== null && hasPermission(currentUser, "payments.view");
-  const canManagePayments = currentUser !== null && hasPermission(currentUser, "payments.manage");
-  const tenantSlug = currentUser?.tenantSlug ?? "";
-
-  const loadFollowUp = async () => {
-    const response = await platformApi.listPaymentFollowUp(tenantSlug);
-    startTransition(() => {
-      setFollowUpState({ kind: "ready", items: response.items });
-    });
-    return response.items;
-  };
-
-  useEffect(() => {
-    let isCancelled = false;
-
-    if (!canViewPayments) {
-      setFollowUpState({ kind: "error", message: "Your role can access the dashboard, but it cannot view payment follow-up work." });
-      return () => {
-        isCancelled = true;
-      };
-    }
-
-    if (!tenantSlug) {
-      setFollowUpState({ kind: "error", message: "Tenant session is missing tenant context." });
-      return () => {
-        isCancelled = true;
-      };
-    }
-
-    const loadFollowUp = async () => {
-      try {
-        const response = await platformApi.listPaymentFollowUp(tenantSlug);
-        if (isCancelled) {
-          return;
-        }
-
-        startTransition(() => {
-          setFollowUpState({ kind: "ready", items: response.items });
-        });
-      } catch (error) {
-        if (isCancelled) {
-          return;
-        }
-
-        startTransition(() => {
-          setFollowUpState({
-            kind: "error",
-            message: error instanceof Error ? error.message : "Unable to load payment follow-up work.",
-          });
-        });
-      }
-    };
-
-    void loadFollowUp();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [canViewPayments, tenantSlug]);
-
-  const ensureCheckoutLink = async (item: DepositPaymentFollowUpItem) => {
-    const checkoutSession = await platformApi.createCheckoutSession({
-      tenantSlug,
-      bookingDraftId: item.bookingDraft.id,
-      kind: "deposit",
-      successUrl: `${storefrontBaseUrl}/${tenantSlug}/book/${item.bookingDraft.id}/success`,
-      cancelUrl: `${storefrontBaseUrl}/${tenantSlug}/book/${item.bookingDraft.id}`,
-    });
-
-    await loadFollowUp();
-    return checkoutSession;
-  };
-
-  const handleOpenCheckoutLink = async (item: DepositPaymentFollowUpItem) => {
-    if (!canManagePayments || !tenantSlug) {
-      return;
-    }
-
-    setActionState({ kind: "submitting", bookingDraftId: item.bookingDraft.id });
-
-    try {
-      const checkoutSession = await ensureCheckoutLink(item);
-      window.open(checkoutSession.checkoutUrl, "_blank", "noopener,noreferrer");
-
-      startTransition(() => {
-        setActionState({
-          kind: "success",
-          message:
-            item.linkState === "open"
-              ? "Opened the current checkout link in a new tab."
-              : "Generated a fresh checkout link and opened it in a new tab.",
-        });
-      });
-    } catch (error) {
-      startTransition(() => {
-        setActionState({
-          kind: "error",
-          message: error instanceof Error ? error.message : "Unable to open the checkout link.",
-        });
-      });
-    }
-  };
-
-  const handleCopyCheckoutLink = async (item: DepositPaymentFollowUpItem) => {
-    if (!canManagePayments || !tenantSlug) {
-      return;
-    }
-
-    setActionState({ kind: "submitting", bookingDraftId: item.bookingDraft.id });
-
-    try {
-      const checkoutSession = await ensureCheckoutLink(item);
-      await copyTextToClipboard(checkoutSession.checkoutUrl);
-
-      startTransition(() => {
-        setActionState({
-          kind: "success",
-          message: "Copied checkout link to the clipboard.",
-        });
-      });
-    } catch (error) {
-      startTransition(() => {
-        setActionState({
-          kind: "error",
-          message: error instanceof Error ? error.message : "Unable to copy the checkout link.",
-        });
-      });
-    }
-  };
-
-  const handleSendReminderEmail = async (item: DepositPaymentFollowUpItem) => {
-    if (!canManagePayments || !tenantSlug) {
-      return;
-    }
-
-    setActionState({ kind: "submitting", bookingDraftId: item.bookingDraft.id });
-
-    try {
-      const reminder = await platformApi.sendPaymentReminder(tenantSlug, item.bookingDraft.id);
-      await loadFollowUp();
-
-      startTransition(() => {
-        setActionState({
-          kind: "success",
-          message: `Reminder email sent to ${reminder.recipientEmail}.`,
-        });
-      });
-    } catch (error) {
-      startTransition(() => {
-        setActionState({
-          kind: "error",
-          message: error instanceof Error ? error.message : "Unable to send the reminder email.",
-        });
-      });
-    }
-  };
-
-  const handleDraftReminderEmail = async (item: DepositPaymentFollowUpItem) => {
-    if (!canManagePayments || !tenantSlug) {
-      return;
-    }
-
-    setActionState({ kind: "submitting", bookingDraftId: item.bookingDraft.id });
-
-    try {
-      const checkoutSession = await ensureCheckoutLink(item);
-      window.open(buildDepositReminderMailto(item, checkoutSession.checkoutUrl), "_blank", "noopener,noreferrer");
-
-      startTransition(() => {
-        setActionState({
-          kind: "success",
-          message: "Opened a prefilled reminder email.",
-        });
-      });
-    } catch (error) {
-      startTransition(() => {
-        setActionState({
-          kind: "error",
-          message: error instanceof Error ? error.message : "Unable to draft the reminder email.",
-        });
-      });
-    }
-  };
-
-  return (
-    <main className="ops-page-stack">
-      <section className="ops-hero ops-hero--compact">
-        <div className="ops-hero-copy">
-          <p className="eyebrow">{definition.eyebrow}</p>
-          <h3>Keep unpaid deposits from going cold.</h3>
-          <p>{definition.description}</p>
-        </div>
-        <div className="ops-hero-panel">
-          <p className="eyebrow">Deposit queue</p>
-          <strong>{followUpState.kind === "ready" ? `${followUpState.items.length} awaiting payment` : definition.metric}</strong>
-          <span>Operators can send or prepare deposit reminders without losing tenant context.</span>
-        </div>
-      </section>
-
-      <section className="catalog-layout">
-        <article className="ops-panel">
-          <div className="panel-title-row">
-            <div>
-              <p className="eyebrow">Deposit follow-up</p>
-              <h4>Outstanding payment links</h4>
-            </div>
-            {followUpState.kind === "ready" ? (
-              <span className="status-chip status-chip--progress">{followUpState.items.length} drafts</span>
-            ) : null}
-          </div>
-
-          {actionState.kind !== "idle" ? (
-            <div className={actionState.kind === "error" ? "message-banner message-banner--error" : "message-banner"}>
-              {actionState.kind === "submitting" ? "Preparing outreach..." : actionState.message}
-            </div>
-          ) : null}
-
-          {!canManagePayments && canViewPayments ? (
-            <div className="message-banner message-banner--muted">Your role can review payment follow-up work, but it cannot send reminders, reopen links, or draft outreach.</div>
-          ) : null}
-
-          {followUpState.kind === "loading" ? (
-            <div className="calendar-state">Loading payment follow-up queue...</div>
-          ) : followUpState.kind === "error" ? (
-            <div className="calendar-state calendar-state--muted">{followUpState.message}</div>
-          ) : followUpState.items.length === 0 ? (
-            <div className="calendar-state calendar-state--muted">No deposit follow-up work is waiting right now.</div>
-          ) : (
-            <div className="service-catalog-list">
-              {followUpState.items.map((item) => (
-                <article key={item.bookingDraft.id} className="service-catalog-card">
-                  <div className="panel-title-row">
-                    <div>
-                      <p className="eyebrow">Deposit follow-up</p>
-                      <h5>{item.bookingDraft.customer?.name ?? item.bookingDraft.customer?.email ?? item.bookingDraft.service.name}</h5>
-                    </div>
-                    <span className={`status-chip status-chip--${getPaymentLinkTone(item)}`}>{getPaymentLinkLabel(item)}</span>
-                  </div>
-                  <p>
-                    {item.bookingDraft.service.name} with {item.bookingDraft.provider.name} on {formatDateTime(item.bookingDraft.startsAt)}.
-                  </p>
-                  <dl className="service-stats">
-                    <div>
-                      <dt>Deposit due</dt>
-                      <dd>{formatMoney(item.bookingDraft.depositCents)}</dd>
-                    </div>
-                    <div>
-                      <dt>Link expires</dt>
-                      <dd>{item.checkoutExpiresAt ? formatDateTime(item.checkoutExpiresAt) : "No link yet"}</dd>
-                    </div>
-                    <div>
-                      <dt>Customer</dt>
-                      <dd>{item.bookingDraft.customer?.email ?? "Missing email"}</dd>
-                    </div>
-                  </dl>
-                  <div className="catalog-location-list">
-                    <span className="status-chip status-chip--planned">{item.bookingDraft.provider.name}</span>
-                    <span className="status-chip status-chip--planned">{item.paymentStatus ?? "pending"}</span>
-                  </div>
-                  <div className="action-row">
-                    <button
-                      type="button"
-                      className="primary-action"
-                      disabled={
-                        !canManagePayments ||
-                        !item.bookingDraft.customer?.email ||
-                        (actionState.kind === "submitting" && actionState.bookingDraftId === item.bookingDraft.id)
-                      }
-                      onClick={() => {
-                        void handleSendReminderEmail(item);
-                      }}
-                    >
-                      {actionState.kind === "submitting" && actionState.bookingDraftId === item.bookingDraft.id
-                        ? "Working..."
-                        : "Send reminder email"}
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-action"
-                      disabled={!canManagePayments || (actionState.kind === "submitting" && actionState.bookingDraftId === item.bookingDraft.id)}
-                      onClick={() => {
-                        void handleOpenCheckoutLink(item);
-                      }}
-                    >
-                      {item.linkState === "open" ? "Open checkout link" : "Reopen checkout link"}
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-action"
-                      disabled={
-                        !canManagePayments ||
-                        !item.bookingDraft.customer?.email ||
-                        (actionState.kind === "submitting" && actionState.bookingDraftId === item.bookingDraft.id)
-                      }
-                      onClick={() => {
-                        void handleDraftReminderEmail(item);
-                      }}
-                    >
-                      Draft reminder email
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-action"
-                      disabled={!canManagePayments || (actionState.kind === "submitting" && actionState.bookingDraftId === item.bookingDraft.id)}
-                      onClick={() => {
-                        void handleCopyCheckoutLink(item);
-                      }}
-                    >
-                      Copy checkout link
-                    </button>
-                    <a
-                      href={`${storefrontBaseUrl}/${tenantSlug}/book/${item.bookingDraft.id}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="secondary-action"
-                    >
-                      Open booking review
-                    </a>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </article>
-
-        <aside className="ops-panel">
-          <p className="eyebrow">Operator steps</p>
-          <h4>Handle unpaid deposits</h4>
-          <ul className="check-list">
-            <li>Review drafts that are still waiting on deposit payment.</li>
-            <li>Send a real reminder email from the backend, or open, copy, and draft outreach with a current hosted checkout link when needed.</li>
-            <li>Jump into the storefront booking review when the operator needs the exact public context.</li>
-          </ul>
         </aside>
       </section>
     </main>

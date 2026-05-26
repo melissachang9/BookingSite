@@ -28,6 +28,7 @@ class Tenant(Base, IdMixin, TimestampMixin):
     )
     services: Mapped[list[Service]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
     providers: Mapped[list[Provider]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
+    bookings: Mapped[list[Booking]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
     booking_drafts: Mapped[list[BookingDraft]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
 
 
@@ -54,7 +55,9 @@ class Customer(Base, IdMixin, TimestampMixin):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="customers")
+    bookings: Mapped[list[Booking]] = relationship(back_populates="customer")
     booking_drafts: Mapped[list[BookingDraft]] = relationship(back_populates="customer")
+    payments: Mapped[list[Payment]] = relationship(back_populates="customer")
 
 
 class Location(Base, IdMixin, TimestampMixin):
@@ -90,7 +93,9 @@ class Service(Base, IdMixin, TimestampMixin):
     tenant: Mapped[Tenant] = relationship(back_populates="services")
     provider_links: Mapped[list[ProviderService]] = relationship(back_populates="service", cascade="all, delete-orphan")
     location_links: Mapped[list[ServiceLocation]] = relationship(back_populates="service", cascade="all, delete-orphan")
+    bookings: Mapped[list[Booking]] = relationship(back_populates="service")
     booking_drafts: Mapped[list[BookingDraft]] = relationship(back_populates="service")
+    form_attachments: Mapped[list[ServiceFormAttachment]] = relationship(back_populates="service", cascade="all, delete-orphan")
 
 
 class Provider(Base, IdMixin, TimestampMixin):
@@ -106,6 +111,7 @@ class Provider(Base, IdMixin, TimestampMixin):
     service_links: Mapped[list[ProviderService]] = relationship(back_populates="provider", cascade="all, delete-orphan")
     location_links: Mapped[list[ProviderLocation]] = relationship(back_populates="provider", cascade="all, delete-orphan")
     schedules: Mapped[list[ProviderSchedule]] = relationship(back_populates="provider", cascade="all, delete-orphan")
+    bookings: Mapped[list[Booking]] = relationship(back_populates="provider")
     booking_drafts: Mapped[list[BookingDraft]] = relationship(back_populates="provider")
 
 
@@ -159,14 +165,102 @@ class ProviderSchedule(Base, IdMixin, TimestampMixin):
     location: Mapped[Location] = relationship(back_populates="schedules")
 
 
+class Booking(Base, IdMixin, TimestampMixin):
+    __tablename__ = "bookings"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    customer_id: Mapped[str] = mapped_column(String(36), ForeignKey("customers.id"), index=True, nullable=False)
+    service_id: Mapped[str] = mapped_column(String(36), ForeignKey("services.id"), index=True, nullable=False)
+    provider_id: Mapped[str] = mapped_column(String(36), ForeignKey("providers.id"), index=True, nullable=False)
+    location_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("locations.id"), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    booking_method: Mapped[str] = mapped_column(String(32), nullable=False)
+    deposit_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    payment_resolution: Mapped[str] = mapped_column(String(32), nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    canceled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    tenant: Mapped[Tenant] = relationship(back_populates="bookings")
+    customer: Mapped[Customer] = relationship(back_populates="bookings")
+    service: Mapped[Service] = relationship(back_populates="bookings")
+    provider: Mapped[Provider] = relationship(back_populates="bookings")
+    payments: Mapped[list[Payment]] = relationship(back_populates="booking")
+    payment_events: Mapped[list[BookingPaymentEvent]] = relationship(
+        back_populates="booking",
+        cascade="all, delete-orphan",
+    )
+    source_draft: Mapped[Optional[BookingDraft]] = relationship(back_populates="confirmed_booking", uselist=False)
+
+
+class BookingPaymentEvent(Base, IdMixin, TimestampMixin):
+    __tablename__ = "booking_payment_events"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    booking_id: Mapped[str] = mapped_column(String(36), ForeignKey("bookings.id"), index=True, nullable=False)
+    event_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    amount_cents: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+
+    booking: Mapped[Booking] = relationship(back_populates="payment_events")
+
+
+class Payment(Base, IdMixin, TimestampMixin):
+    __tablename__ = "payments"
+    __table_args__ = (UniqueConstraint("checkout_session_id", name="uq_payment_checkout_session"),)
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    booking_draft_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("booking_drafts.id"), nullable=True)
+    booking_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("bookings.id"), nullable=True)
+    customer_id: Mapped[str] = mapped_column(String(36), ForeignKey("customers.id"), index=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    deposit_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), default="USD", nullable=False)
+    payment_method_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    checkout_session_kind: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    checkout_session_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    checkout_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    checkout_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    success_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    cancel_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    customer: Mapped[Customer] = relationship(back_populates="payments")
+    booking: Mapped[Optional[Booking]] = relationship(back_populates="payments")
+    booking_draft: Mapped[Optional[BookingDraft]] = relationship(back_populates="payments")
+    events: Mapped[list[PaymentEvent]] = relationship(back_populates="payment", cascade="all, delete-orphan")
+
+
+class PaymentEvent(Base, IdMixin, TimestampMixin):
+    __tablename__ = "payment_events"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    payment_id: Mapped[str] = mapped_column(String(36), ForeignKey("payments.id"), index=True, nullable=False)
+    kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    display_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    amount_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    stripe_session_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    stripe_payment_intent_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    payment: Mapped[Payment] = relationship(back_populates="events")
+
+
 class BookingDraft(Base, IdMixin, TimestampMixin):
     __tablename__ = "booking_drafts"
+    __table_args__ = (UniqueConstraint("confirmed_booking_id", name="uq_booking_draft_confirmed_booking"),)
 
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
     customer_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("customers.id"), nullable=True)
     service_id: Mapped[str] = mapped_column(String(36), ForeignKey("services.id"), index=True, nullable=False)
     provider_id: Mapped[str] = mapped_column(String(36), ForeignKey("providers.id"), index=True, nullable=False)
     location_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("locations.id"), nullable=True)
+    confirmed_booking_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("bookings.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     booking_method: Mapped[str] = mapped_column(String(32), nullable=False)
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -180,7 +274,18 @@ class BookingDraft(Base, IdMixin, TimestampMixin):
     customer: Mapped[Optional[Customer]] = relationship(back_populates="booking_drafts")
     service: Mapped[Service] = relationship(back_populates="booking_drafts")
     provider: Mapped[Provider] = relationship(back_populates="booking_drafts")
+    confirmed_booking: Mapped[Optional[Booking]] = relationship(back_populates="source_draft", uselist=False)
+    payments: Mapped[list[Payment]] = relationship(back_populates="booking_draft")
+    form_requirements: Mapped[list[BookingDraftFormRequirement]] = relationship(
+        back_populates="booking_draft",
+        cascade="all, delete-orphan",
+    )
     hold: Mapped[Optional[SlotHold]] = relationship(back_populates="booking_draft", cascade="all, delete-orphan", uselist=False)
+    intake_plan: Mapped[Optional[BookingDraftIntakePlan]] = relationship(
+        back_populates="booking_draft",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
 
 
 class SlotHold(Base, IdMixin, TimestampMixin):
@@ -198,3 +303,94 @@ class SlotHold(Base, IdMixin, TimestampMixin):
     booking_draft_id: Mapped[str] = mapped_column(String(36), ForeignKey("booking_drafts.id"), nullable=False)
 
     booking_draft: Mapped[BookingDraft] = relationship(back_populates="hold")
+
+
+class BookingDraftIntakePlan(Base, IdMixin, TimestampMixin):
+    __tablename__ = "booking_draft_intake_plans"
+    __table_args__ = (UniqueConstraint("booking_draft_id", name="uq_booking_draft_intake_plan_draft"),)
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    booking_draft_id: Mapped[str] = mapped_column(String(36), ForeignKey("booking_drafts.id"), nullable=False)
+    completion_timing: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    due_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    email_reminder_scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    sms_reminder_scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    booking_draft: Mapped[BookingDraft] = relationship(back_populates="intake_plan")
+
+
+class FormDefinition(Base, IdMixin, TimestampMixin):
+    __tablename__ = "forms"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    scope: Mapped[str] = mapped_column(String(32), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    versions: Mapped[list[FormVersion]] = relationship(back_populates="form", cascade="all, delete-orphan")
+    service_attachments: Mapped[list[ServiceFormAttachment]] = relationship(
+        back_populates="form",
+        cascade="all, delete-orphan",
+    )
+
+
+class FormVersion(Base, IdMixin, TimestampMixin):
+    __tablename__ = "form_versions"
+    __table_args__ = (UniqueConstraint("form_id", "version_number", name="uq_form_version_number"),)
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    form_id: Mapped[str] = mapped_column(String(36), ForeignKey("forms.id"), index=True, nullable=False)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    schema_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+
+    form: Mapped[FormDefinition] = relationship(back_populates="versions")
+
+
+class ServiceFormAttachment(Base, IdMixin, TimestampMixin):
+    __tablename__ = "service_form_attachments"
+    __table_args__ = (UniqueConstraint("service_id", "form_version_id", name="uq_service_form_attachment_version"),)
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    service_id: Mapped[str] = mapped_column(String(36), ForeignKey("services.id"), index=True, nullable=False)
+    form_id: Mapped[str] = mapped_column(String(36), ForeignKey("forms.id"), index=True, nullable=False)
+    form_version_id: Mapped[str] = mapped_column(String(36), ForeignKey("form_versions.id"), index=True, nullable=False)
+    customer_prompt_timing: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    service: Mapped[Service] = relationship(back_populates="form_attachments")
+    form: Mapped[FormDefinition] = relationship(back_populates="service_attachments")
+    form_version: Mapped[FormVersion] = relationship()
+
+
+class FormResponse(Base, IdMixin, TimestampMixin):
+    __tablename__ = "form_responses"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    form_id: Mapped[str] = mapped_column(String(36), ForeignKey("forms.id"), index=True, nullable=False)
+    form_version_id: Mapped[str] = mapped_column(String(36), ForeignKey("form_versions.id"), index=True, nullable=False)
+    customer_id: Mapped[str] = mapped_column(String(36), ForeignKey("customers.id"), index=True, nullable=False)
+    booking_draft_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("booking_drafts.id"), nullable=True)
+    scope: Mapped[str] = mapped_column(String(32), nullable=False)
+    customer_prompt_timing: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    answers_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+
+    form_version: Mapped[FormVersion] = relationship()
+
+
+class BookingDraftFormRequirement(Base, IdMixin, TimestampMixin):
+    __tablename__ = "booking_draft_form_requirements"
+    __table_args__ = (UniqueConstraint("booking_draft_id", "form_version_id", name="uq_booking_draft_form_requirement"),)
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    booking_draft_id: Mapped[str] = mapped_column(String(36), ForeignKey("booking_drafts.id"), index=True, nullable=False)
+    form_id: Mapped[str] = mapped_column(String(36), ForeignKey("forms.id"), index=True, nullable=False)
+    form_version_id: Mapped[str] = mapped_column(String(36), ForeignKey("form_versions.id"), index=True, nullable=False)
+    scope: Mapped[str] = mapped_column(String(32), nullable=False)
+    customer_prompt_timing: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    satisfied_by_response_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("form_responses.id"), nullable=True)
+
+    booking_draft: Mapped[BookingDraft] = relationship(back_populates="form_requirements")
+    form_version: Mapped[FormVersion] = relationship()
+    satisfied_by_response: Mapped[Optional[FormResponse]] = relationship()

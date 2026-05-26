@@ -1,15 +1,32 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
+
+from pydantic import Field
 
 from app.schemas.base import CamelModel
 from app.schemas.catalog import ProviderSummaryResponse, ServiceSummaryResponse
+from app.schemas.forms import FormRequirementResponse
+
+
+IntakeCompletionTiming = Literal["before_booking", "before_visit"]
 
 
 class CustomerInput(CamelModel):
-    name: str
-    email: str | None = None
-    phone: str | None = None
+    name: str = Field(min_length=1)
+    email: str = Field(min_length=1)
+    phone: str = Field(min_length=1)
+
+
+class IntakePlanResponse(CamelModel):
+    completion_timing: IntakeCompletionTiming
+    status: str
+    due_at: datetime | None = None
+    email_reminder_scheduled_at: datetime | None = None
+    sms_reminder_scheduled_at: datetime | None = None
+    reminder_channels: list[str]
+    reminder_hours_before: int
 
 
 class CustomerSummaryResponse(CamelModel):
@@ -25,18 +42,6 @@ class CustomerSummaryResponse(CamelModel):
     source_channel: str | None = None
 
 
-class FormRequirementResponse(CamelModel):
-    id: str
-    booking_id: str | None = None
-    booking_draft_id: str | None = None
-    form_id: str
-    form_version_id: str
-    scope: str
-    customer_prompt_timing: str | None = None
-    status: str
-    satisfied_by_response_id: str | None = None
-
-
 class CreateBookingDraftRequest(CamelModel):
     tenant_slug: str
     service_id: str
@@ -50,6 +55,7 @@ class CreateBookingDraftRequest(CamelModel):
 class UpdateBookingDraftRequest(CamelModel):
     customer_id: str | None = None
     customer: CustomerInput | None = None
+    intake_completion_timing: IntakeCompletionTiming | None = None
 
 
 class BookingDraftSummaryResponse(CamelModel):
@@ -72,4 +78,5 @@ class BookingDraftSummaryResponse(CamelModel):
     service: ServiceSummaryResponse
     provider: ProviderSummaryResponse
     customer: CustomerSummaryResponse | None = None
+    intake_plan: IntakePlanResponse | None = None
     form_requirements: list[FormRequirementResponse]

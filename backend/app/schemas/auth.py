@@ -22,6 +22,7 @@ class PermissionGrantResponse(CamelModel):
 class AuthenticatedUserResponse(CamelModel):
     id: str
     tenant_id: str
+    tenant_slug: str
     email: str
     name: str
     role: str

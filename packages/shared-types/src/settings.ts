@@ -34,6 +34,7 @@ export type TenantSettings = {
   maxAdvanceBookingDays: number;
   defaultDepositCents: number;
   noShowFeeCents: number;
+  taxRatePercent: number;
   autoChargeNoShowFee?: boolean;
 };
 
@@ -46,3 +47,22 @@ export type TenantSummary = AuditFields &
     branding: TenantBranding;
     settings: TenantSettings;
   };
+
+export type CreateTenantRequest = {
+  name: string;
+  slug: string;
+  timezone: string;
+  locationName: string;
+  ownerName: string;
+  ownerEmail: string;
+  ownerPassword: string;
+  homepageUrl?: string;
+  primaryColor?: string;
+  accentColor?: string;
+};
+
+export type CreateTenantResponse = {
+  tenant: TenantSummary;
+  ownerEmail: string;
+  locationId: UUID;
+};

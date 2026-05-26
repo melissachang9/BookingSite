@@ -1,16 +1,41 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies.auth import require_tenant_permission
 from app.db.session import get_db_session
 from app.schemas.availability import AvailabilityResponse
-from app.schemas.catalog import LocationListResponse, ProviderListResponse, ServiceListResponse, TenantSummaryResponse
+from app.schemas.catalog import (
+    CreateServiceRequest,
+    CreateTenantRequest,
+    CreateTenantResponse,
+    LocationListResponse,
+    ProviderListResponse,
+    ServiceListResponse,
+    ServiceSummaryResponse,
+    TenantSummaryResponse,
+)
 from app.services.availability import list_availability
-from app.services.tenants import get_tenant_summary, list_service_providers, list_tenant_locations, list_tenant_services
+from app.services.tenants import (
+    create_tenant_account,
+    create_tenant_service,
+    get_tenant_summary,
+    list_service_providers,
+    list_tenant_locations,
+    list_tenant_services,
+)
 
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
+
+
+@router.post("", response_model=CreateTenantResponse, status_code=status.HTTP_201_CREATED, summary="Create a tenant")
+async def create_tenant(
+    payload: CreateTenantRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> CreateTenantResponse:
+    return await create_tenant_account(session, payload)
 
 
 @router.get("/{tenant_slug}", response_model=TenantSummaryResponse, summary="Get tenant storefront context")
@@ -31,6 +56,21 @@ async def list_services(
     session: AsyncSession = Depends(get_db_session),
 ) -> ServiceListResponse:
     return await list_tenant_services(session, tenant_slug)
+
+
+@router.post(
+    "/{tenant_slug}/services",
+    response_model=ServiceSummaryResponse,
+    status_code=201,
+    summary="Create a tenant-scoped service",
+)
+async def create_service(
+    tenant_slug: str,
+    payload: CreateServiceRequest,
+    _: object = Depends(require_tenant_permission("services.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ServiceSummaryResponse:
+    return await create_tenant_service(session, tenant_slug, payload)
 
 
 @router.get(

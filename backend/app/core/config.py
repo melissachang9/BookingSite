@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     test_reset_token: Optional[str] = None
     access_token_ttl_minutes: int = 60
     refresh_token_ttl_days: int = 14
+    resend_api_key: Optional[str] = None
+    resend_from_email: Optional[str] = None
+    resend_reply_to_email: Optional[str] = None
+    resend_api_base_url: str = "https://api.resend.com"
+    stripe_secret_key: Optional[str] = None
+    stripe_webhook_secret: Optional[str] = None
+    stripe_webhook_tolerance_seconds: int = 300
+    stripe_api_base_url: str = "https://api.stripe.com/v1"
+    storefront_public_base_url: str = "http://localhost:3001"
     cors_origins: str = (
         "http://localhost:5173,http://127.0.0.1:5173,"
         "http://localhost:3000,http://127.0.0.1:3000,"

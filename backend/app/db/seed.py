@@ -8,7 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password
 from app.db.models import (
+    FormDefinition,
+    FormVersion,
     Location,
+    ServiceFormAttachment,
     Provider,
     ProviderLocation,
     ProviderSchedule,
@@ -66,6 +69,16 @@ DEMO_BRANDING = {
             "imageAltText": "Consultation check-in moment",
         },
     },
+    "providerProfiles": {
+        "Jordan Rivera": {
+            "description": "Detail-focused brow and facial specialist with a calm, education-led appointment style.",
+            "availabilityLabel": "Mon-Fri",
+        },
+        "Ava Brooks": {
+            "description": "Skin-first provider for facials, tinting, and first-time consultations across both studios.",
+            "availabilityLabel": "Mon-Sat",
+        },
+    },
 }
 
 DEMO_SETTINGS = {
@@ -76,6 +89,7 @@ DEMO_SETTINGS = {
     "maxAdvanceBookingDays": 45,
     "defaultDepositCents": 2500,
     "noShowFeeCents": 5000,
+    "taxRatePercent": 0,
     "autoChargeNoShowFee": False,
 }
 
@@ -90,11 +104,80 @@ def _with_demo_defaults(existing: dict, defaults: dict) -> dict:
     return merged
 
 
+async def _seed_brow_prep_form(session: AsyncSession, tenant: Tenant, brow_service: Service) -> None:
+    existing_form = await session.scalar(
+        select(FormDefinition).where(FormDefinition.tenant_id == tenant.id, FormDefinition.name == "Brow Prep Check-In")
+    )
+    if existing_form is None:
+        existing_form = FormDefinition(
+            tenant_id=tenant.id,
+            name="Brow Prep Check-In",
+            scope="customer",
+            is_active=True,
+        )
+        session.add(existing_form)
+        await session.flush()
+
+    existing_version = await session.scalar(
+        select(FormVersion).where(FormVersion.tenant_id == tenant.id, FormVersion.form_id == existing_form.id, FormVersion.version_number == 1)
+    )
+    if existing_version is None:
+        existing_version = FormVersion(
+            tenant_id=tenant.id,
+            form_id=existing_form.id,
+            version_number=1,
+            schema_json={
+                "title": "Brow Prep Check-In",
+                "description": "A quick pre-booking check to keep the brow appointment safe and on time.",
+                "fields": [
+                    {
+                        "id": "recentRetinoidUse",
+                        "type": "yes_no",
+                        "label": "Have you used retinoids or exfoliating acids in the last 5 days?",
+                        "required": True,
+                    },
+                    {
+                        "id": "skinSensitivityNotes",
+                        "type": "long_text",
+                        "label": "Anything else we should know before your brow appointment?",
+                        "required": True,
+                        "placeholder": "Share allergies, recent treatments, or anything that could affect tinting.",
+                    },
+                ],
+            },
+        )
+        session.add(existing_version)
+        await session.flush()
+
+    existing_attachment = await session.scalar(
+        select(ServiceFormAttachment).where(
+            ServiceFormAttachment.tenant_id == tenant.id,
+            ServiceFormAttachment.service_id == brow_service.id,
+            ServiceFormAttachment.form_version_id == existing_version.id,
+        )
+    )
+    if existing_attachment is None:
+        session.add(
+            ServiceFormAttachment(
+                tenant_id=tenant.id,
+                service_id=brow_service.id,
+                form_id=existing_form.id,
+                form_version_id=existing_version.id,
+                customer_prompt_timing="pre_booking",
+            )
+        )
+
+
 async def seed_demo_data(session: AsyncSession) -> None:
     existing_tenant = await session.scalar(select(Tenant).where(Tenant.slug == DEMO_TENANT_SLUG))
     if existing_tenant is not None:
         existing_tenant.branding_json = _with_demo_defaults(existing_tenant.branding_json, DEMO_BRANDING)
         existing_tenant.settings_json = _with_demo_defaults(existing_tenant.settings_json, DEMO_SETTINGS)
+        existing_brow_service = await session.scalar(
+            select(Service).where(Service.tenant_id == existing_tenant.id, Service.name == "Brow Shape and Tint")
+        )
+        if existing_brow_service is not None:
+            await _seed_brow_prep_form(session, existing_tenant, existing_brow_service)
         await session.commit()
         return
 
@@ -166,6 +249,7 @@ async def seed_demo_data(session: AsyncSession) -> None:
     )
     session.add_all([facial, brow, consultation])
     await session.flush()
+    await _seed_brow_prep_form(session, tenant, brow)
 
     jordan = Provider(
         tenant_id=tenant.id,

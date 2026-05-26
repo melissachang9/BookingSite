@@ -8,6 +8,7 @@
   "scripts": {
     "dev:dashboard": "npm --workspace @booking/dashboard run dev",
     "dev:storefront": "npm --workspace @booking/storefront run dev",
+    "dev:stripe-webhooks": "bash ./scripts/dev/stripe-webhooks.sh",
     "build:dashboard": "npm --workspace @booking/dashboard run build",
     "build:storefront": "npm --workspace @booking/storefront run build",
     "typecheck:ui-components": "npm --workspace @booking/ui-components run typecheck",
@@ -23,6 +24,7 @@
     "docker:down": "docker compose down"
   },
   "devDependencies": {
-    "@playwright/test": "^1.51.1"
+    "@playwright/test": "^1.51.1",
+    "rollup": "^4.60.4"
   }
 }

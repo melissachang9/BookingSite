@@ -31,7 +31,7 @@ export const bookingJourney: JourneyStep[] = [
   {
     state: "awaiting_payment",
     label: "Awaiting payment",
-    detail: "Stripe Checkout handles deposit collection and supports return-to-session recovery.",
+    detail: "Hosted checkout handles deposit collection and supports return-to-session recovery.",
   },
   {
     state: "confirmed",

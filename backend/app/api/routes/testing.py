@@ -9,8 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, get_settings
 from app.core.http import api_exception
 from app.db.session import get_db_session
-from app.schemas.testing import ResetE2EDataRequest, ResetE2EDataResponse
-from app.services.testing import reset_e2e_data
+from app.schemas.testing import MoveBookingStartRequest, MoveBookingStartResponse, ResetE2EDataRequest, ResetE2EDataResponse
+from app.services.testing import move_e2e_booking_start, reset_e2e_data
 
 
 router = APIRouter(prefix="/testing", tags=["testing"], include_in_schema=False)
@@ -45,3 +45,17 @@ async def reset_e2e_data_route(
 ) -> ResetE2EDataResponse:
     request = payload or ResetE2EDataRequest()
     return await reset_e2e_data(session, request.tenant_slug)
+
+
+@router.post(
+    "/e2e/bookings/{booking_id}/move-start",
+    response_model=MoveBookingStartResponse,
+    summary="Move a confirmed booking start time for E2E setup",
+)
+async def move_booking_start_route(
+    booking_id: str,
+    payload: MoveBookingStartRequest,
+    _: None = Depends(require_e2e_reset_access),
+    session: AsyncSession = Depends(get_db_session),
+) -> MoveBookingStartResponse:
+    return await move_e2e_booking_start(session, payload.tenant_slug, booking_id, payload.starts_at)

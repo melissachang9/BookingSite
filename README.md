@@ -47,6 +47,8 @@ Run from the repository root:
 docker compose up --build -d
 ```
 
+Docker Compose automatically reads the repository root `.env` when it exists. Use that file for durable local Docker settings that should survive rebuilds.
+
 This starts:
 
 - PostgreSQL on `localhost:5433`
@@ -54,6 +56,12 @@ This starts:
 - API docs on `http://localhost:8000/docs`
 - React/Vite dashboard on `http://localhost:5173`
 - Next.js storefront on `http://localhost:3001`
+
+To enable backend-sent deposit reminder emails from the dashboard Payments queue, set `RESEND_API_KEY` and `RESEND_FROM_EMAIL` in your shell or the root `.env` before starting Docker Compose. Optional settings: `RESEND_REPLY_TO_EMAIL` and `RESEND_API_BASE_URL`.
+
+To enable real Stripe-hosted deposit checkout and real refundable cancellation refunds, set `STRIPE_SECRET_KEY` in your shell or the root `.env` before starting Docker Compose. Set `STRIPE_WEBHOOK_SECRET` as well if you want backend webhook reconciliation at `/api/v1/payments/webhooks/stripe`, so Stripe can confirm checkout even when the customer never returns to the storefront success page. The backend will use `STOREFRONT_PUBLIC_BASE_URL` for Stripe return URLs. Without Stripe configured, the existing local fake checkout flow remains active for development and E2E coverage.
+
+For local Stripe webhook development, run `npm run dev:stripe-webhooks`. The script will use `STRIPE_SECRET_KEY` from your shell when it is set; otherwise it falls back to the Stripe CLI `test_mode_api_key` if one is available locally. It persists `STRIPE_SECRET_KEY` and `STOREFRONT_PUBLIC_BASE_URL` into the root `.env` so later `docker compose up --build -d` runs keep Stripe Checkout enabled without re-exporting shell variables. While the listener is running, it also refreshes `STRIPE_WEBHOOK_SECRET` in that same `.env`, rebuilds the backend, verifies the webhook route, and keeps the forwarder attached until you stop it. Run the helper again whenever you restart local Stripe webhook forwarding so the backend picks up the current signing secret. If neither source provides a real Stripe secret key, the script fails fast instead of silently leaving checkout on the local fake payment page.
 
 ### Stop everything
 

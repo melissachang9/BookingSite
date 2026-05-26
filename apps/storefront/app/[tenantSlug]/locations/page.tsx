@@ -60,9 +60,6 @@ export default async function LocationsPage({ params, searchParams }: LocationsP
   return (
     <main className="booking-flow-layout">
       <section className="booking-flow-panel">
-        <Link href={`/${tenantSlug}`} className="back-link">
-          Start
-        </Link>
         <div className="booking-entry-copy">
           <p className="store-eyebrow">Step {stepNumber}</p>
           <h2>Choose a location</h2>
@@ -91,8 +88,8 @@ export default async function LocationsPage({ params, searchParams }: LocationsP
       <aside className="booking-ad-panel booking-ad-panel--quiet" aria-label="Studio highlight">
         {bookingAd?.imageUrl ? <img src={bookingAd.imageUrl} alt={bookingAd.imageAltText ?? tenantName} /> : null}
         <div>
-          <strong>{bookingAd?.headline ?? tenantName}</strong>
-          {bookingAd?.body ? <p>{bookingAd.body}</p> : null}
+          <strong>{bookingAd?.headline ?? "Choose the studio that fits your day."}</strong>
+          <p>{bookingAd?.body ?? "Location-aware booking keeps service availability, checkout, and booking details consistent."}</p>
         </div>
       </aside>
     </main>

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from functools import lru_cache
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
@@ -35,9 +36,28 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
         yield session
 
 
+async def _ensure_postgres_schema_compatibility() -> None:
+    async with get_engine().begin() as connection:
+        checkout_session_id_length = await connection.scalar(
+            text(
+                """
+                SELECT character_maximum_length
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'payments'
+                  AND column_name = 'checkout_session_id'
+                """
+            )
+        )
+        if isinstance(checkout_session_id_length, int) and checkout_session_id_length < 255:
+            await connection.execute(text("ALTER TABLE payments ALTER COLUMN checkout_session_id TYPE VARCHAR(255)"))
+
+
 async def initialize_database() -> None:
     async with get_engine().begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
+    if get_engine().dialect.name == "postgresql":
+        await _ensure_postgres_schema_compatibility()
 
 
 async def dispose_engine() -> None:

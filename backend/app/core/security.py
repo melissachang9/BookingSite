@@ -12,6 +12,7 @@ from app.core.config import get_settings
 
 
 PASSWORD_HASH_ITERATIONS = 120_000
+CUSTOMER_MANAGE_TOKEN_TTL_DAYS = 30
 
 
 def _utcnow() -> datetime:
@@ -62,6 +63,17 @@ def create_refresh_token(payload: dict[str, Any]) -> tuple[str, datetime]:
     expires_at = _utcnow() + timedelta(days=settings.refresh_token_ttl_days)
     token = jwt.encode(
         {**payload, "exp": expires_at, "iat": _utcnow(), "tokenType": "refresh"},
+        settings.token_secret_key,
+        algorithm="HS256",
+    )
+    return token, expires_at
+
+
+def create_customer_manage_token(payload: dict[str, Any]) -> tuple[str, datetime]:
+    settings = get_settings()
+    expires_at = _utcnow() + timedelta(days=CUSTOMER_MANAGE_TOKEN_TTL_DAYS)
+    token = jwt.encode(
+        {**payload, "exp": expires_at, "iat": _utcnow(), "tokenType": "customer_manage"},
         settings.token_secret_key,
         algorithm="HS256",
     )

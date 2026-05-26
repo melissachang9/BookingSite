@@ -18,6 +18,14 @@ type ServicePageProps = {
 
 export const dynamic = "force-dynamic";
 
+const initialsFor = (name: string) =>
+  name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+
 export default async function ServiceRoutePage({ params, searchParams }: ServicePageProps) {
   const { tenantSlug, serviceId } = await params;
   const { error, locationId, screening } = await searchParams;
@@ -82,10 +90,11 @@ export default async function ServiceRoutePage({ params, searchParams }: Service
         date: nextDate,
       });
     };
+    const servicePriceLabel = formatCurrency(service.priceCents);
 
     return (
       <main className="page-stack">
-        <section className="booking-intro booking-intro--compact">
+        <section className="booking-intro booking-intro--compact booking-intro--service">
           <div>
             <Link href={pathWithQuery(`/${tenantSlug}/services`, selectionQuery)} className="back-link">
               Services
@@ -126,52 +135,47 @@ export default async function ServiceRoutePage({ params, searchParams }: Service
             <span className="panel-badge">{providerResponse.providers.length} providers</span>
           </div>
 
-          <div className="provider-grid">
-            <article className="provider-card provider-card--featured">
-              <div>
-                <p className="store-eyebrow">Recommended</p>
-                <h3>No preference</h3>
-                <p>Show all available providers and choose the time that works best.</p>
-              </div>
-              <div className="provider-card__meta">
-                <span>{noPreferenceAvailability.nextAvailableSlot ? "Next opening available" : "No openings in this window"}</span>
-                <strong>{noPreferenceAvailability.days.reduce((total, day) => total + day.slotCount, 0)} openings</strong>
-              </div>
-              <div className="provider-card__actions">
-                {noPreferenceAvailability.nextAvailableSlot ? (
-                  <Link href={nextAvailabilityHref(noPreferenceAvailability.nextAvailableSlot.startAt)} className="card-action">
-                    Show next availability
-                  </Link>
-                ) : null}
-                <Link href={pathWithQuery(availabilityPath, selectionQuery)} className="ghost-link">
-                  View monthly calendar
-                </Link>
-              </div>
-            </article>
+          <div className="provider-choice-list">
+            <Link
+              href={nextAvailabilityHref(noPreferenceAvailability.nextAvailableSlot?.startAt)}
+              className="provider-choice-row provider-choice-row--featured"
+              aria-label="Choose anyone"
+            >
+              <span className="provider-choice-avatar provider-choice-avatar--any" aria-hidden="true">
+                Any
+              </span>
+              <span className="provider-choice-copy">
+                <strong>Anyone</strong>
+                <small>All providers</small>
+                <span>{noPreferenceAvailability.days.reduce((total, day) => total + day.slotCount, 0)} openings in the next month</span>
+              </span>
+              <span className="provider-choice-price">{servicePriceLabel}</span>
+            </Link>
 
-            {providersWithAvailability.map(({ provider, availability }) => (
-              <article key={provider.id} className="provider-card">
-                <div>
-                  <p className="store-eyebrow">Provider</p>
-                  <h3>{provider.name}</h3>
-                  <p>{selectedLocation ? selectedLocation.name : `${provider.locationIds.length} location${provider.locationIds.length === 1 ? "" : "s"} available`}.</p>
-                </div>
-                <div className="provider-card__meta">
-                  <span>{availability.nextAvailableSlot ? "Next opening available" : "No openings in this window"}</span>
-                  <strong>{availability.days.reduce((total, day) => total + day.slotCount, 0)} openings</strong>
-                </div>
-                <div className="provider-card__actions">
-                  {availability.nextAvailableSlot ? (
-                    <Link href={nextAvailabilityHref(availability.nextAvailableSlot.startAt, provider.id)} className="card-action">
-                      Show next availability
-                    </Link>
-                  ) : null}
-                  <Link href={pathWithQuery(availabilityPath, { ...selectionQuery, providerId: provider.id })} className="ghost-link">
-                    View monthly calendar
-                  </Link>
-                </div>
-              </article>
-            ))}
+            {providersWithAvailability.map(({ provider, availability }) => {
+              const providerHref = nextAvailabilityHref(availability.nextAvailableSlot?.startAt, provider.id);
+              const locationLabel = selectedLocation
+                ? selectedLocation.name
+                : `${provider.locationIds.length} location${provider.locationIds.length === 1 ? "" : "s"} available`;
+
+              return (
+                <Link key={provider.id} href={providerHref} className="provider-choice-row" aria-label={`Choose ${provider.name}`}>
+                  {provider.imageUrl ? (
+                    <img src={provider.imageUrl} alt={provider.imageAltText ?? provider.name} className="provider-choice-avatar" />
+                  ) : (
+                    <span className="provider-choice-avatar" aria-hidden="true">
+                      {initialsFor(provider.name)}
+                    </span>
+                  )}
+                  <span className="provider-choice-copy">
+                    <strong>{provider.name}</strong>
+                    <small>{provider.availabilityLabel ?? locationLabel}</small>
+                    {provider.description ? <span>{provider.description}</span> : <span>{availability.nextAvailableSlot ? "Next opening available" : "No openings in this window"}</span>}
+                  </span>
+                  <span className="provider-choice-price">{servicePriceLabel}</span>
+                </Link>
+              );
+            })}
           </div>
         </section>
       </main>

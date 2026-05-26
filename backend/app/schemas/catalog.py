@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.schemas.base import CamelModel
 
@@ -45,6 +45,7 @@ class TenantSettingsResponse(CamelModel):
     max_advance_booking_days: int
     default_deposit_cents: int
     no_show_fee_cents: int
+    tax_rate_percent: float = 0
     auto_charge_no_show_fee: bool | None = None
 
 
@@ -59,6 +60,25 @@ class TenantSummaryResponse(CamelModel):
     default_location_id: str | None = None
     branding: TenantBrandingResponse
     settings: TenantSettingsResponse
+
+
+class CreateTenantRequest(CamelModel):
+    name: str = Field(min_length=1, max_length=255)
+    slug: str = Field(min_length=3, max_length=255, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    timezone: str = Field(min_length=3, max_length=100)
+    location_name: str = Field(min_length=1, max_length=255)
+    owner_name: str = Field(min_length=1, max_length=255)
+    owner_email: str = Field(min_length=5, max_length=255)
+    owner_password: str = Field(min_length=8, max_length=128)
+    homepage_url: str | None = Field(default=None, max_length=255)
+    primary_color: str | None = Field(default=None, max_length=32)
+    accent_color: str | None = Field(default=None, max_length=32)
+
+
+class CreateTenantResponse(CamelModel):
+    tenant: TenantSummaryResponse
+    owner_email: str
+    location_id: str
 
 
 class LocationSummaryResponse(CamelModel):
@@ -93,6 +113,22 @@ class ServiceSummaryResponse(CamelModel):
     form_ids: list[str]
 
 
+class CreateServiceRequest(CamelModel):
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    duration_minutes: int = Field(ge=15, le=480)
+    price_cents: int = Field(ge=0, le=500_000)
+    deposit_cents: int = Field(ge=0, le=500_000)
+    location_ids: list[str] = Field(min_length=1)
+    is_active: bool = True
+
+    @model_validator(mode="after")
+    def validate_deposit(self) -> "CreateServiceRequest":
+        if self.deposit_cents > self.price_cents:
+            raise ValueError("Deposit cannot exceed the service price.")
+        return self
+
+
 class ProviderSummaryResponse(CamelModel):
     id: str
     tenant_id: str
@@ -101,6 +137,10 @@ class ProviderSummaryResponse(CamelModel):
     user_id: str | None = None
     name: str
     email: str | None = None
+    description: str | None = None
+    image_url: str | None = None
+    image_alt_text: str | None = None
+    availability_label: str | None = None
     is_active: bool
     service_ids: list[str]
     location_ids: list[str]

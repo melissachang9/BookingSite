@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
 from app.core.security import create_access_token, create_refresh_token, decode_token, verify_password
@@ -73,9 +74,14 @@ def _permission_grants(role: str) -> list[PermissionGrantResponse]:
 
 
 def _session_response_for_user(user: User) -> SessionResponse:
+    tenant_slug = user.tenant.slug if user.tenant is not None else None
+    if tenant_slug is None:
+        raise api_exception(401, "unauthorized", "User session is no longer active.")
+
     payload = {
         "sub": user.id,
         "tenantId": user.tenant_id,
+        "tenantSlug": tenant_slug,
         "email": user.email,
         "role": user.role,
     }
@@ -88,6 +94,7 @@ def _session_response_for_user(user: User) -> SessionResponse:
         user=AuthenticatedUserResponse(
             id=user.id,
             tenant_id=user.tenant_id,
+            tenant_slug=tenant_slug,
             email=user.email,
             name=user.name,
             role=user.role,
@@ -97,7 +104,7 @@ def _session_response_for_user(user: User) -> SessionResponse:
 
 
 async def login_user(session: AsyncSession, email: str, password: str) -> SessionResponse:
-    user = await session.scalar(select(User).where(User.email == email.strip().lower()))
+    user = await session.scalar(select(User).options(selectinload(User.tenant)).where(User.email == email.strip().lower()))
     if user is None or not user.is_active or not verify_password(password, user.password_hash):
         raise api_exception(401, "unauthorized", "Invalid email or password.")
     return _session_response_for_user(user)
@@ -112,7 +119,7 @@ async def refresh_user_session(session: AsyncSession, refresh_token: str) -> Ses
     if payload.get("tokenType") != "refresh":
         raise api_exception(401, "unauthorized", "Refresh token is invalid or expired.")
 
-    user = await session.scalar(select(User).where(User.id == payload.get("sub")))
+    user = await session.scalar(select(User).options(selectinload(User.tenant)).where(User.id == payload.get("sub")))
     if user is None or not user.is_active:
         raise api_exception(401, "unauthorized", "User session is no longer active.")
     return _session_response_for_user(user)

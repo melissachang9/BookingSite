@@ -193,6 +193,8 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
     const nextAvailableDate = nextAvailable ? isoDateFromValueInTimeZone(nextAvailable.startAt, tenant.timezone) : undefined;
     const locationById = new Map(activeLocations.map((location) => [location.id, location.name]));
     const slotGroups = groupSlotsByDaypart(selectedAvailability.slots, tenant.timezone);
+    const previousMonth = shiftMonth(activeMonth, -1);
+    const nextMonth = shiftMonth(activeMonth, 1);
     const nextAvailabilityLink = nextAvailableDate
       ? pathWithQuery(availabilityPath, { ...baseQuery, month: monthKeyFromDate(nextAvailableDate), date: nextAvailableDate })
       : undefined;
@@ -225,8 +227,11 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
             <div className="appointment-panel-header">
               <h3>Select a date</h3>
               <div className="appointment-month-nav">
+                <Link href={pathWithQuery(availabilityPath, { ...baseQuery, month: previousMonth })} aria-label="Previous month">
+                  ‹
+                </Link>
                 <strong>{monthTitle(activeMonth)}</strong>
-                <Link href={pathWithQuery(availabilityPath, { ...baseQuery, month: shiftMonth(activeMonth, 1) })} aria-label="Next month">
+                <Link href={pathWithQuery(availabilityPath, { ...baseQuery, month: nextMonth })} aria-label="Next month">
                   ›
                 </Link>
               </div>

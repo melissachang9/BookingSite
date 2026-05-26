@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
-from app.db.models import Provider, ProviderSchedule, Service, SlotHold
+from app.db.models import Booking, Provider, ProviderSchedule, Service, SlotHold
 from app.schemas.availability import AvailabilityDayResponse, AvailabilityResponse, SlotAvailabilityResponse
 from app.services.tenants import get_tenant_by_slug
 
@@ -132,14 +132,27 @@ async def list_availability(
             )
         )
     ).all()
+    bookings = (
+        await session.scalars(
+            select(Booking).where(
+                Booking.tenant_id == tenant.id,
+                Booking.provider_id.in_(provider_ids),
+                Booking.status.in_(("confirmed", "completed")),
+                Booking.starts_at < window_end,
+                Booking.ends_at > window_start,
+            )
+        )
+    ).all()
 
     schedule_map: dict[tuple[str, str, int], list[ProviderSchedule]] = defaultdict(list)
     for schedule in schedules:
         schedule_map[(schedule.provider_id, schedule.location_id, schedule.weekday)].append(schedule)
 
-    hold_map: dict[str, list[tuple[datetime, datetime]]] = defaultdict(list)
+    blocked_map: dict[str, list[tuple[datetime, datetime]]] = defaultdict(list)
     for hold in holds:
-        hold_map[hold.provider_id].append((_ensure_aware(hold.starts_at), _ensure_aware(hold.ends_at)))
+        blocked_map[hold.provider_id].append((_ensure_aware(hold.starts_at), _ensure_aware(hold.ends_at)))
+    for booking in bookings:
+        blocked_map[booking.provider_id].append((_ensure_aware(booking.starts_at), _ensure_aware(booking.ends_at)))
 
     all_slots_by_day: list[list[SlotAvailabilityResponse]] = []
     earliest_slot: SlotAvailabilityResponse | None = None
@@ -161,7 +174,7 @@ async def list_availability(
                         if slot_start < min_start or slot_start > max_start:
                             cursor += timedelta(minutes=30)
                             continue
-                        if _overlaps(slot_start, slot_end, hold_map.get(context.provider.id, [])):
+                        if _overlaps(slot_start, slot_end, blocked_map.get(context.provider.id, [])):
                             cursor += timedelta(minutes=30)
                             continue
                         response = SlotAvailabilityResponse(

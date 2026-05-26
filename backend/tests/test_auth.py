@@ -7,6 +7,7 @@ def test_login_returns_session_tokens(client, demo_credentials) -> None:
     assert payload["refreshToken"]
     assert payload["user"]["email"] == demo_credentials["email"]
     assert payload["user"]["role"] == "owner"
+    assert payload["user"]["tenantSlug"] == "brow-beauty-lab"
     assert any(grant["key"] == "calendar.create_booking" and grant["allowed"] for grant in payload["user"]["permissions"])
 
 
@@ -29,3 +30,4 @@ def test_refresh_returns_new_session(client, demo_credentials) -> None:
 
     assert refresh_response.status_code == 200
     assert refresh_response.json()["user"]["email"] == demo_credentials["email"]
+    assert refresh_response.json()["user"]["tenantSlug"] == "brow-beauty-lab"

@@ -2,6 +2,7 @@ import type { CustomerProfile, CustomerSummary } from "./customers";
 import type { FormRequirement } from "./forms";
 import type { ProviderSummary, ServiceSummary } from "./catalog";
 import type { ActorSummary, AuditFields, ISODateString, PaginatedResponse, TenantScoped, UUID } from "./common";
+import type { TenantSummary } from "./settings";
 
 export type BookingState =
   | "draft"
@@ -25,6 +26,18 @@ export type DepositStatus =
   | "follow_up";
 
 export type PaymentResolution = "pending" | "collected" | "follow_up" | "waived";
+
+export type IntakeCompletionTiming = "before_booking" | "before_visit";
+
+export type BookingDraftIntakePlan = {
+  completionTiming: IntakeCompletionTiming;
+  status: "required_before_booking" | "reminders_scheduled" | string;
+  dueAt?: ISODateString | null;
+  emailReminderScheduledAt?: ISODateString | null;
+  smsReminderScheduledAt?: ISODateString | null;
+  reminderChannels: Array<"email" | "sms" | string>;
+  reminderHoursBefore: number;
+};
 
 export type SlotAvailability = {
   startAt: ISODateString;
@@ -72,6 +85,7 @@ export type BookingDraftSummary = AuditFields &
     service: ServiceSummary;
     provider: ProviderSummary;
     customer?: CustomerSummary | null;
+    intakePlan?: BookingDraftIntakePlan | null;
     formRequirements: FormRequirement[];
   };
 
@@ -90,10 +104,27 @@ export type BookingSummary = AuditFields &
     completedAt?: ISODateString | null;
     canceledAt?: ISODateString | null;
     notes?: string | null;
+    amountPaidCents: number;
+    balanceDueCents: number;
+    customerManageToken: string;
     service: ServiceSummary;
     provider: ProviderSummary;
     customer: CustomerProfile | CustomerSummary;
+    intakePlan?: BookingDraftIntakePlan | null;
   };
+
+export type CustomerManageBooking = {
+  tenant: TenantSummary;
+  booking: BookingSummary;
+  cancellationWindowHours: number;
+  refundInsideWindow: boolean;
+  cancellationDeadlineAt: ISODateString;
+  isInsideCancellationWindow: boolean;
+};
+
+export type CancelManageBookingRequest = {
+  reason?: string;
+};
 
 export type BookingListQuery = {
   status?: BookingState[];
@@ -116,8 +147,8 @@ export type CreateBookingDraftRequest = {
   startsAt: ISODateString;
   customer?: {
     name: string;
-    email?: string;
-    phone?: string;
+    email: string;
+    phone: string;
   };
   bookingMethod?: BookingMethod;
 };
@@ -126,9 +157,10 @@ export type UpdateBookingDraftRequest = {
   customerId?: UUID;
   customer?: {
     name: string;
-    email?: string;
-    phone?: string;
+    email: string;
+    phone: string;
   };
+  intakeCompletionTiming?: IntakeCompletionTiming;
 };
 
 export type BookingStatusTransition = {
@@ -141,7 +173,7 @@ export type BookingStatusTransition = {
 };
 
 export type UpdateBookingStatusRequest = {
-  status: Extract<BookingState, "confirmed" | "completed" | "canceled" | "no_show">;
+  status: Extract<BookingState, "completed" | "no_show">;
   notes?: string;
-  paymentResolution?: PaymentResolution;
+  paymentResolution?: Extract<PaymentResolution, "collected" | "follow_up" | "waived">;
 };

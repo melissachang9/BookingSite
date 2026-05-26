@@ -33,6 +33,7 @@ export type PermissionGrant = {
 export type AuthenticatedUser = {
   id: string;
   tenantId: string;
+  tenantSlug: string;
   email: string;
   name: string;
   role: UserRole;

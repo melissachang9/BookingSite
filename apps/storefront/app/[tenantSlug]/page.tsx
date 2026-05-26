@@ -66,10 +66,13 @@ export default async function TenantHomePage({ params }: TenantPageProps) {
 
   return (
     <main className="booking-entry-layout">
-      <section className="booking-entry-panel">
+      <section className="booking-entry-panel booking-entry-panel--editorial">
         <div className="booking-entry-copy">
-          <p className="store-eyebrow">Book online</p>
+          <p className="store-eyebrow">Begin booking</p>
           <h2>{screening?.title ?? "How can we help?"}</h2>
+          <p className="booking-entry-intro">
+            Choose the path that matches your visit so timing, forms, and payment steps stay aligned from the start.
+          </p>
         </div>
 
         <div className="screening-option-list">
@@ -88,8 +91,8 @@ export default async function TenantHomePage({ params }: TenantPageProps) {
       <aside className="booking-ad-panel" aria-label="Studio highlight">
         {bookingAd?.imageUrl ? <img src={bookingAd.imageUrl} alt={bookingAd.imageAltText ?? tenant.name} /> : null}
         <div>
-          {bookingAd?.headline ? <strong>{bookingAd.headline}</strong> : null}
-          {bookingAd?.body ? <p>{bookingAd.body}</p> : null}
+          <strong>{bookingAd?.headline ?? "A smoother way to book, confirm, and return."}</strong>
+          <p>{bookingAd?.body ?? "From screening to checkout, each step is designed to feel clear, calm, and studio-led."}</p>
         </div>
       </aside>
     </main>
