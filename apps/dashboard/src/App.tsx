@@ -397,19 +397,13 @@ function AuthenticatedLayout({
   const location = useLocation();
   const backendStatus = useBackendStatus();
   const pathKey = location.pathname === "/" ? "dashboard" : location.pathname.replace(/^\//, "");
+  const isCalendarRoute = pathKey === "calendar";
   const currentDefinition = pageByPath.get(pathKey) ?? pageByPath.get("dashboard") ?? routeDefinitions[0];
 
   return (
     <div className="ops-shell">
       <aside className="ops-sidebar">
-        <section className="ops-brand-card">
-          <span className="brand-mark">BB</span>
-          <div>
-            <p className="eyebrow">Studio OS</p>
-            <h1>{session.user.tenantSlug}</h1>
-          </div>
-          <p>Calendar-first operations for booking, payments, and launch readiness.</p>
-        </section>
+        {isCalendarRoute ? <div id="dashboard-calendar-sidebar-rail" className="ops-sidebar-calendar-slot" aria-label="Sidebar month calendar" /> : null}
 
         <nav className="ops-nav" aria-label="Dashboard sections">
           {routeDefinitions

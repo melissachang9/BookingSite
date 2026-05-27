@@ -1,81 +1,443 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { AvailabilityRequest, AvailabilityResponse, ServiceListResponse } from "@booking/shared-types";
+import type {
+  BookingDraftSummary,
+  BookingSummary,
+  ServiceListResponse,
+  SlotAvailability,
+} from "@booking/shared-types";
 
 import { CalendarPage, type CalendarPageApi } from "./calendar-page";
 
+const baseBooking = {
+  id: "booking-1",
+  tenantId: "tenant-1",
+  createdAt: "2026-05-24T15:00:00.000Z",
+  updatedAt: "2026-05-24T15:00:00.000Z",
+  customerId: "customer-1",
+  serviceId: "service-1",
+  providerId: "provider-1",
+  status: "confirmed",
+  bookingMethod: "staff_entered",
+  depositStatus: "paid",
+  paymentResolution: "pending",
+  startsAt: "2026-05-27T17:00:00.000Z",
+  endsAt: "2026-05-27T18:00:00.000Z",
+  notes: null,
+  amountPaidCents: 2500,
+  balanceDueCents: 7500,
+  customerManageToken: "manage-token-1",
+  service: {
+    id: "service-1",
+    tenantId: "tenant-1",
+    createdAt: "2026-05-24T15:00:00.000Z",
+    updatedAt: "2026-05-24T15:00:00.000Z",
+    name: "Signature Facial",
+    description: "A 60-minute facial.",
+    durationMinutes: 60,
+    priceCents: 10000,
+    depositCents: 2500,
+    isActive: true,
+    imageUrl: null,
+    imageAltText: null,
+    locationIds: ["location-1"],
+    formIds: [],
+  },
+  provider: {
+    id: "provider-1",
+    tenantId: "tenant-1",
+    createdAt: "2026-05-24T15:00:00.000Z",
+    updatedAt: "2026-05-24T15:00:00.000Z",
+    userId: null,
+    name: "Jordan Rivera",
+    email: "jordan@example.com",
+    description: null,
+    imageUrl: null,
+    imageAltText: null,
+    availabilityLabel: null,
+    isActive: true,
+    serviceIds: ["service-1"],
+    locationIds: ["location-1"],
+  },
+  customer: {
+    id: "customer-1",
+    tenantId: "tenant-1",
+    createdAt: "2026-05-24T15:00:00.000Z",
+    updatedAt: "2026-05-24T15:00:00.000Z",
+    name: "Taylor Guest",
+    email: "guest@example.com",
+    phone: "555-0100",
+    notes: null,
+  },
+} as BookingSummary;
+
 const serviceResponse: ServiceListResponse = {
-  services: [
-    {
-      id: "service-1",
-      tenantId: "tenant-1",
-      createdAt: "2026-05-24T15:00:00.000Z",
-      updatedAt: "2026-05-24T15:00:00.000Z",
-      name: "Signature Facial",
-      description: "A 60-minute facial.",
-      durationMinutes: 60,
-      priceCents: 10000,
-      depositCents: 2500,
-      isActive: true,
-      imageUrl: null,
-      imageAltText: null,
-      locationIds: ["location-1"],
-      formIds: [],
-    },
-  ],
+  services: [baseBooking.service],
 };
 
-const availabilityResponseWithSlot: AvailabilityResponse = {
-  days: [],
-  slots: [
-    {
-      startAt: "2026-05-25T17:00:00.000Z",
-      endAt: "2026-05-25T18:00:00.000Z",
-      providerId: "provider-1",
-      providerName: "Jordan Rivera",
-      locationId: "location-1",
-    },
-  ],
+const baseDraftSummary: BookingDraftSummary = {
+  id: "draft-1",
+  tenantId: "tenant-1",
+  createdAt: "2026-05-26T19:00:00.000Z",
+  updatedAt: "2026-05-26T19:00:00.000Z",
+  customerId: null,
+  serviceId: "service-1",
+  providerId: "provider-1",
+  locationId: "location-1",
+  status: "slot_held",
+  bookingMethod: "staff_entered",
+  startsAt: "2026-05-27T19:00:00.000Z",
+  endsAt: "2026-05-27T20:00:00.000Z",
+  expiresAt: "2026-05-26T19:15:00.000Z",
+  priceCents: 10000,
+  depositCents: 2500,
+  durationMinutes: 60,
+  service: baseBooking.service,
+  provider: baseBooking.provider,
+  customer: null,
+  intakePlan: null,
+  formRequirements: [],
 };
 
-const emptyAvailabilityResponse: AvailabilityResponse = {
-  days: [],
-  slots: [],
-};
+function createBooking(overrides: Partial<BookingSummary> = {}): BookingSummary {
+  return {
+    ...baseBooking,
+    ...overrides,
+    service: {
+      ...baseBooking.service,
+      ...(overrides.service ?? {}),
+    },
+    provider: {
+      ...baseBooking.provider,
+      ...(overrides.provider ?? {}),
+    },
+    customer: {
+      ...baseBooking.customer,
+      ...(overrides.customer ?? {}),
+    },
+  } as BookingSummary;
+}
+
+function createApi(
+  bookings: BookingSummary[],
+  options: {
+    services?: ServiceListResponse["services"];
+    openingsByDate?: Record<string, SlotAvailability[]>;
+    draftSummary?: BookingDraftSummary;
+  } = {},
+): CalendarPageApi {
+  const openingsByDate = options.openingsByDate ?? {};
+
+  return {
+    listBookings: vi.fn().mockResolvedValue({
+      items: bookings,
+      meta: {
+        limit: 100,
+        offset: 0,
+        total: bookings.length,
+      },
+    }),
+    listServices: vi.fn().mockResolvedValue({
+      services: options.services ?? serviceResponse.services,
+    }),
+    getAvailability: vi.fn(async (request) => ({
+      days: [
+        {
+          date: request.date,
+          slotCount: (openingsByDate[request.date] ?? []).length,
+        },
+      ],
+      slots: openingsByDate[request.date] ?? [],
+    })),
+    createBookingDraft: vi.fn().mockResolvedValue(options.draftSummary ?? baseDraftSummary),
+  };
+}
 
 describe("CalendarPage", () => {
-  it("keeps the manual booking drawer anchored to the selected slot", async () => {
-    let availabilityCallCount = 0;
-    const getAvailability = vi.fn(async (_request: AvailabilityRequest) => {
-      availabilityCallCount += 1;
-      return availabilityCallCount === 1 ? availabilityResponseWithSlot : emptyAvailabilityResponse;
-    });
+  it("shows appointment details when selecting a booked visit", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
 
-    const api: CalendarPageApi = {
-      listServices: vi.fn().mockResolvedValue(serviceResponse),
-      getAvailability,
-    };
+    try {
+      const api = createApi([baseBooking]);
 
-    render(
-      <CalendarPage
-        definition={{
-          eyebrow: "Calendar-first booking",
-          description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
-        }}
-        tenantSlug="brow-beauty-lab"
-        api={api}
-      />,
-    );
+      render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
 
-    expect(await screen.findByText("Provider week")).toBeInTheDocument();
-    expect(screen.getByLabelText("Customer")).toHaveValue("Choose a slot first");
-    expect(screen.getByLabelText("Provider")).toHaveValue("Choose a slot");
+      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+      expect(screen.getByLabelText("Customer")).toHaveValue("Select an appointment");
 
-    fireEvent.click(await screen.findByRole("button", { name: /Jordan Rivera/i }));
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
 
-    expect(screen.getByLabelText("Customer")).toHaveValue("Search existing customer");
-    expect(screen.getByLabelText("Service")).toHaveValue("Signature Facial");
-    expect(screen.getByLabelText("Provider")).toHaveValue("Jordan Rivera");
-    expect(screen.getByText(/hold creation stay anchored to this opening/i)).toBeInTheDocument();
+      expect(screen.getByLabelText("Customer")).toHaveValue("Taylor Guest");
+      expect(screen.getByLabelText("Service")).toHaveValue("Signature Facial");
+      expect(screen.getByLabelText("Provider")).toHaveValue("Jordan Rivera");
+      expect(screen.getByLabelText("Booking status")).toHaveValue("Confirmed");
+      expect(screen.getByLabelText("Payment status")).toHaveValue("Pending");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("renders unavailable bands instead of opening boxes when availability is loaded", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const opening = {
+        startAt: "2026-05-27T19:00:00.000Z",
+        endAt: "2026-05-27T20:00:00.000Z",
+        providerId: "provider-1",
+        providerName: "Jordan Rivera",
+        locationId: "location-1",
+      } satisfies SlotAvailability;
+      const api = createApi([], {
+        openingsByDate: {
+          "2026-05-27": [opening],
+        },
+      });
+
+      const { container } = render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+
+      // Wait for availability load to finish painting unavailable bands.
+      await screen.findByRole("combobox");
+
+      expect(screen.queryByRole("button", { name: /Start booking/i })).not.toBeInTheDocument();
+      expect(screen.queryByText(/Create draft from selected opening/i)).not.toBeInTheDocument();
+
+      await vi.waitFor(() => {
+        expect(container.querySelectorAll(".schedule-unavailable").length).toBeGreaterThan(0);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("renders provider columns in day view for booked appointments", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const api = createApi([
+        baseBooking,
+        createBooking({
+          id: "booking-2",
+          providerId: "provider-2",
+          startsAt: "2026-05-27T18:15:00.000Z",
+          endsAt: "2026-05-27T19:00:00.000Z",
+          provider: {
+            ...baseBooking.provider,
+            id: "provider-2",
+            name: "Taylor Stone",
+            email: "taylor@example.com",
+          },
+          customer: {
+            ...baseBooking.customer,
+            id: "customer-2",
+            name: "Morgan Ellis",
+            email: "morgan@example.com",
+          },
+        }),
+      ]);
+
+      render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      fireEvent.click(await screen.findByRole("button", { name: "Day" }));
+
+      expect(await screen.findByLabelText("Jordan Rivera column")).toBeInTheDocument();
+      expect(screen.getByLabelText("Taylor Stone column")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps month rail and week view in sync when selecting a date", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const api = createApi([]);
+
+      render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+      expect(screen.getByText("May 2026")).toBeInTheDocument();
+
+      const juneFourth = screen.getByRole("gridcell", { name: "Thu, Jun 4" });
+      fireEvent.click(juneFourth);
+
+      expect(await screen.findByText("Wed, Jun 3 - Tue, Jun 9")).toBeInTheDocument();
+      expect(juneFourth).toHaveAttribute("aria-pressed", "true");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("renders booked appointments only in the correct week when changing the month rail", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const juneFourthBooking = createBooking({
+        startsAt: "2026-06-04T17:00:00.000Z",
+        endsAt: "2026-06-04T18:00:00.000Z",
+      });
+      const api = createApi([juneFourthBooking]);
+
+      render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Taylor Guest booked Thu, Jun 4/i })).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("gridcell", { name: "Thu, Jun 4" }));
+
+      expect(await screen.findByText("Wed, Jun 3 - Tue, Jun 9")).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: /Taylor Guest booked Thu, Jun 4/i })).toBeInTheDocument();
+      expect(api.listBookings).toHaveBeenCalledWith(
+        "brow-beauty-lab",
+        expect.objectContaining({
+          status: ["confirmed"],
+          limit: 100,
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("still loads booked appointments when the service catalog request fails", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const api = createApi([baseBooking]);
+      api.listServices = vi.fn().mockRejectedValue(new Error("Service catalog unavailable"));
+
+      render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: /Taylor Guest booked/i })).toBeInTheDocument();
+      expect(screen.queryByText("Unable to load booked appointments.")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("creates a staff booking draft from a time block", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const opening = {
+        startAt: "2026-05-27T19:00:00.000Z",
+        endAt: "2026-05-27T20:00:00.000Z",
+        providerId: "provider-1",
+        providerName: "Jordan Rivera",
+        locationId: "location-1",
+      } satisfies SlotAvailability;
+      const api = createApi([], {
+        openingsByDate: {
+          "2026-05-27": [opening],
+        },
+      });
+
+      render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Day" }));
+
+      const addBlockButton = await screen.findByRole("button", {
+        name: "Add time block for Jordan Rivera",
+      });
+      fireEvent.click(addBlockButton);
+
+      expect(
+        await screen.findByRole("button", { name: /Time block .* with Jordan Rivera/i }),
+      ).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Create draft from time block" }));
+
+      await vi.waitFor(() => {
+        expect(api.createBookingDraft).toHaveBeenCalledWith({
+          tenantSlug: "brow-beauty-lab",
+          serviceId: "service-1",
+          providerId: "provider-1",
+          locationId: "location-1",
+          startsAt: "2026-05-27T19:00:00.000Z",
+          bookingMethod: "staff_entered",
+        });
+      });
+
+      expect(
+        await screen.findByRole("link", { name: "Open draft in storefront" }),
+      ).toHaveAttribute("href", "http://127.0.0.1:3001/brow-beauty-lab/book/draft-1");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

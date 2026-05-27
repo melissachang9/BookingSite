@@ -1,0 +1,798 @@
+
+> @booking/dashboard@0.1.0 test
+> vitest run --run
+
+
+ RUN  v2.1.9 /Users/melissachang/Documents/BookingSoftware/apps/dashboard
+
+ ✓ src/payments-page.test.tsx (3 tests) 337ms
+ ✓ src/bookings-page.test.tsx (4 tests) 497ms
+ ❯ src/calendar-page.test.tsx (3 tests | 1 failed) 1700ms
+   ✓ CalendarPage > keeps the manual booking drawer anchored to the selected slot 405ms
+   × CalendarPage > keeps month rail and week view in sync when selecting a date 1148ms
+     → Unable to find an element with the text: Wed, Jun 3 - Tue, Jun 9. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"ops-page-stack"[39m
+    [36m>[39m
+      [36m<section[39m
+        [33mclass[39m=[32m"calendar-command-bar"[39m
+      [36m>[39m
+        [36m<div>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"eyebrow"[39m
+          [36m>[39m
+            [0mCalendar-first booking[0m
+          [36m</p>[39m
+          [36m<h3>[39m
+            [0mChoose a real opening before creating a booking.[0m
+          [36m</h3>[39m
+          [36m<p>[39m
+            [0mProvider openings, manual booking entry, and hold-backed scheduling from calendar context.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33maria-label[39m=[32m"Calendar filters"[39m
+          [33mclass[39m=[32m"filter-row"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33maria-pressed[39m=[32m"false"[39m
+            [33mclass[39m=[32m"filter-chip"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mDay[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33maria-pressed[39m=[32m"true"[39m
+            [33mclass[39m=[32m"filter-chip filter-chip--active"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mWeek[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</section>[39m
+      [36m<section[39m
+        [33mclass[39m=[32m"calendar-workspace"[39m
+      [36m>[39m
+        [36m<article[39m
+          [33mclass[39m=[32m"ops-panel calendar-panel"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"panel-title-row"[39m
+          [36m>[39m
+            [36m<div>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"eyebrow"[39m
+              [36m>[39m
+                [0mLive availability[0m
+              [36m</p>[39m
+              [36m<h4>[39m
+                [0mWed, May 27 - Tue, Jun 2[0m
+              [36m</h4>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"calendar-header-actions"[39m
+            [36m>[39m
+              [36m<button[39m
+                [33mclass[39m=[32m"filter-chip"[39m
+                [33mtype[39m=[32m"button"[39m
+              [36m>[39m
+                [0mPrevious[0m
+              [36m</button>[39m
+              [36m<button[39m
+                [33mclass[39m=[32m"filter-chip"[39m
+                [33mtype[39m=[32m"button"[39m
+              [36m>[39m
+                [0mNext[0m
+              [36m</button>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33maria-label[39m=[32m"Upcoming openings for Signature Facial"[39m
+            [33mclass[39m=[32m"schedule-board"[39m
+            [33mstyle[39m=[32m"--schedule-hour-height: 66px; --schedule-quarter-height: 16.5px;"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"schedule-board__header"[39m
+              [33mstyle[39m=[32m"grid-template-columns: 88px repeat(7, minmax(0, 1fr));"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"schedule-header-corner"[39m
+              [36m>[39m
+                [0mTime[0m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Wed 27 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mWed[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m27[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Thu 28 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mThu[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m28[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Fri 29 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mFri[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m29[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Sat 30 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mSat[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m30[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Sun 31 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mSun[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m31[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Mon 1 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mMon[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m1[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Tue 2 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mTue[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m2[0m
+                [36m</span>[39m
+              [36m</div>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"schedule-board__body"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"schedule-time-axis"[39m
+                [33mstyle[39m=[32m"height: 528px;"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"schedule-time-axis__cell"[39m
+                [36m>[39m
+                  [0m9 AM[0m
+                [36m</div>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"schedule-time-axis__cell"[39m
+                [36m>[39m
+                  [0m10 AM[0m
+                [36m</div>[39m
+     ...
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"ops-page-stack"[39m
+    [36m>[39m
+      [36m<section[39m
+        [33mclass[39m=[32m"calendar-command-bar"[39m
+      [36m>[39m
+        [36m<div>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"eyebrow"[39m
+          [36m>[39m
+            [0mCalendar-first booking[0m
+          [36m</p>[39m
+          [36m<h3>[39m
+            [0mChoose a real opening before creating a booking.[0m
+          [36m</h3>[39m
+          [36m<p>[39m
+            [0mProvider openings, manual booking entry, and hold-backed scheduling from calendar context.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33maria-label[39m=[32m"Calendar filters"[39m
+          [33mclass[39m=[32m"filter-row"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33maria-pressed[39m=[32m"false"[39m
+            [33mclass[39m=[32m"filter-chip"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mDay[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33maria-pressed[39m=[32m"true"[39m
+            [33mclass[39m=[32m"filter-chip filter-chip--active"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mWeek[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</section>[39m
+      [36m<section[39m
+        [33mclass[39m=[32m"calendar-workspace"[39m
+      [36m>[39m
+        [36m<article[39m
+          [33mclass[39m=[32m"ops-panel calendar-panel"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"panel-title-row"[39m
+          [36m>[39m
+            [36m<div>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"eyebrow"[39m
+              [36m>[39m
+                [0mLive availability[0m
+              [36m</p>[39m
+              [36m<h4>[39m
+                [0mWed, May 27 - Tue, Jun 2[0m
+              [36m</h4>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"calendar-header-actions"[39m
+            [36m>[39m
+              [36m<button[39m
+                [33mclass[39m=[32m"filter-chip"[39m
+                [33mtype[39m=[32m"button"[39m
+              [36m>[39m
+                [0mPrevious[0m
+              [36m</button>[39m
+              [36m<button[39m
+                [33mclass[39m=[32m"filter-chip"[39m
+                [33mtype[39m=[32m"button"[39m
+              [36m>[39m
+                [0mNext[0m
+              [36m</button>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33maria-label[39m=[32m"Upcoming openings for Signature Facial"[39m
+            [33mclass[39m=[32m"schedule-board"[39m
+            [33mstyle[39m=[32m"--schedule-hour-height: 66px; --schedule-quarter-height: 16.5px;"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"schedule-board__header"[39m
+              [33mstyle[39m=[32m"grid-template-columns: 88px repeat(7, minmax(0, 1fr));"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"schedule-header-corner"[39m
+              [36m>[39m
+                [0mTime[0m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Wed 27 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mWed[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m27[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Thu 28 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mThu[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m28[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Fri 29 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mFri[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m29[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Sat 30 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mSat[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m30[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Sun 31 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mSun[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m31[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Mon 1 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mMon[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m1[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Tue 2 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mTue[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m2[0m
+                [36m</span>[39m
+              [36m</div>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"schedule-board__body"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"schedule-time-axis"[39m
+                [33mstyle[39m=[32m"height: 528px;"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"schedule-time-axis__cell"[39m
+                [36m>[39m
+                  [0m9 AM[0m
+                [36m</div>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"schedule-time-axis__cell"[39m
+                [36m>[39m
+                  [0m10 AM[0m
+                [36m</div>[39m
+     ...
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/calendar-page.test.tsx > CalendarPage > keeps month rail and week view in sync when selecting a date
+TestingLibraryElementError: Unable to find an element with the text: Wed, Jun 3 - Tue, Jun 9. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"ops-page-stack"[39m
+    [36m>[39m
+      [36m<section[39m
+        [33mclass[39m=[32m"calendar-command-bar"[39m
+      [36m>[39m
+        [36m<div>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"eyebrow"[39m
+          [36m>[39m
+            [0mCalendar-first booking[0m
+          [36m</p>[39m
+          [36m<h3>[39m
+            [0mChoose a real opening before creating a booking.[0m
+          [36m</h3>[39m
+          [36m<p>[39m
+            [0mProvider openings, manual booking entry, and hold-backed scheduling from calendar context.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33maria-label[39m=[32m"Calendar filters"[39m
+          [33mclass[39m=[32m"filter-row"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33maria-pressed[39m=[32m"false"[39m
+            [33mclass[39m=[32m"filter-chip"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mDay[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33maria-pressed[39m=[32m"true"[39m
+            [33mclass[39m=[32m"filter-chip filter-chip--active"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mWeek[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</section>[39m
+      [36m<section[39m
+        [33mclass[39m=[32m"calendar-workspace"[39m
+      [36m>[39m
+        [36m<article[39m
+          [33mclass[39m=[32m"ops-panel calendar-panel"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"panel-title-row"[39m
+          [36m>[39m
+            [36m<div>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"eyebrow"[39m
+              [36m>[39m
+                [0mLive availability[0m
+              [36m</p>[39m
+              [36m<h4>[39m
+                [0mWed, May 27 - Tue, Jun 2[0m
+              [36m</h4>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"calendar-header-actions"[39m
+            [36m>[39m
+              [36m<button[39m
+                [33mclass[39m=[32m"filter-chip"[39m
+                [33mtype[39m=[32m"button"[39m
+              [36m>[39m
+                [0mPrevious[0m
+              [36m</button>[39m
+              [36m<button[39m
+                [33mclass[39m=[32m"filter-chip"[39m
+                [33mtype[39m=[32m"button"[39m
+              [36m>[39m
+                [0mNext[0m
+              [36m</button>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33maria-label[39m=[32m"Upcoming openings for Signature Facial"[39m
+            [33mclass[39m=[32m"schedule-board"[39m
+            [33mstyle[39m=[32m"--schedule-hour-height: 66px; --schedule-quarter-height: 16.5px;"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"schedule-board__header"[39m
+              [33mstyle[39m=[32m"grid-template-columns: 88px repeat(7, minmax(0, 1fr));"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"schedule-header-corner"[39m
+              [36m>[39m
+                [0mTime[0m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Wed 27 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mWed[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m27[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Thu 28 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mThu[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m28[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Fri 29 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mFri[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m29[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Sat 30 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mSat[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m30[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Sun 31 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mSun[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m31[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Mon 1 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mMon[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m1[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Tue 2 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mTue[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m2[0m
+                [36m</span>[39m
+              [36m</div>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"schedule-board__body"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"schedule-time-axis"[39m
+                [33mstyle[39m=[32m"height: 528px;"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"schedule-time-axis__cell"[39m
+                [36m>[39m
+                  [0m9 AM[0m
+                [36m</div>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"schedule-time-axis__cell"[39m
+                [36m>[39m
+                  [0m10 AM[0m
+                [36m</div>[39m
+     ...
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"ops-page-stack"[39m
+    [36m>[39m
+      [36m<section[39m
+        [33mclass[39m=[32m"calendar-command-bar"[39m
+      [36m>[39m
+        [36m<div>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"eyebrow"[39m
+          [36m>[39m
+            [0mCalendar-first booking[0m
+          [36m</p>[39m
+          [36m<h3>[39m
+            [0mChoose a real opening before creating a booking.[0m
+          [36m</h3>[39m
+          [36m<p>[39m
+            [0mProvider openings, manual booking entry, and hold-backed scheduling from calendar context.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33maria-label[39m=[32m"Calendar filters"[39m
+          [33mclass[39m=[32m"filter-row"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33maria-pressed[39m=[32m"false"[39m
+            [33mclass[39m=[32m"filter-chip"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mDay[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33maria-pressed[39m=[32m"true"[39m
+            [33mclass[39m=[32m"filter-chip filter-chip--active"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mWeek[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</section>[39m
+      [36m<section[39m
+        [33mclass[39m=[32m"calendar-workspace"[39m
+      [36m>[39m
+        [36m<article[39m
+          [33mclass[39m=[32m"ops-panel calendar-panel"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"panel-title-row"[39m
+          [36m>[39m
+            [36m<div>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"eyebrow"[39m
+              [36m>[39m
+                [0mLive availability[0m
+              [36m</p>[39m
+              [36m<h4>[39m
+                [0mWed, May 27 - Tue, Jun 2[0m
+              [36m</h4>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"calendar-header-actions"[39m
+            [36m>[39m
+              [36m<button[39m
+                [33mclass[39m=[32m"filter-chip"[39m
+                [33mtype[39m=[32m"button"[39m
+              [36m>[39m
+                [0mPrevious[0m
+              [36m</button>[39m
+              [36m<button[39m
+                [33mclass[39m=[32m"filter-chip"[39m
+                [33mtype[39m=[32m"button"[39m
+              [36m>[39m
+                [0mNext[0m
+              [36m</button>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33maria-label[39m=[32m"Upcoming openings for Signature Facial"[39m
+            [33mclass[39m=[32m"schedule-board"[39m
+            [33mstyle[39m=[32m"--schedule-hour-height: 66px; --schedule-quarter-height: 16.5px;"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"schedule-board__header"[39m
+              [33mstyle[39m=[32m"grid-template-columns: 88px repeat(7, minmax(0, 1fr));"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"schedule-header-corner"[39m
+              [36m>[39m
+                [0mTime[0m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Wed 27 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mWed[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m27[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Thu 28 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mThu[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m28[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Fri 29 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mFri[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m29[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Sat 30 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mSat[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m30[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Sun 31 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mSun[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m31[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Mon 1 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mMon[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m1[0m
+                [36m</span>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Tue 2 column"[39m
+                [33mclass[39m=[32m"schedule-day-heading"[39m
+              [36m>[39m
+                [36m<strong>[39m
+                  [0mTue[0m
+                [36m</strong>[39m
+                [36m<span>[39m
+                  [0m2[0m
+                [36m</span>[39m
+              [36m</div>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"schedule-board__body"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"schedule-time-axis"[39m
+                [33mstyle[39m=[32m"height: 528px;"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"schedule-time-axis__cell"[39m
+                [36m>[39m
+                  [0m9 AM[0m
+                [36m</div>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"schedule-time-axis__cell"[39m
+                [36m>[39m
+                  [0m10 AM[0m
+                [36m</div>[39m
+     ...
+ ❯ waitForWrapper ../../node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ findByText ../../node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ src/calendar-page.test.tsx:158:27
+    156|       fireEvent.click(juneFourth);
+    157| 
+    158|       expect(await screen.findByText("Wed, Jun 3 - Tue, Jun 9")).toBeI…
+       |                           ^
+    159|       expect(juneFourth).toHaveAttribute("aria-pressed", "true");
+    160|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 9 passed (10)
+   Start at  11:52:35
+   Duration  3.68s (transform 388ms, setup 266ms, collect 1.34s, tests 2.53s, environment 2.03s, prepare 547ms)
+
+npm error Lifecycle script `test` failed with error:
+npm error code 1
+npm error path /Users/melissachang/Documents/BookingSoftware/apps/dashboard
+npm error workspace @booking/dashboard@0.1.0
+npm error location /Users/melissachang/Documents/BookingSoftware/apps/dashboard
+npm error command failed
+npm error command sh -c vitest run --run
