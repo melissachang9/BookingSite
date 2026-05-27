@@ -7,9 +7,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
-from app.db.models import BookingDraftFormRequirement, FormResponse
-from app.schemas.forms import FormResponseSummaryResponse, SubmitFormRequirementRequest
-from app.services.booking_drafts import _ensure_not_expired, _load_booking_draft
+from app.db.models import (
+    BookingDraft,
+    BookingDraftFormRequirement,
+    FormDefinition,
+    FormResponse,
+    FormVersion,
+)
+from app.schemas.forms import (
+    BookingFormResponseEntry,
+    BookingFormResponseListResponse,
+    FormResponseSummaryResponse,
+    SubmitFormRequirementRequest,
+)
+from app.services.booking_drafts import _ensure_not_expired, _load_booking, _load_booking_draft
 from app.services.tenants import get_tenant_by_slug
 
 
@@ -126,3 +137,65 @@ async def submit_booking_form_requirement(
 
     await session.commit()
     return _form_response_to_summary(response)
+
+
+async def list_booking_form_responses(
+    session: AsyncSession,
+    tenant_slug: str,
+    booking_id: str,
+) -> BookingFormResponseListResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    booking = await _load_booking(session, booking_id, tenant.id)
+
+    draft_ids: list[str] = []
+    if booking.source_draft is not None:
+        draft_ids.append(booking.source_draft.id)
+    else:
+        sibling_drafts = (
+            await session.scalars(
+                select(BookingDraft.id).where(
+                    BookingDraft.tenant_id == tenant.id,
+                    BookingDraft.confirmed_booking_id == booking.id,
+                )
+            )
+        ).all()
+        draft_ids.extend(sibling_drafts)
+
+    if not draft_ids:
+        return BookingFormResponseListResponse(items=[])
+
+    responses = (
+        await session.scalars(
+            select(FormResponse)
+            .options(
+                selectinload(FormResponse.form_version).selectinload(FormVersion.form),
+            )
+            .where(
+                FormResponse.tenant_id == tenant.id,
+                FormResponse.booking_draft_id.in_(draft_ids),
+            )
+            .order_by(FormResponse.submitted_at.asc())
+        )
+    ).all()
+
+    items: list[BookingFormResponseEntry] = []
+    for response in responses:
+        version = response.form_version
+        form: FormDefinition | None = version.form if version is not None else None
+        schema = version.schema_json if version is not None and isinstance(version.schema_json, dict) else None
+        items.append(
+            BookingFormResponseEntry(
+                id=response.id,
+                form_id=response.form_id,
+                form_version_id=response.form_version_id,
+                form_name=form.name if form is not None else "Form",
+                form_version_number=version.version_number if version is not None else 0,
+                scope=response.scope,
+                customer_prompt_timing=response.customer_prompt_timing,
+                submitted_at=response.submitted_at,
+                answers=response.answers_json,
+                schema=schema,
+            )
+        )
+
+    return BookingFormResponseListResponse(items=items)

@@ -15,8 +15,10 @@ from app.schemas.bookings import (
     CustomerManageBookingResponse,
     UpdateBookingStatusRequest,
 )
+from app.schemas.forms import BookingFormResponseListResponse
 from app.schemas.payments import RecordManualPaymentRequest
 from app.services.booking_drafts import cancel_manage_booking, get_booking, get_manage_booking
+from app.services.booking_forms import list_booking_form_responses
 from app.services.bookings import list_bookings, record_manual_payment, update_booking_status
 
 
@@ -122,3 +124,17 @@ async def update_booking_status_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingSummaryResponse:
     return await update_booking_status(session, tenant_slug, booking_id, payload, current_user)
+
+
+@router.get(
+    "/tenants/{tenant_slug}/bookings/{booking_id}/form-responses",
+    response_model=BookingFormResponseListResponse,
+    summary="List submitted form responses for a confirmed booking",
+)
+async def list_booking_form_responses_route(
+    tenant_slug: str,
+    booking_id: str,
+    _: object = Depends(require_tenant_permission("bookings.view")),
+    session: AsyncSession = Depends(get_db_session),
+) -> BookingFormResponseListResponse:
+    return await list_booking_form_responses(session, tenant_slug, booking_id)

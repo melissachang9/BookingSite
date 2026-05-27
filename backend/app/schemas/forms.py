@@ -43,3 +43,20 @@ class FormResponseSummaryResponse(CamelModel):
     filled_by_user_id: str | None = None
     answers: dict[str, Any]
     attachments: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class BookingFormResponseEntry(CamelModel):
+    id: str
+    form_id: str
+    form_version_id: str
+    form_name: str
+    form_version_number: int
+    scope: str
+    customer_prompt_timing: str | None = None
+    submitted_at: datetime
+    answers: dict[str, Any]
+    schema: dict[str, Any] | None = None
+
+
+class BookingFormResponseListResponse(CamelModel):
+    items: list[BookingFormResponseEntry] = Field(default_factory=list)

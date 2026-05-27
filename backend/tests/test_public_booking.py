@@ -1266,3 +1266,114 @@ def test_create_checkout_session_requires_completed_pre_booking_forms(client) ->
 
     assert checkout_response.status_code == 400
     assert checkout_response.json()["error"]["code"] == "bad_request"
+
+def _auth_headers(client, demo_credentials) -> dict[str, str]:
+    response = client.post("/api/v1/auth/login", json=demo_credentials)
+    assert response.status_code == 200
+    return {"Authorization": f"Bearer {response.json()['accessToken']}"}
+
+
+def test_list_booking_form_responses_returns_submitted_answers(client, demo_credentials) -> None:
+    service = _service_by_name(client, "Brow Shape and Tint")
+    date_text = _next_weekday(4)
+    availability_response = client.get(
+        "/api/v1/tenants/brow-beauty-lab/availability",
+        params={"serviceId": service["id"], "date": date_text},
+    )
+    first_slot = availability_response.json()["slots"][0]
+
+    create_response = client.post(
+        "/api/v1/tenants/brow-beauty-lab/booking-drafts",
+        json={
+            "tenantSlug": "brow-beauty-lab",
+            "serviceId": service["id"],
+            "providerId": first_slot["providerId"],
+            "locationId": first_slot["locationId"],
+            "startsAt": first_slot["startAt"],
+        },
+    )
+    assert create_response.status_code == 200
+    draft_payload = create_response.json()
+    booking_draft_id = draft_payload["id"]
+    requirement = draft_payload["formRequirements"][0]
+
+    update_response = client.patch(
+        f"/api/v1/tenants/brow-beauty-lab/booking-drafts/{booking_draft_id}",
+        json={
+            "customer": {
+                "name": "Form Visibility Guest",
+                "email": "form-visibility@example.com",
+                "phone": "555-0410",
+            },
+            "intakeCompletionTiming": "before_visit",
+        },
+    )
+    assert update_response.status_code == 200
+
+    submit_response = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/booking-drafts/{booking_draft_id}/form-requirements/{requirement['id']}/submit",
+        json={
+            "answers": {
+                "recentRetinoidUse": True,
+                "skinSensitivityNotes": "Mild redness after exfoliation.",
+            }
+        },
+    )
+    assert submit_response.status_code == 200
+
+    checkout_response = client.post(
+        "/api/v1/tenants/brow-beauty-lab/payments/checkout-sessions",
+        json={
+            "tenantSlug": "brow-beauty-lab",
+            "bookingDraftId": booking_draft_id,
+            "kind": "deposit",
+            "successUrl": f"/brow-beauty-lab/book/{booking_draft_id}/success",
+            "cancelUrl": f"/brow-beauty-lab/book/{booking_draft_id}",
+        },
+    )
+    assert checkout_response.status_code == 200
+    session_id = checkout_response.json()["sessionId"]
+
+    complete_response = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/payments/checkout-sessions/{session_id}/complete"
+    )
+    assert complete_response.status_code == 200
+    booking_id = complete_response.json()["id"]
+
+    headers = _auth_headers(client, demo_credentials)
+    list_response = client.get(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking_id}/form-responses",
+        headers=headers,
+    )
+    assert list_response.status_code == 200
+    items = list_response.json()["items"]
+    assert len(items) == 1
+    entry = items[0]
+    assert entry["formName"] == "Brow Prep Check-In"
+    assert entry["scope"] == "customer"
+    assert entry["customerPromptTiming"] == "pre_booking"
+    assert entry["answers"]["recentRetinoidUse"] is True
+    assert entry["answers"]["skinSensitivityNotes"] == "Mild redness after exfoliation."
+    assert entry["schema"]["fields"]
+
+
+def test_list_booking_form_responses_requires_authentication(client) -> None:
+    confirmed = _confirm_paid_deposit_booking(client)
+    booking_id = confirmed["booking"]["id"]
+
+    response = client.get(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking_id}/form-responses"
+    )
+    assert response.status_code in (401, 403)
+
+
+def test_list_booking_form_responses_isolates_tenants(client, demo_credentials) -> None:
+    confirmed = _confirm_paid_deposit_booking(client)
+    booking_id = confirmed["booking"]["id"]
+
+    headers = _auth_headers(client, demo_credentials)
+    response = client.get(
+        f"/api/v1/tenants/not-a-tenant/bookings/{booking_id}/form-responses",
+        headers=headers,
+    )
+    assert response.status_code in (403, 404)
