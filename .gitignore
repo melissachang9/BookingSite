@@ -53,3 +53,4 @@ __pycache__/
 # Supabase local
 supabase/.branches
 supabase/.temp
+test_output.txt
