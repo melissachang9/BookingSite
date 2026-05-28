@@ -3,6 +3,7 @@ import type {
   AvailabilityRequest,
   AvailabilityResponse,
   BookingDraftSummary,
+  BookingFormResponseList,
   BookingListQuery,
   BookingListResponse,
   BookingSummary,
@@ -141,4 +142,6 @@ export const createPlatformApi = (client: ApiClient) => ({
     ),
   updateBookingStatus: (tenantSlug: string, bookingId: string, body: UpdateBookingStatusRequest) =>
     client.post<BookingSummary, UpdateBookingStatusRequest>(`tenants/${tenantSlug}/bookings/${bookingId}/status`, body),
+  listBookingFormResponses: (tenantSlug: string, bookingId: string) =>
+    client.get<BookingFormResponseList>(`tenants/${tenantSlug}/bookings/${bookingId}/form-responses`),
 });

@@ -4,6 +4,8 @@ import type {
   AvailabilityRequest,
   AvailabilityResponse,
   BookingDraftSummary,
+  BookingFormResponseEntry,
+  BookingFormResponseList,
   BookingListQuery,
   BookingListResponse,
   BookingSummary,
@@ -94,6 +96,7 @@ export type CalendarPageApi = {
   listServices: (tenantSlug: string) => Promise<ServiceListResponse>;
   getAvailability: (request: AvailabilityRequest) => Promise<AvailabilityResponse>;
   createBookingDraft: (body: CreateBookingDraftRequest) => Promise<BookingDraftSummary>;
+  listBookingFormResponses: (tenantSlug: string, bookingId: string) => Promise<BookingFormResponseList>;
 };
 
 type CalendarPageProps = {
@@ -313,6 +316,12 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
   const [timeBlocks, setTimeBlocks] = useState<CalendarTimeBlock[]>([]);
   const [selectedTimeBlockId, setSelectedTimeBlockId] = useState<string | null>(null);
   const [draftCreationState, setDraftCreationState] = useState<DraftCreationState>({ kind: "idle" });
+  const [formResponsesState, setFormResponsesState] = useState<
+    | { kind: "idle" }
+    | { kind: "loading"; bookingId: string }
+    | { kind: "ready"; bookingId: string; items: BookingFormResponseEntry[] }
+    | { kind: "error"; bookingId: string; message: string }
+  >({ kind: "idle" });
 
   const selectedAppointment = useMemo<SelectedCalendarAppointment | null>(() => {
     if (calendarState.kind !== "ready" || selectedAppointmentId === null) {
@@ -331,6 +340,40 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
 
     return null;
   }, [calendarState, selectedAppointmentId]);
+
+  useEffect(() => {
+    if (!selectedAppointment) {
+      setFormResponsesState({ kind: "idle" });
+      return;
+    }
+
+    const bookingId = selectedAppointment.id;
+    let isCancelled = false;
+    setFormResponsesState({ kind: "loading", bookingId });
+
+    api
+      .listBookingFormResponses(tenantSlug, bookingId)
+      .then((response) => {
+        if (isCancelled) {
+          return;
+        }
+        setFormResponsesState({ kind: "ready", bookingId, items: response.items });
+      })
+      .catch((error: unknown) => {
+        if (isCancelled) {
+          return;
+        }
+        setFormResponsesState({
+          kind: "error",
+          bookingId,
+          message: error instanceof Error ? error.message : "Unable to load submitted forms for this booking.",
+        });
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [api, tenantSlug, selectedAppointment]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -844,6 +887,8 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
             </label>
           </div>
 
+          <FormResponsesPanel selectedAppointment={selectedAppointment} state={formResponsesState} />
+
           <p className="eyebrow">Time block</p>
           <h4>Selected time block</h4>
           <p>
@@ -1348,5 +1393,78 @@ function CalendarBoard({
         </div>
       </div>
     </div>
+  );
+}
+type FormResponsesPanelProps = {
+  selectedAppointment: SelectedCalendarAppointment | null;
+  state:
+    | { kind: "idle" }
+    | { kind: "loading"; bookingId: string }
+    | { kind: "ready"; bookingId: string; items: BookingFormResponseEntry[] }
+    | { kind: "error"; bookingId: string; message: string };
+};
+
+function formatFormAnswer(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "—";
+  }
+  if (typeof value === "boolean") {
+    return value ? "Yes" : "No";
+  }
+  if (Array.isArray(value)) {
+    return value.length === 0 ? "—" : value.map((entry) => String(entry)).join(", ");
+  }
+  if (typeof value === "string") {
+    return value.trim().length === 0 ? "—" : value;
+  }
+  return String(value);
+}
+
+function FormResponsesPanel({ selectedAppointment, state }: FormResponsesPanelProps): JSX.Element {
+  return (
+    <>
+      <p className="eyebrow">Submitted forms</p>
+      <h4>Customer intake</h4>
+      {!selectedAppointment ? (
+        <p>Select an appointment to review any intake forms the customer submitted before the visit.</p>
+      ) : state.kind === "loading" ? (
+        <p>Loading submitted forms…</p>
+      ) : state.kind === "error" ? (
+        <div className="message-banner message-banner--error" role="alert">
+          {state.message}
+        </div>
+      ) : state.kind === "ready" && state.items.length === 0 ? (
+        <p>No customer intake forms were submitted for this booking.</p>
+      ) : state.kind === "ready" ? (
+        <ul className="form-responses-list" aria-label="Submitted forms">
+          {state.items.map((entry) => {
+            const fields = entry.schema?.fields ?? [];
+            const promptable = fields.filter((field) => field.type !== "section" && field.type !== "static_text");
+            return (
+              <li key={entry.id} className="form-responses-list__item">
+                <header className="form-responses-list__header">
+                  <span className="form-responses-list__title">{entry.formName}</span>
+                  <span className="form-responses-list__meta">
+                    v{entry.formVersionNumber} · {formatDateTime(entry.submittedAt)}
+                  </span>
+                </header>
+                {promptable.length === 0 ? (
+                  <p className="form-responses-list__empty">No prompted answers recorded.</p>
+                ) : (
+                  <dl className="form-responses-list__answers">
+                    {promptable.map((field) => (
+                      <div key={field.id} className="form-responses-list__answer">
+                        <dt>{field.label}</dt>
+                        <dd>{formatFormAnswer(entry.answers[field.id])}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </>
   );
 }

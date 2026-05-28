@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type {
   BookingDraftSummary,
+  BookingFormResponseEntry,
   BookingSummary,
   ServiceListResponse,
   SlotAvailability,
@@ -124,6 +125,7 @@ function createApi(
     services?: ServiceListResponse["services"];
     openingsByDate?: Record<string, SlotAvailability[]>;
     draftSummary?: BookingDraftSummary;
+    formResponses?: BookingFormResponseEntry[];
   } = {},
 ): CalendarPageApi {
   const openingsByDate = options.openingsByDate ?? {};
@@ -150,6 +152,7 @@ function createApi(
       slots: openingsByDate[request.date] ?? [],
     })),
     createBookingDraft: vi.fn().mockResolvedValue(options.draftSummary ?? baseDraftSummary),
+    listBookingFormResponses: vi.fn().mockResolvedValue({ items: options.formResponses ?? [] }),
   };
 }
 
@@ -436,6 +439,98 @@ describe("CalendarPage", () => {
       expect(
         await screen.findByRole("link", { name: "Open draft in storefront" }),
       ).toHaveAttribute("href", "http://127.0.0.1:3001/brow-beauty-lab/book/draft-1");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows submitted form responses for the selected appointment", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const formResponse: BookingFormResponseEntry = {
+        id: "form-response-1",
+        formId: "form-1",
+        formVersionId: "form-version-1",
+        formName: "Brow Prep Check-In",
+        formVersionNumber: 1,
+        scope: "customer",
+        customerPromptTiming: "pre_booking",
+        submittedAt: "2026-05-25T18:30:00.000Z",
+        answers: {
+          recentRetinoidUse: true,
+          skinSensitivityNotes: "Mild redness after exfoliation.",
+        },
+        schema: {
+          title: "Brow Prep Check-In",
+          fields: [
+            { id: "recentRetinoidUse", type: "yes_no", label: "Recent retinoid use" },
+            { id: "skinSensitivityNotes", type: "long_text", label: "Skin sensitivity notes" },
+          ],
+        },
+      };
+
+      const api = createApi([baseBooking], { formResponses: [formResponse] });
+
+      render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      await screen.findByText("Wed, May 27 - Tue, Jun 2");
+
+      expect(
+        screen.getByText("Select an appointment to review any intake forms the customer submitted before the visit."),
+      ).toBeInTheDocument();
+
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
+
+      await vi.waitFor(() => {
+        expect(api.listBookingFormResponses).toHaveBeenCalledWith("brow-beauty-lab", "booking-1");
+      });
+
+      expect(await screen.findByText("Brow Prep Check-In")).toBeInTheDocument();
+      expect(screen.getByText("Recent retinoid use")).toBeInTheDocument();
+      expect(screen.getByText("Yes")).toBeInTheDocument();
+      expect(screen.getByText("Skin sensitivity notes")).toBeInTheDocument();
+      expect(screen.getByText("Mild redness after exfoliation.")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows an empty state when the selected appointment has no submitted forms", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const api = createApi([baseBooking]);
+
+      render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      await screen.findByText("Wed, May 27 - Tue, Jun 2");
+
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
+
+      expect(
+        await screen.findByText("No customer intake forms were submitted for this booking."),
+      ).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

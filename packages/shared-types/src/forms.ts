@@ -136,3 +136,19 @@ export type SaveFormDraftRequest = {
   formVersionId: UUID;
   answers: FormAnswers;
 };
+export type BookingFormResponseEntry = {
+  id: UUID;
+  formId: UUID;
+  formVersionId: UUID;
+  formName: string;
+  formVersionNumber: number;
+  scope: FormScope;
+  customerPromptTiming?: CustomerPromptTiming | null;
+  submittedAt: ISODateString;
+  answers: FormAnswers;
+  schema?: FormSchema | null;
+};
+
+export type BookingFormResponseList = {
+  items: BookingFormResponseEntry[];
+};
