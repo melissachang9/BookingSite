@@ -270,7 +270,8 @@ def _cancellation_policy_for_booking(tenant: Tenant, booking: Booking) -> tuple[
     cancellation_window_hours = raw_window_hours if isinstance(raw_window_hours, int) and raw_window_hours >= 0 else 24
     refund_inside_window = bool(tenant.settings_json.get("refundInsideWindow", False))
     cancellation_deadline_at = _ensure_aware(booking.starts_at) - timedelta(hours=cancellation_window_hours)
-    is_inside_cancellation_window = datetime.now(timezone.utc) >= cancellation_deadline_at
+    # At the exact deadline timestamp, treat cancellations as outside the penalty window.
+    is_inside_cancellation_window = datetime.now(timezone.utc) > cancellation_deadline_at
     return cancellation_window_hours, refund_inside_window, cancellation_deadline_at, is_inside_cancellation_window
 
 
