@@ -177,6 +177,7 @@ describe("CalendarPage", () => {
 
       expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
       expect(screen.getByLabelText("Customer")).toHaveValue("Select an appointment");
+      expect(screen.getAllByText("Intake not checked").length).toBeGreaterThan(0);
 
       fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
 
@@ -490,17 +491,20 @@ describe("CalendarPage", () => {
         screen.getByText("Select an appointment to review any intake forms the customer submitted before the visit."),
       ).toBeInTheDocument();
 
-      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake not checked/i }));
 
       await vi.waitFor(() => {
         expect(api.listBookingFormResponses).toHaveBeenCalledWith("brow-beauty-lab", "booking-1");
       });
 
+      expect(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake submitted/i })).toBeInTheDocument();
       expect(await screen.findByText("Brow Prep Check-In")).toBeInTheDocument();
+      expect(screen.getAllByText("Intake submitted").length).toBeGreaterThan(0);
       expect(screen.getByText("Recent retinoid use")).toBeInTheDocument();
       expect(screen.getByText("Yes")).toBeInTheDocument();
       expect(screen.getByText("Skin sensitivity notes")).toBeInTheDocument();
       expect(screen.getByText("Mild redness after exfoliation.")).toBeInTheDocument();
+      expect(screen.queryByText("Selected time block")).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
@@ -526,11 +530,13 @@ describe("CalendarPage", () => {
 
       await screen.findByText("Wed, May 27 - Tue, Jun 2");
 
-      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake not checked/i }));
 
+      expect(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake missing/i })).toBeInTheDocument();
       expect(
-        await screen.findByText("No customer intake forms were submitted for this booking."),
+        await screen.findByText("Intake missing for this booking."),
       ).toBeInTheDocument();
+      expect(screen.getAllByText("Intake missing").length).toBeGreaterThan(0);
     } finally {
       vi.useRealTimers();
     }

@@ -475,6 +475,7 @@ select:disabled {
   display: grid;
   grid-template-columns: 3.5rem minmax(0, 1fr);
   gap: 0.8rem;
+  overflow: hidden;
   align-items: start;
   padding-bottom: 0.85rem;
   border-bottom: 1px solid var(--ui-border);
@@ -757,6 +758,7 @@ select:disabled {
   background: linear-gradient(180deg, rgba(164, 220, 225, 0.96), rgba(146, 208, 214, 0.96));
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
   transition: box-shadow 160ms ease, border-color 160ms ease, transform 160ms ease;
 }
 
@@ -785,6 +787,35 @@ select:disabled {
 
 .schedule-board--day .schedule-event span {
   font-size: 0.68rem;
+}
+
+.schedule-event .schedule-event__intake {
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.12rem 0.38rem;
+  border: 1px solid rgba(13, 47, 57, 0.16);
+  border-radius: 999px;
+  color: rgba(13, 47, 57, 0.8);
+  background: rgba(255, 253, 249, 0.72);
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-event .schedule-event__intake--submitted {
+  border-color: rgba(72, 111, 76, 0.24);
+  color: var(--ui-success);
+  background: rgba(238, 247, 229, 0.82);
+}
+
+.schedule-event .schedule-event__intake--missing,
+.schedule-event .schedule-event__intake--error {
+  border-color: rgba(179, 119, 28, 0.24);
+  color: #8a4f0f;
+  background: rgba(255, 246, 218, 0.82);
 }
 
 .schedule-event--selected {
@@ -892,6 +923,57 @@ select:disabled {
   display: grid;
   align-content: start;
   gap: 0.75rem;
+}
+
+.booking-rail-section {
+  display: grid;
+  gap: 0.72rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--ui-border);
+}
+
+.booking-rail-section--forms {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.rail-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.rail-section-heading h4,
+.rail-section-heading .eyebrow {
+  margin-bottom: 0;
+}
+
+.intake-status-badge {
+  flex: 0 0 auto;
+  max-width: 9rem;
+  padding: 0.28rem 0.48rem;
+  border: 1px solid rgba(111, 125, 99, 0.26);
+  border-radius: 999px;
+  color: var(--ui-sage);
+  background: var(--ui-sage-soft);
+  font-size: 0.68rem;
+  font-weight: 900;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.intake-status-badge--submitted {
+  border-color: rgba(72, 111, 76, 0.24);
+  color: var(--ui-success);
+  background: var(--ui-success-soft);
+}
+
+.intake-status-badge--missing,
+.intake-status-badge--error {
+  border-color: rgba(179, 119, 28, 0.28);
+  color: #8a4f0f;
+  background: rgba(255, 246, 218, 0.88);
 }
 
 .month-rail {
@@ -1056,6 +1138,12 @@ select:disabled {
   border-color: rgba(154, 61, 50, 0.24);
   color: var(--ui-danger);
   background: var(--ui-danger-soft);
+}
+
+.message-banner--warning {
+  border-color: rgba(179, 119, 28, 0.28);
+  color: #8a4f0f;
+  background: rgba(255, 246, 218, 0.88);
 }
 
 .message-banner--muted {

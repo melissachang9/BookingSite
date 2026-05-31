@@ -86,6 +86,14 @@ type DraftCreationState =
   | { kind: "success"; draftId: string }
   | { kind: "error"; message: string };
 
+type FormResponsesState =
+  | { kind: "idle" }
+  | { kind: "loading"; bookingId: string }
+  | { kind: "ready"; bookingId: string; items: BookingFormResponseEntry[] }
+  | { kind: "error"; bookingId: string; message: string };
+
+type IntakeStatus = "unknown" | "loading" | "submitted" | "missing" | "error";
+
 export type CalendarPageDefinition = {
   eyebrow: string;
   description: string;
@@ -222,6 +230,22 @@ function getPaymentResolutionLabel(resolution: BookingSummary["paymentResolution
   }
 }
 
+function getIntakeStatusLabel(status: IntakeStatus): string {
+  switch (status) {
+    case "loading":
+      return "Checking intake";
+    case "submitted":
+      return "Intake submitted";
+    case "missing":
+      return "Intake missing";
+    case "error":
+      return "Intake check failed";
+    case "unknown":
+    default:
+      return "Intake not checked";
+  }
+}
+
 function createCalendarAppointment(booking: BookingSummary): CalendarAppointment {
   return {
     id: booking.id,
@@ -316,12 +340,8 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
   const [timeBlocks, setTimeBlocks] = useState<CalendarTimeBlock[]>([]);
   const [selectedTimeBlockId, setSelectedTimeBlockId] = useState<string | null>(null);
   const [draftCreationState, setDraftCreationState] = useState<DraftCreationState>({ kind: "idle" });
-  const [formResponsesState, setFormResponsesState] = useState<
-    | { kind: "idle" }
-    | { kind: "loading"; bookingId: string }
-    | { kind: "ready"; bookingId: string; items: BookingFormResponseEntry[] }
-    | { kind: "error"; bookingId: string; message: string }
-  >({ kind: "idle" });
+  const [formResponsesState, setFormResponsesState] = useState<FormResponsesState>({ kind: "idle" });
+  const [intakeStatusByBookingId, setIntakeStatusByBookingId] = useState<Record<string, IntakeStatus>>({});
 
   const selectedAppointment = useMemo<SelectedCalendarAppointment | null>(() => {
     if (calendarState.kind !== "ready" || selectedAppointmentId === null) {
@@ -350,6 +370,7 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
     const bookingId = selectedAppointment.id;
     let isCancelled = false;
     setFormResponsesState({ kind: "loading", bookingId });
+    setIntakeStatusByBookingId((current) => ({ ...current, [bookingId]: "loading" }));
 
     api
       .listBookingFormResponses(tenantSlug, bookingId)
@@ -358,11 +379,16 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
           return;
         }
         setFormResponsesState({ kind: "ready", bookingId, items: response.items });
+        setIntakeStatusByBookingId((current) => ({
+          ...current,
+          [bookingId]: response.items.length > 0 ? "submitted" : "missing",
+        }));
       })
       .catch((error: unknown) => {
         if (isCancelled) {
           return;
         }
+        setIntakeStatusByBookingId((current) => ({ ...current, [bookingId]: "error" }));
         setFormResponsesState({
           kind: "error",
           bookingId,
@@ -381,6 +407,7 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
     setTimeBlocks([]);
     setSelectedTimeBlockId(null);
     setDraftCreationState({ kind: "idle" });
+    setIntakeStatusByBookingId({});
 
     const loadCalendar = async () => {
       try {
@@ -837,6 +864,7 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
             days={viewDays}
             viewMode={viewMode}
             selectedAppointmentId={selectedAppointmentId}
+            intakeStatusByBookingId={intakeStatusByBookingId}
             onSelectAppointment={handleSelectAppointment}
             timeBlocks={timeBlocks}
             selectedTimeBlockId={selectedTimeBlockId}
@@ -848,122 +876,132 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
         <aside className="ops-panel booking-rail">
           {sidebarRailHost ? null : monthRail}
 
-          <p className="eyebrow">Appointment details</p>
-          <h4>Selected appointment</h4>
-          <p>
-            {selectedAppointment
-              ? `${selectedAppointment.customerName} is booked for ${selectedAppointment.serviceName} with ${selectedAppointment.providerName} on ${formatDateTime(selectedAppointment.startAt)}.`
-              : "Select an appointment block to review the booked customer, service, provider, and payment state for that visit."}
-          </p>
-          <div className="drawer-form-preview" aria-label="Appointment details preview">
-            <div className="drawer-selection-note" aria-live="polite">
+          <section className="booking-rail-section booking-rail-section--forms" aria-label="Submitted forms">
+            <FormResponsesPanel
+              selectedAppointment={selectedAppointment}
+              state={formResponsesState}
+              intakeStatus={selectedAppointment ? (intakeStatusByBookingId[selectedAppointment.id] ?? "unknown") : "unknown"}
+            />
+          </section>
+
+          <section className="booking-rail-section" aria-label="Appointment details preview">
+            <p className="eyebrow">Appointment details</p>
+            <h4>Selected appointment</h4>
+            <p>
               {selectedAppointment
-                ? `Selected ${selectedAppointment.dayLabel} at ${timeFormatter.format(new Date(selectedAppointment.startAt))} for ${selectedAppointment.customerName}.`
-                : "Select an appointment from the calendar to inspect its details."}
+                ? `${selectedAppointment.customerName} is booked for ${selectedAppointment.serviceName} with ${selectedAppointment.providerName} on ${formatDateTime(selectedAppointment.startAt)}.`
+                : "Select an appointment block to review the booked customer, service, provider, and payment state for that visit."}
+            </p>
+            <div className="drawer-form-preview">
+              <div className="drawer-selection-note" aria-live="polite">
+                {selectedAppointment
+                  ? `Selected ${selectedAppointment.dayLabel} at ${timeFormatter.format(new Date(selectedAppointment.startAt))} for ${selectedAppointment.customerName}.`
+                  : "Select an appointment from the calendar to inspect its details."}
+              </div>
+              <label>
+                Customer
+                <input value={selectedCustomerLabel} readOnly />
+              </label>
+              <label>
+                Service
+                <input value={selectedServiceLabel} readOnly />
+              </label>
+              <label>
+                Scheduled time
+                <input value={selectedAppointmentTimeLabel} readOnly />
+              </label>
+              <label>
+                Provider
+                <input value={selectedProviderLabel} readOnly />
+              </label>
+              <label>
+                Booking status
+                <input value={selectedStatusLabel} readOnly />
+              </label>
+              <label>
+                Payment status
+                <input value={selectedPaymentLabel} readOnly />
+              </label>
             </div>
-            <label>
-              Customer
-              <input value={selectedCustomerLabel} readOnly />
-            </label>
-            <label>
-              Service
-              <input value={selectedServiceLabel} readOnly />
-            </label>
-            <label>
-              Scheduled time
-              <input value={selectedAppointmentTimeLabel} readOnly />
-            </label>
-            <label>
-              Provider
-              <input value={selectedProviderLabel} readOnly />
-            </label>
-            <label>
-              Booking status
-              <input value={selectedStatusLabel} readOnly />
-            </label>
-            <label>
-              Payment status
-              <input value={selectedPaymentLabel} readOnly />
-            </label>
-          </div>
+          </section>
 
-          <FormResponsesPanel selectedAppointment={selectedAppointment} state={formResponsesState} />
-
-          <p className="eyebrow">Time block</p>
-          <h4>Selected time block</h4>
-          <p>
-            {selectedTimeBlock
-              ? `${selectedTimeBlock.providerName} held ${formatDateTime(selectedTimeBlock.startAt)} - ${timeFormatter.format(new Date(selectedTimeBlock.endAt))}. Convert this block into a staff-entered booking draft.`
-              : viewMode === "day"
-                ? "Use the + Time block button in a provider column to mark a time hold, then convert it into a booking draft."
-                : "Switch to Day view to add a time block for a specific provider."}
-          </p>
-          {draftCreationState.kind === "success" ? (
-            <div className="message-banner" role="status">
-              Booking draft created and slot held for 15 minutes.
-            </div>
-          ) : null}
-          {draftCreationState.kind === "error" ? (
-            <div className="message-banner message-banner--error" role="alert">
-              {draftCreationState.message}
-            </div>
-          ) : null}
-          {calendarState.kind === "ready" && calendarState.services.length === 0 ? (
-            <div className="message-banner message-banner--muted">
-              No active services are available for manual booking creation.
-            </div>
-          ) : null}
-          <div className="drawer-form-preview" aria-label="Time block preview">
-            <div className="drawer-selection-note" aria-live="polite">
-              {selectedTimeBlock
-                ? `Selected ${getDateLabel(selectedTimeBlock.date)} at ${timeFormatter.format(new Date(selectedTimeBlock.startAt))} with ${selectedTimeBlock.providerName}.`
-                : "No time block selected."}
-            </div>
-            <label>
-              Time block service
-              <input value={selectedService?.name ?? "Select a service"} readOnly />
-            </label>
-            <label>
-              Time block start
-              <input
-                value={selectedTimeBlock ? formatDateTime(selectedTimeBlock.startAt) : "Add a time block"}
-                readOnly
-              />
-            </label>
-            <label>
-              Time block provider
-              <input value={selectedTimeBlock?.providerName ?? "Add a time block"} readOnly />
-            </label>
-            <div className="action-row">
-              <button
-                type="button"
-                onClick={() => void handleCreateDraftFromTimeBlock()}
-                disabled={
-                  selectedTimeBlock === null ||
-                  selectedService === null ||
-                  draftCreationState.kind === "submitting"
-                }
-              >
-                {draftCreationState.kind === "submitting"
-                  ? "Creating draft..."
-                  : "Create draft from time block"}
-              </button>
-              {selectedTimeBlock ? (
-                <button
-                  type="button"
-                  className="text-action"
-                  onClick={() => handleDiscardTimeBlock(selectedTimeBlock.id)}
-                >
-                  Discard time block
-                </button>
+          {!selectedAppointment ? (
+            <section className="booking-rail-section" aria-label="Time block preview">
+              <p className="eyebrow">Time block</p>
+              <h4>Selected time block</h4>
+              <p>
+                {selectedTimeBlock
+                  ? `${selectedTimeBlock.providerName} held ${formatDateTime(selectedTimeBlock.startAt)} - ${timeFormatter.format(new Date(selectedTimeBlock.endAt))}. Convert this block into a staff-entered booking draft.`
+                  : viewMode === "day"
+                    ? "Use the + Time block button in a provider column to mark a time hold, then convert it into a booking draft."
+                    : "Switch to Day view to add a time block for a specific provider."}
+              </p>
+              {draftCreationState.kind === "success" ? (
+                <div className="message-banner" role="status">
+                  Booking draft created and slot held for 15 minutes.
+                </div>
               ) : null}
-              {draftHref ? (
-                <a href={draftHref} target="_blank" rel="noreferrer" className="text-action">
-                  Open draft in storefront
-                </a>
+              {draftCreationState.kind === "error" ? (
+                <div className="message-banner message-banner--error" role="alert">
+                  {draftCreationState.message}
+                </div>
               ) : null}
-            </div>
-          </div>
+              {calendarState.kind === "ready" && calendarState.services.length === 0 ? (
+                <div className="message-banner message-banner--muted">
+                  No active services are available for manual booking creation.
+                </div>
+              ) : null}
+              <div className="drawer-form-preview">
+                <div className="drawer-selection-note" aria-live="polite">
+                  {selectedTimeBlock
+                    ? `Selected ${getDateLabel(selectedTimeBlock.date)} at ${timeFormatter.format(new Date(selectedTimeBlock.startAt))} with ${selectedTimeBlock.providerName}.`
+                    : "No time block selected."}
+                </div>
+                <label>
+                  Time block service
+                  <input value={selectedService?.name ?? "Select a service"} readOnly />
+                </label>
+                <label>
+                  Time block start
+                  <input
+                    value={selectedTimeBlock ? formatDateTime(selectedTimeBlock.startAt) : "Add a time block"}
+                    readOnly
+                  />
+                </label>
+                <label>
+                  Time block provider
+                  <input value={selectedTimeBlock?.providerName ?? "Add a time block"} readOnly />
+                </label>
+                <div className="action-row">
+                  <button
+                    type="button"
+                    onClick={() => void handleCreateDraftFromTimeBlock()}
+                    disabled={
+                      selectedTimeBlock === null ||
+                      selectedService === null ||
+                      draftCreationState.kind === "submitting"
+                    }
+                  >
+                    {draftCreationState.kind === "submitting" ? "Creating draft..." : "Create draft from time block"}
+                  </button>
+                  {selectedTimeBlock ? (
+                    <button
+                      type="button"
+                      className="text-action"
+                      onClick={() => handleDiscardTimeBlock(selectedTimeBlock.id)}
+                    >
+                      Discard time block
+                    </button>
+                  ) : null}
+                  {draftHref ? (
+                    <a className="secondary-action" href={draftHref}>
+                      Open draft in storefront
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+          ) : null}
         </aside>
       </section>
     </main>
@@ -1070,6 +1108,7 @@ function CalendarBoard({
   days,
   viewMode,
   selectedAppointmentId,
+  intakeStatusByBookingId,
   onSelectAppointment,
   timeBlocks,
   selectedTimeBlockId,
@@ -1080,6 +1119,7 @@ function CalendarBoard({
   days: CalendarDay[];
   viewMode: CalendarViewMode;
   selectedAppointmentId: string | null;
+  intakeStatusByBookingId: Record<string, IntakeStatus>;
   onSelectAppointment: (appointmentId: string) => void;
   timeBlocks: CalendarTimeBlock[];
   selectedTimeBlockId: string | null;
@@ -1345,6 +1385,8 @@ function CalendarBoard({
                   : null}
                 {column.appointments.map((appointment) => {
                   const isSelected = appointment.id === selectedAppointmentId;
+                  const intakeStatus = intakeStatusByBookingId[appointment.id] ?? "unknown";
+                  const intakeLabel = getIntakeStatusLabel(intakeStatus);
 
                   const startMinutes = minutesInTenantDay(appointment.startAt);
                   const rawEndMinutes = minutesInTenantDay(appointment.endAt);
@@ -1369,7 +1411,7 @@ function CalendarBoard({
                       key={appointment.id}
                       type="button"
                       className={`schedule-event${isSelected ? " schedule-event--selected" : ""}`}
-                      aria-label={`View ${appointment.customerName} booked ${formatDateTime(appointment.startAt)} with ${appointment.providerName}`}
+                      aria-label={`View ${appointment.customerName} booked ${formatDateTime(appointment.startAt)} with ${appointment.providerName}. ${intakeLabel}.`}
                       aria-pressed={isSelected}
                       onClick={() => onSelectAppointment(appointment.id)}
                       style={{ top: `${topPx}px`, height: `${heightPx}px` }}
@@ -1384,6 +1426,9 @@ function CalendarBoard({
                           ? `${appointment.customerName} · ${appointment.serviceName}`
                           : `${appointment.serviceName} · ${formatTimeRange(appointment.startAt, appointment.endAt)}`}
                       </span>
+                      <span className={`schedule-event__intake schedule-event__intake--${intakeStatus}`}>
+                        {intakeLabel}
+                      </span>
                     </button>
                   );
                 })}
@@ -1397,11 +1442,8 @@ function CalendarBoard({
 }
 type FormResponsesPanelProps = {
   selectedAppointment: SelectedCalendarAppointment | null;
-  state:
-    | { kind: "idle" }
-    | { kind: "loading"; bookingId: string }
-    | { kind: "ready"; bookingId: string; items: BookingFormResponseEntry[] }
-    | { kind: "error"; bookingId: string; message: string };
+  state: FormResponsesState;
+  intakeStatus: IntakeStatus;
 };
 
 function formatFormAnswer(value: unknown): string {
@@ -1420,21 +1462,30 @@ function formatFormAnswer(value: unknown): string {
   return String(value);
 }
 
-function FormResponsesPanel({ selectedAppointment, state }: FormResponsesPanelProps): JSX.Element {
+function FormResponsesPanel({ selectedAppointment, state, intakeStatus }: FormResponsesPanelProps): JSX.Element {
+  const intakeLabel = getIntakeStatusLabel(intakeStatus);
+
   return (
     <>
-      <p className="eyebrow">Submitted forms</p>
-      <h4>Customer intake</h4>
+      <div className="rail-section-heading">
+        <div>
+          <p className="eyebrow">Submitted forms</p>
+          <h4>Customer intake</h4>
+        </div>
+        <span className={`intake-status-badge intake-status-badge--${intakeStatus}`}>{intakeLabel}</span>
+      </div>
       {!selectedAppointment ? (
         <p>Select an appointment to review any intake forms the customer submitted before the visit.</p>
       ) : state.kind === "loading" ? (
-        <p>Loading submitted forms…</p>
+        <p>Checking intake status...</p>
       ) : state.kind === "error" ? (
         <div className="message-banner message-banner--error" role="alert">
           {state.message}
         </div>
       ) : state.kind === "ready" && state.items.length === 0 ? (
-        <p>No customer intake forms were submitted for this booking.</p>
+        <div className="message-banner message-banner--warning" role="status">
+          Intake missing for this booking.
+        </div>
       ) : state.kind === "ready" ? (
         <ul className="form-responses-list" aria-label="Submitted forms">
           {state.items.map((entry) => {
