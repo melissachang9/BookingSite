@@ -176,16 +176,21 @@ describe("CalendarPage", () => {
       );
 
       expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
-      expect(screen.getByLabelText("Customer")).toHaveValue("Select an appointment");
+      expect(screen.queryByRole("dialog", { name: "Appointment details" })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Customer")).not.toBeInTheDocument();
       expect(screen.getAllByText("Intake not checked").length).toBeGreaterThan(0);
 
       fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
 
+      expect(await screen.findByRole("dialog", { name: "Appointment details" })).toBeInTheDocument();
       expect(screen.getByLabelText("Customer")).toHaveValue("Taylor Guest");
       expect(screen.getByLabelText("Service")).toHaveValue("Signature Facial");
       expect(screen.getByLabelText("Provider")).toHaveValue("Jordan Rivera");
       expect(screen.getByLabelText("Booking status")).toHaveValue("Confirmed");
       expect(screen.getByLabelText("Payment status")).toHaveValue("Pending");
+
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      expect(screen.queryByRole("dialog", { name: "Appointment details" })).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
@@ -415,14 +420,12 @@ describe("CalendarPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Day" }));
 
-      const addBlockButton = await screen.findByRole("button", {
-        name: "Add time block for Jordan Rivera",
-      });
-      fireEvent.click(addBlockButton);
+      fireEvent.click(await screen.findByLabelText("Jordan Rivera schedule track"));
 
       expect(
         await screen.findByRole("button", { name: /Time block .* with Jordan Rivera/i }),
       ).toBeInTheDocument();
+      expect(screen.getByLabelText("Time block action")).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: "Create draft from time block" }));
 
@@ -487,12 +490,11 @@ describe("CalendarPage", () => {
 
       await screen.findByText("Wed, May 27 - Tue, Jun 2");
 
-      expect(
-        screen.getByText("Select an appointment to review any intake forms the customer submitted before the visit."),
-      ).toBeInTheDocument();
+      expect(screen.queryByRole("dialog", { name: "Appointment details" })).not.toBeInTheDocument();
 
       fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake not checked/i }));
 
+      expect(await screen.findByRole("dialog", { name: "Appointment details" })).toBeInTheDocument();
       await vi.waitFor(() => {
         expect(api.listBookingFormResponses).toHaveBeenCalledWith("brow-beauty-lab", "booking-1");
       });
@@ -504,7 +506,7 @@ describe("CalendarPage", () => {
       expect(screen.getByText("Yes")).toBeInTheDocument();
       expect(screen.getByText("Skin sensitivity notes")).toBeInTheDocument();
       expect(screen.getByText("Mild redness after exfoliation.")).toBeInTheDocument();
-      expect(screen.queryByText("Selected time block")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Time block action")).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { startTransition, useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import type {
   AvailabilityRequest,
@@ -57,9 +57,11 @@ type CalendarAppointment = {
 
 type ScheduleColumn = {
   key: string;
+  date: string;
   heading: string;
   subheading?: string;
   appointments: CalendarAppointment[];
+  openings: CalendarOpening[];
   availableSegments: { startMinute: number; endMinute: number }[];
   emptyLabel: string;
   providerId?: string;
@@ -79,6 +81,8 @@ type CalendarTimeBlock = {
   startAt: string;
   endAt: string;
 };
+
+type PendingTimeBlock = Omit<CalendarTimeBlock, "id">;
 
 type DraftCreationState =
   | { kind: "idle" }
@@ -198,6 +202,19 @@ function formatDateTime(value: string): string {
 
 function formatTimeRange(startAt: string, endAt: string): string {
   return `${timeFormatter.format(new Date(startAt))} - ${timeFormatter.format(new Date(endAt))}`;
+}
+
+function toTenantDateTimeIso(date: string, minuteOfDay: number): string {
+  const safeMinute = Math.max(0, Math.min(23 * 60 + 59, minuteOfDay));
+  const hour = Math.floor(safeMinute / 60);
+  const minute = safeMinute % 60;
+  const hourText = String(hour).padStart(2, "0");
+  const minuteText = String(minute).padStart(2, "0");
+  return new Date(`${date}T${hourText}:${minuteText}:00-07:00`).toISOString();
+}
+
+function roundToQuarterHour(minuteOfDay: number): number {
+  return Math.round(minuteOfDay / 15) * 15;
 }
 
 function getBookingStatusLabel(status: BookingSummary["status"]): string {
@@ -683,6 +700,10 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
     setSelectedTimeBlockId(null);
   };
 
+  const handleCloseAppointmentDrawer = () => {
+    setSelectedAppointmentId(null);
+  };
+
   const selectedTimeBlock = useMemo<CalendarTimeBlock | null>(() => {
     if (selectedTimeBlockId === null) {
       return null;
@@ -690,7 +711,7 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
     return timeBlocks.find((block) => block.id === selectedTimeBlockId) ?? null;
   }, [selectedTimeBlockId, timeBlocks]);
 
-  const handleAddTimeBlock = (providerId: string, providerName: string) => {
+  const handleAddTimeBlock = (providerId: string, providerName: string, pending?: PendingTimeBlock) => {
     if (calendarState.kind !== "ready") {
       return;
     }
@@ -706,7 +727,11 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
     let endAt: string;
     let locationId: string | undefined;
 
-    if (providerOpening) {
+    if (pending) {
+      startAt = pending.startAt;
+      endAt = pending.endAt;
+      locationId = pending.locationId;
+    } else if (providerOpening) {
       startAt = providerOpening.startAt;
       const openingStartMs = new Date(providerOpening.startAt).getTime();
       endAt = new Date(openingStartMs + defaultDurationMinutes * 60_000).toISOString();
@@ -865,145 +890,40 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
             viewMode={viewMode}
             selectedAppointmentId={selectedAppointmentId}
             intakeStatusByBookingId={intakeStatusByBookingId}
+            timeBlockDurationMinutes={selectedService?.durationMinutes ?? 60}
             onSelectAppointment={handleSelectAppointment}
             timeBlocks={timeBlocks}
             selectedTimeBlockId={selectedTimeBlockId}
             onSelectTimeBlock={handleSelectTimeBlock}
-            onAddTimeBlock={handleAddTimeBlock}
+            onRequestTimeBlock={handleAddTimeBlock}
+          />
+          <TimeBlockPrompt
+            selectedTimeBlock={selectedTimeBlock}
+            selectedService={selectedService}
+            draftCreationState={draftCreationState}
+            draftHref={draftHref}
+            onCreateDraft={() => void handleCreateDraftFromTimeBlock()}
+            onDiscard={() => {
+              if (selectedTimeBlock) {
+                handleDiscardTimeBlock(selectedTimeBlock.id);
+              }
+            }}
           />
         </article>
-
-        <aside className="ops-panel booking-rail">
-          {sidebarRailHost ? null : monthRail}
-
-          <section className="booking-rail-section booking-rail-section--forms" aria-label="Submitted forms">
-            <FormResponsesPanel
-              selectedAppointment={selectedAppointment}
-              state={formResponsesState}
-              intakeStatus={selectedAppointment ? (intakeStatusByBookingId[selectedAppointment.id] ?? "unknown") : "unknown"}
-            />
-          </section>
-
-          <section className="booking-rail-section" aria-label="Appointment details preview">
-            <p className="eyebrow">Appointment details</p>
-            <h4>Selected appointment</h4>
-            <p>
-              {selectedAppointment
-                ? `${selectedAppointment.customerName} is booked for ${selectedAppointment.serviceName} with ${selectedAppointment.providerName} on ${formatDateTime(selectedAppointment.startAt)}.`
-                : "Select an appointment block to review the booked customer, service, provider, and payment state for that visit."}
-            </p>
-            <div className="drawer-form-preview">
-              <div className="drawer-selection-note" aria-live="polite">
-                {selectedAppointment
-                  ? `Selected ${selectedAppointment.dayLabel} at ${timeFormatter.format(new Date(selectedAppointment.startAt))} for ${selectedAppointment.customerName}.`
-                  : "Select an appointment from the calendar to inspect its details."}
-              </div>
-              <label>
-                Customer
-                <input value={selectedCustomerLabel} readOnly />
-              </label>
-              <label>
-                Service
-                <input value={selectedServiceLabel} readOnly />
-              </label>
-              <label>
-                Scheduled time
-                <input value={selectedAppointmentTimeLabel} readOnly />
-              </label>
-              <label>
-                Provider
-                <input value={selectedProviderLabel} readOnly />
-              </label>
-              <label>
-                Booking status
-                <input value={selectedStatusLabel} readOnly />
-              </label>
-              <label>
-                Payment status
-                <input value={selectedPaymentLabel} readOnly />
-              </label>
-            </div>
-          </section>
-
-          {!selectedAppointment ? (
-            <section className="booking-rail-section" aria-label="Time block preview">
-              <p className="eyebrow">Time block</p>
-              <h4>Selected time block</h4>
-              <p>
-                {selectedTimeBlock
-                  ? `${selectedTimeBlock.providerName} held ${formatDateTime(selectedTimeBlock.startAt)} - ${timeFormatter.format(new Date(selectedTimeBlock.endAt))}. Convert this block into a staff-entered booking draft.`
-                  : viewMode === "day"
-                    ? "Use the + Time block button in a provider column to mark a time hold, then convert it into a booking draft."
-                    : "Switch to Day view to add a time block for a specific provider."}
-              </p>
-              {draftCreationState.kind === "success" ? (
-                <div className="message-banner" role="status">
-                  Booking draft created and slot held for 15 minutes.
-                </div>
-              ) : null}
-              {draftCreationState.kind === "error" ? (
-                <div className="message-banner message-banner--error" role="alert">
-                  {draftCreationState.message}
-                </div>
-              ) : null}
-              {calendarState.kind === "ready" && calendarState.services.length === 0 ? (
-                <div className="message-banner message-banner--muted">
-                  No active services are available for manual booking creation.
-                </div>
-              ) : null}
-              <div className="drawer-form-preview">
-                <div className="drawer-selection-note" aria-live="polite">
-                  {selectedTimeBlock
-                    ? `Selected ${getDateLabel(selectedTimeBlock.date)} at ${timeFormatter.format(new Date(selectedTimeBlock.startAt))} with ${selectedTimeBlock.providerName}.`
-                    : "No time block selected."}
-                </div>
-                <label>
-                  Time block service
-                  <input value={selectedService?.name ?? "Select a service"} readOnly />
-                </label>
-                <label>
-                  Time block start
-                  <input
-                    value={selectedTimeBlock ? formatDateTime(selectedTimeBlock.startAt) : "Add a time block"}
-                    readOnly
-                  />
-                </label>
-                <label>
-                  Time block provider
-                  <input value={selectedTimeBlock?.providerName ?? "Add a time block"} readOnly />
-                </label>
-                <div className="action-row">
-                  <button
-                    type="button"
-                    onClick={() => void handleCreateDraftFromTimeBlock()}
-                    disabled={
-                      selectedTimeBlock === null ||
-                      selectedService === null ||
-                      draftCreationState.kind === "submitting"
-                    }
-                  >
-                    {draftCreationState.kind === "submitting" ? "Creating draft..." : "Create draft from time block"}
-                  </button>
-                  {selectedTimeBlock ? (
-                    <button
-                      type="button"
-                      className="text-action"
-                      onClick={() => handleDiscardTimeBlock(selectedTimeBlock.id)}
-                    >
-                      Discard time block
-                    </button>
-                  ) : null}
-                  {draftHref ? (
-                    <a className="secondary-action" href={draftHref}>
-                      Open draft in storefront
-                    </a>
-                  ) : null}
-                </div>
-              </div>
-            </section>
-          ) : null}
-        </aside>
       </section>
+      {sidebarRailHost ? null : <div className="calendar-fallback-month-rail">{monthRail}</div>}
+      <AppointmentDetailsDrawer
+        selectedAppointment={selectedAppointment}
+        formResponsesState={formResponsesState}
+        intakeStatus={selectedAppointment ? (intakeStatusByBookingId[selectedAppointment.id] ?? "unknown") : "unknown"}
+        selectedCustomerLabel={selectedCustomerLabel}
+        selectedServiceLabel={selectedServiceLabel}
+        selectedAppointmentTimeLabel={selectedAppointmentTimeLabel}
+        selectedProviderLabel={selectedProviderLabel}
+        selectedStatusLabel={selectedStatusLabel}
+        selectedPaymentLabel={selectedPaymentLabel}
+        onClose={handleCloseAppointmentDrawer}
+      />
     </main>
   );
 }
@@ -1109,22 +1029,24 @@ function CalendarBoard({
   viewMode,
   selectedAppointmentId,
   intakeStatusByBookingId,
+  timeBlockDurationMinutes,
   onSelectAppointment,
   timeBlocks,
   selectedTimeBlockId,
   onSelectTimeBlock,
-  onAddTimeBlock,
+  onRequestTimeBlock,
 }: {
   state: CalendarDataState;
   days: CalendarDay[];
   viewMode: CalendarViewMode;
   selectedAppointmentId: string | null;
   intakeStatusByBookingId: Record<string, IntakeStatus>;
+  timeBlockDurationMinutes: number;
   onSelectAppointment: (appointmentId: string) => void;
   timeBlocks: CalendarTimeBlock[];
   selectedTimeBlockId: string | null;
   onSelectTimeBlock: (blockId: string) => void;
-  onAddTimeBlock: (providerId: string, providerName: string) => void;
+  onRequestTimeBlock: (providerId: string, providerName: string, pending?: PendingTimeBlock) => void;
 }) {
   if (state.kind === "loading") {
     return <div className="calendar-state">Loading booked appointments...</div>;
@@ -1231,10 +1153,12 @@ function CalendarBoard({
             })
             .map((column) => ({
               key: column.key,
+              date: focusedDay.date,
               heading: column.heading,
               providerId: column.providerId,
               providerName: column.providerName,
               appointments: column.appointments,
+              openings: column.openings,
               availableSegments: mergeMinuteSegments(column.openings),
               emptyLabel: "No appointments",
             }));
@@ -1244,8 +1168,10 @@ function CalendarBoard({
             : [
                 {
                   key: `${focusedDay.date}-empty`,
+                  date: focusedDay.date,
                   heading: "No providers",
                   appointments: [],
+                  openings: focusedDay.openings,
                   availableSegments: mergeMinuteSegments(focusedDay.openings),
                   emptyLabel: "No appointments",
                 },
@@ -1253,9 +1179,11 @@ function CalendarBoard({
         })()
       : days.map((day) => ({
           key: day.date,
+          date: day.date,
           heading: getWeekHeading(day.date),
           subheading: getDayNumberLabel(day.date),
           appointments: day.appointments,
+          openings: day.openings,
           availableSegments: mergeMinuteSegments(day.openings),
           emptyLabel: "No appointments",
         }));
@@ -1281,16 +1209,6 @@ function CalendarBoard({
           >
             <strong>{column.heading}</strong>
             {column.subheading ? <span>{column.subheading}</span> : null}
-            {viewMode === "day" && column.providerId && column.providerName ? (
-              <button
-                type="button"
-                className="schedule-day-heading__add-block"
-                onClick={() => onAddTimeBlock(column.providerId!, column.providerName!)}
-                aria-label={`Add time block for ${column.providerName}`}
-              >
-                + Time block
-              </button>
-            ) : null}
           </div>
         ))}
       </div>
@@ -1309,6 +1227,33 @@ function CalendarBoard({
             const scheduleStartMinute = startHour * 60;
             const scheduleEndMinute = endHour * 60;
             const unavailableSegments: { topPx: number; heightPx: number }[] = [];
+            const isInteractiveTrack = viewMode === "day" && column.providerId !== undefined && column.providerName !== undefined;
+
+            const handleTrackClick = (event: MouseEvent<HTMLElement>) => {
+              if (!isInteractiveTrack) {
+                return;
+              }
+
+              const rect = event.currentTarget.getBoundingClientRect();
+              const relativeY = rect.height > 0 ? event.clientY - rect.top : 0;
+              const clickedMinutes = rect.height > 0
+                ? scheduleStartMinute + (Math.max(0, Math.min(rect.height, relativeY)) / rect.height) * (scheduleEndMinute - scheduleStartMinute)
+                : column.openings[0]
+                  ? minutesInTenantDay(column.openings[0].startAt)
+                  : scheduleStartMinute;
+              const startMinute = Math.max(scheduleStartMinute, Math.min(scheduleEndMinute - 15, roundToQuarterHour(clickedMinutes)));
+              const durationMinutes = timeBlockDurationMinutes;
+              const endMinute = Math.min(scheduleEndMinute, startMinute + durationMinutes);
+
+              onRequestTimeBlock(column.providerId!, column.providerName!, {
+                date: column.date,
+                providerId: column.providerId!,
+                providerName: column.providerName!,
+                locationId: column.openings[0]?.locationId,
+                startAt: toTenantDateTimeIso(column.date, startMinute),
+                endAt: toTenantDateTimeIso(column.date, endMinute),
+              });
+            };
 
             if (column.availableSegments.length > 0) {
               let cursor = scheduleStartMinute;
@@ -1332,7 +1277,12 @@ function CalendarBoard({
             }
 
             return (
-              <section key={column.key} className="schedule-day-track">
+              <section
+                key={column.key}
+                className={`schedule-day-track${isInteractiveTrack ? " schedule-day-track--interactive" : ""}`}
+                aria-label={isInteractiveTrack ? `${column.providerName} schedule track` : `${column.heading} schedule track`}
+                onClick={handleTrackClick}
+              >
                 {unavailableSegments.map((segment, index) => (
                   <div
                     key={`unavailable-${index}`}
@@ -1374,7 +1324,10 @@ function CalendarBoard({
                             className={`schedule-time-block${isSelected ? " schedule-time-block--selected" : ""}`}
                             aria-label={`Time block ${formatDateTime(block.startAt)} with ${block.providerName}`}
                             aria-pressed={isSelected}
-                            onClick={() => onSelectTimeBlock(block.id)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onSelectTimeBlock(block.id);
+                            }}
                             style={{ top: `${topPx}px`, height: `${heightPx}px` }}
                           >
                             <strong>{formatTimeRange(block.startAt, block.endAt)}</strong>
@@ -1413,7 +1366,10 @@ function CalendarBoard({
                       className={`schedule-event${isSelected ? " schedule-event--selected" : ""}`}
                       aria-label={`View ${appointment.customerName} booked ${formatDateTime(appointment.startAt)} with ${appointment.providerName}. ${intakeLabel}.`}
                       aria-pressed={isSelected}
-                      onClick={() => onSelectAppointment(appointment.id)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSelectAppointment(appointment.id);
+                      }}
                       style={{ top: `${topPx}px`, height: `${heightPx}px` }}
                     >
                       <strong>
@@ -1440,6 +1396,171 @@ function CalendarBoard({
     </div>
   );
 }
+
+type TimeBlockPromptProps = {
+  selectedTimeBlock: CalendarTimeBlock | null;
+  selectedService: ServiceSummary | null;
+  draftCreationState: DraftCreationState;
+  draftHref: string | null;
+  onCreateDraft: () => void;
+  onDiscard: () => void;
+};
+
+function TimeBlockPrompt({
+  selectedTimeBlock,
+  selectedService,
+  draftCreationState,
+  draftHref,
+  onCreateDraft,
+  onDiscard,
+}: TimeBlockPromptProps): JSX.Element | null {
+  if (!selectedTimeBlock && draftCreationState.kind !== "success") {
+    return null;
+  }
+
+  return (
+    <section className="time-block-prompt" aria-label="Time block action">
+      <div>
+        <p className="eyebrow">Time block</p>
+        <h4>{selectedTimeBlock ? "Block selected time" : "Booking draft created"}</h4>
+      </div>
+      {draftCreationState.kind === "success" ? (
+        <div className="message-banner" role="status">
+          Booking draft created and slot held for 15 minutes.
+        </div>
+      ) : null}
+      {draftCreationState.kind === "error" ? (
+        <div className="message-banner message-banner--error" role="alert">
+          {draftCreationState.message}
+        </div>
+      ) : null}
+      {selectedTimeBlock ? (
+        <div className="time-block-prompt__summary">
+          <span>{selectedService?.name ?? "Selected service"}</span>
+          <strong>{formatDateTime(selectedTimeBlock.startAt)}</strong>
+          <span>{selectedTimeBlock.providerName}</span>
+        </div>
+      ) : null}
+      <div className="action-row">
+        {selectedTimeBlock ? (
+          <button
+            type="button"
+            onClick={onCreateDraft}
+            disabled={selectedService === null || draftCreationState.kind === "submitting"}
+          >
+            {draftCreationState.kind === "submitting" ? "Creating draft..." : "Create draft from time block"}
+          </button>
+        ) : null}
+        {selectedTimeBlock ? (
+          <button type="button" className="text-action" onClick={onDiscard}>
+            Discard time block
+          </button>
+        ) : null}
+        {draftHref ? (
+          <a className="secondary-action" href={draftHref}>
+            Open draft in storefront
+          </a>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+type AppointmentDetailsDrawerProps = {
+  selectedAppointment: SelectedCalendarAppointment | null;
+  formResponsesState: FormResponsesState;
+  intakeStatus: IntakeStatus;
+  selectedCustomerLabel: string;
+  selectedServiceLabel: string;
+  selectedAppointmentTimeLabel: string;
+  selectedProviderLabel: string;
+  selectedStatusLabel: string;
+  selectedPaymentLabel: string;
+  onClose: () => void;
+};
+
+function AppointmentDetailsDrawer({
+  selectedAppointment,
+  formResponsesState,
+  intakeStatus,
+  selectedCustomerLabel,
+  selectedServiceLabel,
+  selectedAppointmentTimeLabel,
+  selectedProviderLabel,
+  selectedStatusLabel,
+  selectedPaymentLabel,
+  onClose,
+}: AppointmentDetailsDrawerProps): JSX.Element | null {
+  if (!selectedAppointment) {
+    return null;
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className="appointment-drawer-backdrop"
+        aria-label="Close appointment details"
+        onClick={onClose}
+      />
+      <aside className="appointment-details-drawer" role="dialog" aria-label="Appointment details">
+        <header className="appointment-details-drawer__header">
+          <div>
+            <p className="eyebrow">Appointment details</p>
+            <h4>{selectedAppointment.customerName}</h4>
+          </div>
+          <button type="button" className="text-action" onClick={onClose}>
+            Close
+          </button>
+        </header>
+
+        <section className="booking-rail-section booking-rail-section--forms" aria-label="Submitted forms">
+          <FormResponsesPanel
+            selectedAppointment={selectedAppointment}
+            state={formResponsesState}
+            intakeStatus={intakeStatus}
+          />
+        </section>
+
+        <section className="booking-rail-section" aria-label="Appointment details preview">
+          <p>
+            {`${selectedAppointment.customerName} is booked for ${selectedAppointment.serviceName} with ${selectedAppointment.providerName} on ${formatDateTime(selectedAppointment.startAt)}.`}
+          </p>
+          <div className="drawer-form-preview">
+            <div className="drawer-selection-note" aria-live="polite">
+              {`Selected ${selectedAppointment.dayLabel} at ${timeFormatter.format(new Date(selectedAppointment.startAt))} for ${selectedAppointment.customerName}.`}
+            </div>
+            <label>
+              Customer
+              <input value={selectedCustomerLabel} readOnly />
+            </label>
+            <label>
+              Service
+              <input value={selectedServiceLabel} readOnly />
+            </label>
+            <label>
+              Scheduled time
+              <input value={selectedAppointmentTimeLabel} readOnly />
+            </label>
+            <label>
+              Provider
+              <input value={selectedProviderLabel} readOnly />
+            </label>
+            <label>
+              Booking status
+              <input value={selectedStatusLabel} readOnly />
+            </label>
+            <label>
+              Payment status
+              <input value={selectedPaymentLabel} readOnly />
+            </label>
+          </div>
+        </section>
+      </aside>
+    </>
+  );
+}
+
 type FormResponsesPanelProps = {
   selectedAppointment: SelectedCalendarAppointment | null;
   state: FormResponsesState;
