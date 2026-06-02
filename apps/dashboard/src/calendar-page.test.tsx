@@ -4,6 +4,8 @@ import type {
   BookingDraftSummary,
   BookingFormResponseEntry,
   BookingSummary,
+  CustomerLookupResponse,
+  ProviderListResponse,
   ServiceListResponse,
   SlotAvailability,
 } from "@booking/shared-types";
@@ -123,12 +125,15 @@ function createApi(
   bookings: BookingSummary[],
   options: {
     services?: ServiceListResponse["services"];
+    providersByServiceId?: Record<string, ProviderListResponse["providers"]>;
+    customerLookupItems?: CustomerLookupResponse["items"];
     openingsByDate?: Record<string, SlotAvailability[]>;
     draftSummary?: BookingDraftSummary;
     formResponses?: BookingFormResponseEntry[];
   } = {},
 ): CalendarPageApi {
   const openingsByDate = options.openingsByDate ?? {};
+  const services = options.services ?? serviceResponse.services;
 
   return {
     listBookings: vi.fn().mockResolvedValue({
@@ -140,8 +145,11 @@ function createApi(
       },
     }),
     listServices: vi.fn().mockResolvedValue({
-      services: options.services ?? serviceResponse.services,
+      services,
     }),
+    listServiceProviders: vi.fn(async (_tenantSlug, serviceId) => ({
+      providers: options.providersByServiceId?.[serviceId] ?? [baseBooking.provider],
+    })),
     getAvailability: vi.fn(async (request) => ({
       days: [
         {
@@ -152,6 +160,14 @@ function createApi(
       slots: openingsByDate[request.date] ?? [],
     })),
     createBookingDraft: vi.fn().mockResolvedValue(options.draftSummary ?? baseDraftSummary),
+    lookupCustomers: vi.fn(async () => ({
+      items: options.customerLookupItems ?? [baseBooking.customer],
+      meta: {
+        limit: 5,
+        offset: 0,
+        total: options.customerLookupItems?.length ?? 1,
+      },
+    })),
     listBookingFormResponses: vi.fn().mockResolvedValue({ items: options.formResponses ?? [] }),
   };
 }
@@ -228,7 +244,7 @@ describe("CalendarPage", () => {
       expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
 
       // Wait for availability load to finish painting unavailable bands.
-      await screen.findByRole("combobox");
+      expect(await screen.findByLabelText("Availability for")).toHaveValue("");
 
       expect(screen.queryByRole("button", { name: /Start booking/i })).not.toBeInTheDocument();
       expect(screen.queryByText(/Create draft from selected opening/i)).not.toBeInTheDocument();
@@ -283,6 +299,241 @@ describe("CalendarPage", () => {
 
       expect(await screen.findByLabelText("Jordan Rivera column")).toBeInTheDocument();
       expect(screen.getByLabelText("Taylor Stone column")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("filters week view by service provider", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const api = createApi([
+        baseBooking,
+        createBooking({
+          id: "booking-2",
+          providerId: "provider-2",
+          startsAt: "2026-05-28T18:15:00.000Z",
+          endsAt: "2026-05-28T19:00:00.000Z",
+          provider: {
+            ...baseBooking.provider,
+            id: "provider-2",
+            name: "Taylor Stone",
+            email: "taylor@example.com",
+          },
+          customer: {
+            ...baseBooking.customer,
+            id: "customer-2",
+            name: "Morgan Ellis",
+            email: "morgan@example.com",
+          },
+        }),
+      ]);
+
+      const { container } = render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: /Taylor Guest booked/i })).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: /Morgan Ellis booked/i })).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Taylor Stone" }));
+
+      expect(screen.queryByRole("button", { name: /Taylor Guest booked/i })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Morgan Ellis booked/i })).toBeInTheDocument();
+      expect(container.querySelector(".schedule-day-track__empty")).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "All providers" }));
+
+      expect(screen.getByRole("button", { name: /Taylor Guest booked/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Morgan Ellis booked/i })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows week provider toggle from the provider catalog when the week has no bookings", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const api = createApi([]);
+
+      render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+      expect(await screen.findByRole("group", { name: "Week provider view" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "All providers" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Jordan Rivera" })).toBeInTheDocument();
+
+      await vi.waitFor(() => {
+        expect(api.listServiceProviders).toHaveBeenCalledWith("brow-beauty-lab", "service-1");
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("opens slot actions from week view without selecting a provider first", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const opening = {
+        startAt: "2026-05-27T19:00:00.000Z",
+        endAt: "2026-05-27T20:00:00.000Z",
+        providerId: "provider-1",
+        providerName: "Jordan Rivera",
+        locationId: "location-1",
+      } satisfies SlotAvailability;
+      const api = createApi([baseBooking], {
+        openingsByDate: {
+          "2026-05-27": [opening],
+        },
+      });
+
+      const { container } = render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+
+      await vi.waitFor(() => {
+        expect(container.querySelectorAll(".schedule-unavailable").length).toBeGreaterThan(0);
+      });
+
+      fireEvent.click(screen.getByLabelText("Wed schedule track"));
+
+      expect(await screen.findByRole("dialog", { name: "Calendar slot actions" })).toBeInTheDocument();
+      expect(screen.getByLabelText("Provider")).toHaveValue("Jordan Rivera");
+      expect(screen.getByLabelText("Appointment duration")).toHaveValue("1 hr");
+
+      fireEvent.change(screen.getByLabelText("Client name"), { target: { value: "Tay" } });
+
+      await vi.waitFor(() => {
+        expect(screen.getByLabelText("Client name")).toHaveValue("Taylor Guest");
+        expect(screen.getByLabelText("Email")).toHaveValue("guest@example.com");
+        expect(screen.getByLabelText("Phone number")).toHaveValue("555-0100");
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Book appointment" }));
+
+      await vi.waitFor(() => {
+        expect(api.createBookingDraft).toHaveBeenCalledWith({
+          tenantSlug: "brow-beauty-lab",
+          serviceId: "service-1",
+          providerId: "provider-1",
+          locationId: "location-1",
+          startsAt: "2026-05-27T19:00:00.000Z",
+          customer: {
+            name: "Taylor Guest",
+            email: "guest@example.com",
+            phone: "555-0100",
+          },
+          bookingMethod: "staff_entered",
+        });
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("updates appointment duration from appointment type and books the edited start time", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const waxingService = {
+        ...baseBooking.service,
+        id: "service-2",
+        name: "Waxing",
+        durationMinutes: 30,
+      };
+      const opening = {
+        startAt: "2026-05-27T19:00:00.000Z",
+        endAt: "2026-05-27T20:00:00.000Z",
+        providerId: "provider-1",
+        providerName: "Jordan Rivera",
+        locationId: "location-1",
+      } satisfies SlotAvailability;
+      const api = createApi([], {
+        services: [baseBooking.service, waxingService],
+        openingsByDate: {
+          "2026-05-27": [opening],
+        },
+      });
+
+      const { container } = render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Day" }));
+
+      await vi.waitFor(() => {
+        expect(container.querySelectorAll(".schedule-unavailable").length).toBeGreaterThan(0);
+      });
+
+      fireEvent.click(await screen.findByLabelText("Jordan Rivera schedule track"));
+
+      expect(await screen.findByRole("dialog", { name: "Calendar slot actions" })).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText("Start time"), { target: { value: "13:15" } });
+      fireEvent.change(screen.getByLabelText("Appointment type"), { target: { value: "service-2" } });
+
+      expect(screen.getByLabelText("Appointment duration")).toHaveValue("30 min");
+
+      fireEvent.change(screen.getByLabelText("Client name"), { target: { value: "New Client" } });
+      fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new-client@example.com" } });
+      fireEvent.change(screen.getByLabelText("Phone number"), { target: { value: "555-0144" } });
+      fireEvent.click(screen.getByRole("button", { name: "Book appointment" }));
+
+      await vi.waitFor(() => {
+        expect(api.createBookingDraft).toHaveBeenCalledWith({
+          tenantSlug: "brow-beauty-lab",
+          serviceId: "service-2",
+          providerId: "provider-1",
+          locationId: "location-1",
+          startsAt: "2026-05-27T20:15:00.000Z",
+          customer: {
+            name: "New Client",
+            email: "new-client@example.com",
+            phone: "555-0144",
+          },
+          bookingMethod: "staff_entered",
+        });
+      });
     } finally {
       vi.useRealTimers();
     }
@@ -387,7 +638,90 @@ describe("CalendarPage", () => {
     }
   });
 
-  it("creates a staff booking draft from a time block", async () => {
+  it("opens time block details with notes and affected appointments", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const opening = {
+        startAt: "2026-05-27T19:00:00.000Z",
+        endAt: "2026-05-27T20:00:00.000Z",
+        providerId: "provider-1",
+        providerName: "Jordan Rivera",
+        locationId: "location-1",
+      } satisfies SlotAvailability;
+      const overlappingBooking = createBooking({
+        startsAt: "2026-05-27T19:15:00.000Z",
+        endsAt: "2026-05-27T19:45:00.000Z",
+      });
+      const api = createApi([overlappingBooking], {
+        openingsByDate: {
+          "2026-05-27": [opening],
+        },
+      });
+
+      const { container } = render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Day" }));
+
+      await vi.waitFor(() => {
+        expect(container.querySelectorAll(".schedule-unavailable").length).toBeGreaterThan(0);
+      });
+
+      fireEvent.click(await screen.findByLabelText("Jordan Rivera schedule track"));
+
+      expect(await screen.findByRole("dialog", { name: "Calendar slot actions" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Create time block" }));
+      expect(screen.getByLabelText("Provider")).toHaveValue("Jordan Rivera");
+      expect(screen.getByLabelText("Signature Facial")).toBeChecked();
+      fireEvent.change(screen.getByLabelText("End time"), { target: { value: "12:45" } });
+      fireEvent.change(screen.getByLabelText("Notes"), { target: { value: "Hold for staff meeting." } });
+      fireEvent.click(screen.getByRole("button", { name: "Add time block" }));
+
+      const drawer = await screen.findByRole("dialog", { name: "Time block details" });
+      expect(
+        await screen.findByRole("button", { name: /Time block .* with Jordan Rivera/i }),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText("Duration")).toHaveValue("45 min");
+      expect(drawer).toHaveTextContent("Appointments blocked");
+      expect(drawer).toHaveTextContent("Taylor Guest");
+
+      expect(screen.getByLabelText("Notes")).toHaveValue("Hold for staff meeting.");
+      expect(screen.getByLabelText("Signature Facial")).toBeChecked();
+
+      fireEvent.click(screen.getByRole("button", { name: "Create draft from time block" }));
+
+      await vi.waitFor(() => {
+        expect(api.createBookingDraft).toHaveBeenCalledWith({
+          tenantSlug: "brow-beauty-lab",
+          serviceId: "service-1",
+          providerId: "provider-1",
+          locationId: "location-1",
+          startsAt: "2026-05-27T19:00:00.000Z",
+          bookingMethod: "staff_entered",
+        });
+      });
+
+      expect(
+        await screen.findByRole("link", { name: "Open draft in storefront" }),
+      ).toHaveAttribute("href", "http://127.0.0.1:3001/brow-beauty-lab/book/draft-1");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("deletes a selected time block from the details drawer", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
 
@@ -419,30 +753,19 @@ describe("CalendarPage", () => {
       expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: "Day" }));
-
       fireEvent.click(await screen.findByLabelText("Jordan Rivera schedule track"));
 
-      expect(
-        await screen.findByRole("button", { name: /Time block .* with Jordan Rivera/i }),
-      ).toBeInTheDocument();
-      expect(screen.getByLabelText("Time block action")).toBeInTheDocument();
+      expect(await screen.findByRole("dialog", { name: "Calendar slot actions" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Create time block" }));
+      fireEvent.click(screen.getByRole("button", { name: "Add time block" }));
 
-      fireEvent.click(screen.getByRole("button", { name: "Create draft from time block" }));
+      expect(await screen.findByRole("dialog", { name: "Time block details" })).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: /Time block .* with Jordan Rivera/i })).toBeInTheDocument();
 
-      await vi.waitFor(() => {
-        expect(api.createBookingDraft).toHaveBeenCalledWith({
-          tenantSlug: "brow-beauty-lab",
-          serviceId: "service-1",
-          providerId: "provider-1",
-          locationId: "location-1",
-          startsAt: "2026-05-27T19:00:00.000Z",
-          bookingMethod: "staff_entered",
-        });
-      });
+      fireEvent.click(screen.getByRole("button", { name: "Delete time block" }));
 
-      expect(
-        await screen.findByRole("link", { name: "Open draft in storefront" }),
-      ).toHaveAttribute("href", "http://127.0.0.1:3001/brow-beauty-lab/book/draft-1");
+      expect(screen.queryByRole("dialog", { name: "Time block details" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Time block .* with Jordan Rivera/i })).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
@@ -506,7 +829,7 @@ describe("CalendarPage", () => {
       expect(screen.getByText("Yes")).toBeInTheDocument();
       expect(screen.getByText("Skin sensitivity notes")).toBeInTheDocument();
       expect(screen.getByText("Mild redness after exfoliation.")).toBeInTheDocument();
-      expect(screen.queryByLabelText("Time block action")).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog", { name: "Time block details" })).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

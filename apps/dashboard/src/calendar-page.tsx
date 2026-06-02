@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
+import { startTransition, useEffect, useMemo, useState, type CSSProperties, type MouseEvent, type ReactElement } from "react";
 import { createPortal } from "react-dom";
 import type {
   AvailabilityRequest,
@@ -10,6 +10,10 @@ import type {
   BookingListResponse,
   BookingSummary,
   CreateBookingDraftRequest,
+  CustomerLookupQuery,
+  CustomerLookupResponse,
+  CustomerSummary,
+  ProviderListResponse,
   ServiceListResponse,
   ServiceSummary,
   SlotAvailability,
@@ -19,7 +23,7 @@ import { platformApi } from "./platform-api";
 
 type CalendarDataState =
   | { kind: "loading" }
-  | { kind: "ready"; days: CalendarDay[]; services: ServiceSummary[] }
+  | { kind: "ready"; days: CalendarDay[]; services: ServiceSummary[]; providers: CalendarProviderOption[] }
   | { kind: "empty"; message: string }
   | { kind: "error"; message: string };
 
@@ -41,6 +45,13 @@ type CalendarOpening = {
   locationId?: string;
   serviceId: string;
   serviceName: string;
+  durationMinutes: number;
+};
+
+type CalendarServiceOption = {
+  id: string;
+  name: string;
+  durationMinutes: number;
 };
 
 type CalendarAppointment = {
@@ -50,6 +61,7 @@ type CalendarAppointment = {
   providerId: string;
   providerName: string;
   customerName: string;
+  serviceId: string;
   serviceName: string;
   status: BookingSummary["status"];
   paymentResolution: BookingSummary["paymentResolution"];
@@ -80,9 +92,31 @@ type CalendarTimeBlock = {
   locationId?: string;
   startAt: string;
   endAt: string;
+  notes: string;
+  blockedServiceIds: string[];
 };
 
-type PendingTimeBlock = Omit<CalendarTimeBlock, "id">;
+type PendingTimeBlock = Omit<CalendarTimeBlock, "id" | "notes" | "blockedServiceIds"> & {
+  notes?: string;
+  blockedServiceIds?: string[];
+};
+
+type PendingCalendarSlot = {
+  date: string;
+  providerId: string | null;
+  providerName: string | null;
+  locationId?: string;
+  startAt: string;
+  endAt: string;
+  openings: CalendarOpening[];
+  providerOptions: CalendarProviderOption[];
+};
+
+type SlotCustomerForm = {
+  name: string;
+  email: string;
+  phone: string;
+};
 
 type DraftCreationState =
   | { kind: "idle" }
@@ -98,6 +132,17 @@ type FormResponsesState =
 
 type IntakeStatus = "unknown" | "loading" | "submitted" | "missing" | "error";
 
+type CustomerLookupState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "ready"; items: CustomerSummary[] }
+  | { kind: "error"; message: string };
+
+type CalendarProviderOption = {
+  id: string;
+  name: string;
+};
+
 export type CalendarPageDefinition = {
   eyebrow: string;
   description: string;
@@ -106,6 +151,8 @@ export type CalendarPageDefinition = {
 export type CalendarPageApi = {
   listBookings: (tenantSlug: string, query?: BookingListQuery) => Promise<BookingListResponse>;
   listServices: (tenantSlug: string) => Promise<ServiceListResponse>;
+  listServiceProviders: (tenantSlug: string, serviceId: string) => Promise<ProviderListResponse>;
+  lookupCustomers: (query: CustomerLookupQuery) => Promise<CustomerLookupResponse>;
   getAvailability: (request: AvailabilityRequest) => Promise<AvailabilityResponse>;
   createBookingDraft: (body: CreateBookingDraftRequest) => Promise<BookingDraftSummary>;
   listBookingFormResponses: (tenantSlug: string, bookingId: string) => Promise<BookingFormResponseList>;
@@ -204,6 +251,42 @@ function formatTimeRange(startAt: string, endAt: string): string {
   return `${timeFormatter.format(new Date(startAt))} - ${timeFormatter.format(new Date(endAt))}`;
 }
 
+function getDurationMinutes(startAt: string, endAt: string): number {
+  const startMs = new Date(startAt).getTime();
+  const endMs = new Date(endAt).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+    return 15;
+  }
+  return Math.max(15, Math.round((endMs - startMs) / 60_000));
+}
+
+function formatDuration(minutes: number): string {
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  const hourLabel = `${hours} hr${hours === 1 ? "" : "s"}`;
+
+  return remainder === 0 ? hourLabel : `${hourLabel} ${remainder} min`;
+}
+
+function timeRangesOverlap(leftStartAt: string, leftEndAt: string, rightStartAt: string, rightEndAt: string): boolean {
+  return new Date(leftStartAt).getTime() < new Date(rightEndAt).getTime() && new Date(rightStartAt).getTime() < new Date(leftEndAt).getTime();
+}
+
+function getInitials(value: string): string {
+  const initials = value
+    .split(/\s+/)
+    .map((part) => part.trim()[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("");
+
+  return initials.toUpperCase() || "--";
+}
+
 function toTenantDateTimeIso(date: string, minuteOfDay: number): string {
   const safeMinute = Math.max(0, Math.min(23 * 60 + 59, minuteOfDay));
   const hour = Math.floor(safeMinute / 60);
@@ -211,6 +294,49 @@ function toTenantDateTimeIso(date: string, minuteOfDay: number): string {
   const hourText = String(hour).padStart(2, "0");
   const minuteText = String(minute).padStart(2, "0");
   return new Date(`${date}T${hourText}:${minuteText}:00-07:00`).toISOString();
+}
+
+function formatTimeInputValue(value: string): string {
+  const parts = tenantTimePartsFormatter.formatToParts(new Date(value));
+  const hour = parts.find((part) => part.type === "hour")?.value ?? "00";
+  const minute = parts.find((part) => part.type === "minute")?.value ?? "00";
+  return `${hour}:${minute}`;
+}
+
+function getMinutesFromTimeInput(value: string): number | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) {
+    return null;
+  }
+
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour > 23 || minute > 59) {
+    return null;
+  }
+
+  return hour * 60 + minute;
+}
+
+function addMinutesToTenantIso(startAt: string, durationMinutes: number): string {
+  const date = getTenantDate(startAt);
+  return toTenantDateTimeIso(date, minutesInTenantDay(startAt) + Math.max(15, durationMinutes));
+}
+
+function addMinutesToIsoUnclamped(startAt: string, durationMinutes: number): string {
+  const startMs = new Date(startAt).getTime();
+  if (!Number.isFinite(startMs)) {
+    return startAt;
+  }
+  return new Date(startMs + Math.max(15, durationMinutes) * 60_000).toISOString();
+}
+
+function isoFromTenantDateAndTime(date: string, timeValue: string): string | null {
+  const minuteOfDay = getMinutesFromTimeInput(timeValue);
+  if (minuteOfDay === null || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return null;
+  }
+  return toTenantDateTimeIso(date, minuteOfDay);
 }
 
 function roundToQuarterHour(minuteOfDay: number): number {
@@ -271,6 +397,7 @@ function createCalendarAppointment(booking: BookingSummary): CalendarAppointment
     providerId: booking.providerId,
     providerName: booking.provider.name,
     customerName: booking.customer.name,
+    serviceId: booking.serviceId,
     serviceName: booking.service.name,
     status: booking.status,
     paymentResolution: booking.paymentResolution,
@@ -287,7 +414,83 @@ function createCalendarOpening(slot: SlotAvailability, service: ServiceSummary):
     locationId: slot.locationId,
     serviceId: service.id,
     serviceName: service.name,
+    durationMinutes: service.durationMinutes,
   };
+}
+
+function getProviderOptions(days: CalendarDay[]): CalendarProviderOption[] {
+  const providers = new Map<string, string>();
+
+  for (const day of days) {
+    for (const appointment of day.appointments) {
+      providers.set(appointment.providerId, appointment.providerName);
+    }
+    for (const opening of day.openings) {
+      providers.set(opening.providerId, opening.providerName);
+    }
+  }
+
+  return Array.from(providers, ([id, name]) => ({ id, name })).sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function mergeProviderOptions(...providerGroups: CalendarProviderOption[][]): CalendarProviderOption[] {
+  const providers = new Map<string, string>();
+
+  for (const group of providerGroups) {
+    for (const provider of group) {
+      providers.set(provider.id, provider.name);
+    }
+  }
+
+  return Array.from(providers, ([id, name]) => ({ id, name })).sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function getProviderOptionsFromProviderResponses(responses: PromiseSettledResult<ProviderListResponse>[]): CalendarProviderOption[] {
+  const providers = responses.flatMap((response) =>
+    response.status === "fulfilled"
+      ? response.value.providers.filter((provider) => provider.isActive).map((provider) => ({ id: provider.id, name: provider.name }))
+      : [],
+  );
+
+  return mergeProviderOptions(providers);
+}
+
+function getProviderOptionsFromSchedule(appointments: CalendarAppointment[], openings: CalendarOpening[]): CalendarProviderOption[] {
+  const providers = new Map<string, string>();
+  for (const appointment of appointments) {
+    providers.set(appointment.providerId, appointment.providerName);
+  }
+  for (const opening of openings) {
+    providers.set(opening.providerId, opening.providerName);
+  }
+  return Array.from(providers, ([id, name]) => ({ id, name })).sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function getServiceOptionsFromOpenings(openings: CalendarOpening[], providerId: string | null, fallbackServices: ServiceSummary[]): CalendarServiceOption[] {
+  const services = new Map<string, CalendarServiceOption>();
+
+  for (const opening of openings) {
+    if (providerId !== null && opening.providerId !== providerId) {
+      continue;
+    }
+    services.set(opening.serviceId, {
+      id: opening.serviceId,
+      name: opening.serviceName,
+      durationMinutes: opening.durationMinutes,
+    });
+  }
+
+  if (services.size === 0) {
+    for (const service of fallbackServices) {
+      services.set(service.id, {
+        id: service.id,
+        name: service.name,
+        durationMinutes: service.durationMinutes,
+      });
+    }
+  }
+
+  return Array.from(services.values()).sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function formatHourLabel(hour24: number): string {
@@ -350,6 +553,14 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
   const [calendarState, setCalendarState] = useState<CalendarDataState>({ kind: "loading" });
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+  const [selectedWeekProviderId, setSelectedWeekProviderId] = useState<string | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<PendingCalendarSlot | null>(null);
+  const [selectedSlotServiceId, setSelectedSlotServiceId] = useState<string | null>(null);
+  const [selectedSlotNotes, setSelectedSlotNotes] = useState("");
+  const [selectedSlotBlockedServiceIds, setSelectedSlotBlockedServiceIds] = useState<string[]>([]);
+  const [selectedSlotCustomer, setSelectedSlotCustomer] = useState<SlotCustomerForm>({ name: "", email: "", phone: "" });
+  const [selectedSlotBlockDurationMinutes, setSelectedSlotBlockDurationMinutes] = useState(60);
+  const [customerLookupState, setCustomerLookupState] = useState<CustomerLookupState>({ kind: "idle" });
   const [viewMode, setViewMode] = useState<CalendarViewMode>("week");
   const [focusedDate, setFocusedDate] = useState<string>(getUpcomingDate(1));
   const [monthCursorDate, setMonthCursorDate] = useState<string>(monthAnchor(getUpcomingDate(1)));
@@ -423,8 +634,13 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
     setSelectedAppointmentId(null);
     setTimeBlocks([]);
     setSelectedTimeBlockId(null);
+    setSelectedSlot(null);
+    setSelectedSlotCustomer({ name: "", email: "", phone: "" });
+    setSelectedSlotBlockDurationMinutes(60);
+    setCustomerLookupState({ kind: "idle" });
     setDraftCreationState({ kind: "idle" });
     setIntakeStatusByBookingId({});
+    setSelectedWeekProviderId(null);
 
     const loadCalendar = async () => {
       try {
@@ -451,6 +667,15 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
           servicesResult.status === "fulfilled"
             ? servicesResult.value.services.filter((candidate) => candidate.isActive)
             : [];
+        const providerResults = services.length > 0
+          ? await Promise.allSettled(services.map((service) => api.listServiceProviders(tenantSlug, service.id)))
+          : [];
+
+        if (isCancelled) {
+          return;
+        }
+
+        const providers = getProviderOptionsFromProviderResponses(providerResults);
         const requestedDateSet = new Set(requestedDates);
         const appointmentsByDate = new Map(requestedDates.map((date) => [date, [] as CalendarAppointment[]]));
 
@@ -476,14 +701,12 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
         }));
 
         startTransition(() => {
-          setCalendarState({ kind: "ready", days, services });
+          setCalendarState({ kind: "ready", days, services, providers });
           if (days.length > 0) {
             setFocusedDate(days[0].date);
             setMonthCursorDate(monthAnchor(days[0].date));
           }
-          setSelectedServiceId((current) =>
-            current !== null && services.some((service) => service.id === current) ? current : (services[0]?.id ?? null),
-          );
+          setSelectedServiceId((current) => (current !== null && services.some((service) => service.id === current) ? current : null));
         });
       } catch (error) {
         if (isCancelled) {
@@ -515,13 +738,14 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
   }, [calendarState, selectedServiceId]);
 
   const calendarDateKey = calendarState.kind === "ready" ? calendarState.days.map((day) => day.date).join("|") : "";
+  const serviceDateKey = calendarState.kind === "ready" ? calendarState.services.map((service) => service.id).join("|") : "";
 
   useEffect(() => {
     if (calendarState.kind !== "ready") {
       return;
     }
 
-    if (selectedServiceId === null) {
+    if (calendarState.services.length === 0) {
       setCalendarState((current) => {
         if (current.kind !== "ready") {
           return current;
@@ -530,6 +754,7 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
         return {
           kind: "ready",
           services: current.services,
+          providers: current.providers,
           days: current.days.map((day) => ({
             ...day,
             openings: [],
@@ -544,19 +769,23 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
 
     const loadOpenings = async () => {
       try {
-        const service = calendarState.services.find((candidate) => candidate.id === selectedServiceId);
-        if (service === undefined) {
+        const services = selectedServiceId === null
+          ? calendarState.services
+          : calendarState.services.filter((candidate) => candidate.id === selectedServiceId);
+        if (services.length === 0) {
           return;
         }
 
         const availabilityResponses = await Promise.all(
-          requestedDates.map((date) =>
-            api.getAvailability({
-              tenantSlug,
-              serviceId: service.id,
-              date,
-              windowDays: 1,
-            }),
+          services.flatMap((service) =>
+            requestedDates.map((date) =>
+              api.getAvailability({
+                tenantSlug,
+                serviceId: service.id,
+                date,
+                windowDays: 1,
+              }).then((availability) => ({ availability, requestedDate: date, service })),
+            ),
           ),
         );
 
@@ -566,12 +795,10 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
 
         const openingsByDate = new Map(requestedDates.map((date) => [date, [] as CalendarOpening[]]));
 
-        for (const [index, availability] of availabilityResponses.entries()) {
-          const requestedDate = requestedDates[index];
+        for (const { availability, requestedDate, service } of availabilityResponses) {
           const resolvedDate = openingsByDate.has(availability.days[0]?.date ?? "") ? (availability.days[0]?.date ?? requestedDate) : requestedDate;
-          openingsByDate.set(
-            resolvedDate,
-            availability.slots
+          openingsByDate.get(resolvedDate)?.push(
+            ...availability.slots
               .filter((slot) => getTenantDate(slot.startAt) === resolvedDate)
               .map((slot) => createCalendarOpening(slot, service)),
           );
@@ -586,6 +813,7 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
             return {
               kind: "ready",
               services: current.services,
+              providers: current.providers,
               days: current.days.map((day) => ({
                 ...day,
                 openings: openingsByDate.get(day.date) ?? [],
@@ -607,6 +835,7 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
             return {
               kind: "ready",
               services: current.services,
+              providers: current.providers,
               days: current.days.map((day) => ({
                 ...day,
                 openings: [],
@@ -622,7 +851,7 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
     return () => {
       isCancelled = true;
     };
-  }, [api, calendarDateKey, calendarState.kind, selectedServiceId, tenantSlug]);
+  }, [api, calendarDateKey, calendarState.kind, selectedServiceId, serviceDateKey, tenantSlug]);
 
   useEffect(() => {
     if (calendarState.kind !== "ready") {
@@ -675,6 +904,24 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
     return `${getDateLabel(viewDays[0].date)} - ${getDateLabel(viewDays[viewDays.length - 1].date)}`;
   }, [viewDays]);
 
+  const weekProviderOptions = useMemo(
+    () => (viewMode === "week" && calendarState.kind === "ready" ? mergeProviderOptions(calendarState.providers, getProviderOptions(viewDays)) : []),
+    [calendarState, viewDays, viewMode],
+  );
+  const selectedWeekProvider = useMemo(
+    () => weekProviderOptions.find((provider) => provider.id === selectedWeekProviderId) ?? null,
+    [selectedWeekProviderId, weekProviderOptions],
+  );
+
+  useEffect(() => {
+    if (selectedWeekProviderId === null) {
+      return;
+    }
+    if (!weekProviderOptions.some((provider) => provider.id === selectedWeekProviderId)) {
+      setSelectedWeekProviderId(null);
+    }
+  }, [selectedWeekProviderId, weekProviderOptions]);
+
   const monthGrid = useMemo(() => buildMonthGrid(monthCursorDate), [monthCursorDate]);
   const monthDatesByDay = useMemo(() => {
     if (calendarState.kind !== "ready") {
@@ -698,6 +945,15 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
   const handleSelectAppointment = (appointmentId: string) => {
     setSelectedAppointmentId(appointmentId);
     setSelectedTimeBlockId(null);
+    setSelectedSlot(null);
+  };
+
+  const handleSelectWeekProvider = (providerId: string | null) => {
+    setSelectedWeekProviderId(providerId);
+    setSelectedAppointmentId(null);
+    setSelectedTimeBlockId(null);
+    setSelectedSlot(null);
+    setDraftCreationState({ kind: "idle" });
   };
 
   const handleCloseAppointmentDrawer = () => {
@@ -711,16 +967,282 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
     return timeBlocks.find((block) => block.id === selectedTimeBlockId) ?? null;
   }, [selectedTimeBlockId, timeBlocks]);
 
+  const selectedTimeBlockAppointments = useMemo<CalendarAppointment[]>(() => {
+    if (calendarState.kind !== "ready" || selectedTimeBlock === null) {
+      return [];
+    }
+
+    return calendarState.days
+      .flatMap((day) => day.appointments)
+      .filter(
+        (appointment) =>
+          appointment.providerId === selectedTimeBlock.providerId &&
+          (selectedTimeBlock.blockedServiceIds.length === 0 || selectedTimeBlock.blockedServiceIds.includes(appointment.serviceId)) &&
+          timeRangesOverlap(selectedTimeBlock.startAt, selectedTimeBlock.endAt, appointment.startAt, appointment.endAt),
+      )
+      .sort((left, right) => left.startAt.localeCompare(right.startAt) || left.customerName.localeCompare(right.customerName));
+  }, [calendarState, selectedTimeBlock]);
+
+  const selectedSlotServiceOptions = useMemo<CalendarServiceOption[]>(() => {
+    if (calendarState.kind !== "ready" || selectedSlot === null) {
+      return [];
+    }
+
+    return getServiceOptionsFromOpenings(selectedSlot.openings, selectedSlot.providerId, calendarState.services);
+  }, [calendarState, selectedSlot]);
+
+  const selectedSlotService = useMemo<CalendarServiceOption | null>(
+    () => selectedSlotServiceOptions.find((service) => service.id === selectedSlotServiceId) ?? null,
+    [selectedSlotServiceId, selectedSlotServiceOptions],
+  );
+
+  const selectedTimeBlockServiceOptions = useMemo<CalendarServiceOption[]>(() => {
+    if (calendarState.kind !== "ready" || selectedTimeBlock === null) {
+      return [];
+    }
+
+    const blockDay = calendarState.days.find((day) => day.date === selectedTimeBlock.date);
+    return getServiceOptionsFromOpenings(blockDay?.openings ?? [], selectedTimeBlock.providerId, calendarState.services);
+  }, [calendarState, selectedTimeBlock]);
+
+  useEffect(() => {
+    if (selectedSlot === null) {
+      return;
+    }
+
+    setSelectedSlotServiceId((current) => {
+      if (current !== null && selectedSlotServiceOptions.some((service) => service.id === current)) {
+        return current;
+      }
+      if (selectedServiceId !== null && selectedSlotServiceOptions.some((service) => service.id === selectedServiceId)) {
+        return selectedServiceId;
+      }
+      return selectedSlotServiceOptions[0]?.id ?? null;
+    });
+
+    setSelectedSlotBlockedServiceIds((current) => {
+      const valid = current.filter((serviceId) => selectedSlotServiceOptions.some((service) => service.id === serviceId));
+      return valid.length > 0 ? valid : selectedSlotServiceOptions.map((service) => service.id);
+    });
+  }, [selectedServiceId, selectedSlot, selectedSlotServiceOptions]);
+
+  useEffect(() => {
+    if (selectedSlot === null) {
+      setCustomerLookupState({ kind: "idle" });
+      return;
+    }
+
+    const search = selectedSlotCustomer.name.trim();
+    if (search.length < 2) {
+      setCustomerLookupState({ kind: "idle" });
+      return;
+    }
+
+    let isCancelled = false;
+    setCustomerLookupState({ kind: "loading" });
+    api
+      .lookupCustomers({ search, limit: 5 })
+      .then((response) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setCustomerLookupState({ kind: "ready", items: response.items });
+        const normalizedSearch = search.toLowerCase();
+        const matchingCustomer = response.items.find((customer) => customer.name.toLowerCase().startsWith(normalizedSearch));
+        if (matchingCustomer) {
+          setSelectedSlotCustomer((current) => {
+            if (current.name.trim().toLowerCase() !== normalizedSearch) {
+              return current;
+            }
+
+            const nextCustomer = {
+              name: matchingCustomer.name,
+              email: matchingCustomer.email ?? "",
+              phone: matchingCustomer.phone ?? "",
+            };
+            if (current.name === nextCustomer.name && current.email === nextCustomer.email && current.phone === nextCustomer.phone) {
+              return current;
+            }
+            return nextCustomer;
+          });
+        }
+      })
+      .catch((error: unknown) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setCustomerLookupState({
+          kind: "error",
+          message: error instanceof Error ? error.message : "Unable to search customer records.",
+        });
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [api, selectedSlot, selectedSlotCustomer.name]);
+
+  const handleRequestCalendarSlot = (slot: PendingCalendarSlot) => {
+    const provider = slot.providerId !== null
+      ? { id: slot.providerId, name: slot.providerName ?? "Selected provider" }
+      : (slot.providerOptions[0] ?? null);
+
+    setSelectedSlot({
+      ...slot,
+      providerId: provider?.id ?? null,
+      providerName: provider?.name ?? null,
+      locationId: provider ? (slot.openings.find((opening) => opening.providerId === provider.id)?.locationId ?? slot.locationId) : slot.locationId,
+    });
+    setSelectedAppointmentId(null);
+    setSelectedTimeBlockId(null);
+    setSelectedSlotNotes("");
+    setSelectedSlotCustomer({ name: "", email: "", phone: "" });
+    setSelectedSlotBlockDurationMinutes(getDurationMinutes(slot.startAt, slot.endAt));
+    setCustomerLookupState({ kind: "idle" });
+    setDraftCreationState({ kind: "idle" });
+  };
+
+  const handleSelectSlotService = (serviceId: string) => {
+    const service = selectedSlotServiceOptions.find((option) => option.id === serviceId);
+    setSelectedSlotServiceId(serviceId);
+    if (service) {
+      setSelectedSlot((current) => (current === null ? current : { ...current, endAt: addMinutesToTenantIso(current.startAt, service.durationMinutes) }));
+    }
+    setDraftCreationState({ kind: "idle" });
+  };
+
+  const handleUpdateSlotStartTime = (timeValue: string) => {
+    const minuteOfDay = getMinutesFromTimeInput(timeValue);
+    if (minuteOfDay === null) {
+      return;
+    }
+
+    setSelectedSlot((current) => {
+      if (current === null) {
+        return current;
+      }
+
+      const startAt = toTenantDateTimeIso(current.date, minuteOfDay);
+      const appointmentDurationMinutes = selectedSlotService?.durationMinutes ?? getDurationMinutes(current.startAt, current.endAt);
+      return {
+        ...current,
+        startAt,
+        endAt: addMinutesToTenantIso(startAt, appointmentDurationMinutes),
+      };
+    });
+    setDraftCreationState({ kind: "idle" });
+  };
+
+  const handleUpdateSlotStartDate = (dateValue: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+      return;
+    }
+
+    setSelectedSlot((current) => {
+      if (current === null) {
+        return current;
+      }
+
+      const startAt = toTenantDateTimeIso(dateValue, minutesInTenantDay(current.startAt));
+      const appointmentDurationMinutes = selectedSlotService?.durationMinutes ?? getDurationMinutes(current.startAt, current.endAt);
+      return {
+        ...current,
+        date: dateValue,
+        startAt,
+        endAt: addMinutesToTenantIso(startAt, appointmentDurationMinutes),
+      };
+    });
+    setDraftCreationState({ kind: "idle" });
+  };
+
+  const handleUpdateSlotBlockEnd = (dateValue: string, timeValue: string) => {
+    if (selectedSlot === null) {
+      return;
+    }
+    const endIso = isoFromTenantDateAndTime(dateValue, timeValue);
+    if (endIso === null) {
+      return;
+    }
+    const startMs = new Date(selectedSlot.startAt).getTime();
+    const endMs = new Date(endIso).getTime();
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+      return;
+    }
+    const durationMinutes = Math.max(15, Math.round((endMs - startMs) / 60_000));
+    setSelectedSlotBlockDurationMinutes(durationMinutes);
+    setDraftCreationState({ kind: "idle" });
+  };
+
+  const handleUpdateSlotBlockDuration = (durationValue: number) => {
+    if (!Number.isFinite(durationValue)) {
+      return;
+    }
+
+    const durationMinutes = Math.max(15, Math.min(12 * 60, Math.round(durationValue / 15) * 15));
+    setSelectedSlotBlockDurationMinutes(durationMinutes);
+    setDraftCreationState({ kind: "idle" });
+  };
+
+  const handleUpdateSlotCustomerField = (field: keyof SlotCustomerForm, value: string) => {
+    setSelectedSlotCustomer((current) => ({ ...current, [field]: value }));
+    setDraftCreationState({ kind: "idle" });
+  };
+
+  const handleApplySlotCustomer = (customer: CustomerSummary) => {
+    setSelectedSlotCustomer({
+      name: customer.name,
+      email: customer.email ?? "",
+      phone: customer.phone ?? "",
+    });
+    setCustomerLookupState({ kind: "ready", items: [customer] });
+    setDraftCreationState({ kind: "idle" });
+  };
+
+  const handleSelectSlotProvider = (providerId: string) => {
+    setSelectedSlot((current) => {
+      if (current === null) {
+        return current;
+      }
+
+      const provider = current.providerOptions.find((option) => option.id === providerId);
+      if (!provider) {
+        return current;
+      }
+
+      return {
+        ...current,
+        providerId: provider.id,
+        providerName: provider.name,
+        locationId: current.openings.find((opening) => opening.providerId === provider.id)?.locationId ?? current.locationId,
+      };
+    });
+    setSelectedSlotServiceId(null);
+    setSelectedSlotBlockedServiceIds([]);
+    setDraftCreationState({ kind: "idle" });
+  };
+
+  const handleToggleSlotBlockedService = (serviceId: string) => {
+    setSelectedSlotBlockedServiceIds((current) => {
+      if (current.includes(serviceId)) {
+        return current.filter((candidate) => candidate !== serviceId);
+      }
+      return [...current, serviceId];
+    });
+  };
+
   const handleAddTimeBlock = (providerId: string, providerName: string, pending?: PendingTimeBlock) => {
     if (calendarState.kind !== "ready") {
       return;
     }
-    const focusedDay = calendarState.days.find((day) => day.date === focusedDate);
-    if (!focusedDay) {
+    const targetDate = pending?.date ?? focusedDate;
+    const targetDay = calendarState.days.find((day) => day.date === targetDate);
+    if (!targetDay) {
       return;
     }
 
-    const providerOpening = focusedDay.openings.find((opening) => opening.providerId === providerId);
+    const providerOpening = targetDay.openings.find((opening) => opening.providerId === providerId);
     const defaultDurationMinutes = selectedService?.durationMinutes ?? 60;
 
     let startAt: string;
@@ -737,7 +1259,7 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
       endAt = new Date(openingStartMs + defaultDurationMinutes * 60_000).toISOString();
       locationId = providerOpening.locationId;
     } else {
-      const fallback = new Date(`${focusedDay.date}T10:00:00-07:00`);
+      const fallback = new Date(`${targetDay.date}T10:00:00-07:00`);
       startAt = fallback.toISOString();
       endAt = new Date(fallback.getTime() + defaultDurationMinutes * 60_000).toISOString();
     }
@@ -745,24 +1267,89 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
     const id = `time-block-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const block: CalendarTimeBlock = {
       id,
-      date: focusedDay.date,
+      date: targetDay.date,
       providerId,
       providerName,
       locationId,
       startAt,
       endAt,
+      notes: pending?.notes ?? "",
+      blockedServiceIds: pending?.blockedServiceIds ?? [],
     };
 
     setTimeBlocks((current) => [...current, block]);
     setSelectedTimeBlockId(id);
     setSelectedAppointmentId(null);
+    setSelectedSlot(null);
     setDraftCreationState({ kind: "idle" });
   };
 
   const handleSelectTimeBlock = (blockId: string) => {
     setSelectedTimeBlockId(blockId);
     setSelectedAppointmentId(null);
+    setSelectedSlot(null);
     setDraftCreationState({ kind: "idle" });
+  };
+
+  const handleAddTimeBlockFromSlot = () => {
+    if (selectedSlot === null || selectedSlot.providerId === null || selectedSlot.providerName === null) {
+      return;
+    }
+
+    handleAddTimeBlock(selectedSlot.providerId, selectedSlot.providerName, {
+      date: selectedSlot.date,
+      providerId: selectedSlot.providerId,
+      providerName: selectedSlot.providerName,
+      locationId: selectedSlot.locationId,
+      startAt: selectedSlot.startAt,
+      endAt: addMinutesToIsoUnclamped(selectedSlot.startAt, selectedSlotBlockDurationMinutes),
+      notes: selectedSlotNotes,
+      blockedServiceIds: selectedSlotBlockedServiceIds,
+    });
+  };
+
+  const handleCreateDraftFromSlot = async () => {
+    const customer = {
+      name: selectedSlotCustomer.name.trim(),
+      email: selectedSlotCustomer.email.trim(),
+      phone: selectedSlotCustomer.phone.trim(),
+    };
+    if (selectedSlot === null || selectedSlot.providerId === null || selectedSlotServiceId === null || !customer.name || !customer.email || !customer.phone) {
+      return;
+    }
+
+    setDraftCreationState({ kind: "submitting" });
+
+    try {
+      const draft = await api.createBookingDraft({
+        tenantSlug,
+        serviceId: selectedSlotServiceId,
+        providerId: selectedSlot.providerId,
+        locationId: selectedSlot.locationId,
+        startsAt: selectedSlot.startAt,
+        customer,
+        bookingMethod: "staff_entered",
+      });
+
+      setDraftCreationState({ kind: "success", draftId: draft.id });
+    } catch (error) {
+      setDraftCreationState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to create a booking draft from this calendar slot.",
+      });
+    }
+  };
+
+  const handleUpdateTimeBlockBlockedServices = (blockId: string, serviceIds: string[]) => {
+    setTimeBlocks((current) => current.map((block) => (block.id === blockId ? { ...block, blockedServiceIds: serviceIds } : block)));
+  };
+
+  const handleCloseTimeBlockDrawer = () => {
+    setSelectedTimeBlockId(null);
+  };
+
+  const handleUpdateTimeBlockNotes = (blockId: string, notes: string) => {
+    setTimeBlocks((current) => current.map((block) => (block.id === blockId ? { ...block, notes } : block)));
   };
 
   const handleDiscardTimeBlock = (blockId: string) => {
@@ -772,7 +1359,12 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
   };
 
   const handleCreateDraftFromTimeBlock = async () => {
-    if (selectedTimeBlock === null || selectedService === null) {
+    if (selectedTimeBlock === null || calendarState.kind !== "ready") {
+      return;
+    }
+
+    const serviceId = selectedService?.id ?? selectedTimeBlock.blockedServiceIds[0] ?? calendarState.services[0]?.id;
+    if (!serviceId) {
       return;
     }
 
@@ -781,7 +1373,7 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
     try {
       const draft = await api.createBookingDraft({
         tenantSlug,
-        serviceId: selectedService.id,
+        serviceId,
         providerId: selectedTimeBlock.providerId,
         locationId: selectedTimeBlock.locationId,
         startsAt: selectedTimeBlock.startAt,
@@ -789,8 +1381,6 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
       });
 
       setDraftCreationState({ kind: "success", draftId: draft.id });
-      setTimeBlocks((current) => current.filter((block) => block.id !== selectedTimeBlock.id));
-      setSelectedTimeBlockId(null);
     } catch (error) {
       setDraftCreationState({
         kind: "error",
@@ -840,6 +1430,7 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
                 <label className="calendar-service-filter">
                   <span>Availability for</span>
                   <select value={selectedServiceId ?? ""} onChange={(event) => setSelectedServiceId(event.target.value || null)}>
+                    <option value="">Any service</option>
                     {calendarState.services.map((service) => (
                       <option key={service.id} value={service.id}>
                         {service.name}
@@ -866,6 +1457,29 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
                   Week
                 </button>
               </div>
+              {viewMode === "week" && weekProviderOptions.length > 0 ? (
+                <div className="provider-view-toggle" role="group" aria-label="Week provider view">
+                  <button
+                    type="button"
+                    className={`provider-view-toggle__button${selectedWeekProviderId === null ? " provider-view-toggle__button--active" : ""}`}
+                    onClick={() => handleSelectWeekProvider(null)}
+                    aria-pressed={selectedWeekProviderId === null}
+                  >
+                    All providers
+                  </button>
+                  {weekProviderOptions.map((provider) => (
+                    <button
+                      key={provider.id}
+                      type="button"
+                      className={`provider-view-toggle__button${selectedWeekProviderId === provider.id ? " provider-view-toggle__button--active" : ""}`}
+                      onClick={() => handleSelectWeekProvider(provider.id)}
+                      aria-pressed={selectedWeekProviderId === provider.id}
+                    >
+                      {provider.name}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <button
                 type="button"
                 className="filter-chip"
@@ -890,28 +1504,44 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
             viewMode={viewMode}
             selectedAppointmentId={selectedAppointmentId}
             intakeStatusByBookingId={intakeStatusByBookingId}
+            selectedWeekProviderId={selectedWeekProviderId}
+            selectedWeekProviderName={selectedWeekProvider?.name ?? null}
+            fallbackProviderOptions={weekProviderOptions}
             timeBlockDurationMinutes={selectedService?.durationMinutes ?? 60}
             onSelectAppointment={handleSelectAppointment}
             timeBlocks={timeBlocks}
             selectedTimeBlockId={selectedTimeBlockId}
             onSelectTimeBlock={handleSelectTimeBlock}
-            onRequestTimeBlock={handleAddTimeBlock}
-          />
-          <TimeBlockPrompt
-            selectedTimeBlock={selectedTimeBlock}
-            selectedService={selectedService}
-            draftCreationState={draftCreationState}
-            draftHref={draftHref}
-            onCreateDraft={() => void handleCreateDraftFromTimeBlock()}
-            onDiscard={() => {
-              if (selectedTimeBlock) {
-                handleDiscardTimeBlock(selectedTimeBlock.id);
-              }
-            }}
+            onRequestCalendarSlot={handleRequestCalendarSlot}
           />
         </article>
       </section>
       {sidebarRailHost ? null : <div className="calendar-fallback-month-rail">{monthRail}</div>}
+      <SlotActionDrawer
+        selectedSlot={selectedSlot}
+        serviceOptions={selectedSlotServiceOptions}
+        selectedServiceId={selectedSlotServiceId}
+        blockedServiceIds={selectedSlotBlockedServiceIds}
+        notes={selectedSlotNotes}
+        draftCreationState={draftCreationState}
+        draftHref={draftHref}
+        onClose={() => setSelectedSlot(null)}
+        onSelectProvider={handleSelectSlotProvider}
+        onSelectService={handleSelectSlotService}
+        onStartDateChange={handleUpdateSlotStartDate}
+        onStartTimeChange={handleUpdateSlotStartTime}
+        onBlockDurationChange={handleUpdateSlotBlockDuration}
+        onBlockEndChange={handleUpdateSlotBlockEnd}
+        onToggleBlockedService={handleToggleSlotBlockedService}
+        customer={selectedSlotCustomer}
+        customerLookupState={customerLookupState}
+        blockDurationMinutes={selectedSlotBlockDurationMinutes}
+        onCustomerFieldChange={handleUpdateSlotCustomerField}
+        onApplyCustomer={handleApplySlotCustomer}
+        onNotesChange={setSelectedSlotNotes}
+        onBookAppointment={() => void handleCreateDraftFromSlot()}
+        onAddTimeBlock={handleAddTimeBlockFromSlot}
+      />
       <AppointmentDetailsDrawer
         selectedAppointment={selectedAppointment}
         formResponsesState={formResponsesState}
@@ -923,6 +1553,31 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
         selectedStatusLabel={selectedStatusLabel}
         selectedPaymentLabel={selectedPaymentLabel}
         onClose={handleCloseAppointmentDrawer}
+      />
+      <TimeBlockDetailsDrawer
+        selectedTimeBlock={selectedTimeBlock}
+        selectedService={selectedService}
+        serviceOptions={selectedTimeBlockServiceOptions}
+        blockedAppointments={selectedTimeBlockAppointments}
+        draftCreationState={draftCreationState}
+        draftHref={draftHref}
+        onClose={handleCloseTimeBlockDrawer}
+        onCreateDraft={() => void handleCreateDraftFromTimeBlock()}
+        onDelete={() => {
+          if (selectedTimeBlock) {
+            handleDiscardTimeBlock(selectedTimeBlock.id);
+          }
+        }}
+        onNotesChange={(notes) => {
+          if (selectedTimeBlock) {
+            handleUpdateTimeBlockNotes(selectedTimeBlock.id, notes);
+          }
+        }}
+        onBlockedServicesChange={(serviceIds) => {
+          if (selectedTimeBlock) {
+            handleUpdateTimeBlockBlockedServices(selectedTimeBlock.id, serviceIds);
+          }
+        }}
       />
     </main>
   );
@@ -1029,24 +1684,30 @@ function CalendarBoard({
   viewMode,
   selectedAppointmentId,
   intakeStatusByBookingId,
+  selectedWeekProviderId,
+  selectedWeekProviderName,
+  fallbackProviderOptions,
   timeBlockDurationMinutes,
   onSelectAppointment,
   timeBlocks,
   selectedTimeBlockId,
   onSelectTimeBlock,
-  onRequestTimeBlock,
+  onRequestCalendarSlot,
 }: {
   state: CalendarDataState;
   days: CalendarDay[];
   viewMode: CalendarViewMode;
   selectedAppointmentId: string | null;
   intakeStatusByBookingId: Record<string, IntakeStatus>;
+  selectedWeekProviderId: string | null;
+  selectedWeekProviderName: string | null;
+  fallbackProviderOptions: CalendarProviderOption[];
   timeBlockDurationMinutes: number;
   onSelectAppointment: (appointmentId: string) => void;
   timeBlocks: CalendarTimeBlock[];
   selectedTimeBlockId: string | null;
   onSelectTimeBlock: (blockId: string) => void;
-  onRequestTimeBlock: (providerId: string, providerName: string, pending?: PendingTimeBlock) => void;
+  onRequestCalendarSlot: (slot: PendingCalendarSlot) => void;
 }) {
   if (state.kind === "loading") {
     return <div className="calendar-state">Loading booked appointments...</div>;
@@ -1160,7 +1821,7 @@ function CalendarBoard({
               appointments: column.appointments,
               openings: column.openings,
               availableSegments: mergeMinuteSegments(column.openings),
-              emptyLabel: "No appointments",
+              emptyLabel: "",
             }));
 
           return columns.length > 0
@@ -1173,20 +1834,32 @@ function CalendarBoard({
                   appointments: [],
                   openings: focusedDay.openings,
                   availableSegments: mergeMinuteSegments(focusedDay.openings),
-                  emptyLabel: "No appointments",
+                  emptyLabel: "",
                 },
               ];
         })()
-      : days.map((day) => ({
-          key: day.date,
-          date: day.date,
-          heading: getWeekHeading(day.date),
-          subheading: getDayNumberLabel(day.date),
-          appointments: day.appointments,
-          openings: day.openings,
-          availableSegments: mergeMinuteSegments(day.openings),
-          emptyLabel: "No appointments",
-        }));
+      : days.map((day) => {
+          const appointments = selectedWeekProviderId === null
+            ? day.appointments
+            : day.appointments.filter((appointment) => appointment.providerId === selectedWeekProviderId);
+          const openings = selectedWeekProviderId === null
+            ? day.openings
+            : day.openings.filter((opening) => opening.providerId === selectedWeekProviderId);
+          const providerName = selectedWeekProviderId === null ? undefined : (selectedWeekProviderName ?? undefined);
+
+          return {
+            key: day.date,
+            date: day.date,
+            heading: getWeekHeading(day.date),
+            subheading: getDayNumberLabel(day.date),
+            providerId: selectedWeekProviderId ?? undefined,
+            providerName,
+            appointments,
+            openings,
+            availableSegments: mergeMinuteSegments(openings),
+            emptyLabel: "",
+          };
+        });
 
   const dayCount = Math.max(1, scheduleColumns.length);
 
@@ -1227,7 +1900,16 @@ function CalendarBoard({
             const scheduleStartMinute = startHour * 60;
             const scheduleEndMinute = endHour * 60;
             const unavailableSegments: { topPx: number; heightPx: number }[] = [];
-            const isInteractiveTrack = viewMode === "day" && column.providerId !== undefined && column.providerName !== undefined;
+            const columnProviderOptions = getProviderOptionsFromSchedule(column.appointments, column.openings);
+            const slotProviderOptions = columnProviderOptions.length > 0 ? columnProviderOptions : fallbackProviderOptions;
+            const isInteractiveTrack = (column.providerId !== undefined && column.providerName !== undefined) || slotProviderOptions.length > 0;
+            const trackLabel = isInteractiveTrack
+              ? viewMode === "day"
+                ? `${column.providerName} schedule track`
+                : column.providerName
+                  ? `${column.providerName} ${column.heading} schedule track`
+                  : `${column.heading} schedule track`
+              : `${column.heading} schedule track`;
 
             const handleTrackClick = (event: MouseEvent<HTMLElement>) => {
               if (!isInteractiveTrack) {
@@ -1244,14 +1926,19 @@ function CalendarBoard({
               const startMinute = Math.max(scheduleStartMinute, Math.min(scheduleEndMinute - 15, roundToQuarterHour(clickedMinutes)));
               const durationMinutes = timeBlockDurationMinutes;
               const endMinute = Math.min(scheduleEndMinute, startMinute + durationMinutes);
+              const providerId = column.providerId ?? slotProviderOptions[0]?.id ?? null;
+              const providerName = column.providerName ?? slotProviderOptions[0]?.name ?? null;
+              const providerOpening = providerId ? column.openings.find((opening) => opening.providerId === providerId) : column.openings[0];
 
-              onRequestTimeBlock(column.providerId!, column.providerName!, {
+              onRequestCalendarSlot({
                 date: column.date,
-                providerId: column.providerId!,
-                providerName: column.providerName!,
-                locationId: column.openings[0]?.locationId,
+                providerId,
+                providerName,
+                locationId: providerOpening?.locationId,
                 startAt: toTenantDateTimeIso(column.date, startMinute),
                 endAt: toTenantDateTimeIso(column.date, endMinute),
+                openings: column.openings,
+                providerOptions: slotProviderOptions,
               });
             };
 
@@ -1280,7 +1967,7 @@ function CalendarBoard({
               <section
                 key={column.key}
                 className={`schedule-day-track${isInteractiveTrack ? " schedule-day-track--interactive" : ""}`}
-                aria-label={isInteractiveTrack ? `${column.providerName} schedule track` : `${column.heading} schedule track`}
+                aria-label={trackLabel}
                 onClick={handleTrackClick}
               >
                 {unavailableSegments.map((segment, index) => (
@@ -1291,12 +1978,12 @@ function CalendarBoard({
                     style={{ top: `${segment.topPx}px`, height: `${segment.heightPx}px` }}
                   />
                 ))}
-                {column.appointments.length === 0 ? (
+                {column.appointments.length === 0 && column.emptyLabel ? (
                   <span className="schedule-day-track__empty">{column.emptyLabel}</span>
                 ) : null}
-                {viewMode === "day" && column.providerId
+                {(column.providerId !== undefined || viewMode === "week")
                   ? timeBlocks
-                      .filter((block) => block.providerId === column.providerId && days.some((day) => day.date === block.date))
+                      .filter((block) => block.date === column.date && (column.providerId === undefined || block.providerId === column.providerId))
                       .map((block) => {
                         const isSelected = block.id === selectedTimeBlockId;
                         const startMinutes = minutesInTenantDay(block.startAt);
@@ -1397,72 +2084,470 @@ function CalendarBoard({
   );
 }
 
-type TimeBlockPromptProps = {
-  selectedTimeBlock: CalendarTimeBlock | null;
-  selectedService: ServiceSummary | null;
+type SlotActionDrawerProps = {
+  selectedSlot: PendingCalendarSlot | null;
+  serviceOptions: CalendarServiceOption[];
+  selectedServiceId: string | null;
+  blockedServiceIds: string[];
+  customer: SlotCustomerForm;
+  customerLookupState: CustomerLookupState;
+  blockDurationMinutes: number;
+  notes: string;
   draftCreationState: DraftCreationState;
   draftHref: string | null;
-  onCreateDraft: () => void;
-  onDiscard: () => void;
+  onClose: () => void;
+  onSelectProvider: (providerId: string) => void;
+  onSelectService: (serviceId: string) => void;
+  onStartDateChange: (dateValue: string) => void;
+  onStartTimeChange: (timeValue: string) => void;
+  onBlockDurationChange: (durationMinutes: number) => void;
+  onBlockEndChange: (dateValue: string, timeValue: string) => void;
+  onToggleBlockedService: (serviceId: string) => void;
+  onCustomerFieldChange: (field: keyof SlotCustomerForm, value: string) => void;
+  onApplyCustomer: (customer: CustomerSummary) => void;
+  onNotesChange: (notes: string) => void;
+  onBookAppointment: () => void;
+  onAddTimeBlock: () => void;
 };
 
-function TimeBlockPrompt({
-  selectedTimeBlock,
-  selectedService,
+function SlotActionDrawer({
+  selectedSlot,
+  serviceOptions,
+  selectedServiceId,
+  blockedServiceIds,
+  customer,
+  customerLookupState,
+  blockDurationMinutes,
+  notes,
   draftCreationState,
   draftHref,
-  onCreateDraft,
-  onDiscard,
-}: TimeBlockPromptProps): JSX.Element | null {
-  if (!selectedTimeBlock && draftCreationState.kind !== "success") {
+  onClose,
+  onSelectProvider,
+  onSelectService,
+  onStartDateChange,
+  onStartTimeChange,
+  onBlockDurationChange,
+  onBlockEndChange,
+  onToggleBlockedService,
+  onCustomerFieldChange,
+  onApplyCustomer,
+  onNotesChange,
+  onBookAppointment,
+  onAddTimeBlock,
+}: SlotActionDrawerProps): ReactElement | null {
+  const slotKey = selectedSlot
+    ? `${selectedSlot.date}|${selectedSlot.providerId ?? ""}|${selectedSlot.startAt}`
+    : null;
+  const [mode, setMode] = useState<"appointment" | "time-block">("appointment");
+  useEffect(() => {
+    setMode("appointment");
+  }, [slotKey]);
+
+  if (selectedSlot === null) {
     return null;
   }
 
+  const isAppointmentMode = mode === "appointment";
+  const hasProvider = selectedSlot.providerId !== null;
+  const selectedService = serviceOptions.find((service) => service.id === selectedServiceId) ?? null;
+  const appointmentEndAt = selectedService ? addMinutesToTenantIso(selectedSlot.startAt, selectedService.durationMinutes) : selectedSlot.endAt;
+  const blockEndAt = addMinutesToTenantIso(selectedSlot.startAt, blockDurationMinutes);
+  const hasRequiredCustomer = Boolean(customer.name.trim() && customer.email.trim() && customer.phone.trim());
+  const canCreateDraft = hasProvider && selectedServiceId !== null && hasRequiredCustomer && draftCreationState.kind !== "submitting";
+  const canAddTimeBlock = hasProvider && blockedServiceIds.length > 0;
+  const headingTimeRange = isAppointmentMode ? formatTimeRange(selectedSlot.startAt, appointmentEndAt) : formatTimeRange(selectedSlot.startAt, blockEndAt);
+
   return (
-    <section className="time-block-prompt" aria-label="Time block action">
-      <div>
-        <p className="eyebrow">Time block</p>
-        <h4>{selectedTimeBlock ? "Block selected time" : "Booking draft created"}</h4>
-      </div>
-      {draftCreationState.kind === "success" ? (
-        <div className="message-banner" role="status">
-          Booking draft created and slot held for 15 minutes.
+    <>
+      <button type="button" className="appointment-drawer-backdrop" aria-label="Close calendar slot actions" onClick={onClose} />
+      <aside className="appointment-details-drawer slot-action-drawer" role="dialog" aria-label="Calendar slot actions">
+        <header className="appointment-details-drawer__header">
+          <span className="appointment-status-chip">
+            <span aria-hidden="true" />
+            {isAppointmentMode ? "New appointment" : "New time block"}
+          </span>
+          <div className="slot-action-drawer__header-actions">
+            <button
+              type="button"
+              className="appointment-drawer-outline-action"
+              aria-pressed={!isAppointmentMode}
+              onClick={() => setMode(isAppointmentMode ? "time-block" : "appointment")}
+            >
+              {isAppointmentMode ? "Create time block" : "Create appointment"}
+            </button>
+            <button type="button" className="appointment-drawer-outline-action" onClick={onClose}>
+              Close
+            </button>
+          </div>
+        </header>
+
+        <div className="appointment-drawer-when" aria-label="Calendar slot timing">
+          <div>
+            On <strong>{getDateLabel(selectedSlot.date)}</strong>
+          </div>
+          <div>
+            At <strong>{headingTimeRange}</strong>
+          </div>
         </div>
-      ) : null}
-      {draftCreationState.kind === "error" ? (
-        <div className="message-banner message-banner--error" role="alert">
-          {draftCreationState.message}
+
+        <section className="booking-rail-section" aria-label="Slot setup">
+          <p className="rail-section-kicker">Setup</p>
+          <div className="slot-action-grid">
+            <label>
+              <span>Provider</span>
+              {selectedSlot.providerOptions.length > 1 ? (
+                <select value={selectedSlot.providerId ?? ""} onChange={(event) => onSelectProvider(event.target.value)}>
+                  {selectedSlot.providerOptions.map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {provider.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input value={selectedSlot.providerName ?? "No provider available"} readOnly />
+              )}
+            </label>
+            {isAppointmentMode ? (
+              <label>
+                <span>Start time</span>
+                <input type="time" value={formatTimeInputValue(selectedSlot.startAt)} onChange={(event) => onStartTimeChange(event.target.value)} />
+              </label>
+            ) : null}
+            {isAppointmentMode ? (
+              <>
+                <label>
+                  <span>Appointment type</span>
+                  <select value={selectedServiceId ?? ""} onChange={(event) => onSelectService(event.target.value)} disabled={serviceOptions.length === 0}>
+                    {serviceOptions.length === 0 ? <option value="">No appointment types available</option> : null}
+                    {serviceOptions.map((service) => (
+                      <option key={service.id} value={service.id}>
+                        {service.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Appointment duration</span>
+                  <input value={selectedService ? formatDuration(selectedService.durationMinutes) : "Choose appointment type"} readOnly />
+                </label>
+                <label>
+                  <span>Client name</span>
+                  <input value={customer.name} onChange={(event) => onCustomerFieldChange("name", event.target.value)} autoComplete="off" />
+                </label>
+                <label>
+                  <span>Phone number</span>
+                  <input value={customer.phone} onChange={(event) => onCustomerFieldChange("phone", event.target.value)} inputMode="tel" autoComplete="tel" />
+                </label>
+                <label>
+                  <span>Email</span>
+                  <input value={customer.email} onChange={(event) => onCustomerFieldChange("email", event.target.value)} inputMode="email" autoComplete="email" />
+                </label>
+              </>
+            ) : null}
+          </div>
+          {isAppointmentMode && customerLookupState.kind === "loading" ? <div className="slot-customer-lookup-note" role="status">Searching clients...</div> : null}
+          {isAppointmentMode && customerLookupState.kind === "ready" && customerLookupState.items.length > 0 ? (
+            <div className="slot-customer-results" aria-label="Matching clients">
+              {customerLookupState.items.map((lookupCustomer) => (
+                <button key={lookupCustomer.id} type="button" onClick={() => onApplyCustomer(lookupCustomer)}>
+                  <strong>{lookupCustomer.name}</strong>
+                  <span>{lookupCustomer.email ?? lookupCustomer.phone ?? "Client record"}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {isAppointmentMode && customerLookupState.kind === "error" ? (
+            <div className="message-banner message-banner--error" role="alert">
+              {customerLookupState.message}
+            </div>
+          ) : null}
+        </section>
+
+        {isAppointmentMode ? (
+          <section className="booking-rail-section" aria-label="Book appointment from slot">
+            <p className="rail-section-kicker">Book appointment</p>
+            <div className="appointment-summary-card">
+              <div>
+                <strong>{selectedService?.name ?? "Choose an appointment type"}</strong>
+                <span>{formatTimeRange(selectedSlot.startAt, appointmentEndAt)}</span>
+              </div>
+              <p>{customer.name || "Client required"}</p>
+            </div>
+            {draftCreationState.kind === "error" ? (
+              <div className="message-banner message-banner--error" role="alert">
+                {draftCreationState.message}
+              </div>
+            ) : null}
+            {draftCreationState.kind === "success" ? (
+              <div className="message-banner" role="status">
+                Booking draft created and slot held for 15 minutes.
+              </div>
+            ) : null}
+            <div className="time-block-drawer-actions">
+              <button type="button" className="primary-action" onClick={onBookAppointment} disabled={!canCreateDraft || draftCreationState.kind === "success"}>
+                {draftCreationState.kind === "submitting" ? "Creating draft..." : draftCreationState.kind === "success" ? "Draft created" : "Book appointment"}
+              </button>
+              {draftHref ? (
+                <a className="secondary-action" href={draftHref}>
+                  Open draft in storefront
+                </a>
+              ) : null}
+            </div>
+          </section>
+        ) : (
+          <section className="booking-rail-section" aria-label="Add time block from slot">
+            <p className="rail-section-kicker">Add time block</p>
+            <div className="slot-action-grid">
+              <label>
+                <span>Start date</span>
+                <input
+                  type="date"
+                  value={getTenantDate(selectedSlot.startAt)}
+                  onChange={(event) => onStartDateChange(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Start time</span>
+                <input
+                  type="time"
+                  value={formatTimeInputValue(selectedSlot.startAt)}
+                  onChange={(event) => onStartTimeChange(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>End date</span>
+                <input
+                  type="date"
+                  value={getTenantDate(blockEndAt)}
+                  onChange={(event) => onBlockEndChange(event.target.value, formatTimeInputValue(blockEndAt))}
+                />
+              </label>
+              <label>
+                <span>End time</span>
+                <input
+                  type="time"
+                  value={formatTimeInputValue(blockEndAt)}
+                  onChange={(event) => onBlockEndChange(getTenantDate(blockEndAt), event.target.value)}
+                />
+              </label>
+            </div>
+            <label className="time-block-notes-field">
+              <span>Notes</span>
+              <textarea value={notes} onChange={(event) => onNotesChange(event.target.value)} placeholder="Add staff-facing context for this block." rows={4} />
+            </label>
+            <div className="time-block-service-options" aria-label="Appointment types to block">
+              <span>Appointment types to block</span>
+              {serviceOptions.map((service) => (
+                <label key={service.id}>
+                  <input
+                    type="checkbox"
+                    checked={blockedServiceIds.includes(service.id)}
+                    onChange={() => onToggleBlockedService(service.id)}
+                  />
+                  {service.name}
+                </label>
+              ))}
+            </div>
+            <button type="button" className="primary-action" onClick={onAddTimeBlock} disabled={!canAddTimeBlock}>
+              Add time block
+            </button>
+          </section>
+        )}
+      </aside>
+    </>
+  );
+}
+
+type TimeBlockDetailsDrawerProps = {
+  selectedTimeBlock: CalendarTimeBlock | null;
+  selectedService: ServiceSummary | null;
+  serviceOptions: CalendarServiceOption[];
+  blockedAppointments: CalendarAppointment[];
+  draftCreationState: DraftCreationState;
+  draftHref: string | null;
+  onClose: () => void;
+  onCreateDraft: () => void;
+  onDelete: () => void;
+  onNotesChange: (notes: string) => void;
+  onBlockedServicesChange: (serviceIds: string[]) => void;
+};
+
+function TimeBlockDetailsDrawer({
+  selectedTimeBlock,
+  selectedService,
+  serviceOptions,
+  blockedAppointments,
+  draftCreationState,
+  draftHref,
+  onClose,
+  onCreateDraft,
+  onDelete,
+  onNotesChange,
+  onBlockedServicesChange,
+}: TimeBlockDetailsDrawerProps): ReactElement | null {
+  if (!selectedTimeBlock) {
+    return null;
+  }
+
+  const durationMinutes = getDurationMinutes(selectedTimeBlock.startAt, selectedTimeBlock.endAt);
+  const durationLabel = formatDuration(durationMinutes);
+  const dayLabel = getDateLabel(selectedTimeBlock.date);
+  const draftCreated = draftCreationState.kind === "success";
+  const canCreateDraft = (selectedService !== null || selectedTimeBlock.blockedServiceIds.length > 0) && draftCreationState.kind !== "submitting" && !draftCreated;
+  const blockedServiceNames = selectedTimeBlock.blockedServiceIds
+    .map((serviceId) => serviceOptions.find((service) => service.id === serviceId)?.name)
+    .filter(Boolean)
+    .join(", ");
+
+  return (
+    <>
+      <button
+        type="button"
+        className="appointment-drawer-backdrop"
+        aria-label="Close time block details"
+        onClick={onClose}
+      />
+      <aside className="appointment-details-drawer time-block-details-drawer" role="dialog" aria-label="Time block details">
+        <header className="appointment-details-drawer__header">
+          <span className="appointment-status-chip appointment-status-chip--block">
+            <span aria-hidden="true" />
+            Time block
+          </span>
+          <button type="button" className="appointment-drawer-outline-action" onClick={onClose}>
+            Close
+          </button>
+        </header>
+
+        <div className="appointment-drawer-when" aria-label="Time block timing">
+          <div>
+            On <strong>{dayLabel}</strong>
+          </div>
+          <div>
+            At <strong>{formatTimeRange(selectedTimeBlock.startAt, selectedTimeBlock.endAt)}</strong>
+          </div>
         </div>
-      ) : null}
-      {selectedTimeBlock ? (
-        <div className="time-block-prompt__summary">
-          <span>{selectedService?.name ?? "Selected service"}</span>
-          <strong>{formatDateTime(selectedTimeBlock.startAt)}</strong>
-          <span>{selectedTimeBlock.providerName}</span>
-        </div>
-      ) : null}
-      <div className="action-row">
-        {selectedTimeBlock ? (
+
+        <section className="booking-rail-section" aria-label="Time block summary">
+          <p className="rail-section-kicker">Block details</p>
+          <div className="appointment-summary-card time-block-summary-card">
+            <div>
+              <strong>{blockedServiceNames || selectedService?.name || "Selected service"}</strong>
+              <span>{durationLabel}</span>
+            </div>
+            <p>{`${selectedTimeBlock.providerName} · ${formatDateTime(selectedTimeBlock.startAt)}`}</p>
+          </div>
+          <div className="drawer-form-preview drawer-form-preview--compact">
+            <label>
+              <span>Provider</span>
+              <input value={selectedTimeBlock.providerName} readOnly />
+            </label>
+            <label>
+              <span>Duration</span>
+              <input value={durationLabel} readOnly />
+            </label>
+            <label>
+              <span>Start</span>
+              <input value={formatDateTime(selectedTimeBlock.startAt)} readOnly />
+            </label>
+            <label>
+              <span>End</span>
+              <input value={formatDateTime(selectedTimeBlock.endAt)} readOnly />
+            </label>
+          </div>
+        </section>
+
+        <section className="booking-rail-section" aria-label="Time block notes">
+          <label className="time-block-notes-field">
+            <span>Notes</span>
+            <textarea
+              value={selectedTimeBlock.notes}
+              onChange={(event) => onNotesChange(event.target.value)}
+              placeholder="Add staff-facing context for this block."
+              rows={5}
+            />
+          </label>
+        </section>
+
+        <section className="booking-rail-section" aria-label="Appointment types blocked by this time block">
+          <p className="rail-section-kicker">Appointment types blocked</p>
+          <div className="time-block-service-options">
+            {serviceOptions.map((service) => {
+              const checked = selectedTimeBlock.blockedServiceIds.includes(service.id);
+              return (
+                <label key={service.id}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      onBlockedServicesChange(
+                        checked
+                          ? selectedTimeBlock.blockedServiceIds.filter((serviceId) => serviceId !== service.id)
+                          : [...selectedTimeBlock.blockedServiceIds, service.id],
+                      );
+                    }}
+                  />
+                  {service.name}
+                </label>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="booking-rail-section" aria-label="Appointments blocked by this time block">
+          <div className="rail-section-heading">
+            <div>
+              <p className="eyebrow">Affected appointments</p>
+              <h4>Appointments blocked</h4>
+            </div>
+            <span className="intake-status-badge">{blockedAppointments.length}</span>
+          </div>
+          {blockedAppointments.length === 0 ? (
+            <div className="message-banner message-banner--muted" role="status">
+              No booked appointments fall inside this block.
+            </div>
+          ) : (
+            <ul className="time-block-appointment-list">
+              {blockedAppointments.map((appointment) => (
+                <li key={appointment.id}>
+                  <strong>{appointment.customerName}</strong>
+                  <span>{`${appointment.serviceName} · ${formatTimeRange(appointment.startAt, appointment.endAt)}`}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {draftCreationState.kind === "error" ? (
+          <div className="message-banner message-banner--error" role="alert">
+            {draftCreationState.message}
+          </div>
+        ) : null}
+        {draftCreated ? (
+          <div className="message-banner" role="status">
+            Booking draft created and slot held for 15 minutes.
+          </div>
+        ) : null}
+
+        <div className="time-block-drawer-actions">
+          <button type="button" className="time-block-delete-action" onClick={onDelete}>
+            Delete time block
+          </button>
           <button
             type="button"
+            className="primary-action"
             onClick={onCreateDraft}
-            disabled={selectedService === null || draftCreationState.kind === "submitting"}
+            disabled={!canCreateDraft}
           >
-            {draftCreationState.kind === "submitting" ? "Creating draft..." : "Create draft from time block"}
+            {draftCreationState.kind === "submitting" ? "Creating draft..." : draftCreated ? "Draft created" : "Create draft from time block"}
           </button>
-        ) : null}
-        {selectedTimeBlock ? (
-          <button type="button" className="text-action" onClick={onDiscard}>
-            Discard time block
-          </button>
-        ) : null}
-        {draftHref ? (
-          <a className="secondary-action" href={draftHref}>
-            Open draft in storefront
-          </a>
-        ) : null}
-      </div>
-    </section>
+          {draftHref ? (
+            <a className="secondary-action" href={draftHref}>
+              Open draft in storefront
+            </a>
+          ) : null}
+        </div>
+      </aside>
+    </>
   );
 }
 
@@ -1490,10 +2575,12 @@ function AppointmentDetailsDrawer({
   selectedStatusLabel,
   selectedPaymentLabel,
   onClose,
-}: AppointmentDetailsDrawerProps): JSX.Element | null {
+}: AppointmentDetailsDrawerProps): ReactElement | null {
   if (!selectedAppointment) {
     return null;
   }
+
+  const selectedAppointmentClockLabel = timeFormatter.format(new Date(selectedAppointment.startAt));
 
   return (
     <>
@@ -1505,14 +2592,73 @@ function AppointmentDetailsDrawer({
       />
       <aside className="appointment-details-drawer" role="dialog" aria-label="Appointment details">
         <header className="appointment-details-drawer__header">
-          <div>
-            <p className="eyebrow">Appointment details</p>
-            <h4>{selectedAppointment.customerName}</h4>
-          </div>
-          <button type="button" className="text-action" onClick={onClose}>
+          <span className="appointment-status-chip">
+            <span aria-hidden="true" />
+            {selectedStatusLabel}
+          </span>
+          <button type="button" className="appointment-drawer-outline-action" onClick={onClose}>
             Close
           </button>
         </header>
+
+        <div className="appointment-drawer-when" aria-label="Appointment timing">
+          <div>
+            On <strong>{selectedAppointment.dayLabel}</strong>
+          </div>
+          <div>
+            At <strong>{selectedAppointmentClockLabel}</strong>
+          </div>
+        </div>
+
+        <section className="booking-rail-section booking-rail-section--customer" aria-label="Customer summary">
+          <p className="rail-section-kicker">Customer</p>
+          <div className="appointment-customer-card">
+            <span className="appointment-customer-avatar" aria-hidden="true">{getInitials(selectedAppointment.customerName)}</span>
+            <div>
+              <strong>{selectedAppointment.customerName}</strong>
+              <span>Client profile</span>
+            </div>
+          </div>
+          <div className="drawer-form-preview">
+            <label>
+              <span>Customer</span>
+              <input value={selectedCustomerLabel} readOnly />
+            </label>
+            <label>
+              <span>Provider</span>
+              <input value={selectedProviderLabel} readOnly />
+            </label>
+          </div>
+        </section>
+
+        <section className="booking-rail-section" aria-label="Appointment details preview">
+          <p className="rail-section-kicker">Appointment</p>
+          <div className="appointment-summary-card">
+            <div>
+              <strong>{selectedServiceLabel}</strong>
+              <span>{selectedPaymentLabel}</span>
+            </div>
+            <p>{`${selectedAppointmentTimeLabel} · ${selectedProviderLabel}`}</p>
+          </div>
+          <div className="drawer-form-preview drawer-form-preview--compact">
+            <label>
+              <span>Service</span>
+              <input value={selectedServiceLabel} readOnly />
+            </label>
+            <label>
+              <span>Scheduled time</span>
+              <input value={selectedAppointmentTimeLabel} readOnly />
+            </label>
+            <label>
+              <span>Booking status</span>
+              <input value={selectedStatusLabel} readOnly />
+            </label>
+            <label>
+              <span>Payment status</span>
+              <input value={selectedPaymentLabel} readOnly />
+            </label>
+          </div>
+        </section>
 
         <section className="booking-rail-section booking-rail-section--forms" aria-label="Submitted forms">
           <FormResponsesPanel
@@ -1520,41 +2666,6 @@ function AppointmentDetailsDrawer({
             state={formResponsesState}
             intakeStatus={intakeStatus}
           />
-        </section>
-
-        <section className="booking-rail-section" aria-label="Appointment details preview">
-          <p>
-            {`${selectedAppointment.customerName} is booked for ${selectedAppointment.serviceName} with ${selectedAppointment.providerName} on ${formatDateTime(selectedAppointment.startAt)}.`}
-          </p>
-          <div className="drawer-form-preview">
-            <div className="drawer-selection-note" aria-live="polite">
-              {`Selected ${selectedAppointment.dayLabel} at ${timeFormatter.format(new Date(selectedAppointment.startAt))} for ${selectedAppointment.customerName}.`}
-            </div>
-            <label>
-              Customer
-              <input value={selectedCustomerLabel} readOnly />
-            </label>
-            <label>
-              Service
-              <input value={selectedServiceLabel} readOnly />
-            </label>
-            <label>
-              Scheduled time
-              <input value={selectedAppointmentTimeLabel} readOnly />
-            </label>
-            <label>
-              Provider
-              <input value={selectedProviderLabel} readOnly />
-            </label>
-            <label>
-              Booking status
-              <input value={selectedStatusLabel} readOnly />
-            </label>
-            <label>
-              Payment status
-              <input value={selectedPaymentLabel} readOnly />
-            </label>
-          </div>
         </section>
       </aside>
     </>
@@ -1583,7 +2694,7 @@ function formatFormAnswer(value: unknown): string {
   return String(value);
 }
 
-function FormResponsesPanel({ selectedAppointment, state, intakeStatus }: FormResponsesPanelProps): JSX.Element {
+function FormResponsesPanel({ selectedAppointment, state, intakeStatus }: FormResponsesPanelProps): ReactElement {
   const intakeLabel = getIntakeStatusLabel(intakeStatus);
 
   return (

@@ -401,8 +401,16 @@ function AuthenticatedLayout({
   const currentDefinition = pageByPath.get(pathKey) ?? pageByPath.get("dashboard") ?? routeDefinitions[0];
 
   return (
-    <div className="ops-shell">
-      <aside className="ops-sidebar">
+    <div className={`ops-shell${isCalendarRoute ? " ops-shell--calendar" : ""}`}>
+      <aside className={`ops-sidebar${isCalendarRoute ? " ops-sidebar--calendar" : ""}`}>
+        <div className="ops-sidebar-brand" aria-label="Dashboard workspace">
+          <span className="ops-sidebar-brand__mark" aria-hidden="true" />
+          <div>
+            <strong>Brow Beauty Lab</strong>
+            <span>Operator desk</span>
+          </div>
+        </div>
+
         {isCalendarRoute ? <div id="dashboard-calendar-sidebar-rail" className="ops-sidebar-calendar-slot" aria-label="Sidebar month calendar" /> : null}
 
         <nav className="ops-nav" aria-label="Dashboard sections">

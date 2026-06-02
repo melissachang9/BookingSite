@@ -1,37 +1,54 @@
 :root {
   color-scheme: light;
-  --ui-font-sans: Inter, "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --ui-font-sans: "Avenir Next", "Avenir", "Nunito Sans", "Helvetica Neue", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   --ui-font-serif: Fraunces, "Cormorant Garamond", Georgia, serif;
-  --ui-ink: #201914;
-  --ui-ink-soft: #584b42;
-  --ui-muted: #7a6a60;
-  --ui-canvas: #f8f4ef;
-  --ui-canvas-raised: #fffdf9;
-  --ui-ivory: #fffaf3;
-  --ui-blush: #f4d8cf;
-  --ui-blush-soft: #fbebe6;
-  --ui-sage: #6f7d63;
-  --ui-sage-soft: #edf2e8;
-  --ui-gold: #b98d56;
-  --ui-rose: #9c5a45;
-  --ui-wine: #6f332d;
-  --ui-amber: #b76e35;
+
+  /* Warm cinematic palette — see docs/ui-design-system.md */
+  --ui-ink: #2a1d18;            /* espresso */
+  --ui-ink-soft: #6b4a36;       /* bronze */
+  --ui-muted: #a8968f;          /* taupe */
+  --ui-canvas: #efe6d8;         /* cream — light band surface */
+  --ui-canvas-raised: #f5efe2;  /* ivory — floating cards */
+  --ui-ivory: #f5efe2;
+  --ui-sand: #d9c9b3;
+  --ui-cocoa: #4a3429;
+  --ui-espresso: #2a1d18;
+  --ui-charcoal: #1a110e;
+
+  /* Single accent */
+  --ui-gold: #c89968;           /* amber — primary accent */
+  --ui-amber: #c89968;
+  --ui-amber-deep: #a47744;
+
+  /* Legacy aliases repointed so existing components keep working */
+  --ui-blush: #d9c0a5;
+  --ui-blush-soft: #efe6d8;
+  --ui-sage: #4a3429;
+  --ui-sage-soft: #ddd0b8;
+  --ui-rose: #6b4a36;
+  --ui-wine: #2a1d18;
+
+  /* Status (semantic) */
   --ui-danger: #9a3d32;
   --ui-danger-soft: #f8e5e1;
   --ui-success: #486f4c;
   --ui-success-soft: #e7f1e5;
-  --ui-warning: #9a6a25;
-  --ui-warning-soft: #fff0d7;
-  --ui-border: rgba(51, 37, 27, 0.12);
-  --ui-border-strong: rgba(51, 37, 27, 0.22);
-  --ui-ring: rgba(156, 90, 69, 0.32);
-  --ui-shadow-sm: 0 10px 24px rgba(52, 36, 26, 0.08);
-  --ui-shadow-md: 0 20px 52px rgba(52, 36, 26, 0.12);
-  --ui-shadow-lg: 0 32px 90px rgba(52, 36, 26, 0.16);
-  --ui-radius-xs: 6px;
-  --ui-radius-sm: 8px;
-  --ui-radius-md: 12px;
-  --ui-radius-lg: 16px;
+  --ui-warning: #a47744;
+  --ui-warning-soft: #f1dcbe;
+
+  --ui-border: rgba(74, 52, 41, 0.18);
+  --ui-border-strong: rgba(74, 52, 41, 0.32);
+  --ui-ring: rgba(200, 153, 104, 0.45);
+
+  --ui-shadow-sm: 0 1px 2px rgba(26, 17, 14, 0.22);
+  --ui-shadow-md: 0 14px 34px rgba(26, 17, 14, 0.42);
+  --ui-shadow-lg: 0 30px 80px rgba(26, 17, 14, 0.60);
+
+  --ui-radius-xs: 8px;
+  --ui-radius-sm: 12px;
+  --ui-radius-md: 18px;
+  --ui-radius-lg: 28px;
+
   --ui-space-1: 0.25rem;
   --ui-space-2: 0.5rem;
   --ui-space-3: 0.75rem;
@@ -54,8 +71,10 @@ html {
   background: var(--ui-canvas);
   color: var(--ui-ink);
   font-family: var(--ui-font-sans);
+  font-weight: 400;
   letter-spacing: 0;
   text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
 }
 
 body {
@@ -90,7 +109,7 @@ textarea {
 }
 
 ::selection {
-  background: rgba(185, 141, 86, 0.28);
+  background: rgba(200, 153, 104, 0.32);
 }
 
 .ui-stack {
