@@ -908,6 +908,10 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
     () => (viewMode === "week" && calendarState.kind === "ready" ? mergeProviderOptions(calendarState.providers, getProviderOptions(viewDays)) : []),
     [calendarState, viewDays, viewMode],
   );
+  const allKnownProviderOptions = useMemo(
+    () => (calendarState.kind === "ready" ? mergeProviderOptions(calendarState.providers, getProviderOptions(viewDays)) : []),
+    [calendarState, viewDays],
+  );
   const selectedWeekProvider = useMemo(
     () => weekProviderOptions.find((provider) => provider.id === selectedWeekProviderId) ?? null,
     [selectedWeekProviderId, weekProviderOptions],
@@ -1516,7 +1520,7 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
             intakeStatusByBookingId={intakeStatusByBookingId}
             selectedWeekProviderId={selectedWeekProviderId}
             selectedWeekProviderName={selectedWeekProvider?.name ?? null}
-            fallbackProviderOptions={weekProviderOptions}
+            fallbackProviderOptions={allKnownProviderOptions}
             timeBlockDurationMinutes={selectedService?.durationMinutes ?? 60}
             onSelectAppointment={handleSelectAppointment}
             timeBlocks={timeBlocks}
@@ -1777,6 +1781,18 @@ function CalendarBoard({
               openings: CalendarOpening[];
             }
           >();
+
+          for (const provider of fallbackProviderOptions) {
+            providerColumns.set(provider.id, {
+              key: provider.id,
+              heading: provider.name,
+              providerId: provider.id,
+              providerName: provider.name,
+              appointments: [],
+              openings: [],
+            });
+          }
+
           for (const appointment of focusedDay.appointments) {
             const existing = providerColumns.get(appointment.providerId);
             if (existing) {
@@ -1812,11 +1828,7 @@ function CalendarBoard({
           }
 
           const columns: ScheduleColumn[] = Array.from(providerColumns.values())
-            .sort((left, right) => {
-              const leftStart = left.appointments[0]?.startAt ?? left.openings[0]?.startAt ?? "";
-              const rightStart = right.appointments[0]?.startAt ?? right.openings[0]?.startAt ?? "";
-              return leftStart.localeCompare(rightStart) || left.heading.localeCompare(right.heading);
-            })
+            .sort((left, right) => left.heading.localeCompare(right.heading))
             .map((column) => ({
               key: column.key,
               date: focusedDay.date,
@@ -1826,7 +1838,7 @@ function CalendarBoard({
               appointments: column.appointments,
               openings: column.openings,
               availableSegments: mergeMinuteSegments(column.openings),
-              emptyLabel: "",
+              emptyLabel: column.appointments.length === 0 && column.openings.length === 0 ? "No scheduled hours" : "",
             }));
 
           return columns.length > 0
@@ -1966,6 +1978,11 @@ function CalendarBoard({
                   heightPx: ((scheduleEndMinute - cursor) / 60) * SCHEDULE_HOUR_HEIGHT_PX,
                 });
               }
+            } else if (viewMode === "day" && column.openings.length === 0) {
+              unavailableSegments.push({
+                topPx: 0,
+                heightPx: scheduleHeightPx,
+              });
             }
 
             return (
