@@ -1352,6 +1352,16 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
     setTimeBlocks((current) => current.map((block) => (block.id === blockId ? { ...block, notes } : block)));
   };
 
+  const handleSaveTimeBlockEdits = (
+    blockId: string,
+    updates: { startAt: string; endAt: string; date: string; notes: string; blockedServiceIds: string[] },
+  ) => {
+    setTimeBlocks((current) =>
+      current.map((block) => (block.id === blockId ? { ...block, ...updates } : block)),
+    );
+    setDraftCreationState({ kind: "idle" });
+  };
+
   const handleDiscardTimeBlock = (blockId: string) => {
     setTimeBlocks((current) => current.filter((block) => block.id !== blockId));
     setSelectedTimeBlockId((current) => (current === blockId ? null : current));
@@ -1568,14 +1578,9 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
             handleDiscardTimeBlock(selectedTimeBlock.id);
           }
         }}
-        onNotesChange={(notes) => {
+        onSave={(updates) => {
           if (selectedTimeBlock) {
-            handleUpdateTimeBlockNotes(selectedTimeBlock.id, notes);
-          }
-        }}
-        onBlockedServicesChange={(serviceIds) => {
-          if (selectedTimeBlock) {
-            handleUpdateTimeBlockBlockedServices(selectedTimeBlock.id, serviceIds);
+            handleSaveTimeBlockEdits(selectedTimeBlock.id, updates);
           }
         }}
       />
@@ -2368,8 +2373,7 @@ type TimeBlockDetailsDrawerProps = {
   onClose: () => void;
   onCreateDraft: () => void;
   onDelete: () => void;
-  onNotesChange: (notes: string) => void;
-  onBlockedServicesChange: (serviceIds: string[]) => void;
+  onSave: (updates: { startAt: string; endAt: string; date: string; notes: string; blockedServiceIds: string[] }) => void;
 };
 
 function TimeBlockDetailsDrawer({
@@ -2382,22 +2386,83 @@ function TimeBlockDetailsDrawer({
   onClose,
   onCreateDraft,
   onDelete,
-  onNotesChange,
-  onBlockedServicesChange,
+  onSave,
 }: TimeBlockDetailsDrawerProps): ReactElement | null {
+  const blockId = selectedTimeBlock?.id ?? null;
+  const initialStartDate = selectedTimeBlock ? getTenantDate(selectedTimeBlock.startAt) : "";
+  const initialStartTime = selectedTimeBlock ? formatTimeInputValue(selectedTimeBlock.startAt) : "";
+  const initialEndDate = selectedTimeBlock ? getTenantDate(selectedTimeBlock.endAt) : "";
+  const initialEndTime = selectedTimeBlock ? formatTimeInputValue(selectedTimeBlock.endAt) : "";
+  const initialNotes = selectedTimeBlock?.notes ?? "";
+  const initialBlockedServiceIds = selectedTimeBlock?.blockedServiceIds ?? [];
+
+  const [startDate, setStartDate] = useState(initialStartDate);
+  const [startTime, setStartTime] = useState(initialStartTime);
+  const [endDate, setEndDate] = useState(initialEndDate);
+  const [endTime, setEndTime] = useState(initialEndTime);
+  const [notesDraft, setNotesDraft] = useState(initialNotes);
+  const [blockedServiceIdsDraft, setBlockedServiceIdsDraft] = useState<string[]>(initialBlockedServiceIds);
+  const [saveState, setSaveState] = useState<"idle" | "saved" | "error">("idle");
+
+  useEffect(() => {
+    setStartDate(initialStartDate);
+    setStartTime(initialStartTime);
+    setEndDate(initialEndDate);
+    setEndTime(initialEndTime);
+    setNotesDraft(initialNotes);
+    setBlockedServiceIdsDraft(initialBlockedServiceIds);
+    setSaveState("idle");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blockId]);
+
   if (!selectedTimeBlock) {
     return null;
   }
 
-  const durationMinutes = getDurationMinutes(selectedTimeBlock.startAt, selectedTimeBlock.endAt);
-  const durationLabel = formatDuration(durationMinutes);
-  const dayLabel = getDateLabel(selectedTimeBlock.date);
+  const startIso = isoFromTenantDateAndTime(startDate, startTime);
+  const endIso = isoFromTenantDateAndTime(endDate, endTime);
+  const startMs = startIso ? new Date(startIso).getTime() : NaN;
+  const endMs = endIso ? new Date(endIso).getTime() : NaN;
+  const hasValidRange = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs;
+  const draftDurationMinutes = hasValidRange ? Math.max(15, Math.round((endMs - startMs) / 60_000)) : getDurationMinutes(selectedTimeBlock.startAt, selectedTimeBlock.endAt);
+  const durationLabel = formatDuration(draftDurationMinutes);
+  const dayLabel = getDateLabel(startDate || selectedTimeBlock.date);
   const draftCreated = draftCreationState.kind === "success";
   const canCreateDraft = (selectedService !== null || selectedTimeBlock.blockedServiceIds.length > 0) && draftCreationState.kind !== "submitting" && !draftCreated;
-  const blockedServiceNames = selectedTimeBlock.blockedServiceIds
+  const blockedServiceNames = blockedServiceIdsDraft
     .map((serviceId) => serviceOptions.find((service) => service.id === serviceId)?.name)
     .filter(Boolean)
     .join(", ");
+  const hasUnsavedChanges =
+    startDate !== initialStartDate ||
+    startTime !== initialStartTime ||
+    endDate !== initialEndDate ||
+    endTime !== initialEndTime ||
+    notesDraft !== initialNotes ||
+    blockedServiceIdsDraft.length !== initialBlockedServiceIds.length ||
+    blockedServiceIdsDraft.some((id, i) => id !== initialBlockedServiceIds[i]);
+
+  const handleToggleBlockedService = (serviceId: string) => {
+    setBlockedServiceIdsDraft((current) =>
+      current.includes(serviceId) ? current.filter((id) => id !== serviceId) : [...current, serviceId],
+    );
+    setSaveState("idle");
+  };
+
+  const handleSave = () => {
+    if (!hasValidRange || !startIso || !endIso) {
+      setSaveState("error");
+      return;
+    }
+    onSave({
+      startAt: startIso,
+      endAt: endIso,
+      date: startDate,
+      notes: notesDraft,
+      blockedServiceIds: blockedServiceIdsDraft,
+    });
+    setSaveState("saved");
+  };
 
   return (
     <>
@@ -2423,7 +2488,7 @@ function TimeBlockDetailsDrawer({
             On <strong>{dayLabel}</strong>
           </div>
           <div>
-            At <strong>{formatTimeRange(selectedTimeBlock.startAt, selectedTimeBlock.endAt)}</strong>
+            At <strong>{hasValidRange && startIso && endIso ? formatTimeRange(startIso, endIso) : formatTimeRange(selectedTimeBlock.startAt, selectedTimeBlock.endAt)}</strong>
           </div>
         </div>
 
@@ -2434,7 +2499,7 @@ function TimeBlockDetailsDrawer({
               <strong>{blockedServiceNames || selectedService?.name || "Selected service"}</strong>
               <span>{durationLabel}</span>
             </div>
-            <p>{`${selectedTimeBlock.providerName} · ${formatDateTime(selectedTimeBlock.startAt)}`}</p>
+            <p>{`${selectedTimeBlock.providerName} · ${formatDateTime(startIso ?? selectedTimeBlock.startAt)}`}</p>
           </div>
           <div className="drawer-form-preview drawer-form-preview--compact">
             <label>
@@ -2446,12 +2511,48 @@ function TimeBlockDetailsDrawer({
               <input value={durationLabel} readOnly />
             </label>
             <label>
-              <span>Start</span>
-              <input value={formatDateTime(selectedTimeBlock.startAt)} readOnly />
+              <span>Start date</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(event) => {
+                  setStartDate(event.target.value);
+                  setSaveState("idle");
+                }}
+              />
             </label>
             <label>
-              <span>End</span>
-              <input value={formatDateTime(selectedTimeBlock.endAt)} readOnly />
+              <span>Start time</span>
+              <input
+                type="time"
+                value={startTime}
+                onChange={(event) => {
+                  setStartTime(event.target.value);
+                  setSaveState("idle");
+                }}
+              />
+            </label>
+            <label>
+              <span>End date</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(event) => {
+                  setEndDate(event.target.value);
+                  setSaveState("idle");
+                }}
+              />
+            </label>
+            <label>
+              <span>End time</span>
+              <input
+                type="time"
+                value={endTime}
+                onChange={(event) => {
+                  setEndTime(event.target.value);
+                  setSaveState("idle");
+                }}
+              />
             </label>
           </div>
         </section>
@@ -2460,8 +2561,11 @@ function TimeBlockDetailsDrawer({
           <label className="time-block-notes-field">
             <span>Notes</span>
             <textarea
-              value={selectedTimeBlock.notes}
-              onChange={(event) => onNotesChange(event.target.value)}
+              value={notesDraft}
+              onChange={(event) => {
+                setNotesDraft(event.target.value);
+                setSaveState("idle");
+              }}
               placeholder="Add staff-facing context for this block."
               rows={5}
             />
@@ -2472,19 +2576,13 @@ function TimeBlockDetailsDrawer({
           <p className="rail-section-kicker">Appointment types blocked</p>
           <div className="time-block-service-options">
             {serviceOptions.map((service) => {
-              const checked = selectedTimeBlock.blockedServiceIds.includes(service.id);
+              const checked = blockedServiceIdsDraft.includes(service.id);
               return (
                 <label key={service.id}>
                   <input
                     type="checkbox"
                     checked={checked}
-                    onChange={() => {
-                      onBlockedServicesChange(
-                        checked
-                          ? selectedTimeBlock.blockedServiceIds.filter((serviceId) => serviceId !== service.id)
-                          : [...selectedTimeBlock.blockedServiceIds, service.id],
-                      );
-                    }}
+                    onChange={() => handleToggleBlockedService(service.id)}
                   />
                   {service.name}
                 </label>
@@ -2517,6 +2615,16 @@ function TimeBlockDetailsDrawer({
           )}
         </section>
 
+        {saveState === "error" ? (
+          <div className="message-banner message-banner--error" role="alert">
+            End time must be after start time.
+          </div>
+        ) : null}
+        {saveState === "saved" && !hasUnsavedChanges ? (
+          <div className="message-banner" role="status">
+            Time block updated.
+          </div>
+        ) : null}
         {draftCreationState.kind === "error" ? (
           <div className="message-banner message-banner--error" role="alert">
             {draftCreationState.message}
@@ -2535,6 +2643,14 @@ function TimeBlockDetailsDrawer({
           <button
             type="button"
             className="primary-action"
+            onClick={handleSave}
+            disabled={!hasUnsavedChanges || !hasValidRange}
+          >
+            {hasUnsavedChanges ? "Save changes" : "Saved"}
+          </button>
+          <button
+            type="button"
+            className="secondary-action"
             onClick={onCreateDraft}
             disabled={!canCreateDraft}
           >
