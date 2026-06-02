@@ -15,6 +15,7 @@ from app.schemas.catalog import (
     ServiceListResponse,
     ServiceSummaryResponse,
     TenantSummaryResponse,
+    UpdateTenantSettingsRequest,
 )
 from app.services.availability import list_availability
 from app.services.tenants import (
@@ -24,6 +25,7 @@ from app.services.tenants import (
     list_service_providers,
     list_tenant_locations,
     list_tenant_services,
+    update_tenant_settings,
 )
 
 
@@ -44,6 +46,20 @@ async def get_tenant(
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantSummaryResponse:
     return await get_tenant_summary(session, tenant_slug)
+
+
+@router.patch(
+    "/{tenant_slug}/settings",
+    response_model=TenantSummaryResponse,
+    summary="Update tenant settings",
+)
+async def patch_tenant_settings(
+    tenant_slug: str,
+    payload: UpdateTenantSettingsRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> TenantSummaryResponse:
+    return await update_tenant_settings(session, tenant_slug, payload)
 
 
 @router.get(

@@ -2697,3 +2697,37 @@ body {
   border-radius: 0;
   box-shadow: none;
 }
+
+.settings-panel-help {
+  margin: 0 0 0.75rem;
+  color: var(--color-fg-muted, #5a5a64);
+}
+.settings-form-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.settings-field select {
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border, #d4d4d8);
+  background: var(--color-bg-surface, #fff);
+}
+.settings-actions {
+  margin-top: 0.75rem;
+}
+.settings-status {
+  color: var(--color-success, #166534);
+}
+.settings-error {
+  color: var(--color-danger, #b91c1c);
+}
+.settings-permission-note {
+  margin-top: 0.5rem;
+  color: var(--color-fg-muted, #5a5a64);
+}

@@ -162,6 +162,8 @@ type CalendarPageProps = {
   definition: CalendarPageDefinition;
   tenantSlug: string;
   api?: CalendarPageApi;
+  displayStartHour?: number;
+  displayEndHour?: number;
 };
 
 const dateFormatter = new Intl.DateTimeFormat("en-CA", {
@@ -196,8 +198,6 @@ const tenantTimePartsFormatter = new Intl.DateTimeFormat("en-US", {
   hour12: false,
 });
 
-const SCHEDULE_MIN_HOUR = 7;
-const SCHEDULE_MAX_HOUR = 22;
 const SCHEDULE_MIN_VISIBLE_HOURS = 8;
 const SCHEDULE_HOUR_HEIGHT_PX = 66;
 const SCHEDULE_QUARTER_HEIGHT_PX = SCHEDULE_HOUR_HEIGHT_PX / 4;
@@ -549,7 +549,13 @@ function buildMonthGrid(value: string): string[] {
   });
 }
 
-export function CalendarPage({ definition, tenantSlug, api = platformApi }: CalendarPageProps) {
+export function CalendarPage({
+  definition,
+  tenantSlug,
+  api = platformApi,
+  displayStartHour,
+  displayEndHour,
+}: CalendarPageProps) {
   const [calendarState, setCalendarState] = useState<CalendarDataState>({ kind: "loading" });
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
@@ -1527,6 +1533,8 @@ export function CalendarPage({ definition, tenantSlug, api = platformApi }: Cale
             selectedTimeBlockId={selectedTimeBlockId}
             onSelectTimeBlock={handleSelectTimeBlock}
             onRequestCalendarSlot={handleRequestCalendarSlot}
+            displayStartHour={displayStartHour}
+            displayEndHour={displayEndHour}
           />
         </article>
       </section>
@@ -1702,6 +1710,8 @@ function CalendarBoard({
   selectedTimeBlockId,
   onSelectTimeBlock,
   onRequestCalendarSlot,
+  displayStartHour,
+  displayEndHour,
 }: {
   state: CalendarDataState;
   days: CalendarDay[];
@@ -1717,6 +1727,8 @@ function CalendarBoard({
   selectedTimeBlockId: string | null;
   onSelectTimeBlock: (blockId: string) => void;
   onRequestCalendarSlot: (slot: PendingCalendarSlot) => void;
+  displayStartHour?: number;
+  displayEndHour?: number;
 }) {
   if (state.kind === "loading") {
     return <div className="calendar-state">Loading booked appointments...</div>;
@@ -1726,37 +1738,14 @@ function CalendarBoard({
     return <div className="calendar-state calendar-state--muted">{state.message}</div>;
   }
 
-  const appointments = days.flatMap((day) => day.appointments);
-  const openings = days.flatMap((day) => day.openings);
-  const relevantTimeBlocks = timeBlocks.filter((block) => days.some((day) => day.date === block.date));
-  let startHour = 9;
-  let endHour = startHour + SCHEDULE_MIN_VISIBLE_HOURS;
-
-  if (appointments.length > 0 || openings.length > 0 || relevantTimeBlocks.length > 0) {
-    const minMinutes = Math.min(
-      ...appointments.map((appointment) => minutesInTenantDay(appointment.startAt)),
-      ...openings.map((opening) => minutesInTenantDay(opening.startAt)),
-      ...relevantTimeBlocks.map((block) => minutesInTenantDay(block.startAt)),
-    );
-    const maxMinutes = Math.max(
-      ...appointments.map((appointment) => minutesInTenantDay(appointment.endAt)),
-      ...openings.map((opening) => minutesInTenantDay(opening.endAt)),
-      ...relevantTimeBlocks.map((block) => minutesInTenantDay(block.endAt)),
-    );
-
-    startHour = Math.max(SCHEDULE_MIN_HOUR, Math.floor((minMinutes - 45) / 60));
-    endHour = Math.min(SCHEDULE_MAX_HOUR, Math.ceil((maxMinutes + 45) / 60));
-
-    if (endHour <= startHour) {
-      endHour = Math.min(SCHEDULE_MAX_HOUR, startHour + SCHEDULE_MIN_VISIBLE_HOURS);
-    }
+  const clampHour = (value: number) => Math.min(24, Math.max(0, Math.round(value)));
+  let startHour = clampHour(displayStartHour ?? 9);
+  let endHour = clampHour(displayEndHour ?? 19);
+  if (endHour <= startHour) {
+    endHour = Math.min(24, startHour + SCHEDULE_MIN_VISIBLE_HOURS);
   }
-
-  if (endHour - startHour < SCHEDULE_MIN_VISIBLE_HOURS) {
-    endHour = Math.min(SCHEDULE_MAX_HOUR, startHour + SCHEDULE_MIN_VISIBLE_HOURS);
-    if (endHour - startHour < SCHEDULE_MIN_VISIBLE_HOURS) {
-      startHour = Math.max(SCHEDULE_MIN_HOUR, endHour - SCHEDULE_MIN_VISIBLE_HOURS);
-    }
+  if (endHour - startHour < 1) {
+    endHour = Math.min(24, startHour + 1);
   }
 
   const totalHours = Math.max(1, endHour - startHour);

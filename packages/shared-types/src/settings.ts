@@ -36,6 +36,13 @@ export type TenantSettings = {
   noShowFeeCents: number;
   taxRatePercent: number;
   autoChargeNoShowFee?: boolean;
+  calendarDisplayStartHour: number;
+  calendarDisplayEndHour: number;
+};
+
+export type UpdateTenantSettingsRequest = {
+  calendarDisplayStartHour?: number;
+  calendarDisplayEndHour?: number;
 };
 
 export type TenantSummary = AuditFields &

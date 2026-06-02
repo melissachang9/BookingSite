@@ -466,6 +466,7 @@ function AuthenticatedLayout({
 
 export function App() {
   const [session, setSession] = useState<SessionResponse | null>(() => readStoredSession());
+  const [tenantSummary, setTenantSummary] = useState<TenantSummary | null>(null);
   const onboardingDefinition = pageByPath.get("onboarding") ?? routeDefinitions[0];
 
   useEffect(() => {
@@ -506,7 +507,41 @@ export function App() {
     clearStoredRedirectPath();
     clearStoredSession();
     setSession(null);
+    setTenantSummary(null);
   };
+
+  const tenantSlug = session?.user.tenantSlug ?? null;
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (!tenantSlug) {
+      setTenantSummary(null);
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    const loadTenant = async () => {
+      try {
+        const tenant = await platformApi.getTenantBySlug(tenantSlug);
+        if (isCancelled) return;
+        setTenantSummary(tenant);
+      } catch {
+        if (isCancelled) return;
+        setTenantSummary(null);
+      }
+    };
+
+    void loadTenant();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [tenantSlug]);
+
+  const calendarDisplayStartHour = tenantSummary?.settings.calendarDisplayStartHour ?? 9;
+  const calendarDisplayEndHour = tenantSummary?.settings.calendarDisplayEndHour ?? 19;
 
   return (
     <Routes>
@@ -528,7 +563,14 @@ export function App() {
           <Route path="/dashboard" element={<DashboardHomePage tenantSlug={session.user.tenantSlug} />} />
           <Route
             path="/calendar"
-            element={<CalendarPage definition={pageByPath.get("calendar") ?? routeDefinitions[0]} tenantSlug={session.user.tenantSlug} />}
+            element={
+              <CalendarPage
+                definition={pageByPath.get("calendar") ?? routeDefinitions[0]}
+                tenantSlug={session.user.tenantSlug}
+                displayStartHour={calendarDisplayStartHour}
+                displayEndHour={calendarDisplayEndHour}
+              />
+            }
           />
           <Route
             path="/bookings"
@@ -546,7 +588,17 @@ export function App() {
           <Route path="/locations" element={<SectionPage definition={pageByPath.get("locations") ?? routeDefinitions[0]} />} />
           <Route path="/providers" element={<SectionPage definition={pageByPath.get("providers") ?? routeDefinitions[0]} />} />
           <Route path="/forms" element={<SectionPage definition={pageByPath.get("forms") ?? routeDefinitions[0]} />} />
-          <Route path="/settings" element={<SectionPage definition={pageByPath.get("settings") ?? routeDefinitions[0]} />} />
+          <Route
+            path="/settings"
+            element={
+              <SettingsPage
+                definition={pageByPath.get("settings") ?? routeDefinitions[0]}
+                currentUser={session.user}
+                tenant={tenantSummary}
+                onTenantUpdated={setTenantSummary}
+              />
+            }
+          />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       )}
@@ -1266,6 +1318,153 @@ function SectionPage({ definition }: { definition: RouteDefinition }) {
               <li key={stream}>{stream}</li>
             ))}
           </ul>
+        </article>
+      </section>
+    </main>
+  );
+}
+
+const HOUR_OPTIONS = Array.from({ length: 25 }, (_, hour) => {
+  let label: string;
+  if (hour === 0) {
+    label = "12:00 AM";
+  } else if (hour === 12) {
+    label = "12:00 PM";
+  } else if (hour === 24) {
+    label = "12:00 AM (next day)";
+  } else if (hour > 12) {
+    label = `${hour - 12}:00 PM`;
+  } else {
+    label = `${hour}:00 AM`;
+  }
+  return { value: hour, label };
+});
+
+function SettingsPage({
+  definition,
+  currentUser,
+  tenant,
+  onTenantUpdated,
+}: {
+  definition: RouteDefinition;
+  currentUser: AuthenticatedUser;
+  tenant: TenantSummary | null;
+  onTenantUpdated: (tenant: TenantSummary) => void;
+}) {
+  const tenantSlug = currentUser.tenantSlug;
+  const canManageSettings = hasPermission(currentUser, "settings.manage");
+
+  const [startHour, setStartHour] = useState<number>(tenant?.settings.calendarDisplayStartHour ?? 9);
+  const [endHour, setEndHour] = useState<number>(tenant?.settings.calendarDisplayEndHour ?? 19);
+  const [saveState, setSaveState] = useState<
+    | { kind: "idle" }
+    | { kind: "submitting" }
+    | { kind: "success"; message: string }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" });
+
+  useEffect(() => {
+    if (tenant) {
+      setStartHour(tenant.settings.calendarDisplayStartHour);
+      setEndHour(tenant.settings.calendarDisplayEndHour);
+    }
+  }, [tenant]);
+
+  const validationMessage = endHour <= startHour ? "End hour must be later than start hour." : null;
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canManageSettings || validationMessage !== null) {
+      return;
+    }
+    setSaveState({ kind: "submitting" });
+    try {
+      const updated = await platformApi.updateTenantSettings(tenantSlug, {
+        calendarDisplayStartHour: startHour,
+        calendarDisplayEndHour: endHour,
+      });
+      onTenantUpdated(updated);
+      setSaveState({ kind: "success", message: "Calendar display hours saved." });
+    } catch (error) {
+      setSaveState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to save settings.",
+      });
+    }
+  };
+
+  return (
+    <main className="ops-page-stack">
+      <section className="ops-hero ops-hero--compact">
+        <div className="ops-hero-copy">
+          <p className="eyebrow">{definition.eyebrow}</p>
+          <h3>{definition.title}</h3>
+          <p>{definition.description}</p>
+        </div>
+      </section>
+
+      <section className="ops-dashboard-grid">
+        <article className="ops-panel">
+          <p className="eyebrow">Calendar display</p>
+          <h4>Visible hours on the operator calendar</h4>
+          <p className="settings-panel-help">
+            Sets the hour range shown on the calendar grid. Time before and after this window is hidden so the schedule
+            focuses on hours your studio is actively offering services.
+          </p>
+
+          {tenant === null ? (
+            <p>Loading current settings…</p>
+          ) : (
+            <form className="settings-form" onSubmit={handleSubmit}>
+              <div className="settings-form-row">
+                <label className="settings-field">
+                  <span>Start hour</span>
+                  <select
+                    value={startHour}
+                    onChange={(event) => setStartHour(Number(event.target.value))}
+                    disabled={!canManageSettings || saveState.kind === "submitting"}
+                  >
+                    {HOUR_OPTIONS.slice(0, 24).map((option) => (
+                      <option key={`start-${option.value}`} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="settings-field">
+                  <span>End hour</span>
+                  <select
+                    value={endHour}
+                    onChange={(event) => setEndHour(Number(event.target.value))}
+                    disabled={!canManageSettings || saveState.kind === "submitting"}
+                  >
+                    {HOUR_OPTIONS.slice(1).map((option) => (
+                      <option key={`end-${option.value}`} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              {validationMessage ? <p role="alert" className="settings-error">{validationMessage}</p> : null}
+              {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
+              {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+
+              <div className="settings-actions">
+                <button
+                  type="submit"
+                  className="primary-action"
+                  disabled={!canManageSettings || validationMessage !== null || saveState.kind === "submitting"}
+                >
+                  {saveState.kind === "submitting" ? "Saving…" : "Save calendar hours"}
+                </button>
+                {!canManageSettings ? (
+                  <p className="settings-permission-note">You do not have permission to edit tenant settings.</p>
+                ) : null}
+              </div>
+            </form>
+          )}
         </article>
       </section>
     </main>

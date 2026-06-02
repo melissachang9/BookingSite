@@ -17,6 +17,7 @@ from app.schemas.catalog import (
     ProviderListResponse,
     ServiceListResponse,
     TenantSummaryResponse,
+    UpdateTenantSettingsRequest,
 )
 from app.services.presenters import location_to_summary, provider_to_summary, service_to_summary, tenant_to_summary
 
@@ -31,6 +32,8 @@ DEFAULT_TENANT_SETTINGS = {
     "noShowFeeCents": 5000,
     "taxRatePercent": 0,
     "autoChargeNoShowFee": False,
+    "calendarDisplayStartHour": 9,
+    "calendarDisplayEndHour": 19,
 }
 
 
@@ -65,6 +68,26 @@ async def get_tenant_by_slug(session: AsyncSession, tenant_slug: str) -> Tenant:
 
 async def get_tenant_summary(session: AsyncSession, tenant_slug: str) -> TenantSummaryResponse:
     tenant = await get_tenant_by_slug(session, tenant_slug)
+    return tenant_to_summary(tenant)
+
+
+async def update_tenant_settings(
+    session: AsyncSession, tenant_slug: str, payload: UpdateTenantSettingsRequest
+) -> TenantSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    current = dict(tenant.settings_json or {})
+
+    start_hour = payload.calendar_display_start_hour if payload.calendar_display_start_hour is not None else current.get("calendarDisplayStartHour", 9)
+    end_hour = payload.calendar_display_end_hour if payload.calendar_display_end_hour is not None else current.get("calendarDisplayEndHour", 19)
+
+    if end_hour <= start_hour:
+        raise api_exception(422, "validation_error", "Calendar display end hour must be greater than start hour.")
+
+    current["calendarDisplayStartHour"] = start_hour
+    current["calendarDisplayEndHour"] = end_hour
+    tenant.settings_json = current
+    await session.commit()
+    await session.refresh(tenant)
     return tenant_to_summary(tenant)
 
 

@@ -47,6 +47,13 @@ class TenantSettingsResponse(CamelModel):
     no_show_fee_cents: int
     tax_rate_percent: float = 0
     auto_charge_no_show_fee: bool | None = None
+    calendar_display_start_hour: int = 9
+    calendar_display_end_hour: int = 19
+
+
+class UpdateTenantSettingsRequest(CamelModel):
+    calendar_display_start_hour: int | None = Field(default=None, ge=0, le=23)
+    calendar_display_end_hour: int | None = Field(default=None, ge=1, le=24)
 
 
 class TenantSummaryResponse(CamelModel):
