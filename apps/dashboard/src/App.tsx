@@ -39,6 +39,8 @@ type BackendStatusState =
   | { kind: "ready"; root: ApiRootResponse; health: HealthResponse }
   | { kind: "error"; message: string };
 
+type RouteGroupKey = "settings-management";
+
 type RouteDefinition = {
   path: string;
   title: string;
@@ -48,6 +50,14 @@ type RouteDefinition = {
   tone: "ready" | "progress" | "planned";
   workstreams: string[];
   actions: string[];
+  group?: RouteGroupKey;
+};
+
+type RouteGroupDefinition = {
+  key: RouteGroupKey;
+  title: string;
+  eyebrow: string;
+  childPaths: string[];
 };
 
 type ServiceCatalogState =
@@ -173,6 +183,7 @@ const routeDefinitions: RouteDefinition[] = [
     tone: "progress",
     workstreams: ["Service editing", "Form requirements", "Deposit defaults"],
     actions: ["Edit service", "Attach forms", "Preview storefront"],
+    group: "settings-management",
   },
   {
     path: "/providers",
@@ -203,6 +214,29 @@ const routeDefinitions: RouteDefinition[] = [
     tone: "progress",
     workstreams: ["Booking policies", "Payment settings", "Branding"],
     actions: ["Update policy", "Review defaults", "Publish storefront"],
+    group: "settings-management",
+  },
+  {
+    path: "/staff",
+    title: "Staff",
+    eyebrow: "Team roster",
+    description: "Team members who can sign in to the dashboard. Roles, invites, and deactivation tools land here.",
+    metric: "Read-only roster",
+    tone: "progress",
+    workstreams: ["User list", "Role assignment", "Invite workflow"],
+    actions: ["View team", "Assign role", "Invite teammate"],
+    group: "settings-management",
+  },
+  {
+    path: "/resources",
+    title: "Resources",
+    eyebrow: "Rooms and equipment",
+    description: "Schedulable resources such as treatment rooms, chairs, and equipment that gate service availability.",
+    metric: "Planned",
+    tone: "planned",
+    workstreams: ["Resource catalog", "Service requirements", "Conflict prevention"],
+    actions: ["Add resource", "Attach to service", "Block resource"],
+    group: "settings-management",
   },
   {
     path: "/onboarding",
@@ -213,6 +247,15 @@ const routeDefinitions: RouteDefinition[] = [
     tone: "planned",
     workstreams: ["Tenant setup", "Data import", "Go-live review"],
     actions: ["Complete setup", "Validate imports", "Invite staff"],
+  },
+];
+
+const routeGroupDefinitions: RouteGroupDefinition[] = [
+  {
+    key: "settings-management",
+    title: "Settings & Management",
+    eyebrow: "Configure your studio",
+    childPaths: ["/settings", "/services", "/staff", "/resources"],
   },
 ];
 
@@ -400,6 +443,52 @@ function AuthenticatedLayout({
   const isCalendarRoute = pathKey === "calendar";
   const currentDefinition = pageByPath.get(pathKey) ?? pageByPath.get("dashboard") ?? routeDefinitions[0];
 
+  const activePath = location.pathname === "/" ? "/dashboard" : location.pathname;
+  const groupedPathsByGroup = useMemo(() => {
+    const map = new Map<RouteGroupKey, RouteDefinition[]>();
+    for (const definition of routeDefinitions) {
+      if (!definition.group) continue;
+      const list = map.get(definition.group) ?? [];
+      list.push(definition);
+      map.set(definition.group, list);
+    }
+    return map;
+  }, []);
+  const groupContainsActive = (groupKey: RouteGroupKey) => {
+    const children = groupedPathsByGroup.get(groupKey) ?? [];
+    return children.some((definition) => activePath === definition.path || activePath.startsWith(`${definition.path}/`));
+  };
+  const [expandedGroups, setExpandedGroups] = useState<Record<RouteGroupKey, boolean>>(() => {
+    const initial = {} as Record<RouteGroupKey, boolean>;
+    for (const group of routeGroupDefinitions) {
+      initial[group.key] = groupContainsActive(group.key);
+    }
+    return initial;
+  });
+  useEffect(() => {
+    setExpandedGroups((current) => {
+      let next = current;
+      for (const group of routeGroupDefinitions) {
+        if (groupContainsActive(group.key) && !current[group.key]) {
+          if (next === current) {
+            next = { ...current };
+          }
+          next[group.key] = true;
+        }
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePath]);
+
+  const toggleGroup = (key: RouteGroupKey) => {
+    setExpandedGroups((current) => ({ ...current, [key]: !current[key] }));
+  };
+
+  const topLevelDefinitions = routeDefinitions.filter(
+    (definition) => definition.path !== "/onboarding" && !definition.group,
+  );
+
   return (
     <div className={`ops-shell${isCalendarRoute ? " ops-shell--calendar" : ""}`}>
       <aside className={`ops-sidebar${isCalendarRoute ? " ops-sidebar--calendar" : ""}`}>
@@ -414,19 +503,59 @@ function AuthenticatedLayout({
         {isCalendarRoute ? <div id="dashboard-calendar-sidebar-rail" className="ops-sidebar-calendar-slot" aria-label="Sidebar month calendar" /> : null}
 
         <nav className="ops-nav" aria-label="Dashboard sections">
-          {routeDefinitions
-            .filter((definition) => definition.path !== "/onboarding")
-            .map((definition) => (
-              <NavLink
-                key={definition.path}
-                to={definition.path}
-                end={definition.path === "/dashboard"}
-                className={({ isActive }) => `ops-nav-link${isActive ? " ops-nav-link--active" : ""}`}
+          {topLevelDefinitions.map((definition) => (
+            <NavLink
+              key={definition.path}
+              to={definition.path}
+              end={definition.path === "/dashboard"}
+              className={({ isActive }) => `ops-nav-link${isActive ? " ops-nav-link--active" : ""}`}
+            >
+              <span>{definition.title}</span>
+              <small>{definition.metric}</small>
+            </NavLink>
+          ))}
+
+          {routeGroupDefinitions.map((group) => {
+            const children = groupedPathsByGroup.get(group.key) ?? [];
+            if (children.length === 0) return null;
+            const isExpanded = expandedGroups[group.key];
+            const groupActive = groupContainsActive(group.key);
+            return (
+              <div
+                key={group.key}
+                className={`ops-nav-group${isExpanded ? " ops-nav-group--expanded" : ""}${groupActive ? " ops-nav-group--active" : ""}`}
               >
-                <span>{definition.title}</span>
-                <small>{definition.metric}</small>
-              </NavLink>
-            ))}
+                <button
+                  type="button"
+                  className="ops-nav-group__header"
+                  aria-expanded={isExpanded}
+                  aria-controls={`ops-nav-group-${group.key}`}
+                  onClick={() => toggleGroup(group.key)}
+                >
+                  <span className="ops-nav-group__title">{group.title}</span>
+                  <span className="ops-nav-group__chevron" aria-hidden="true">
+                    {isExpanded ? "▾" : "▸"}
+                  </span>
+                </button>
+                {isExpanded ? (
+                  <div className="ops-nav-group__children" id={`ops-nav-group-${group.key}`}>
+                    {children.map((definition) => (
+                      <NavLink
+                        key={definition.path}
+                        to={definition.path}
+                        className={({ isActive }) =>
+                          `ops-nav-link ops-nav-link--child${isActive ? " ops-nav-link--active" : ""}`
+                        }
+                      >
+                        <span>{definition.title}</span>
+                        <small>{definition.metric}</small>
+                      </NavLink>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </nav>
 
         <section className="ops-sidebar-panel">
@@ -599,6 +728,8 @@ export function App() {
               />
             }
           />
+          <Route path="/staff" element={<SectionPage definition={pageByPath.get("staff") ?? routeDefinitions[0]} />} />
+          <Route path="/resources" element={<SectionPage definition={pageByPath.get("resources") ?? routeDefinitions[0]} />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       )}
