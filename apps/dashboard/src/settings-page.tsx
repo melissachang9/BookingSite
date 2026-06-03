@@ -172,14 +172,6 @@ export function SettingsPage({
 
   return (
     <main className="ops-page-stack">
-      <section className="ops-hero ops-hero--compact">
-        <div className="ops-hero-copy">
-          <p className="eyebrow">{definition.eyebrow}</p>
-          <h3>{definition.title}</h3>
-          <p>{definition.description}</p>
-        </div>
-      </section>
-
       <div className="settings-layout">
         <nav className="settings-anchor-nav" aria-label="Settings sections">
           {groupedSections.map(([groupTitle, sections]) => (
