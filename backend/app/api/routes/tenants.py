@@ -7,14 +7,17 @@ from app.api.dependencies.auth import require_tenant_permission
 from app.db.session import get_db_session
 from app.schemas.availability import AvailabilityResponse
 from app.schemas.catalog import (
+    CreateLocationRequest,
     CreateServiceRequest,
     CreateTenantRequest,
     CreateTenantResponse,
     LocationListResponse,
+    LocationSummaryResponse,
     ProviderListResponse,
     ServiceListResponse,
     ServiceSummaryResponse,
     TenantSummaryResponse,
+    UpdateLocationRequest,
     UpdateTenantBusinessHoursRequest,
     UpdateTenantBusinessRequest,
     UpdateTenantSettingsRequest,
@@ -22,13 +25,17 @@ from app.schemas.catalog import (
 from app.services.availability import list_availability
 from app.services.tenants import (
     create_tenant_account,
+    create_tenant_location,
     create_tenant_service,
+    deactivate_tenant_location,
     get_tenant_summary,
     list_service_providers,
     list_tenant_locations,
+    list_tenant_locations_admin,
     list_tenant_services,
     update_tenant_business,
     update_tenant_business_hours,
+    update_tenant_location,
     update_tenant_settings,
 )
 
@@ -131,6 +138,63 @@ async def list_locations(
     session: AsyncSession = Depends(get_db_session),
 ) -> LocationListResponse:
     return await list_tenant_locations(session, tenant_slug)
+
+
+@router.get(
+    "/{tenant_slug}/locations/manage",
+    response_model=LocationListResponse,
+    summary="List all locations (including inactive) for settings management",
+)
+async def list_locations_admin(
+    tenant_slug: str,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> LocationListResponse:
+    return await list_tenant_locations_admin(session, tenant_slug)
+
+
+@router.post(
+    "/{tenant_slug}/locations",
+    response_model=LocationSummaryResponse,
+    status_code=201,
+    summary="Create a tenant location",
+)
+async def create_location(
+    tenant_slug: str,
+    payload: CreateLocationRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> LocationSummaryResponse:
+    return await create_tenant_location(session, tenant_slug, payload)
+
+
+@router.patch(
+    "/{tenant_slug}/locations/{location_id}",
+    response_model=LocationSummaryResponse,
+    summary="Update a tenant location",
+)
+async def patch_location(
+    tenant_slug: str,
+    location_id: str,
+    payload: UpdateLocationRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> LocationSummaryResponse:
+    return await update_tenant_location(session, tenant_slug, location_id, payload)
+
+
+@router.delete(
+    "/{tenant_slug}/locations/{location_id}",
+    response_model=LocationSummaryResponse,
+    summary="Deactivate (soft-delete) a tenant location",
+)
+async def delete_location(
+    tenant_slug: str,
+    location_id: str,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> LocationSummaryResponse:
+    return await deactivate_tenant_location(session, tenant_slug, location_id)
 
 
 @router.get(

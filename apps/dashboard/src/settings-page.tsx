@@ -6,6 +6,7 @@ import {
   type BusinessHoursDay,
   type BusinessHoursWeek,
   type BusinessHoursWeekdayKey,
+  type LocationSummary,
   type SessionResponse,
   type TenantSummary,
 } from "@booking/shared-types";
@@ -53,8 +54,7 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
     title: "Locations",
     eyebrow: "Business setup",
     description: "Manage studio locations, addresses, and per-location phones.",
-    status: "planned",
-    plannedPhase: "Phase 5",
+    status: "available",
   },
   {
     id: "branding",
@@ -217,6 +217,12 @@ export function SettingsPage({
                   tenant={tenant}
                   onTenantUpdated={onTenantUpdated}
                   tenantSlug={currentUser.tenantSlug}
+                />
+              ) : section.id === "locations" ? (
+                <LocationsSection
+                  canManageSettings={canManageSettings}
+                  tenantSlug={currentUser.tenantSlug}
+                  defaultLocationId={tenant?.defaultLocationId ?? null}
                 />
               ) : (
                 <PlannedPlaceholder phase={section.plannedPhase ?? "a later release"} />
@@ -693,3 +699,377 @@ function BusinessHoursSection({
 
 export type { RouteDefinitionLike as SettingsRouteDefinition };
 export type SettingsPageSession = SessionResponse;
+
+type LocationsLoadState =
+  | { kind: "loading" }
+  | { kind: "ready"; locations: LocationSummary[] }
+  | { kind: "error"; message: string };
+
+type LocationDraft = {
+  name: string;
+  timeZone: string;
+  addressLine1: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  phone: string;
+};
+
+const EMPTY_LOCATION_DRAFT: LocationDraft = {
+  name: "",
+  timeZone: "",
+  addressLine1: "",
+  city: "",
+  state: "",
+  postalCode: "",
+  phone: "",
+};
+
+function LocationsSection({
+  canManageSettings,
+  tenantSlug,
+  defaultLocationId,
+}: {
+  canManageSettings: boolean;
+  tenantSlug: string;
+  defaultLocationId: string | null;
+}) {
+  const [state, setState] = useState<LocationsLoadState>({ kind: "loading" });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<LocationDraft>(EMPTY_LOCATION_DRAFT);
+  const [showCreate, setShowCreate] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
+
+  const loadLocations = async () => {
+    setState({ kind: "loading" });
+    try {
+      const response = canManageSettings
+        ? await platformApi.listLocationsAdmin(tenantSlug)
+        : await platformApi.listLocations(tenantSlug);
+      setState({ kind: "ready", locations: response.locations });
+    } catch (error) {
+      setState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to load locations.",
+      });
+    }
+  };
+
+  useEffect(() => {
+    void loadLocations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantSlug, canManageSettings]);
+
+  const beginEdit = (location: LocationSummary) => {
+    setEditingId(location.id);
+    setShowCreate(false);
+    setSaveState({ kind: "idle" });
+    setDraft({
+      name: location.name,
+      timeZone: location.timeZone,
+      addressLine1: location.addressLine1 ?? "",
+      city: location.city ?? "",
+      state: location.state ?? "",
+      postalCode: location.postalCode ?? "",
+      phone: location.phone ?? "",
+    });
+  };
+
+  const beginCreate = () => {
+    setEditingId(null);
+    setShowCreate(true);
+    setSaveState({ kind: "idle" });
+    setDraft(EMPTY_LOCATION_DRAFT);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setShowCreate(false);
+    setDraft(EMPTY_LOCATION_DRAFT);
+    setSaveState({ kind: "idle" });
+  };
+
+  const submitDraft = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canManageSettings) return;
+    if (!draft.name.trim() || !draft.timeZone.trim()) {
+      setSaveState({ kind: "error", message: "Name and time zone are required." });
+      return;
+    }
+    setSaveState({ kind: "submitting" });
+    try {
+      if (editingId) {
+        await platformApi.updateLocation(tenantSlug, editingId, {
+          name: draft.name.trim(),
+          timeZone: draft.timeZone.trim(),
+          addressLine1: draft.addressLine1.trim() || null,
+          city: draft.city.trim() || null,
+          state: draft.state.trim() || null,
+          postalCode: draft.postalCode.trim() || null,
+          phone: draft.phone.trim() || null,
+        });
+        setSaveState({ kind: "success", message: "Location updated." });
+      } else {
+        await platformApi.createLocation(tenantSlug, {
+          name: draft.name.trim(),
+          timeZone: draft.timeZone.trim(),
+          addressLine1: draft.addressLine1.trim() || undefined,
+          city: draft.city.trim() || undefined,
+          state: draft.state.trim() || undefined,
+          postalCode: draft.postalCode.trim() || undefined,
+          phone: draft.phone.trim() || undefined,
+        });
+        setSaveState({ kind: "success", message: "Location created." });
+      }
+      setEditingId(null);
+      setShowCreate(false);
+      setDraft(EMPTY_LOCATION_DRAFT);
+      await loadLocations();
+    } catch (error) {
+      setSaveState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to save location.",
+      });
+    }
+  };
+
+  const deactivate = async (location: LocationSummary) => {
+    if (!canManageSettings) return;
+    if (location.id === defaultLocationId) {
+      setSaveState({ kind: "error", message: "Cannot deactivate the default location." });
+      return;
+    }
+    setSaveState({ kind: "submitting" });
+    try {
+      await platformApi.deactivateLocation(tenantSlug, location.id);
+      setSaveState({ kind: "success", message: "Location deactivated." });
+      await loadLocations();
+    } catch (error) {
+      setSaveState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to deactivate location.",
+      });
+    }
+  };
+
+  const reactivate = async (location: LocationSummary) => {
+    if (!canManageSettings) return;
+    setSaveState({ kind: "submitting" });
+    try {
+      await platformApi.updateLocation(tenantSlug, location.id, { isActive: true });
+      setSaveState({ kind: "success", message: "Location reactivated." });
+      await loadLocations();
+    } catch (error) {
+      setSaveState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to reactivate location.",
+      });
+    }
+  };
+
+  if (state.kind === "loading") {
+    return <p>Loading locations…</p>;
+  }
+  if (state.kind === "error") {
+    return <p role="alert" className="settings-error">{state.message}</p>;
+  }
+
+  return (
+    <div className="locations-section">
+      <ul className="locations-list">
+        {state.locations.map((location) => {
+          const isEditing = editingId === location.id;
+          return (
+            <li key={location.id} className="locations-list__item">
+              {isEditing ? (
+                <LocationForm
+                  draft={draft}
+                  setDraft={setDraft}
+                  onSubmit={submitDraft}
+                  onCancel={cancelEdit}
+                  saveState={saveState}
+                  submitLabel="Save location"
+                />
+              ) : (
+                <div className="locations-list__row">
+                  <div>
+                    <strong>{location.name}</strong>
+                    {location.id === defaultLocationId ? (
+                      <span className="locations-default-tag"> · Default</span>
+                    ) : null}
+                    <p className="settings-panel-help">
+                      {[location.addressLine1, location.city, location.state, location.postalCode]
+                        .filter(Boolean)
+                        .join(", ") || "No address on file"}
+                    </p>
+                    <p className="settings-panel-help">
+                      {location.phone ? `Phone: ${location.phone}` : "No phone"} · {location.timeZone}
+                    </p>
+                    {!location.isActive ? (
+                      <p className="settings-panel-help">Inactive</p>
+                    ) : null}
+                  </div>
+                  {canManageSettings ? (
+                    <div className="locations-list__actions">
+                      <button type="button" className="ghost-action" onClick={() => beginEdit(location)}>
+                        Edit
+                      </button>
+                      {location.isActive ? (
+                        <button
+                          type="button"
+                          className="ghost-action"
+                          onClick={() => void deactivate(location)}
+                          disabled={location.id === defaultLocationId}
+                          title={
+                            location.id === defaultLocationId
+                              ? "Cannot deactivate the default location."
+                              : undefined
+                          }
+                        >
+                          Deactivate
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="ghost-action"
+                          onClick={() => void reactivate(location)}
+                        >
+                          Reactivate
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+
+      {canManageSettings ? (
+        showCreate ? (
+          <LocationForm
+            draft={draft}
+            setDraft={setDraft}
+            onSubmit={submitDraft}
+            onCancel={cancelEdit}
+            saveState={saveState}
+            submitLabel="Create location"
+          />
+        ) : (
+          <div className="settings-actions">
+            <button type="button" className="primary-action" onClick={beginCreate}>
+              Add location
+            </button>
+          </div>
+        )
+      ) : (
+        <p className="settings-permission-note">You do not have permission to edit locations.</p>
+      )}
+
+      {!showCreate && editingId === null && saveState.kind === "success" ? (
+        <p role="status" className="settings-status">{saveState.message}</p>
+      ) : null}
+      {!showCreate && editingId === null && saveState.kind === "error" ? (
+        <p role="alert" className="settings-error">{saveState.message}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function LocationForm({
+  draft,
+  setDraft,
+  onSubmit,
+  onCancel,
+  saveState,
+  submitLabel,
+}: {
+  draft: LocationDraft;
+  setDraft: (draft: LocationDraft) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+  saveState: SaveState;
+  submitLabel: string;
+}) {
+  const disabled = saveState.kind === "submitting";
+  return (
+    <form className="settings-form" onSubmit={onSubmit}>
+      <label>
+        <span>Location name</span>
+        <input
+          type="text"
+          value={draft.name}
+          onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+          disabled={disabled}
+          required
+        />
+      </label>
+      <label>
+        <span>Time zone (IANA)</span>
+        <input
+          type="text"
+          value={draft.timeZone}
+          onChange={(event) => setDraft({ ...draft, timeZone: event.target.value })}
+          placeholder="America/Los_Angeles"
+          disabled={disabled}
+          required
+        />
+      </label>
+      <label>
+        <span>Address</span>
+        <input
+          type="text"
+          value={draft.addressLine1}
+          onChange={(event) => setDraft({ ...draft, addressLine1: event.target.value })}
+          disabled={disabled}
+        />
+      </label>
+      <label>
+        <span>City</span>
+        <input
+          type="text"
+          value={draft.city}
+          onChange={(event) => setDraft({ ...draft, city: event.target.value })}
+          disabled={disabled}
+        />
+      </label>
+      <label>
+        <span>State / region</span>
+        <input
+          type="text"
+          value={draft.state}
+          onChange={(event) => setDraft({ ...draft, state: event.target.value })}
+          disabled={disabled}
+        />
+      </label>
+      <label>
+        <span>Postal code</span>
+        <input
+          type="text"
+          value={draft.postalCode}
+          onChange={(event) => setDraft({ ...draft, postalCode: event.target.value })}
+          disabled={disabled}
+        />
+      </label>
+      <label>
+        <span>Phone</span>
+        <input
+          type="tel"
+          value={draft.phone}
+          onChange={(event) => setDraft({ ...draft, phone: event.target.value })}
+          disabled={disabled}
+        />
+      </label>
+      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+      <div className="settings-actions">
+        <button type="submit" className="primary-action" disabled={disabled}>
+          {disabled ? "Saving…" : submitLabel}
+        </button>
+        <button type="button" className="ghost-action" onClick={onCancel} disabled={disabled}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}

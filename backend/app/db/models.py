@@ -72,6 +72,7 @@ class Location(Base, IdMixin, TimestampMixin):
     city: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     state: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     postal_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="locations", foreign_keys=[tenant_id])
     provider_links: Mapped[list[ProviderLocation]] = relationship(back_populates="location", cascade="all, delete-orphan")

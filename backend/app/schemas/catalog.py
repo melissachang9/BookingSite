@@ -183,6 +183,48 @@ class LocationSummaryResponse(CamelModel):
     city: str | None = None
     state: str | None = None
     postal_code: str | None = None
+    phone: str | None = None
+
+
+class CreateLocationRequest(CamelModel):
+    name: str = Field(min_length=1, max_length=255)
+    time_zone: str = Field(min_length=3, max_length=100)
+    address_line1: str | None = Field(default=None, max_length=255)
+    address_line2: str | None = Field(default=None, max_length=255)
+    city: str | None = Field(default=None, max_length=120)
+    state: str | None = Field(default=None, max_length=120)
+    postal_code: str | None = Field(default=None, max_length=20)
+    phone: str | None = Field(default=None, max_length=40)
+
+    @model_validator(mode="after")
+    def _validate(self) -> "CreateLocationRequest":
+        if self.phone is not None and self.phone.strip():
+            stripped = self.phone.strip()
+            digits = sum(ch.isdigit() for ch in stripped)
+            if digits < 7 or any(ch not in "+0123456789-() .x" for ch in stripped):
+                raise ValueError("phone must contain at least 7 digits and only standard phone characters.")
+        return self
+
+
+class UpdateLocationRequest(CamelModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    time_zone: str | None = Field(default=None, min_length=3, max_length=100)
+    address_line1: str | None = Field(default=None, max_length=255)
+    address_line2: str | None = Field(default=None, max_length=255)
+    city: str | None = Field(default=None, max_length=120)
+    state: str | None = Field(default=None, max_length=120)
+    postal_code: str | None = Field(default=None, max_length=20)
+    phone: str | None = Field(default=None, max_length=40)
+    is_active: bool | None = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> "UpdateLocationRequest":
+        if self.phone is not None and self.phone.strip():
+            stripped = self.phone.strip()
+            digits = sum(ch.isdigit() for ch in stripped)
+            if digits < 7 or any(ch not in "+0123456789-() .x" for ch in stripped):
+                raise ValueError("phone must contain at least 7 digits and only standard phone characters.")
+        return self
 
 
 class ServiceSummaryResponse(CamelModel):

@@ -118,6 +118,7 @@ def location_to_summary(location: Location) -> LocationSummaryResponse:
         city=location.city,
         state=location.state,
         postal_code=location.postal_code,
+        phone=location.phone,
     )
 
 

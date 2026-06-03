@@ -15,6 +15,7 @@ import type {
   CreateBookingDraftRequest,
   CreateCheckoutSessionRequest,
   CreateCheckoutSessionResponse,
+  CreateLocationRequest,
   DepositPaymentFollowUpListResponse,
   RecordManualPaymentRequest,
   SendPaymentReminderResponse,
@@ -23,6 +24,7 @@ import type {
   FormResponseSummary,
   HealthResponse,
   LocationListResponse,
+  LocationSummary,
   ProviderListResponse,
   SaveFormDraftRequest,
   ServiceListResponse,
@@ -33,6 +35,7 @@ import type {
   TenantSummary,
   UpdateBookingStatusRequest,
   UpdateBookingDraftRequest,
+  UpdateLocationRequest,
   UpdateTenantBusinessHoursRequest,
   UpdateTenantBusinessRequest,
   UpdateTenantSettingsRequest,
@@ -59,6 +62,14 @@ export const createPlatformApi = (client: ApiClient) => ({
   createService: (tenantSlug: string, body: CreateServiceRequest) =>
     client.post<ServiceSummary, CreateServiceRequest>(`tenants/${tenantSlug}/services`, body),
   listLocations: (tenantSlug: string) => client.get<LocationListResponse>(`tenants/${tenantSlug}/locations`),
+  listLocationsAdmin: (tenantSlug: string) =>
+    client.get<LocationListResponse>(`tenants/${tenantSlug}/locations/manage`),
+  createLocation: (tenantSlug: string, body: CreateLocationRequest) =>
+    client.post<LocationSummary, CreateLocationRequest>(`tenants/${tenantSlug}/locations`, body),
+  updateLocation: (tenantSlug: string, locationId: string, body: UpdateLocationRequest) =>
+    client.patch<LocationSummary, UpdateLocationRequest>(`tenants/${tenantSlug}/locations/${locationId}`, body),
+  deactivateLocation: (tenantSlug: string, locationId: string) =>
+    client.delete<LocationSummary>(`tenants/${tenantSlug}/locations/${locationId}`),
   listServiceProviders: (tenantSlug: string, serviceId: string, query: { locationId?: string } = {}) =>
     client.get<ProviderListResponse>(`tenants/${tenantSlug}/services/${serviceId}/providers`, {
       query: {

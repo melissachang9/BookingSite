@@ -113,8 +113,8 @@ describe("SettingsPage", () => {
       />,
     );
 
-    expect(screen.getByText(/ships in Phase 5/i)).toBeInTheDocument();
     expect(screen.getByText(/ships in Phase 6/i)).toBeInTheDocument();
+    expect(screen.getByText(/ships in Phase 7/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save calendar hours/i })).toBeEnabled();
   });
 
@@ -246,5 +246,74 @@ describe("SettingsPage", () => {
     expect(body.businessHoursEnabled).toBe(true);
     expect(body.restrictProvidersToBusinessHours).toBe(true);
     expect(body.businessHours?.mon).toEqual({ open: "09:00", close: "17:00", closed: false });
+  });
+
+  it("renders Locations section and creates a new location", async () => {
+    const baseLocation = {
+      id: "location-1",
+      tenantId: "tenant-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      name: "Downtown Studio",
+      timeZone: "America/Los_Angeles",
+      isActive: true,
+      phone: "+1 503 555 0100",
+    };
+    vi.spyOn(platformApi, "listLocationsAdmin").mockResolvedValue({ locations: [baseLocation] } as any);
+    const created = { ...baseLocation, id: "location-2", name: "Annex Studio", phone: null };
+    const createSpy = vi
+      .spyOn(platformApi, "createLocation")
+      .mockResolvedValue(created as any);
+    vi.spyOn(platformApi, "listLocationsAdmin")
+      .mockResolvedValueOnce({ locations: [baseLocation] } as any)
+      .mockResolvedValue({ locations: [baseLocation, created] } as any);
+
+    render(
+      <SettingsPage
+        definition={definition}
+        currentUser={ownerUser}
+        tenant={tenant}
+        onTenantUpdated={() => {}}
+      />,
+    );
+
+    expect(await screen.findByText("Downtown Studio")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /add location/i }));
+    fireEvent.change(screen.getByLabelText(/location name/i), { target: { value: "Annex Studio" } });
+    fireEvent.change(screen.getByLabelText(/time zone/i), { target: { value: "America/Los_Angeles" } });
+    fireEvent.click(screen.getByRole("button", { name: /create location/i }));
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith("brow-beauty-lab", expect.objectContaining({
+        name: "Annex Studio",
+        timeZone: "America/Los_Angeles",
+      }));
+    });
+  });
+
+  it("disables deactivate button for the default location", async () => {
+    const defaultLocation = {
+      id: "location-1",
+      tenantId: "tenant-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      name: "Downtown Studio",
+      timeZone: "America/Los_Angeles",
+      isActive: true,
+      phone: null,
+    };
+    vi.spyOn(platformApi, "listLocationsAdmin").mockResolvedValue({ locations: [defaultLocation] } as any);
+
+    render(
+      <SettingsPage
+        definition={definition}
+        currentUser={ownerUser}
+        tenant={tenant}
+        onTenantUpdated={() => {}}
+      />,
+    );
+
+    expect(await screen.findByText("Downtown Studio")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /deactivate/i })).toBeDisabled();
   });
 });

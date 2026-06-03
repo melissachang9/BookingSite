@@ -52,6 +52,20 @@ async def _ensure_postgres_schema_compatibility() -> None:
         if isinstance(checkout_session_id_length, int) and checkout_session_id_length < 255:
             await connection.execute(text("ALTER TABLE payments ALTER COLUMN checkout_session_id TYPE VARCHAR(255)"))
 
+        location_phone_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'locations'
+                  AND column_name = 'phone'
+                """
+            )
+        )
+        if not location_phone_exists:
+            await connection.execute(text("ALTER TABLE locations ADD COLUMN phone VARCHAR(40)"))
+
 
 async def initialize_database() -> None:
     async with get_engine().begin() as connection:

@@ -10,7 +10,31 @@ export type LocationSummary = AuditFields &
     city?: string;
     state?: string;
     postalCode?: string;
+    phone?: string | null;
   };
+
+export type CreateLocationRequest = {
+  name: string;
+  timeZone: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  phone?: string | null;
+};
+
+export type UpdateLocationRequest = {
+  name?: string;
+  timeZone?: string;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  phone?: string | null;
+  isActive?: boolean;
+};
 
 export type ServiceSummary = AuditFields &
   TenantScoped & {

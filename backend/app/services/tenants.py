@@ -10,13 +10,16 @@ from app.core.http import api_exception
 from app.core.security import hash_password
 from app.db.models import Location, Provider, Service, ServiceLocation, Tenant, User
 from app.schemas.catalog import (
+    CreateLocationRequest,
     CreateServiceRequest,
     CreateTenantRequest,
     CreateTenantResponse,
     LocationListResponse,
+    LocationSummaryResponse,
     ProviderListResponse,
     ServiceListResponse,
     TenantSummaryResponse,
+    UpdateLocationRequest,
     UpdateTenantBusinessHoursRequest,
     UpdateTenantBusinessRequest,
     UpdateTenantSettingsRequest,
@@ -288,6 +291,130 @@ async def list_tenant_locations(session: AsyncSession, tenant_slug: str) -> Loca
         )
     ).all()
     return LocationListResponse(locations=[location_to_summary(location) for location in locations])
+
+
+async def list_tenant_locations_admin(session: AsyncSession, tenant_slug: str) -> LocationListResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    locations = (
+        await session.scalars(
+            select(Location)
+            .where(Location.tenant_id == tenant.id)
+            .order_by(Location.created_at.asc())
+        )
+    ).all()
+    return LocationListResponse(locations=[location_to_summary(location) for location in locations])
+
+
+def _normalize_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+async def create_tenant_location(
+    session: AsyncSession, tenant_slug: str, payload: CreateLocationRequest
+) -> LocationSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    name = payload.name.strip()
+    existing_id = await session.scalar(
+        select(Location.id).where(
+            Location.tenant_id == tenant.id,
+            func.lower(Location.name) == name.lower(),
+        )
+    )
+    if existing_id is not None:
+        raise api_exception(409, "conflict", "A location with this name already exists for the tenant.")
+    location = Location(
+        tenant_id=tenant.id,
+        name=name,
+        time_zone=payload.time_zone.strip(),
+        is_active=True,
+        address_line1=_normalize_optional_text(payload.address_line1),
+        address_line2=_normalize_optional_text(payload.address_line2),
+        city=_normalize_optional_text(payload.city),
+        state=_normalize_optional_text(payload.state),
+        postal_code=_normalize_optional_text(payload.postal_code),
+        phone=_normalize_optional_text(payload.phone),
+    )
+    session.add(location)
+    await session.commit()
+    await session.refresh(location)
+    return location_to_summary(location)
+
+
+async def update_tenant_location(
+    session: AsyncSession,
+    tenant_slug: str,
+    location_id: str,
+    payload: UpdateLocationRequest,
+) -> LocationSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    location = await session.scalar(
+        select(Location).where(Location.tenant_id == tenant.id, Location.id == location_id)
+    )
+    if location is None:
+        raise api_exception(404, "not_found", "Location was not found for this tenant.")
+
+    if payload.name is not None:
+        name = payload.name.strip()
+        duplicate_id = await session.scalar(
+            select(Location.id).where(
+                Location.tenant_id == tenant.id,
+                Location.id != location.id,
+                func.lower(Location.name) == name.lower(),
+            )
+        )
+        if duplicate_id is not None:
+            raise api_exception(409, "conflict", "A location with this name already exists for the tenant.")
+        location.name = name
+    if payload.time_zone is not None:
+        location.time_zone = payload.time_zone.strip()
+    if payload.address_line1 is not None:
+        location.address_line1 = _normalize_optional_text(payload.address_line1)
+    if payload.address_line2 is not None:
+        location.address_line2 = _normalize_optional_text(payload.address_line2)
+    if payload.city is not None:
+        location.city = _normalize_optional_text(payload.city)
+    if payload.state is not None:
+        location.state = _normalize_optional_text(payload.state)
+    if payload.postal_code is not None:
+        location.postal_code = _normalize_optional_text(payload.postal_code)
+    if payload.phone is not None:
+        location.phone = _normalize_optional_text(payload.phone)
+    if payload.is_active is not None:
+        if not payload.is_active and tenant.default_location_id == location.id:
+            raise api_exception(
+                409,
+                "conflict",
+                "Cannot deactivate the default location. Set a different default first.",
+            )
+        location.is_active = payload.is_active
+
+    await session.commit()
+    await session.refresh(location)
+    return location_to_summary(location)
+
+
+async def deactivate_tenant_location(
+    session: AsyncSession, tenant_slug: str, location_id: str
+) -> LocationSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    location = await session.scalar(
+        select(Location).where(Location.tenant_id == tenant.id, Location.id == location_id)
+    )
+    if location is None:
+        raise api_exception(404, "not_found", "Location was not found for this tenant.")
+    if tenant.default_location_id == location.id:
+        raise api_exception(
+            409,
+            "conflict",
+            "Cannot deactivate the default location. Set a different default first.",
+        )
+    location.is_active = False
+    await session.commit()
+    await session.refresh(location)
+    return location_to_summary(location)
 
 
 async def list_service_providers(
