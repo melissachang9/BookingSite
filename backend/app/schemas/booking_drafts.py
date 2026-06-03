@@ -38,6 +38,7 @@ class CustomerSummaryResponse(CamelModel):
     email: str | None = None
     phone: str | None = None
     notes: str | None = None
+    owner_user_id: str | None = None
     acquired_at: datetime | None = None
     source_channel: str | None = None
 

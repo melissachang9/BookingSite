@@ -39,6 +39,7 @@ import type {
   UpdateTenantBrandingRequest,
   UpdateTenantBusinessHoursRequest,
   UpdateTenantBusinessRequest,
+  UpdateTenantClientOwnershipRequest,
   UpdateTenantSettingsRequest,
   UpsertCustomerRequest,
 } from "@booking/shared-types";
@@ -61,6 +62,11 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.patch<TenantSummary, UpdateTenantBusinessHoursRequest>(`tenants/${tenantSlug}/hours`, body),
   updateTenantBranding: (tenantSlug: string, body: UpdateTenantBrandingRequest) =>
     client.patch<TenantSummary, UpdateTenantBrandingRequest>(`tenants/${tenantSlug}/branding`, body),
+  updateTenantClientOwnership: (tenantSlug: string, body: UpdateTenantClientOwnershipRequest) =>
+    client.patch<TenantSummary, UpdateTenantClientOwnershipRequest>(
+      `tenants/${tenantSlug}/client-ownership`,
+      body,
+    ),
   listServices: (tenantSlug: string) => client.get<ServiceListResponse>(`tenants/${tenantSlug}/services`),
   createService: (tenantSlug: string, body: CreateServiceRequest) =>
     client.post<ServiceSummary, CreateServiceRequest>(`tenants/${tenantSlug}/services`, body),

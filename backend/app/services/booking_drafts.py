@@ -54,6 +54,7 @@ async def _upsert_customer(
     session: AsyncSession,
     tenant_id: str,
     payload: dict[str, str | None],
+    assign_owner_user_id: str | None = None,
 ) -> Customer:
     email = payload.get("email")
     phone = payload.get("phone")
@@ -71,6 +72,7 @@ async def _upsert_customer(
             name=payload["name"] or "Guest",
             email=email,
             phone=phone,
+            owner_user_id=assign_owner_user_id,
         )
         session.add(customer)
         await session.flush()
@@ -433,7 +435,17 @@ async def create_booking_draft(
 
     customer = None
     if payload.customer is not None:
-        customer = await _upsert_customer(session, tenant.id, payload.customer.model_dump())
+        assign_owner = (
+            provider.user_id
+            if bool(tenant.settings_json.get("onlineBookingOwnerAssignmentEnabled"))
+            else None
+        )
+        customer = await _upsert_customer(
+            session,
+            tenant.id,
+            payload.customer.model_dump(),
+            assign_owner_user_id=assign_owner,
+        )
 
     draft = BookingDraft(
         tenant_id=tenant.id,
@@ -619,7 +631,18 @@ async def update_booking_draft(
         draft.customer = customer
 
     if payload.customer is not None:
-        customer = await _upsert_customer(session, draft.tenant_id, payload.customer.model_dump())
+        assign_owner: str | None = None
+        if bool(tenant.settings_json.get("onlineBookingOwnerAssignmentEnabled")):
+            provider = await session.scalar(
+                select(Provider).where(Provider.id == draft.provider_id, Provider.tenant_id == draft.tenant_id)
+            )
+            assign_owner = provider.user_id if provider is not None else None
+        customer = await _upsert_customer(
+            session,
+            draft.tenant_id,
+            payload.customer.model_dump(),
+            assign_owner_user_id=assign_owner,
+        )
         draft.customer_id = customer.id
         draft.customer = customer
 

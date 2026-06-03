@@ -73,6 +73,8 @@ export type TenantSettings = {
   businessHoursEnabled: boolean;
   restrictProvidersToBusinessHours: boolean;
   businessHours: BusinessHoursWeek;
+  clientOwnershipEnabled: boolean;
+  onlineBookingOwnerAssignmentEnabled: boolean;
 };
 
 export type UpdateTenantSettingsRequest = {
@@ -100,6 +102,11 @@ export type UpdateTenantBrandingRequest = {
   primaryColor?: string | null;
   accentColor?: string | null;
   photos?: string[];
+};
+
+export type UpdateTenantClientOwnershipRequest = {
+  clientOwnershipEnabled?: boolean;
+  onlineBookingOwnerAssignmentEnabled?: boolean;
 };
 
 export const SUPPORTED_CURRENCIES = ["USD", "CAD", "EUR", "GBP", "AUD", "MXN"] as const;

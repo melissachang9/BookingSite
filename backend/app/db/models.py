@@ -53,6 +53,7 @@ class Customer(Base, IdMixin, TimestampMixin):
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    owner_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True, index=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="customers")
     bookings: Mapped[list[Booking]] = relationship(back_populates="customer")

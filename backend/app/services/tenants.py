@@ -23,6 +23,7 @@ from app.schemas.catalog import (
     UpdateTenantBrandingRequest,
     UpdateTenantBusinessHoursRequest,
     UpdateTenantBusinessRequest,
+    UpdateTenantClientOwnershipRequest,
     UpdateTenantSettingsRequest,
 )
 from app.services.presenters import location_to_summary, provider_to_summary, service_to_summary, tenant_to_summary
@@ -57,6 +58,8 @@ DEFAULT_TENANT_SETTINGS = {
     "businessHoursEnabled": False,
     "restrictProvidersToBusinessHours": False,
     "businessHours": deepcopy(DEFAULT_BUSINESS_HOURS),
+    "clientOwnershipEnabled": False,
+    "onlineBookingOwnerAssignmentEnabled": False,
 }
 
 
@@ -163,6 +166,23 @@ async def update_tenant_branding(
         current_branding["photos"] = [url.strip() for url in payload.photos]
 
     tenant.branding_json = current_branding
+    await session.commit()
+    await session.refresh(tenant)
+    return tenant_to_summary(tenant)
+
+
+async def update_tenant_client_ownership(
+    session: AsyncSession, tenant_slug: str, payload: UpdateTenantClientOwnershipRequest
+) -> TenantSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    current = dict(tenant.settings_json or {})
+
+    if payload.client_ownership_enabled is not None:
+        current["clientOwnershipEnabled"] = payload.client_ownership_enabled
+    if payload.online_booking_owner_assignment_enabled is not None:
+        current["onlineBookingOwnerAssignmentEnabled"] = payload.online_booking_owner_assignment_enabled
+
+    tenant.settings_json = current
     await session.commit()
     await session.refresh(tenant)
     return tenant_to_summary(tenant)

@@ -66,6 +66,21 @@ async def _ensure_postgres_schema_compatibility() -> None:
         if not location_phone_exists:
             await connection.execute(text("ALTER TABLE locations ADD COLUMN phone VARCHAR(40)"))
 
+        customer_owner_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'customers'
+                  AND column_name = 'owner_user_id'
+                """
+            )
+        )
+        if not customer_owner_exists:
+            await connection.execute(text("ALTER TABLE customers ADD COLUMN owner_user_id VARCHAR(36)"))
+            await connection.execute(text("CREATE INDEX IF NOT EXISTS ix_customers_owner_user_id ON customers (owner_user_id)"))
+
 
 async def initialize_database() -> None:
     async with get_engine().begin() as connection:

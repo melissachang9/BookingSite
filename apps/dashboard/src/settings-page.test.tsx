@@ -72,6 +72,8 @@ const tenant: TenantSummary = {
       sat: { open: "09:00", close: "17:00", closed: true },
       sun: { open: "09:00", close: "17:00", closed: true },
     },
+    clientOwnershipEnabled: false,
+    onlineBookingOwnerAssignmentEnabled: false,
   },
 };
 
@@ -113,8 +115,8 @@ describe("SettingsPage", () => {
       />,
     );
 
-    expect(screen.getByText(/ships in Phase 8/i)).toBeInTheDocument();
     expect(screen.getByText(/ships in Phase 9/i)).toBeInTheDocument();
+    expect(screen.getByText(/ships in Phase 10/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save calendar hours/i })).toBeEnabled();
   });
 
@@ -378,5 +380,38 @@ describe("SettingsPage", () => {
 
     expect(screen.getByRole("button", { name: /connect bank account/i })).toBeDisabled();
     expect(screen.getByText(/onboarding ships in a later release/i)).toBeInTheDocument();
+  });
+
+  it("saves client ownership toggles via platformApi.updateTenantClientOwnership", async () => {
+    const updated = {
+      ...tenant,
+      settings: {
+        ...tenant.settings,
+        clientOwnershipEnabled: true,
+        onlineBookingOwnerAssignmentEnabled: true,
+      },
+    };
+    const spy = vi.spyOn(platformApi, "updateTenantClientOwnership").mockResolvedValue(updated as any);
+    const onTenantUpdated = vi.fn();
+
+    render(
+      <SettingsPage
+        definition={definition}
+        currentUser={ownerUser}
+        tenant={tenant}
+        onTenantUpdated={onTenantUpdated}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /enable client ownership/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /assign owner on online bookings/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save client ownership/i }));
+
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+    expect(spy).toHaveBeenCalledWith("brow-beauty-lab", {
+      clientOwnershipEnabled: true,
+      onlineBookingOwnerAssignmentEnabled: true,
+    });
+    expect(onTenantUpdated).toHaveBeenCalledWith(updated);
   });
 });

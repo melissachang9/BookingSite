@@ -83,8 +83,7 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
     title: "Client Ownership",
     eyebrow: "Advanced",
     description: "Restrict customer visibility to the assigned provider.",
-    status: "planned",
-    plannedPhase: "Phase 8",
+    status: "available",
   },
   {
     id: "custom-email",
@@ -232,6 +231,13 @@ export function SettingsPage({
                 />
               ) : section.id === "payroll" ? (
                 <PayrollSection />
+              ) : section.id === "client-ownership" ? (
+                <ClientOwnershipSection
+                  canManageSettings={canManageSettings}
+                  tenant={tenant}
+                  onTenantUpdated={onTenantUpdated}
+                  tenantSlug={currentUser.tenantSlug}
+                />
               ) : (
                 <PlannedPlaceholder phase={section.plannedPhase ?? "a later release"} />
               )}
@@ -1298,5 +1304,101 @@ function PayrollSection() {
         </p>
       </div>
     </div>
+  );
+}
+
+function ClientOwnershipSection({
+  canManageSettings,
+  tenant,
+  onTenantUpdated,
+  tenantSlug,
+}: {
+  canManageSettings: boolean;
+  tenant: TenantSummary | null;
+  onTenantUpdated: (tenant: TenantSummary) => void;
+  tenantSlug: string;
+}) {
+  const [clientOwnershipEnabled, setClientOwnershipEnabled] = useState<boolean>(false);
+  const [onlineAssignEnabled, setOnlineAssignEnabled] = useState<boolean>(false);
+  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
+
+  useEffect(() => {
+    if (tenant) {
+      setClientOwnershipEnabled(Boolean(tenant.settings?.clientOwnershipEnabled));
+      setOnlineAssignEnabled(Boolean(tenant.settings?.onlineBookingOwnerAssignmentEnabled));
+    }
+  }, [tenant]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canManageSettings) return;
+    setSaveState({ kind: "submitting" });
+    try {
+      const updated = await platformApi.updateTenantClientOwnership(tenantSlug, {
+        clientOwnershipEnabled,
+        onlineBookingOwnerAssignmentEnabled: onlineAssignEnabled,
+      });
+      onTenantUpdated(updated);
+      setSaveState({ kind: "success", message: "Client ownership saved." });
+    } catch (error) {
+      setSaveState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to save client ownership.",
+      });
+    }
+  };
+
+  if (tenant === null) {
+    return <p>Loading current settings…</p>;
+  }
+
+  const disabled = !canManageSettings || saveState.kind === "submitting";
+
+  return (
+    <form className="settings-form client-ownership-section" onSubmit={handleSubmit}>
+      <p className="settings-form-help">
+        When client ownership is on, providers can only see customers assigned to them. Owners and
+        managers always see all customers.
+      </p>
+      <label className="settings-toggle-field">
+        <input
+          type="checkbox"
+          checked={clientOwnershipEnabled}
+          onChange={(event) => setClientOwnershipEnabled(event.target.checked)}
+          disabled={disabled}
+        />
+        <span>
+          <strong>Enable client ownership</strong>
+          <small>Scope the customer list for non-manager roles to clients they own.</small>
+        </span>
+      </label>
+      <label className="settings-toggle-field">
+        <input
+          type="checkbox"
+          checked={onlineAssignEnabled}
+          onChange={(event) => setOnlineAssignEnabled(event.target.checked)}
+          disabled={disabled}
+        />
+        <span>
+          <strong>Assign owner on online bookings</strong>
+          <small>
+            When a new customer books online, set their owner to the booked provider's user
+            account. Existing customers are never reassigned.
+          </small>
+        </span>
+      </label>
+
+      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+
+      <div className="settings-actions">
+        <button type="submit" className="primary-action" disabled={disabled}>
+          {saveState.kind === "submitting" ? "Saving…" : "Save client ownership"}
+        </button>
+        {!canManageSettings ? (
+          <p className="settings-permission-note">You do not have permission to edit client ownership.</p>
+        ) : null}
+      </div>
+    </form>
   );
 }

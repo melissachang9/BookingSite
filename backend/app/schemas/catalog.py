@@ -98,6 +98,8 @@ class TenantSettingsResponse(CamelModel):
     business_hours_enabled: bool = False
     restrict_providers_to_business_hours: bool = False
     business_hours: BusinessHoursWeekResponse = Field(default_factory=BusinessHoursWeekResponse)
+    client_ownership_enabled: bool = False
+    online_booking_owner_assignment_enabled: bool = False
 
 
 _HHMM_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
@@ -133,6 +135,11 @@ class UpdateTenantBusinessHoursRequest(CamelModel):
     business_hours_enabled: bool | None = None
     restrict_providers_to_business_hours: bool | None = None
     business_hours: BusinessHoursWeekRequest | None = None
+
+
+class UpdateTenantClientOwnershipRequest(CamelModel):
+    client_ownership_enabled: bool | None = None
+    online_booking_owner_assignment_enabled: bool | None = None
 
 
 class UpdateTenantSettingsRequest(CamelModel):

@@ -172,6 +172,7 @@ def customer_to_summary(customer: Customer) -> CustomerSummaryResponse:
         email=customer.email,
         phone=customer.phone,
         notes=customer.notes,
+        owner_user_id=customer.owner_user_id,
         acquired_at=None,
         source_channel=None,
     )

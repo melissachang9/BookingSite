@@ -2947,3 +2947,9 @@ body {
 .payroll-section__lead { margin: 0; }
 .payroll-section__bullets { margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.25rem; color: var(--color-muted, #4b5563); }
 .payroll-section__cta { display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-start; margin-top: 0.5rem; }
+
+.client-ownership-section .settings-form-help { margin: 0 0 0.5rem; color: var(--color-muted, #4b5563); }
+.settings-toggle-field { display: flex; align-items: flex-start; gap: 0.65rem; padding: 0.5rem 0; }
+.settings-toggle-field input[type="checkbox"] { margin-top: 0.25rem; }
+.settings-toggle-field span { display: flex; flex-direction: column; gap: 0.15rem; }
+.settings-toggle-field small { color: var(--color-muted, #6b7280); font-size: 0.85em; }

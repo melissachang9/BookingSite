@@ -25,4 +25,11 @@ async def lookup_customers(
     if "customers.view" not in ROLE_PERMISSION_ALLOWLIST.get(current_user.role, set()):
         raise api_exception(403, "forbidden", "You do not have permission to view customers.")
 
-    return await lookup_tenant_customers(session, current_user.tenant_id, search, limit)
+    return await lookup_tenant_customers(
+        session,
+        current_user.tenant_id,
+        search,
+        limit,
+        current_user_id=current_user.id,
+        current_user_role=current_user.role,
+    )
