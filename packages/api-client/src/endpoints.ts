@@ -36,6 +36,7 @@ import type {
   UpdateBookingStatusRequest,
   UpdateBookingDraftRequest,
   UpdateLocationRequest,
+  UpdateTenantBrandingRequest,
   UpdateTenantBusinessHoursRequest,
   UpdateTenantBusinessRequest,
   UpdateTenantSettingsRequest,
@@ -58,6 +59,8 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.patch<TenantSummary, UpdateTenantBusinessRequest>(`tenants/${tenantSlug}/business`, body),
   updateTenantBusinessHours: (tenantSlug: string, body: UpdateTenantBusinessHoursRequest) =>
     client.patch<TenantSummary, UpdateTenantBusinessHoursRequest>(`tenants/${tenantSlug}/hours`, body),
+  updateTenantBranding: (tenantSlug: string, body: UpdateTenantBrandingRequest) =>
+    client.patch<TenantSummary, UpdateTenantBrandingRequest>(`tenants/${tenantSlug}/branding`, body),
   listServices: (tenantSlug: string) => client.get<ServiceListResponse>(`tenants/${tenantSlug}/services`),
   createService: (tenantSlug: string, body: CreateServiceRequest) =>
     client.post<ServiceSummary, CreateServiceRequest>(`tenants/${tenantSlug}/services`, body),

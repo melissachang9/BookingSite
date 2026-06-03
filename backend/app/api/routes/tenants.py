@@ -18,6 +18,7 @@ from app.schemas.catalog import (
     ServiceSummaryResponse,
     TenantSummaryResponse,
     UpdateLocationRequest,
+    UpdateTenantBrandingRequest,
     UpdateTenantBusinessHoursRequest,
     UpdateTenantBusinessRequest,
     UpdateTenantSettingsRequest,
@@ -34,6 +35,7 @@ from app.services.tenants import (
     list_tenant_locations_admin,
     list_tenant_services,
     update_tenant_business,
+    update_tenant_branding,
     update_tenant_business_hours,
     update_tenant_location,
     update_tenant_settings,
@@ -99,6 +101,20 @@ async def patch_tenant_business_hours(
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantSummaryResponse:
     return await update_tenant_business_hours(session, tenant_slug, payload)
+
+
+@router.patch(
+    "/{tenant_slug}/branding",
+    response_model=TenantSummaryResponse,
+    summary="Update tenant branding (logo, favicon, colors, gallery)",
+)
+async def patch_tenant_branding(
+    tenant_slug: str,
+    payload: UpdateTenantBrandingRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> TenantSummaryResponse:
+    return await update_tenant_branding(session, tenant_slug, payload)
 
 
 @router.get(

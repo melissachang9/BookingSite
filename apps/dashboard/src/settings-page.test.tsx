@@ -113,8 +113,8 @@ describe("SettingsPage", () => {
       />,
     );
 
-    expect(screen.getByText(/ships in Phase 6/i)).toBeInTheDocument();
     expect(screen.getByText(/ships in Phase 7/i)).toBeInTheDocument();
+    expect(screen.getByText(/ships in Phase 8/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save calendar hours/i })).toBeEnabled();
   });
 
@@ -315,5 +315,54 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByText("Downtown Studio")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /deactivate/i })).toBeDisabled();
+  });
+
+  it("saves branding via platformApi.updateTenantBranding", async () => {
+    const updated = { ...tenant, branding: { ...tenant.branding, primaryColor: "#112233" } };
+    const spy = vi.spyOn(platformApi, "updateTenantBranding").mockResolvedValue(updated as any);
+    const onTenantUpdated = vi.fn();
+
+    render(
+      <SettingsPage
+        definition={definition}
+        currentUser={ownerUser}
+        tenant={tenant}
+        onTenantUpdated={onTenantUpdated}
+      />,
+    );
+
+    const logoInput = screen.getByLabelText(/logo url/i);
+    fireEvent.change(logoInput, { target: { value: "https://cdn.example.com/logo.png" } });
+    const primaryHex = screen.getByLabelText(/primary color hex/i);
+    fireEvent.change(primaryHex, { target: { value: "#112233" } });
+    const photosTextarea = screen.getByLabelText(/gallery photo urls/i);
+    fireEvent.change(photosTextarea, {
+      target: { value: "https://cdn.example.com/a.jpg\nhttps://cdn.example.com/b.jpg\n" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save branding/i }));
+
+    await waitFor(() => {
+      expect(spy).toHaveBeenCalledWith("brow-beauty-lab", expect.objectContaining({
+        logoUrl: "https://cdn.example.com/logo.png",
+        primaryColor: "#112233",
+        photos: ["https://cdn.example.com/a.jpg", "https://cdn.example.com/b.jpg"],
+      }));
+    });
+    expect(onTenantUpdated).toHaveBeenCalled();
+  });
+
+  it("disables the branding save button on invalid hex color", () => {
+    render(
+      <SettingsPage
+        definition={definition}
+        currentUser={ownerUser}
+        tenant={tenant}
+        onTenantUpdated={() => {}}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/primary color hex/i), { target: { value: "not-a-color" } });
+    expect(screen.getByText(/must be a #RGB or #RRGGBB hex/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save branding/i })).toBeDisabled();
   });
 });

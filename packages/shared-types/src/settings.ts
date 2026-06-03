@@ -3,10 +3,12 @@ import type { AuditFields, TenantScoped, UUID } from "./common";
 export type ServiceCatalogMode = "flat" | "categories";
 
 export type TenantBranding = {
-  logoUrl?: string;
+  logoUrl?: string | null;
+  faviconUrl?: string | null;
   homepageUrl?: string;
-  primaryColor?: string;
-  accentColor?: string;
+  primaryColor?: string | null;
+  accentColor?: string | null;
+  photos?: string[];
   serviceCatalogMode?: ServiceCatalogMode;
   serviceCategories?: string[];
   bookingScreening?: {
@@ -90,6 +92,14 @@ export type UpdateTenantBusinessHoursRequest = {
   businessHoursEnabled?: boolean;
   restrictProvidersToBusinessHours?: boolean;
   businessHours?: BusinessHoursWeek;
+};
+
+export type UpdateTenantBrandingRequest = {
+  logoUrl?: string | null;
+  faviconUrl?: string | null;
+  primaryColor?: string | null;
+  accentColor?: string | null;
+  photos?: string[];
 };
 
 export const SUPPORTED_CURRENCIES = ["USD", "CAD", "EUR", "GBP", "AUD", "MXN"] as const;

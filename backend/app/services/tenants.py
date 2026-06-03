@@ -20,6 +20,7 @@ from app.schemas.catalog import (
     ServiceListResponse,
     TenantSummaryResponse,
     UpdateLocationRequest,
+    UpdateTenantBrandingRequest,
     UpdateTenantBusinessHoursRequest,
     UpdateTenantBusinessRequest,
     UpdateTenantSettingsRequest,
@@ -135,6 +136,33 @@ async def update_tenant_business(
 
     tenant.branding_json = current_branding
     tenant.settings_json = current_settings
+    await session.commit()
+    await session.refresh(tenant)
+    return tenant_to_summary(tenant)
+
+
+async def update_tenant_branding(
+    session: AsyncSession, tenant_slug: str, payload: UpdateTenantBrandingRequest
+) -> TenantSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    current_branding = dict(tenant.branding_json or {})
+
+    if payload.logo_url is not None:
+        url = payload.logo_url.strip()
+        current_branding["logoUrl"] = url or None
+    if payload.favicon_url is not None:
+        url = payload.favicon_url.strip()
+        current_branding["faviconUrl"] = url or None
+    if payload.primary_color is not None:
+        color = payload.primary_color.strip()
+        current_branding["primaryColor"] = color or None
+    if payload.accent_color is not None:
+        color = payload.accent_color.strip()
+        current_branding["accentColor"] = color or None
+    if payload.photos is not None:
+        current_branding["photos"] = [url.strip() for url in payload.photos]
+
+    tenant.branding_json = current_branding
     await session.commit()
     await session.refresh(tenant)
     return tenant_to_summary(tenant)

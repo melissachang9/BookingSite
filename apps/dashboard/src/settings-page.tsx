@@ -8,6 +8,7 @@ import {
   type BusinessHoursWeekdayKey,
   type LocationSummary,
   type SessionResponse,
+  type TenantBranding,
   type TenantSummary,
 } from "@booking/shared-types";
 
@@ -61,8 +62,7 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
     title: "Logo & Branding",
     eyebrow: "Business setup",
     description: "Logo URL, favicon, gallery photos, and brand colors.",
-    status: "planned",
-    plannedPhase: "Phase 6",
+    status: "available",
   },
   {
     id: "calendar",
@@ -223,6 +223,13 @@ export function SettingsPage({
                   canManageSettings={canManageSettings}
                   tenantSlug={currentUser.tenantSlug}
                   defaultLocationId={tenant?.defaultLocationId ?? null}
+                />
+              ) : section.id === "branding" ? (
+                <BrandingSection
+                  canManageSettings={canManageSettings}
+                  tenant={tenant}
+                  onTenantUpdated={onTenantUpdated}
+                  tenantSlug={currentUser.tenantSlug}
                 />
               ) : (
                 <PlannedPlaceholder phase={section.plannedPhase ?? "a later release"} />
@@ -1069,6 +1076,202 @@ function LocationForm({
         <button type="button" className="ghost-action" onClick={onCancel} disabled={disabled}>
           Cancel
         </button>
+      </div>
+    </form>
+  );
+}
+const HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+function BrandingSection({
+  canManageSettings,
+  tenant,
+  onTenantUpdated,
+  tenantSlug,
+}: {
+  canManageSettings: boolean;
+  tenant: TenantSummary | null;
+  onTenantUpdated: (tenant: TenantSummary) => void;
+  tenantSlug: string;
+}) {
+  const [logoUrl, setLogoUrl] = useState<string>("");
+  const [faviconUrl, setFaviconUrl] = useState<string>("");
+  const [primaryColor, setPrimaryColor] = useState<string>("#9f5323");
+  const [accentColor, setAccentColor] = useState<string>("#7a3c13");
+  const [photosText, setPhotosText] = useState<string>("");
+  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
+
+  useEffect(() => {
+    if (tenant) {
+      const branding: TenantBranding = tenant.branding ?? {};
+      setLogoUrl(branding.logoUrl ?? "");
+      setFaviconUrl(branding.faviconUrl ?? "");
+      setPrimaryColor(branding.primaryColor ?? "#9f5323");
+      setAccentColor(branding.accentColor ?? "#7a3c13");
+      setPhotosText((branding.photos ?? []).join("\n"));
+    }
+  }, [tenant]);
+
+  const parsedPhotos = useMemo(
+    () =>
+      photosText
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0),
+    [photosText],
+  );
+
+  const validationMessage = useMemo(() => {
+    if (primaryColor.trim() && !HEX_COLOR_RE.test(primaryColor.trim())) {
+      return "Primary color must be a #RGB or #RRGGBB hex value.";
+    }
+    if (accentColor.trim() && !HEX_COLOR_RE.test(accentColor.trim())) {
+      return "Accent color must be a #RGB or #RRGGBB hex value.";
+    }
+    return null;
+  }, [primaryColor, accentColor]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canManageSettings || validationMessage !== null) return;
+    setSaveState({ kind: "submitting" });
+    try {
+      const updated = await platformApi.updateTenantBranding(tenantSlug, {
+        logoUrl: logoUrl.trim(),
+        faviconUrl: faviconUrl.trim(),
+        primaryColor: primaryColor.trim() || null,
+        accentColor: accentColor.trim() || null,
+        photos: parsedPhotos,
+      });
+      onTenantUpdated(updated);
+      setSaveState({ kind: "success", message: "Branding saved." });
+    } catch (error) {
+      setSaveState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to save branding.",
+      });
+    }
+  };
+
+  if (tenant === null) {
+    return <p>Loading current settings…</p>;
+  }
+
+  const disabled = !canManageSettings || saveState.kind === "submitting";
+
+  return (
+    <form className="settings-form branding-section" onSubmit={handleSubmit}>
+      <div className="settings-form-row">
+        <label className="settings-field">
+          <span>Logo URL</span>
+          <input
+            type="url"
+            value={logoUrl}
+            onChange={(event) => setLogoUrl(event.target.value)}
+            disabled={disabled}
+            maxLength={2048}
+            placeholder="https://cdn.example.com/logo.png"
+          />
+        </label>
+        <label className="settings-field">
+          <span>Favicon URL</span>
+          <input
+            type="url"
+            value={faviconUrl}
+            onChange={(event) => setFaviconUrl(event.target.value)}
+            disabled={disabled}
+            maxLength={2048}
+            placeholder="https://cdn.example.com/favicon.ico"
+          />
+        </label>
+      </div>
+
+      <div className="settings-form-row">
+        <label className="settings-field branding-color-field">
+          <span>Primary color</span>
+          <div className="branding-color-input">
+            <input
+              type="color"
+              value={HEX_COLOR_RE.test(primaryColor.trim()) ? primaryColor.trim() : "#9f5323"}
+              onChange={(event) => setPrimaryColor(event.target.value)}
+              disabled={disabled}
+              aria-label="Primary color picker"
+            />
+            <input
+              type="text"
+              value={primaryColor}
+              onChange={(event) => setPrimaryColor(event.target.value)}
+              disabled={disabled}
+              maxLength={16}
+              aria-label="Primary color hex"
+            />
+          </div>
+        </label>
+        <label className="settings-field branding-color-field">
+          <span>Accent color</span>
+          <div className="branding-color-input">
+            <input
+              type="color"
+              value={HEX_COLOR_RE.test(accentColor.trim()) ? accentColor.trim() : "#7a3c13"}
+              onChange={(event) => setAccentColor(event.target.value)}
+              disabled={disabled}
+              aria-label="Accent color picker"
+            />
+            <input
+              type="text"
+              value={accentColor}
+              onChange={(event) => setAccentColor(event.target.value)}
+              disabled={disabled}
+              maxLength={16}
+              aria-label="Accent color hex"
+            />
+          </div>
+        </label>
+      </div>
+
+      <label className="settings-field">
+        <span>Gallery photo URLs</span>
+        <textarea
+          value={photosText}
+          onChange={(event) => setPhotosText(event.target.value)}
+          disabled={disabled}
+          rows={4}
+          placeholder={"https://cdn.example.com/photo1.jpg\nhttps://cdn.example.com/photo2.jpg"}
+        />
+        <span className="settings-field-help">One URL per line.</span>
+      </label>
+
+      <div className="branding-preview" aria-label="Brand preview">
+        <span className="branding-preview__label">Preview</span>
+        <span
+          className="branding-preview__swatch"
+          style={{ backgroundColor: HEX_COLOR_RE.test(primaryColor.trim()) ? primaryColor.trim() : "transparent" }}
+          aria-label="Primary color swatch"
+        />
+        <span
+          className="branding-preview__swatch"
+          style={{ backgroundColor: HEX_COLOR_RE.test(accentColor.trim()) ? accentColor.trim() : "transparent" }}
+          aria-label="Accent color swatch"
+        />
+        {parsedPhotos.length > 0 ? (
+          <span className="branding-preview__count">{parsedPhotos.length} gallery photo{parsedPhotos.length === 1 ? "" : "s"}</span>
+        ) : null}
+      </div>
+
+      {validationMessage ? <p role="alert" className="settings-error">{validationMessage}</p> : null}
+      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+
+      <div className="settings-actions">
+        <button
+          type="submit"
+          className="primary-action"
+          disabled={disabled || validationMessage !== null}
+        >
+          {saveState.kind === "submitting" ? "Saving…" : "Save branding"}
+        </button>
+        {!canManageSettings ? (
+          <p className="settings-permission-note">You do not have permission to edit branding.</p>
+        ) : null}
       </div>
     </form>
   );

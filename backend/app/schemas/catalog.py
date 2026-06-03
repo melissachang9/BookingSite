@@ -29,13 +29,39 @@ class BookingAdResponse(CamelModel):
 
 class TenantBrandingResponse(CamelModel):
     logo_url: str | None = None
+    favicon_url: str | None = None
     homepage_url: str | None = None
     primary_color: str | None = None
     accent_color: str | None = None
+    photos: list[str] = Field(default_factory=list)
     service_catalog_mode: str | None = None
     service_categories: list[str] = Field(default_factory=list)
     booking_screening: BookingScreeningResponse | None = None
     booking_ad: BookingAdResponse | None = None
+
+
+_HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
+class UpdateTenantBrandingRequest(CamelModel):
+    logo_url: str | None = Field(default=None, max_length=2048)
+    favicon_url: str | None = Field(default=None, max_length=2048)
+    primary_color: str | None = Field(default=None, max_length=16)
+    accent_color: str | None = Field(default=None, max_length=16)
+    photos: list[str] | None = Field(default=None, max_length=24)
+
+    @model_validator(mode="after")
+    def _validate(self) -> "UpdateTenantBrandingRequest":
+        for field_name, value in (("primary_color", self.primary_color), ("accent_color", self.accent_color)):
+            if value is not None and value.strip() and not _HEX_COLOR_RE.match(value.strip()):
+                raise ValueError(f"{field_name} must be a #RGB or #RRGGBB hex color.")
+        if self.photos is not None:
+            for url in self.photos:
+                if not isinstance(url, str) or not url.strip():
+                    raise ValueError("photos entries must be non-empty URLs.")
+                if len(url) > 2048:
+                    raise ValueError("photos entries must be 2048 characters or fewer.")
+        return self
 
 
 class BusinessHoursDayResponse(CamelModel):
