@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import type { AuthenticatedUser, SessionResponse, TenantSummary } from "@booking/shared-types";
+import { SUPPORTED_CURRENCIES, type AuthenticatedUser, type SessionResponse, type TenantSummary } from "@booking/shared-types";
 
 import { platformApi } from "./platform-api";
 
@@ -30,8 +30,7 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
     title: "Business Details",
     eyebrow: "Business setup",
     description: "Business name, website, country, currency, and primary phone.",
-    status: "planned",
-    plannedPhase: "Phase 3",
+    status: "available",
   },
   {
     id: "business-hours",
@@ -205,6 +204,13 @@ export function SettingsPage({
                   onTenantUpdated={onTenantUpdated}
                   tenantSlug={currentUser.tenantSlug}
                 />
+              ) : section.id === "business-details" ? (
+                <BusinessDetailsSection
+                  canManageSettings={canManageSettings}
+                  tenant={tenant}
+                  onTenantUpdated={onTenantUpdated}
+                  tenantSlug={currentUser.tenantSlug}
+                />
               ) : (
                 <PlannedPlaceholder phase={section.plannedPhase ?? "a later release"} />
               )}
@@ -339,6 +345,151 @@ function CalendarDisplaySection({
         </button>
         {!canManageSettings ? (
           <p className="settings-permission-note">You do not have permission to edit tenant settings.</p>
+        ) : null}
+      </div>
+    </form>
+  );
+}
+
+function BusinessDetailsSection({
+  canManageSettings,
+  tenant,
+  onTenantUpdated,
+  tenantSlug,
+}: {
+  canManageSettings: boolean;
+  tenant: TenantSummary | null;
+  onTenantUpdated: (tenant: TenantSummary) => void;
+  tenantSlug: string;
+}) {
+  const [name, setName] = useState<string>("");
+  const [homepageUrl, setHomepageUrl] = useState<string>("");
+  const [country, setCountry] = useState<string>("US");
+  const [currency, setCurrency] = useState<string>("USD");
+  const [smsPhone, setSmsPhone] = useState<string>("");
+  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
+
+  useEffect(() => {
+    if (tenant) {
+      setName(tenant.name);
+      setHomepageUrl(tenant.branding.homepageUrl ?? "");
+      setCountry(tenant.settings.country ?? "US");
+      setCurrency(tenant.settings.currency ?? "USD");
+      setSmsPhone(tenant.settings.smsPhone ?? "");
+    }
+  }, [tenant]);
+
+  const trimmedName = name.trim();
+  const validationMessage = trimmedName.length === 0 ? "Business name is required." : null;
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canManageSettings || validationMessage !== null) {
+      return;
+    }
+    setSaveState({ kind: "submitting" });
+    try {
+      const updated = await platformApi.updateTenantBusiness(tenantSlug, {
+        name: trimmedName,
+        homepageUrl: homepageUrl.trim(),
+        country: country.trim().toUpperCase(),
+        currency: currency.trim().toUpperCase(),
+        smsPhone: smsPhone.trim() === "" ? null : smsPhone.trim(),
+      });
+      onTenantUpdated(updated);
+      setSaveState({ kind: "success", message: "Business details saved." });
+    } catch (error) {
+      setSaveState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to save business details.",
+      });
+    }
+  };
+
+  if (tenant === null) {
+    return <p>Loading current settings…</p>;
+  }
+
+  return (
+    <form className="settings-form" onSubmit={handleSubmit}>
+      <div className="settings-form-row">
+        <label className="settings-field">
+          <span>Business name</span>
+          <input
+            type="text"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            disabled={!canManageSettings || saveState.kind === "submitting"}
+            required
+            maxLength={255}
+          />
+        </label>
+        <label className="settings-field">
+          <span>Website</span>
+          <input
+            type="url"
+            placeholder="https://yourbusiness.com"
+            value={homepageUrl}
+            onChange={(event) => setHomepageUrl(event.target.value)}
+            disabled={!canManageSettings || saveState.kind === "submitting"}
+            maxLength={255}
+          />
+        </label>
+      </div>
+
+      <div className="settings-form-row">
+        <label className="settings-field">
+          <span>Country</span>
+          <input
+            type="text"
+            value={country}
+            onChange={(event) => setCountry(event.target.value.toUpperCase().slice(0, 3))}
+            disabled={!canManageSettings || saveState.kind === "submitting"}
+            maxLength={3}
+            placeholder="US"
+          />
+        </label>
+        <label className="settings-field">
+          <span>Currency</span>
+          <select
+            value={currency}
+            onChange={(event) => setCurrency(event.target.value)}
+            disabled={!canManageSettings || saveState.kind === "submitting"}
+          >
+            {SUPPORTED_CURRENCIES.map((code) => (
+              <option key={code} value={code}>
+                {code}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="settings-field">
+          <span>Primary phone</span>
+          <input
+            type="tel"
+            value={smsPhone}
+            onChange={(event) => setSmsPhone(event.target.value)}
+            disabled={!canManageSettings || saveState.kind === "submitting"}
+            maxLength={32}
+            placeholder="+1 555 123 4567"
+          />
+        </label>
+      </div>
+
+      {validationMessage ? <p role="alert" className="settings-error">{validationMessage}</p> : null}
+      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+
+      <div className="settings-actions">
+        <button
+          type="submit"
+          className="primary-action"
+          disabled={!canManageSettings || validationMessage !== null || saveState.kind === "submitting"}
+        >
+          {saveState.kind === "submitting" ? "Saving…" : "Save business details"}
+        </button>
+        {!canManageSettings ? (
+          <p className="settings-permission-note">You do not have permission to edit business details.</p>
         ) : null}
       </div>
     </form>

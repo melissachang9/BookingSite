@@ -38,12 +38,26 @@ export type TenantSettings = {
   autoChargeNoShowFee?: boolean;
   calendarDisplayStartHour: number;
   calendarDisplayEndHour: number;
+  country: string;
+  currency: string;
+  smsPhone: string | null;
 };
 
 export type UpdateTenantSettingsRequest = {
   calendarDisplayStartHour?: number;
   calendarDisplayEndHour?: number;
 };
+
+export type UpdateTenantBusinessRequest = {
+  name?: string;
+  homepageUrl?: string;
+  country?: string;
+  currency?: string;
+  smsPhone?: string | null;
+};
+
+export const SUPPORTED_CURRENCIES = ["USD", "CAD", "EUR", "GBP", "AUD", "MXN"] as const;
+export type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
 
 export type TenantSummary = AuditFields &
   TenantScoped & {

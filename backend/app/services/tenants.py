@@ -17,6 +17,7 @@ from app.schemas.catalog import (
     ProviderListResponse,
     ServiceListResponse,
     TenantSummaryResponse,
+    UpdateTenantBusinessRequest,
     UpdateTenantSettingsRequest,
 )
 from app.services.presenters import location_to_summary, provider_to_summary, service_to_summary, tenant_to_summary
@@ -34,6 +35,9 @@ DEFAULT_TENANT_SETTINGS = {
     "autoChargeNoShowFee": False,
     "calendarDisplayStartHour": 9,
     "calendarDisplayEndHour": 19,
+    "country": "US",
+    "currency": "USD",
+    "smsPhone": None,
 }
 
 
@@ -86,6 +90,33 @@ async def update_tenant_settings(
     current["calendarDisplayStartHour"] = start_hour
     current["calendarDisplayEndHour"] = end_hour
     tenant.settings_json = current
+    await session.commit()
+    await session.refresh(tenant)
+    return tenant_to_summary(tenant)
+
+
+async def update_tenant_business(
+    session: AsyncSession, tenant_slug: str, payload: UpdateTenantBusinessRequest
+) -> TenantSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    current_settings = dict(tenant.settings_json or {})
+    current_branding = dict(tenant.branding_json or {})
+
+    if payload.name is not None:
+        tenant.name = payload.name.strip()
+    if payload.homepage_url is not None:
+        homepage = payload.homepage_url.strip()
+        current_branding["homepageUrl"] = homepage or None
+    if payload.country is not None:
+        current_settings["country"] = payload.country.strip().upper()
+    if payload.currency is not None:
+        current_settings["currency"] = payload.currency.strip().upper()
+    if payload.sms_phone is not None:
+        sms = payload.sms_phone.strip()
+        current_settings["smsPhone"] = sms or None
+
+    tenant.branding_json = current_branding
+    tenant.settings_json = current_settings
     await session.commit()
     await session.refresh(tenant)
     return tenant_to_summary(tenant)

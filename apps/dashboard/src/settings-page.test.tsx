@@ -58,6 +58,9 @@ const tenant: TenantSummary = {
     taxRatePercent: 0,
     calendarDisplayStartHour: 9,
     calendarDisplayEndHour: 19,
+    country: "US",
+    currency: "USD",
+    smsPhone: null,
   },
 };
 
@@ -99,8 +102,8 @@ describe("SettingsPage", () => {
       />,
     );
 
-    expect(screen.getByText(/ships in Phase 3/i)).toBeInTheDocument();
     expect(screen.getByText(/ships in Phase 4/i)).toBeInTheDocument();
+    expect(screen.getByText(/ships in Phase 5/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save calendar hours/i })).toBeEnabled();
   });
 
@@ -143,6 +146,45 @@ describe("SettingsPage", () => {
     );
 
     expect(screen.getByRole("button", { name: /save calendar hours/i })).toBeDisabled();
-    expect(screen.getByText(/do not have permission/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/do not have permission/i).length).toBeGreaterThan(0);
+  });
+
+  it("submits business details via platformApi.updateTenantBusiness", async () => {
+    const updated = {
+      ...tenant,
+      name: "Brow Beauty Studio",
+      branding: { ...tenant.branding, homepageUrl: "https://browbeautystudio.com" },
+      settings: { ...tenant.settings, country: "CA", currency: "CAD", smsPhone: "+1 416 555 0199" },
+    };
+    const spy = vi.spyOn(platformApi, "updateTenantBusiness").mockResolvedValue(updated);
+    const onTenantUpdated = vi.fn();
+
+    render(
+      <SettingsPage
+        definition={definition}
+        currentUser={ownerUser}
+        tenant={tenant}
+        onTenantUpdated={onTenantUpdated}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/business name/i), { target: { value: "Brow Beauty Studio" } });
+    fireEvent.change(screen.getByLabelText(/website/i), { target: { value: "https://browbeautystudio.com" } });
+    fireEvent.change(screen.getByLabelText(/country/i), { target: { value: "CA" } });
+    fireEvent.change(screen.getByLabelText(/currency/i), { target: { value: "CAD" } });
+    fireEvent.change(screen.getByLabelText(/primary phone/i), { target: { value: "+1 416 555 0199" } });
+    fireEvent.click(screen.getByRole("button", { name: /save business details/i }));
+
+    await waitFor(() => {
+      expect(spy).toHaveBeenCalledWith("brow-beauty-lab", {
+        name: "Brow Beauty Studio",
+        homepageUrl: "https://browbeautystudio.com",
+        country: "CA",
+        currency: "CAD",
+        smsPhone: "+1 416 555 0199",
+      });
+    });
+    expect(onTenantUpdated).toHaveBeenCalledWith(updated);
+    expect(await screen.findByText(/business details saved/i)).toBeInTheDocument();
   });
 });
