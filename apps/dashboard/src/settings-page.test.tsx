@@ -113,8 +113,8 @@ describe("SettingsPage", () => {
       />,
     );
 
-    expect(screen.getByText(/ships in Phase 7/i)).toBeInTheDocument();
     expect(screen.getByText(/ships in Phase 8/i)).toBeInTheDocument();
+    expect(screen.getByText(/ships in Phase 9/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save calendar hours/i })).toBeEnabled();
   });
 
@@ -364,5 +364,19 @@ describe("SettingsPage", () => {
     fireEvent.change(screen.getByLabelText(/primary color hex/i), { target: { value: "not-a-color" } });
     expect(screen.getByText(/must be a #RGB or #RRGGBB hex/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save branding/i })).toBeDisabled();
+  });
+
+  it("renders the Payroll placeholder with a disabled connect button", () => {
+    render(
+      <SettingsPage
+        definition={definition}
+        currentUser={ownerUser}
+        tenant={tenant}
+        onTenantUpdated={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /connect bank account/i })).toBeDisabled();
+    expect(screen.getByText(/onboarding ships in a later release/i)).toBeInTheDocument();
   });
 });

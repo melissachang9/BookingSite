@@ -76,8 +76,7 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
     title: "Payroll",
     eyebrow: "Payments & checkout",
     description: "Connect a bank account to pay providers.",
-    status: "planned",
-    plannedPhase: "Phase 7",
+    status: "available",
   },
   {
     id: "client-ownership",
@@ -231,6 +230,8 @@ export function SettingsPage({
                   onTenantUpdated={onTenantUpdated}
                   tenantSlug={currentUser.tenantSlug}
                 />
+              ) : section.id === "payroll" ? (
+                <PayrollSection />
               ) : (
                 <PlannedPlaceholder phase={section.plannedPhase ?? "a later release"} />
               )}
@@ -1274,5 +1275,28 @@ function BrandingSection({
         ) : null}
       </div>
     </form>
+  );
+}
+
+function PayrollSection() {
+  return (
+    <div className="payroll-section">
+      <p className="payroll-section__lead">
+        Connect a bank account to run provider payroll directly from your booking platform.
+      </p>
+      <ul className="payroll-section__bullets">
+        <li>Calculate commissions per booking, service, or provider.</li>
+        <li>Schedule weekly or biweekly payouts to provider bank accounts.</li>
+        <li>Track tips, deductions, and 1099/contractor totals automatically.</li>
+      </ul>
+      <div className="payroll-section__cta">
+        <button type="button" className="primary-action" disabled>
+          Connect bank account
+        </button>
+        <p className="settings-permission-note">
+          Bank-account onboarding ships in a later release. We'll email you when it's ready.
+        </p>
+      </div>
+    </div>
   );
 }
