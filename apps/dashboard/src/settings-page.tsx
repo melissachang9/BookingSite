@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { SUPPORTED_CURRENCIES, type AuthenticatedUser, type SessionResponse, type TenantSummary } from "@booking/shared-types";
+import {
+  BUSINESS_HOURS_WEEKDAY_KEYS,
+  SUPPORTED_CURRENCIES,
+  type AuthenticatedUser,
+  type BusinessHoursDay,
+  type BusinessHoursWeek,
+  type BusinessHoursWeekdayKey,
+  type SessionResponse,
+  type TenantSummary,
+} from "@booking/shared-types";
 
 import { platformApi } from "./platform-api";
 
@@ -37,8 +46,7 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
     title: "Business Hours",
     eyebrow: "Business setup",
     description: "Optional weekly open hours that scope provider availability.",
-    status: "planned",
-    plannedPhase: "Phase 4",
+    status: "available",
   },
   {
     id: "locations",
@@ -206,6 +214,13 @@ export function SettingsPage({
                 />
               ) : section.id === "business-details" ? (
                 <BusinessDetailsSection
+                  canManageSettings={canManageSettings}
+                  tenant={tenant}
+                  onTenantUpdated={onTenantUpdated}
+                  tenantSlug={currentUser.tenantSlug}
+                />
+              ) : section.id === "business-hours" ? (
+                <BusinessHoursSection
                   canManageSettings={canManageSettings}
                   tenant={tenant}
                   onTenantUpdated={onTenantUpdated}
@@ -490,6 +505,194 @@ function BusinessDetailsSection({
         </button>
         {!canManageSettings ? (
           <p className="settings-permission-note">You do not have permission to edit business details.</p>
+        ) : null}
+      </div>
+    </form>
+  );
+}
+
+const WEEKDAY_LABELS: Record<BusinessHoursWeekdayKey, string> = {
+  mon: "Monday",
+  tue: "Tuesday",
+  wed: "Wednesday",
+  thu: "Thursday",
+  fri: "Friday",
+  sat: "Saturday",
+  sun: "Sunday",
+};
+
+function defaultBusinessHoursWeek(): BusinessHoursWeek {
+  return {
+    mon: { open: "09:00", close: "17:00", closed: false },
+    tue: { open: "09:00", close: "17:00", closed: false },
+    wed: { open: "09:00", close: "17:00", closed: false },
+    thu: { open: "09:00", close: "17:00", closed: false },
+    fri: { open: "09:00", close: "17:00", closed: false },
+    sat: { open: "09:00", close: "17:00", closed: true },
+    sun: { open: "09:00", close: "17:00", closed: true },
+  };
+}
+
+function BusinessHoursSection({
+  canManageSettings,
+  tenant,
+  onTenantUpdated,
+  tenantSlug,
+}: {
+  canManageSettings: boolean;
+  tenant: TenantSummary | null;
+  onTenantUpdated: (tenant: TenantSummary) => void;
+  tenantSlug: string;
+}) {
+  const [enabled, setEnabled] = useState<boolean>(false);
+  const [restrict, setRestrict] = useState<boolean>(false);
+  const [week, setWeek] = useState<BusinessHoursWeek>(() => defaultBusinessHoursWeek());
+  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
+
+  useEffect(() => {
+    if (tenant) {
+      setEnabled(tenant.settings.businessHoursEnabled ?? false);
+      setRestrict(tenant.settings.restrictProvidersToBusinessHours ?? false);
+      const hours = tenant.settings.businessHours ?? defaultBusinessHoursWeek();
+      setWeek({
+        mon: { ...hours.mon },
+        tue: { ...hours.tue },
+        wed: { ...hours.wed },
+        thu: { ...hours.thu },
+        fri: { ...hours.fri },
+        sat: { ...hours.sat },
+        sun: { ...hours.sun },
+      });
+    }
+  }, [tenant]);
+
+  const validationMessage = useMemo(() => {
+    for (const key of BUSINESS_HOURS_WEEKDAY_KEYS) {
+      const day = week[key];
+      if (day.closed) continue;
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(day.open) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(day.close)) {
+        return `${WEEKDAY_LABELS[key]}: times must be HH:MM (24-hour).`;
+      }
+      if (day.open >= day.close) {
+        return `${WEEKDAY_LABELS[key]}: open must be earlier than close.`;
+      }
+    }
+    return null;
+  }, [week]);
+
+  const updateDay = (key: BusinessHoursWeekdayKey, patch: Partial<BusinessHoursDay>) => {
+    setWeek((current) => ({ ...current, [key]: { ...current[key], ...patch } }));
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canManageSettings || validationMessage !== null) {
+      return;
+    }
+    setSaveState({ kind: "submitting" });
+    try {
+      const updated = await platformApi.updateTenantBusinessHours(tenantSlug, {
+        businessHoursEnabled: enabled,
+        restrictProvidersToBusinessHours: restrict,
+        businessHours: week,
+      });
+      onTenantUpdated(updated);
+      setSaveState({ kind: "success", message: "Business hours saved." });
+    } catch (error) {
+      setSaveState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to save business hours.",
+      });
+    }
+  };
+
+  if (tenant === null) {
+    return <p>Loading current settings…</p>;
+  }
+
+  const editorDisabled = !canManageSettings || saveState.kind === "submitting" || !enabled;
+
+  return (
+    <form className="settings-form" onSubmit={handleSubmit}>
+      <label className="settings-toggle">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(event) => setEnabled(event.target.checked)}
+          disabled={!canManageSettings || saveState.kind === "submitting"}
+        />
+        <span>Set business hours</span>
+      </label>
+      {!enabled ? (
+        <p className="settings-panel-help">Availability follows each provider&rsquo;s schedule.</p>
+      ) : (
+        <div className="business-hours-grid">
+          {BUSINESS_HOURS_WEEKDAY_KEYS.map((key) => {
+            const day = week[key];
+            return (
+              <div key={key} className="business-hours-row">
+                <span className="business-hours-row__label">{WEEKDAY_LABELS[key]}</span>
+                <label className="business-hours-row__field">
+                  <span className="visually-hidden">{WEEKDAY_LABELS[key]} open</span>
+                  <input
+                    type="time"
+                    value={day.open}
+                    onChange={(event) => updateDay(key, { open: event.target.value })}
+                    disabled={editorDisabled || day.closed}
+                    aria-label={`${WEEKDAY_LABELS[key]} open`}
+                  />
+                </label>
+                <span aria-hidden="true">–</span>
+                <label className="business-hours-row__field">
+                  <span className="visually-hidden">{WEEKDAY_LABELS[key]} close</span>
+                  <input
+                    type="time"
+                    value={day.close}
+                    onChange={(event) => updateDay(key, { close: event.target.value })}
+                    disabled={editorDisabled || day.closed}
+                    aria-label={`${WEEKDAY_LABELS[key]} close`}
+                  />
+                </label>
+                <label className="business-hours-row__closed">
+                  <input
+                    type="checkbox"
+                    checked={day.closed}
+                    onChange={(event) => updateDay(key, { closed: event.target.checked })}
+                    disabled={editorDisabled}
+                    aria-label={`${WEEKDAY_LABELS[key]} closed`}
+                  />
+                  <span>Closed</span>
+                </label>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <label className={`settings-toggle${!enabled ? " settings-toggle--disabled" : ""}`}>
+        <input
+          type="checkbox"
+          checked={restrict}
+          onChange={(event) => setRestrict(event.target.checked)}
+          disabled={!canManageSettings || saveState.kind === "submitting" || !enabled}
+        />
+        <span>Only allow providers to offer services within business hours</span>
+      </label>
+
+      {validationMessage ? <p role="alert" className="settings-error">{validationMessage}</p> : null}
+      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+
+      <div className="settings-actions">
+        <button
+          type="submit"
+          className="primary-action"
+          disabled={!canManageSettings || validationMessage !== null || saveState.kind === "submitting"}
+        >
+          {saveState.kind === "submitting" ? "Saving…" : "Save business hours"}
+        </button>
+        {!canManageSettings ? (
+          <p className="settings-permission-note">You do not have permission to edit business hours.</p>
         ) : null}
       </div>
     </form>

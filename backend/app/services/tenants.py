@@ -17,10 +17,22 @@ from app.schemas.catalog import (
     ProviderListResponse,
     ServiceListResponse,
     TenantSummaryResponse,
+    UpdateTenantBusinessHoursRequest,
     UpdateTenantBusinessRequest,
     UpdateTenantSettingsRequest,
 )
 from app.services.presenters import location_to_summary, provider_to_summary, service_to_summary, tenant_to_summary
+
+
+DEFAULT_BUSINESS_HOURS = {
+    "mon": {"open": "09:00", "close": "17:00", "closed": False},
+    "tue": {"open": "09:00", "close": "17:00", "closed": False},
+    "wed": {"open": "09:00", "close": "17:00", "closed": False},
+    "thu": {"open": "09:00", "close": "17:00", "closed": False},
+    "fri": {"open": "09:00", "close": "17:00", "closed": False},
+    "sat": {"open": "09:00", "close": "17:00", "closed": True},
+    "sun": {"open": "09:00", "close": "17:00", "closed": True},
+}
 
 
 DEFAULT_TENANT_SETTINGS = {
@@ -38,6 +50,9 @@ DEFAULT_TENANT_SETTINGS = {
     "country": "US",
     "currency": "USD",
     "smsPhone": None,
+    "businessHoursEnabled": False,
+    "restrictProvidersToBusinessHours": False,
+    "businessHours": deepcopy(DEFAULT_BUSINESS_HOURS),
 }
 
 
@@ -117,6 +132,33 @@ async def update_tenant_business(
 
     tenant.branding_json = current_branding
     tenant.settings_json = current_settings
+    await session.commit()
+    await session.refresh(tenant)
+    return tenant_to_summary(tenant)
+
+
+async def update_tenant_business_hours(
+    session: AsyncSession, tenant_slug: str, payload: UpdateTenantBusinessHoursRequest
+) -> TenantSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    current = dict(tenant.settings_json or {})
+
+    if payload.business_hours_enabled is not None:
+        current["businessHoursEnabled"] = payload.business_hours_enabled
+    if payload.restrict_providers_to_business_hours is not None:
+        current["restrictProvidersToBusinessHours"] = payload.restrict_providers_to_business_hours
+    if payload.business_hours is not None:
+        hours: dict[str, dict[str, object]] = {}
+        for day_key in ("mon", "tue", "wed", "thu", "fri", "sat", "sun"):
+            entry = getattr(payload.business_hours, day_key)
+            hours[day_key] = {
+                "open": entry.open,
+                "close": entry.close,
+                "closed": entry.closed,
+            }
+        current["businessHours"] = hours
+
+    tenant.settings_json = current
     await session.commit()
     await session.refresh(tenant)
     return tenant_to_summary(tenant)

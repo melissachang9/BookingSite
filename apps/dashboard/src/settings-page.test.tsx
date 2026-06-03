@@ -61,6 +61,17 @@ const tenant: TenantSummary = {
     country: "US",
     currency: "USD",
     smsPhone: null,
+    businessHoursEnabled: false,
+    restrictProvidersToBusinessHours: false,
+    businessHours: {
+      mon: { open: "09:00", close: "17:00", closed: false },
+      tue: { open: "09:00", close: "17:00", closed: false },
+      wed: { open: "09:00", close: "17:00", closed: false },
+      thu: { open: "09:00", close: "17:00", closed: false },
+      fri: { open: "09:00", close: "17:00", closed: false },
+      sat: { open: "09:00", close: "17:00", closed: true },
+      sun: { open: "09:00", close: "17:00", closed: true },
+    },
   },
 };
 
@@ -102,8 +113,8 @@ describe("SettingsPage", () => {
       />,
     );
 
-    expect(screen.getByText(/ships in Phase 4/i)).toBeInTheDocument();
     expect(screen.getByText(/ships in Phase 5/i)).toBeInTheDocument();
+    expect(screen.getByText(/ships in Phase 6/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save calendar hours/i })).toBeEnabled();
   });
 
@@ -186,5 +197,54 @@ describe("SettingsPage", () => {
     });
     expect(onTenantUpdated).toHaveBeenCalledWith(updated);
     expect(await screen.findByText(/business details saved/i)).toBeInTheDocument();
+  });
+
+  it("hides the weekday editor and disables the restrict toggle when Set business hours is off", () => {
+    render(
+      <SettingsPage
+        definition={definition}
+        currentUser={ownerUser}
+        tenant={tenant}
+        onTenantUpdated={() => {}}
+      />,
+    );
+
+    expect(screen.queryByLabelText(/monday open/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/availability follows each provider/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/only allow providers to offer services/i)).toBeDisabled();
+  });
+
+  it("reveals the weekday editor when Set business hours is enabled and saves the toggle + week", async () => {
+    const updated = {
+      ...tenant,
+      settings: {
+        ...tenant.settings,
+        businessHoursEnabled: true,
+        restrictProvidersToBusinessHours: true,
+      },
+    };
+    const spy = vi.spyOn(platformApi, "updateTenantBusinessHours").mockResolvedValue(updated);
+
+    render(
+      <SettingsPage
+        definition={definition}
+        currentUser={ownerUser}
+        tenant={tenant}
+        onTenantUpdated={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText(/^set business hours$/i));
+    expect(screen.getByLabelText(/monday open/i)).toBeEnabled();
+    fireEvent.click(screen.getByLabelText(/only allow providers to offer services/i));
+    fireEvent.click(screen.getByRole("button", { name: /save business hours/i }));
+
+    await waitFor(() => {
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+    const [, body] = spy.mock.calls[0];
+    expect(body.businessHoursEnabled).toBe(true);
+    expect(body.restrictProvidersToBusinessHours).toBe(true);
+    expect(body.businessHours?.mon).toEqual({ open: "09:00", close: "17:00", closed: false });
   });
 });

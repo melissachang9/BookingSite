@@ -26,6 +26,33 @@ export type TenantBranding = {
   } | null;
 };
 
+export type BusinessHoursDay = {
+  open: string;
+  close: string;
+  closed: boolean;
+};
+
+export type BusinessHoursWeek = {
+  mon: BusinessHoursDay;
+  tue: BusinessHoursDay;
+  wed: BusinessHoursDay;
+  thu: BusinessHoursDay;
+  fri: BusinessHoursDay;
+  sat: BusinessHoursDay;
+  sun: BusinessHoursDay;
+};
+
+export const BUSINESS_HOURS_WEEKDAY_KEYS = [
+  "mon",
+  "tue",
+  "wed",
+  "thu",
+  "fri",
+  "sat",
+  "sun",
+] as const;
+export type BusinessHoursWeekdayKey = (typeof BUSINESS_HOURS_WEEKDAY_KEYS)[number];
+
 export type TenantSettings = {
   cancellationWindowHours: number;
   refundInsideWindow: boolean;
@@ -41,6 +68,9 @@ export type TenantSettings = {
   country: string;
   currency: string;
   smsPhone: string | null;
+  businessHoursEnabled: boolean;
+  restrictProvidersToBusinessHours: boolean;
+  businessHours: BusinessHoursWeek;
 };
 
 export type UpdateTenantSettingsRequest = {
@@ -54,6 +84,12 @@ export type UpdateTenantBusinessRequest = {
   country?: string;
   currency?: string;
   smsPhone?: string | null;
+};
+
+export type UpdateTenantBusinessHoursRequest = {
+  businessHoursEnabled?: boolean;
+  restrictProvidersToBusinessHours?: boolean;
+  businessHours?: BusinessHoursWeek;
 };
 
 export const SUPPORTED_CURRENCIES = ["USD", "CAD", "EUR", "GBP", "AUD", "MXN"] as const;

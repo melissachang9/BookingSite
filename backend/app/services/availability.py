@@ -34,6 +34,33 @@ def _normalize_settings(settings_json: dict[str, object]) -> dict[str, int | boo
     }
 
 
+_WEEKDAY_KEYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
+
+def _business_window_for_weekday(
+    settings_json: dict[str, object], weekday_index: int
+) -> tuple[time, time] | None:
+    """Return (open, close) `time` window for the weekday, or None if closed.
+
+    Returns the sentinel ``None`` only when business-hours restriction applies and
+    the day is closed. Callers should check the enable/restrict flags before calling.
+    """
+    hours = settings_json.get("businessHours")
+    if not isinstance(hours, dict):
+        return (time(0, 0), time(23, 59))
+    entry = hours.get(_WEEKDAY_KEYS[weekday_index])
+    if not isinstance(entry, dict) or entry.get("closed", False):
+        return None
+    try:
+        open_text = str(entry.get("open", "00:00"))
+        close_text = str(entry.get("close", "23:59"))
+        oh, om = (int(part) for part in open_text.split(":", 1))
+        ch, cm = (int(part) for part in close_text.split(":", 1))
+        return (time(oh, om), time(ch, cm))
+    except (ValueError, TypeError):
+        return (time(0, 0), time(23, 59))
+
+
 def _overlaps(start_at: datetime, end_at: datetime, hold_ranges: list[tuple[datetime, datetime]]) -> bool:
     return any(start_at < hold_end and end_at > hold_start for hold_start, hold_end in hold_ranges)
 
@@ -156,9 +183,24 @@ async def list_availability(
 
     all_slots_by_day: list[list[SlotAvailabilityResponse]] = []
     earliest_slot: SlotAvailabilityResponse | None = None
+    business_hours_enabled = bool(tenant.settings_json.get("businessHoursEnabled", False))
+    restrict_to_business_hours = business_hours_enabled and bool(
+        tenant.settings_json.get("restrictProvidersToBusinessHours", False)
+    )
     for day_offset in range(resolved_window_days):
         current_date = requested_date + timedelta(days=day_offset)
         day_slots: list[SlotAvailabilityResponse] = []
+        business_window: tuple[time, time] | None
+        if restrict_to_business_hours:
+            business_window = _business_window_for_weekday(
+                tenant.settings_json, current_date.weekday()
+            )
+            if business_window is None:
+                # Closed day under restriction -> no slots
+                all_slots_by_day.append(day_slots)
+                continue
+        else:
+            business_window = None
         for context in provider_contexts:
             for resolved_location_id in context.location_ids:
                 day_schedules = schedule_map.get(
@@ -166,8 +208,18 @@ async def list_availability(
                     [],
                 )
                 for schedule in day_schedules:
-                    cursor = datetime.combine(current_date, schedule.start_time, tzinfo=tenant_timezone)
-                    end_boundary = datetime.combine(current_date, schedule.end_time, tzinfo=tenant_timezone)
+                    effective_start = schedule.start_time
+                    effective_end = schedule.end_time
+                    if business_window is not None:
+                        business_open, business_close = business_window
+                        if business_close <= effective_start or business_open >= effective_end:
+                            continue
+                        if business_open > effective_start:
+                            effective_start = business_open
+                        if business_close < effective_end:
+                            effective_end = business_close
+                    cursor = datetime.combine(current_date, effective_start, tzinfo=tenant_timezone)
+                    end_boundary = datetime.combine(current_date, effective_end, tzinfo=tenant_timezone)
                     while cursor + duration <= end_boundary:
                         slot_start = cursor.astimezone(timezone.utc)
                         slot_end = (cursor + duration).astimezone(timezone.utc)

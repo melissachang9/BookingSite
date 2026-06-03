@@ -15,6 +15,7 @@ from app.schemas.catalog import (
     ServiceListResponse,
     ServiceSummaryResponse,
     TenantSummaryResponse,
+    UpdateTenantBusinessHoursRequest,
     UpdateTenantBusinessRequest,
     UpdateTenantSettingsRequest,
 )
@@ -27,6 +28,7 @@ from app.services.tenants import (
     list_tenant_locations,
     list_tenant_services,
     update_tenant_business,
+    update_tenant_business_hours,
     update_tenant_settings,
 )
 
@@ -76,6 +78,20 @@ async def patch_tenant_business(
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantSummaryResponse:
     return await update_tenant_business(session, tenant_slug, payload)
+
+
+@router.patch(
+    "/{tenant_slug}/hours",
+    response_model=TenantSummaryResponse,
+    summary="Update tenant business hours and provider restriction toggle",
+)
+async def patch_tenant_business_hours(
+    tenant_slug: str,
+    payload: UpdateTenantBusinessHoursRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> TenantSummaryResponse:
+    return await update_tenant_business_hours(session, tenant_slug, payload)
 
 
 @router.get(

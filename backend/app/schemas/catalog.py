@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from pydantic import Field, model_validator
@@ -37,6 +38,22 @@ class TenantBrandingResponse(CamelModel):
     booking_ad: BookingAdResponse | None = None
 
 
+class BusinessHoursDayResponse(CamelModel):
+    open: str = "09:00"
+    close: str = "17:00"
+    closed: bool = False
+
+
+class BusinessHoursWeekResponse(CamelModel):
+    mon: BusinessHoursDayResponse = Field(default_factory=BusinessHoursDayResponse)
+    tue: BusinessHoursDayResponse = Field(default_factory=BusinessHoursDayResponse)
+    wed: BusinessHoursDayResponse = Field(default_factory=BusinessHoursDayResponse)
+    thu: BusinessHoursDayResponse = Field(default_factory=BusinessHoursDayResponse)
+    fri: BusinessHoursDayResponse = Field(default_factory=BusinessHoursDayResponse)
+    sat: BusinessHoursDayResponse = Field(default_factory=lambda: BusinessHoursDayResponse(closed=True))
+    sun: BusinessHoursDayResponse = Field(default_factory=lambda: BusinessHoursDayResponse(closed=True))
+
+
 class TenantSettingsResponse(CamelModel):
     cancellation_window_hours: int
     refund_inside_window: bool
@@ -52,6 +69,44 @@ class TenantSettingsResponse(CamelModel):
     country: str = "US"
     currency: str = "USD"
     sms_phone: str | None = None
+    business_hours_enabled: bool = False
+    restrict_providers_to_business_hours: bool = False
+    business_hours: BusinessHoursWeekResponse = Field(default_factory=BusinessHoursWeekResponse)
+
+
+_HHMM_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+
+
+class BusinessHoursDayRequest(CamelModel):
+    open: str = "09:00"
+    close: str = "17:00"
+    closed: bool = False
+
+    @model_validator(mode="after")
+    def _validate_window(self) -> "BusinessHoursDayRequest":
+        if not _HHMM_RE.match(self.open):
+            raise ValueError("open must be HH:MM 24-hour format.")
+        if not _HHMM_RE.match(self.close):
+            raise ValueError("close must be HH:MM 24-hour format.")
+        if not self.closed and self.open >= self.close:
+            raise ValueError("open must be earlier than close on open days.")
+        return self
+
+
+class BusinessHoursWeekRequest(CamelModel):
+    mon: BusinessHoursDayRequest = Field(default_factory=BusinessHoursDayRequest)
+    tue: BusinessHoursDayRequest = Field(default_factory=BusinessHoursDayRequest)
+    wed: BusinessHoursDayRequest = Field(default_factory=BusinessHoursDayRequest)
+    thu: BusinessHoursDayRequest = Field(default_factory=BusinessHoursDayRequest)
+    fri: BusinessHoursDayRequest = Field(default_factory=BusinessHoursDayRequest)
+    sat: BusinessHoursDayRequest = Field(default_factory=lambda: BusinessHoursDayRequest(closed=True))
+    sun: BusinessHoursDayRequest = Field(default_factory=lambda: BusinessHoursDayRequest(closed=True))
+
+
+class UpdateTenantBusinessHoursRequest(CamelModel):
+    business_hours_enabled: bool | None = None
+    restrict_providers_to_business_hours: bool | None = None
+    business_hours: BusinessHoursWeekRequest | None = None
 
 
 class UpdateTenantSettingsRequest(CamelModel):
