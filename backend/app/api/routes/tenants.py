@@ -8,7 +8,10 @@ from app.db.session import get_db_session
 from app.schemas.availability import AvailabilityResponse
 from app.schemas.catalog import (
     CreateLocationRequest,
+    CreateProviderRequest,
     CreateServiceRequest,
+    CreateStaffRequest,
+    CreateStaffResponse,
     CreateTenantRequest,
     CreateTenantResponse,
     CreateTenantUserRequest,
@@ -16,6 +19,7 @@ from app.schemas.catalog import (
     LocationListResponse,
     LocationSummaryResponse,
     ProviderListResponse,
+    ProviderSummaryResponse,
     ResetTenantUserPasswordRequest,
     ServiceListResponse,
     ServiceSummaryResponse,
@@ -23,6 +27,7 @@ from app.schemas.catalog import (
     TenantUserListResponse,
     TenantUserSummaryResponse,
     UpdateLocationRequest,
+    UpdateProviderRequest,
     UpdateTenantBrandingRequest,
     UpdateTenantBusinessHoursRequest,
     UpdateTenantBusinessRequest,
@@ -36,13 +41,17 @@ from app.services.availability import list_availability
 from app.services.tenants import (
     create_tenant_account,
     create_tenant_location,
+    create_tenant_provider,
     create_tenant_service,
+    create_tenant_staff,
     create_tenant_user,
     deactivate_tenant_location,
+    deactivate_tenant_provider,
     get_tenant_summary,
     list_service_providers,
     list_tenant_locations,
     list_tenant_locations_admin,
+    list_tenant_providers_admin,
     list_tenant_services,
     list_tenant_users,
     reset_tenant_user_password,
@@ -51,6 +60,7 @@ from app.services.tenants import (
     update_tenant_business_hours,
     update_tenant_client_ownership,
     update_tenant_custom_email,
+    update_tenant_provider,
     update_tenant_user,
     update_tenant_wallet_membership,
     get_tenant_email_dns,
@@ -381,3 +391,75 @@ async def get_availability(
         requested_date_text=date,
         window_days=window_days,
     )
+
+
+@router.get(
+    "/{tenant_slug}/providers/manage",
+    response_model=ProviderListResponse,
+    summary="List all providers (including inactive) for staff management",
+)
+async def list_providers_admin(
+    tenant_slug: str,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ProviderListResponse:
+    return await list_tenant_providers_admin(session, tenant_slug)
+
+
+@router.post(
+    "/{tenant_slug}/providers",
+    response_model=ProviderSummaryResponse,
+    status_code=201,
+    summary="Create a tenant provider",
+)
+async def post_tenant_provider(
+    tenant_slug: str,
+    payload: CreateProviderRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ProviderSummaryResponse:
+    return await create_tenant_provider(session, tenant_slug, payload)
+
+
+@router.patch(
+    "/{tenant_slug}/providers/{provider_id}",
+    response_model=ProviderSummaryResponse,
+    summary="Update a tenant provider",
+)
+async def patch_tenant_provider(
+    tenant_slug: str,
+    provider_id: str,
+    payload: UpdateProviderRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ProviderSummaryResponse:
+    return await update_tenant_provider(session, tenant_slug, provider_id, payload)
+
+
+@router.delete(
+    "/{tenant_slug}/providers/{provider_id}",
+    response_model=ProviderSummaryResponse,
+    summary="Deactivate a tenant provider",
+)
+async def delete_tenant_provider(
+    tenant_slug: str,
+    provider_id: str,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ProviderSummaryResponse:
+    return await deactivate_tenant_provider(session, tenant_slug, provider_id)
+
+
+@router.post(
+    "/{tenant_slug}/staff",
+    response_model=CreateStaffResponse,
+    status_code=201,
+    summary="Create a tenant user with an optional linked provider in one transaction",
+)
+async def post_tenant_staff(
+    tenant_slug: str,
+    payload: CreateStaffRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> CreateStaffResponse:
+    return await create_tenant_staff(session, tenant_slug, payload)

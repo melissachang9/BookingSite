@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
   AuthenticatedUser,
-  CreateTenantUserRequest,
+  CreateProviderRequest,
+  CreateStaffRequest,
+  LocationSummary,
+  ProviderSummary,
+  ServiceSummary,
   TenantUserSummary,
+  UpdateProviderRequest,
   UpdateTenantUserRequest,
 } from "@booking/shared-types";
 
@@ -16,14 +21,16 @@ type RouteDefinitionLike = {
 
 type LoadState =
   | { kind: "loading" }
-  | { kind: "ready"; users: TenantUserSummary[] }
+  | { kind: "ready" }
   | { kind: "error"; message: string };
 
 type ModalState =
   | { kind: "none" }
   | { kind: "add" }
-  | { kind: "edit"; user: TenantUserSummary }
-  | { kind: "password"; user: TenantUserSummary };
+  | { kind: "password"; user: TenantUserSummary }
+  | { kind: "addProviderFor"; user: TenantUserSummary };
+
+type TabKey = "details" | "services" | "schedule";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Owner",
@@ -38,6 +45,9 @@ const ROLE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "staff", label: "Staff" },
   { value: "provider", label: "Provider" },
 ];
+
+const storefrontBaseUrl =
+  import.meta.env.VITE_PUBLIC_STOREFRONT_BASE_URL ?? "http://127.0.0.1:3001";
 
 function hasPermission(user: AuthenticatedUser, key: string): boolean {
   return user.permissions.some((permission) => permission.key === key && permission.allowed);
@@ -54,6 +64,15 @@ function readErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function initialsOf(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
 export function StaffPage({
   definition,
   currentUser,
@@ -63,6 +82,12 @@ export function StaffPage({
 }) {
   const canManage = hasPermission(currentUser, "settings.manage");
   const [state, setState] = useState<LoadState>({ kind: "loading" });
+  const [users, setUsers] = useState<TenantUserSummary[]>([]);
+  const [providers, setProviders] = useState<ProviderSummary[]>([]);
+  const [locations, setLocations] = useState<LocationSummary[]>([]);
+  const [services, setServices] = useState<ServiceSummary[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabKey>("details");
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -70,15 +95,27 @@ export function StaffPage({
     if (!canManage) return;
     let cancelled = false;
     setState({ kind: "loading" });
-    platformApi
-      .listTenantUsers(currentUser.tenantSlug)
-      .then((response) => {
+    Promise.all([
+      platformApi.listTenantUsers(currentUser.tenantSlug),
+      platformApi.listProvidersAdmin(currentUser.tenantSlug),
+      platformApi.listLocationsAdmin(currentUser.tenantSlug),
+      platformApi.listServices(currentUser.tenantSlug),
+    ])
+      .then(([usersRes, providersRes, locationsRes, servicesRes]) => {
         if (cancelled) return;
-        setState({ kind: "ready", users: response.users });
+        setUsers(usersRes.users);
+        setProviders(providersRes.providers);
+        setLocations(locationsRes.locations);
+        setServices(servicesRes.services);
+        setState({ kind: "ready" });
+        setSelectedUserId((prev) => prev ?? usersRes.users[0]?.id ?? null);
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        setState({ kind: "error", message: readErrorMessage(error, "Unable to load team roster.") });
+        setState({
+          kind: "error",
+          message: readErrorMessage(error, "Unable to load team roster."),
+        });
       });
     return () => {
       cancelled = true;
@@ -89,6 +126,15 @@ export function StaffPage({
     setModal({ kind: "none" });
     setRefreshKey((value) => value + 1);
   };
+
+  const selectedUser = useMemo(
+    () => users.find((u) => u.id === selectedUserId) ?? null,
+    [users, selectedUserId],
+  );
+  const selectedProvider = useMemo(
+    () => (selectedUser ? providers.find((p) => p.userId === selectedUser.id) ?? null : null),
+    [providers, selectedUser],
+  );
 
   if (!canManage) {
     return (
@@ -114,87 +160,98 @@ export function StaffPage({
         </div>
       </section>
 
-      <section className="ops-panel staff-roster-panel">
-        <header className="staff-roster-header">
-          <div>
-            <p className="eyebrow">Team roster</p>
-            <h4>Dashboard users</h4>
-            <p className="settings-form-help">
-              Add owners, managers, staff, and providers who can sign in to the dashboard.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="primary-action"
-            onClick={() => setModal({ kind: "add" })}
-          >
-            Add user
-          </button>
-        </header>
-
+      <section className="ops-panel staff-master-detail">
         {state.kind === "loading" ? <p>Loading roster…</p> : null}
         {state.kind === "error" ? (
           <p role="alert" className="settings-error">
             {state.message}
           </p>
         ) : null}
-        {state.kind === "ready" && state.users.length === 0 ? (
-          <p>No users are configured yet.</p>
-        ) : null}
-        {state.kind === "ready" && state.users.length > 0 ? (
-          <table className="settings-table staff-roster-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Joined</th>
-                <th aria-label="Actions" />
-              </tr>
-            </thead>
-            <tbody>
-              {state.users.map((user) => (
-                <tr key={user.id}>
-                  <td>{user.name}</td>
-                  <td>{user.email}</td>
-                  <td>{ROLE_LABELS[user.role] ?? user.role}</td>
-                  <td>{user.isActive ? "Active" : "Inactive"}</td>
-                  <td>{DATE_FORMAT.format(new Date(user.createdAt))}</td>
-                  <td className="staff-roster-actions">
-                    <button
-                      type="button"
-                      className="ghost-action"
-                      onClick={() => setModal({ kind: "edit", user })}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="ghost-action"
-                      onClick={() => setModal({ kind: "password", user })}
-                    >
-                      Reset password
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {state.kind === "ready" ? (
+          <div className="staff-grid">
+            <aside className="staff-list-rail">
+              <header className="staff-list-rail-header">
+                <h4>Team</h4>
+                <button
+                  type="button"
+                  className="primary-action"
+                  onClick={() => setModal({ kind: "add" })}
+                >
+                  Add staff
+                </button>
+              </header>
+              {users.length === 0 ? (
+                <p className="settings-form-help">No users configured yet.</p>
+              ) : (
+                <ul className="staff-list">
+                  {users.map((user) => {
+                    const provider = providers.find((p) => p.userId === user.id);
+                    const isActive = user.id === selectedUserId;
+                    return (
+                      <li key={user.id}>
+                        <button
+                          type="button"
+                          className={`staff-list-item${isActive ? " is-active" : ""}`}
+                          onClick={() => {
+                            setSelectedUserId(user.id);
+                            setActiveTab("details");
+                          }}
+                        >
+                          {user.avatarUrl ? (
+                            <img
+                              className="staff-avatar"
+                              src={user.avatarUrl}
+                              alt=""
+                              loading="lazy"
+                            />
+                          ) : (
+                            <span className="staff-avatar staff-avatar--initials" aria-hidden>
+                              {initialsOf(user.name)}
+                            </span>
+                          )}
+                          <span className="staff-list-meta">
+                            <span className="staff-list-name">{user.name}</span>
+                            <span className="staff-list-role">
+                              {ROLE_LABELS[user.role] ?? user.role}
+                              {provider ? " · Provider" : ""}
+                              {!user.isActive ? " · Inactive" : ""}
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </aside>
+
+            <div className="staff-detail">
+              {selectedUser === null ? (
+                <p className="settings-form-help">Select a team member to view details.</p>
+              ) : (
+                <StaffDetail
+                  tenantSlug={currentUser.tenantSlug}
+                  user={selectedUser}
+                  provider={selectedProvider}
+                  locations={locations}
+                  services={services}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                  onResetPassword={() => setModal({ kind: "password", user: selectedUser })}
+                  onLinkProvider={() => setModal({ kind: "addProviderFor", user: selectedUser })}
+                  onSaved={handleSaved}
+                />
+              )}
+            </div>
+          </div>
         ) : null}
       </section>
 
       {modal.kind === "add" ? (
-        <AddUserModal
+        <AddStaffModal
           tenantSlug={currentUser.tenantSlug}
-          onClose={() => setModal({ kind: "none" })}
-          onSaved={handleSaved}
-        />
-      ) : null}
-      {modal.kind === "edit" ? (
-        <EditUserModal
-          tenantSlug={currentUser.tenantSlug}
-          user={modal.user}
+          locations={locations}
+          services={services}
           onClose={() => setModal({ kind: "none" })}
           onSaved={handleSaved}
         />
@@ -207,7 +264,400 @@ export function StaffPage({
           onSaved={handleSaved}
         />
       ) : null}
+      {modal.kind === "addProviderFor" ? (
+        <AddProviderModal
+          tenantSlug={currentUser.tenantSlug}
+          user={modal.user}
+          locations={locations}
+          services={services}
+          onClose={() => setModal({ kind: "none" })}
+          onSaved={handleSaved}
+        />
+      ) : null}
     </main>
+  );
+}
+
+function StaffDetail({
+  tenantSlug,
+  user,
+  provider,
+  locations,
+  services,
+  activeTab,
+  onTabChange,
+  onResetPassword,
+  onLinkProvider,
+  onSaved,
+}: {
+  tenantSlug: string;
+  user: TenantUserSummary;
+  provider: ProviderSummary | null;
+  locations: LocationSummary[];
+  services: ServiceSummary[];
+  activeTab: TabKey;
+  onTabChange: (tab: TabKey) => void;
+  onResetPassword: () => void;
+  onLinkProvider: () => void;
+  onSaved: () => void;
+}) {
+  const tabs: Array<{ key: TabKey; label: string; disabled?: boolean }> = [
+    { key: "details", label: "Details" },
+    { key: "services", label: "Services", disabled: !provider },
+    { key: "schedule", label: "Work hours", disabled: !provider },
+  ];
+
+  const directBookingLink = provider
+    ? `${storefrontBaseUrl}/${tenantSlug}?providerId=${provider.id}`
+    : null;
+
+  return (
+    <div className="staff-detail-inner">
+      <header className="staff-detail-header">
+        <div>
+          <p className="eyebrow">{ROLE_LABELS[user.role] ?? user.role}</p>
+          <h4>{user.name}</h4>
+          <p className="settings-form-help">
+            {user.email}
+            {user.phone ? ` · ${user.phone}` : ""}
+            {!user.isActive ? " · Inactive" : ""}
+          </p>
+        </div>
+        <div className="staff-detail-actions">
+          <button type="button" className="ghost-action" onClick={onResetPassword}>
+            Reset password
+          </button>
+          {provider === null ? (
+            <button type="button" className="ghost-action" onClick={onLinkProvider}>
+              Make service provider
+            </button>
+          ) : null}
+        </div>
+      </header>
+
+      <nav className="staff-detail-tabs" role="tablist" aria-label="Staff sections">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.key}
+            disabled={tab.disabled}
+            className={`staff-detail-tab${activeTab === tab.key ? " is-active" : ""}`}
+            onClick={() => onTabChange(tab.key)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      {activeTab === "details" ? (
+        <DetailsTab
+          tenantSlug={tenantSlug}
+          user={user}
+          directBookingLink={directBookingLink}
+          onSaved={onSaved}
+        />
+      ) : null}
+      {activeTab === "services" && provider ? (
+        <ServicesTab
+          tenantSlug={tenantSlug}
+          provider={provider}
+          locations={locations}
+          services={services}
+          onSaved={onSaved}
+        />
+      ) : null}
+      {activeTab === "schedule" && provider ? <SchedulePlaceholder /> : null}
+    </div>
+  );
+}
+
+function DetailsTab({
+  tenantSlug,
+  user,
+  directBookingLink,
+  onSaved,
+}: {
+  tenantSlug: string;
+  user: TenantUserSummary;
+  directBookingLink: string | null;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState({
+    name: user.name,
+    role: user.role,
+    isActive: user.isActive,
+    phone: user.phone ?? "",
+    avatarUrl: user.avatarUrl ?? "",
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setForm({
+      name: user.name,
+      role: user.role,
+      isActive: user.isActive,
+      phone: user.phone ?? "",
+      avatarUrl: user.avatarUrl ?? "",
+    });
+  }, [user]);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    const payload: UpdateTenantUserRequest = {};
+    if (form.name.trim() !== user.name) payload.name = form.name.trim();
+    if (form.role !== user.role) payload.role = form.role;
+    if (form.isActive !== user.isActive) payload.isActive = form.isActive;
+    const phone = form.phone.trim();
+    if (phone !== (user.phone ?? "")) payload.phone = phone || null;
+    const avatar = form.avatarUrl.trim();
+    if (avatar !== (user.avatarUrl ?? "")) payload.avatarUrl = avatar || null;
+    if (Object.keys(payload).length === 0) {
+      setSubmitting(false);
+      return;
+    }
+    try {
+      await platformApi.updateTenantUser(tenantSlug, user.id, payload);
+      onSaved();
+    } catch (err) {
+      setError(readErrorMessage(err, "Unable to update user."));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form className="staff-detail-form" onSubmit={submit}>
+      <div className="staff-detail-grid">
+        <label>
+          <span>Name</span>
+          <input
+            type="text"
+            value={form.name}
+            onChange={(event) => setForm({ ...form, name: event.target.value })}
+            required
+          />
+        </label>
+        <label>
+          <span>Email</span>
+          <input type="email" value={user.email} disabled readOnly />
+        </label>
+        <label>
+          <span>Role</span>
+          <select
+            value={form.role}
+            onChange={(event) => setForm({ ...form, role: event.target.value })}
+          >
+            {ROLE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Phone</span>
+          <input
+            type="text"
+            value={form.phone}
+            onChange={(event) => setForm({ ...form, phone: event.target.value })}
+            placeholder="+1 555-555-1212"
+          />
+        </label>
+        <label className="staff-detail-grid-wide">
+          <span>Avatar URL</span>
+          <input
+            type="text"
+            value={form.avatarUrl}
+            onChange={(event) => setForm({ ...form, avatarUrl: event.target.value })}
+            placeholder="https://…"
+          />
+          <small className="settings-form-help">
+            Paste a hosted image URL. Upload coming later.
+          </small>
+        </label>
+        <label className="settings-toggle staff-detail-grid-wide">
+          <input
+            type="checkbox"
+            checked={form.isActive}
+            onChange={(event) => setForm({ ...form, isActive: event.target.checked })}
+          />
+          <span>Active (can sign in)</span>
+        </label>
+        <label>
+          <span>Joined</span>
+          <input
+            type="text"
+            value={DATE_FORMAT.format(new Date(user.createdAt))}
+            disabled
+            readOnly
+          />
+        </label>
+      </div>
+
+      {directBookingLink ? (
+        <div className="staff-booking-link">
+          <p className="eyebrow">Direct booking link</p>
+          <code>{directBookingLink}</code>
+          <a className="ghost-action" href={directBookingLink} target="_blank" rel="noreferrer">
+            Open
+          </a>
+        </div>
+      ) : null}
+
+      {error ? (
+        <p role="alert" className="settings-error">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="modal-actions">
+        <button type="submit" className="primary-action" disabled={submitting}>
+          {submitting ? "Saving…" : "Save changes"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function ServicesTab({
+  tenantSlug,
+  provider,
+  locations,
+  services,
+  onSaved,
+}: {
+  tenantSlug: string;
+  provider: ProviderSummary;
+  locations: LocationSummary[];
+  services: ServiceSummary[];
+  onSaved: () => void;
+}) {
+  const [locationIds, setLocationIds] = useState<string[]>(provider.locationIds);
+  const [serviceIds, setServiceIds] = useState<string[]>(provider.serviceIds);
+  const [isBookableOnline, setIsBookableOnline] = useState(provider.isBookableOnline);
+  const [isActive, setIsActive] = useState(provider.isActive);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLocationIds(provider.locationIds);
+    setServiceIds(provider.serviceIds);
+    setIsBookableOnline(provider.isBookableOnline);
+    setIsActive(provider.isActive);
+  }, [provider]);
+
+  const toggle = (list: string[], id: string): string[] =>
+    list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    const payload: UpdateProviderRequest = {
+      locationIds,
+      serviceIds,
+      isBookableOnline,
+      isActive,
+    };
+    try {
+      await platformApi.updateProvider(tenantSlug, provider.id, payload);
+      onSaved();
+    } catch (err) {
+      setError(readErrorMessage(err, "Unable to update provider."));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form className="staff-detail-form" onSubmit={submit}>
+      <fieldset className="staff-fieldset">
+        <legend>Locations</legend>
+        {locations.length === 0 ? (
+          <p className="settings-form-help">No locations configured.</p>
+        ) : (
+          <div className="staff-checkbox-grid">
+            {locations.map((loc) => (
+              <label key={loc.id} className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={locationIds.includes(loc.id)}
+                  onChange={() => setLocationIds(toggle(locationIds, loc.id))}
+                />
+                <span>{loc.name}</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </fieldset>
+
+      <fieldset className="staff-fieldset">
+        <legend>Services performed</legend>
+        {services.length === 0 ? (
+          <p className="settings-form-help">No services configured.</p>
+        ) : (
+          <div className="staff-checkbox-grid">
+            {services.map((svc) => (
+              <label key={svc.id} className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={serviceIds.includes(svc.id)}
+                  onChange={() => setServiceIds(toggle(serviceIds, svc.id))}
+                />
+                <span>{svc.name}</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </fieldset>
+
+      <fieldset className="staff-fieldset">
+        <legend>Visibility</legend>
+        <label className="settings-toggle">
+          <input
+            type="checkbox"
+            checked={isBookableOnline}
+            onChange={(event) => setIsBookableOnline(event.target.checked)}
+          />
+          <span>Bookable online (shows on storefront)</span>
+        </label>
+        <label className="settings-toggle">
+          <input
+            type="checkbox"
+            checked={isActive}
+            onChange={(event) => setIsActive(event.target.checked)}
+          />
+          <span>Active provider</span>
+        </label>
+      </fieldset>
+
+      {error ? (
+        <p role="alert" className="settings-error">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="modal-actions">
+        <button type="submit" className="primary-action" disabled={submitting}>
+          {submitting ? "Saving…" : "Save provider"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function SchedulePlaceholder() {
+  return (
+    <div className="staff-detail-form">
+      <p className="settings-form-help">
+        Weekly work hours editor lands in the next phase. Schedules currently follow tenant business hours.
+      </p>
+    </div>
   );
 }
 
@@ -215,14 +665,16 @@ function ModalShell({
   title,
   children,
   onClose,
+  wide,
 }: {
   title: string;
   children: React.ReactNode;
   onClose: () => void;
+  wide?: boolean;
 }) {
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="modal-panel">
+      <div className={`modal-panel${wide ? " modal-panel--wide" : ""}`}>
         <header className="modal-header">
           <h4>{title}</h4>
           <button type="button" className="ghost-action" onClick={onClose} aria-label="Close">
@@ -235,50 +687,77 @@ function ModalShell({
   );
 }
 
-function AddUserModal({
+function AddStaffModal({
   tenantSlug,
+  locations,
+  services,
   onClose,
   onSaved,
 }: {
   tenantSlug: string;
+  locations: LocationSummary[];
+  services: ServiceSummary[];
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [form, setForm] = useState<CreateTenantUserRequest>({
-    email: "",
+  const [form, setForm] = useState({
     name: "",
+    email: "",
     role: "staff",
     initialPassword: "",
+    phone: "",
+    avatarUrl: "",
+    isProvider: false,
+    isBookableOnline: true,
+    locationIds: [] as string[],
+    serviceIds: [] as string[],
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const disabled = useMemo(
-    () => submitting || !form.email.trim() || !form.name.trim() || form.initialPassword.length < 8,
+    () =>
+      submitting ||
+      !form.email.trim() ||
+      !form.name.trim() ||
+      form.initialPassword.length < 8,
     [form, submitting],
   );
+
+  const toggle = (list: string[], id: string): string[] =>
+    list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
     try {
-      await platformApi.createTenantUser(tenantSlug, {
+      const payload: CreateStaffRequest = {
         email: form.email.trim(),
         name: form.name.trim(),
         role: form.role,
         initialPassword: form.initialPassword,
-      });
+        phone: form.phone.trim() || null,
+        avatarUrl: form.avatarUrl.trim() || null,
+      };
+      if (form.isProvider) {
+        payload.provider = {
+          locationIds: form.locationIds,
+          serviceIds: form.serviceIds,
+          isBookableOnline: form.isBookableOnline,
+        };
+      }
+      await platformApi.createTenantStaff(tenantSlug, payload);
       onSaved();
     } catch (err) {
-      setError(readErrorMessage(err, "Unable to create user."));
+      setError(readErrorMessage(err, "Unable to create staff member."));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <ModalShell title="Add user" onClose={onClose}>
+    <ModalShell title="Add staff" onClose={onClose} wide>
       <form className="modal-form" onSubmit={submit}>
         <label>
           <span>Name</span>
@@ -312,6 +791,15 @@ function AddUserModal({
           </select>
         </label>
         <label>
+          <span>Phone</span>
+          <input
+            type="text"
+            value={form.phone}
+            onChange={(event) => setForm({ ...form, phone: event.target.value })}
+            placeholder="+1 555-555-1212"
+          />
+        </label>
+        <label>
           <span>Initial password</span>
           <input
             type="text"
@@ -320,10 +808,74 @@ function AddUserModal({
             minLength={8}
             required
           />
-          <small className="settings-form-help">
-            Minimum 8 characters. Share securely with the new user.
-          </small>
+          <small className="settings-form-help">Minimum 8 characters. Share securely.</small>
         </label>
+        <label className="settings-toggle">
+          <input
+            type="checkbox"
+            checked={form.isProvider}
+            onChange={(event) => setForm({ ...form, isProvider: event.target.checked })}
+          />
+          <span>This person is a service provider</span>
+        </label>
+
+        {form.isProvider ? (
+          <>
+            <fieldset className="staff-fieldset">
+              <legend>Locations</legend>
+              {locations.length === 0 ? (
+                <p className="settings-form-help">No locations configured.</p>
+              ) : (
+                <div className="staff-checkbox-grid">
+                  {locations.map((loc) => (
+                    <label key={loc.id} className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={form.locationIds.includes(loc.id)}
+                        onChange={() =>
+                          setForm({ ...form, locationIds: toggle(form.locationIds, loc.id) })
+                        }
+                      />
+                      <span>{loc.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </fieldset>
+            <fieldset className="staff-fieldset">
+              <legend>Services performed</legend>
+              {services.length === 0 ? (
+                <p className="settings-form-help">No services configured.</p>
+              ) : (
+                <div className="staff-checkbox-grid">
+                  {services.map((svc) => (
+                    <label key={svc.id} className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={form.serviceIds.includes(svc.id)}
+                        onChange={() =>
+                          setForm({ ...form, serviceIds: toggle(form.serviceIds, svc.id) })
+                        }
+                      />
+                      <span>{svc.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </fieldset>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={form.isBookableOnline}
+                onChange={(event) =>
+                  setForm({ ...form, isBookableOnline: event.target.checked })
+                }
+              />
+              <span>Bookable online</span>
+            </label>
+          </>
+        ) : null}
+
         {error ? (
           <p role="alert" className="settings-error">
             {error}
@@ -334,7 +886,7 @@ function AddUserModal({
             Cancel
           </button>
           <button type="submit" className="primary-action" disabled={disabled}>
-            {submitting ? "Saving…" : "Create user"}
+            {submitting ? "Saving…" : "Create staff"}
           </button>
         </div>
       </form>
@@ -342,85 +894,94 @@ function AddUserModal({
   );
 }
 
-function EditUserModal({
+function AddProviderModal({
   tenantSlug,
   user,
+  locations,
+  services,
   onClose,
   onSaved,
 }: {
   tenantSlug: string;
   user: TenantUserSummary;
+  locations: LocationSummary[];
+  services: ServiceSummary[];
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [form, setForm] = useState<{ name: string; role: string; isActive: boolean }>({
-    name: user.name,
-    role: user.role,
-    isActive: user.isActive,
-  });
+  const [locationIds, setLocationIds] = useState<string[]>([]);
+  const [serviceIds, setServiceIds] = useState<string[]>([]);
+  const [isBookableOnline, setIsBookableOnline] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const toggle = (list: string[], id: string): string[] =>
+    list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
-    const payload: UpdateTenantUserRequest = {};
-    if (form.name.trim() !== user.name) payload.name = form.name.trim();
-    if (form.role !== user.role) payload.role = form.role;
-    if (form.isActive !== user.isActive) payload.isActive = form.isActive;
-    if (Object.keys(payload).length === 0) {
-      onClose();
-      return;
-    }
     try {
-      await platformApi.updateTenantUser(tenantSlug, user.id, payload);
+      const payload: CreateProviderRequest = {
+        name: user.name,
+        email: user.email,
+        userId: user.id,
+        locationIds,
+        serviceIds,
+        isBookableOnline,
+      };
+      await platformApi.createProvider(tenantSlug, payload);
       onSaved();
     } catch (err) {
-      setError(readErrorMessage(err, "Unable to update user."));
+      setError(readErrorMessage(err, "Unable to create provider."));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <ModalShell title={`Edit ${user.name}`} onClose={onClose}>
+    <ModalShell title={`Make ${user.name} a service provider`} onClose={onClose} wide>
       <form className="modal-form" onSubmit={submit}>
-        <label>
-          <span>Email</span>
-          <input type="email" value={user.email} disabled readOnly />
-          <small className="settings-form-help">Email cannot be changed in this release.</small>
-        </label>
-        <label>
-          <span>Name</span>
-          <input
-            type="text"
-            value={form.name}
-            onChange={(event) => setForm({ ...form, name: event.target.value })}
-            required
-          />
-        </label>
-        <label>
-          <span>Role</span>
-          <select
-            value={form.role}
-            onChange={(event) => setForm({ ...form, role: event.target.value })}
-          >
-            {ROLE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
+        <fieldset className="staff-fieldset">
+          <legend>Locations</legend>
+          <div className="staff-checkbox-grid">
+            {locations.map((loc) => (
+              <label key={loc.id} className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={locationIds.includes(loc.id)}
+                  onChange={() => setLocationIds(toggle(locationIds, loc.id))}
+                />
+                <span>{loc.name}</span>
+              </label>
             ))}
-          </select>
-        </label>
+          </div>
+        </fieldset>
+        <fieldset className="staff-fieldset">
+          <legend>Services performed</legend>
+          <div className="staff-checkbox-grid">
+            {services.map((svc) => (
+              <label key={svc.id} className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={serviceIds.includes(svc.id)}
+                  onChange={() => setServiceIds(toggle(serviceIds, svc.id))}
+                />
+                <span>{svc.name}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
         <label className="settings-toggle">
           <input
             type="checkbox"
-            checked={form.isActive}
-            onChange={(event) => setForm({ ...form, isActive: event.target.checked })}
+            checked={isBookableOnline}
+            onChange={(event) => setIsBookableOnline(event.target.checked)}
           />
-          <span>Active</span>
+          <span>Bookable online</span>
         </label>
+
         {error ? (
           <p role="alert" className="settings-error">
             {error}
@@ -431,7 +992,7 @@ function EditUserModal({
             Cancel
           </button>
           <button type="submit" className="primary-action" disabled={submitting}>
-            {submitting ? "Saving…" : "Save changes"}
+            {submitting ? "Saving…" : "Create provider"}
           </button>
         </div>
       </form>
@@ -480,7 +1041,9 @@ function ResetPasswordModal({
             minLength={8}
             required
           />
-          <small className="settings-form-help">Minimum 8 characters. Share securely with the user.</small>
+          <small className="settings-form-help">
+            Minimum 8 characters. Share securely with the user.
+          </small>
         </label>
         {error ? (
           <p role="alert" className="settings-error">

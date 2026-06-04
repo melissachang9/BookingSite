@@ -157,6 +157,7 @@ def provider_to_summary(provider: Provider, tenant: Tenant | None = None) -> Pro
         image_alt_text=profile["image_alt_text"],
         availability_label=profile["availability_label"],
         is_active=provider.is_active,
+        is_bookable_online=getattr(provider, "is_bookable_online", True),
         service_ids=[link.service_id for link in provider.service_links],
         location_ids=[link.location_id for link in provider.location_links],
     )

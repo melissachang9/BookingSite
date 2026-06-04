@@ -188,16 +188,6 @@ const routeDefinitions: RouteDefinition[] = [
     group: "settings-management",
   },
   {
-    path: "/providers",
-    title: "Providers",
-    eyebrow: "Staff and schedules",
-    description: "Provider availability, service assignment, location coverage, and read-only provider states.",
-    metric: "Schedule APIs next",
-    tone: "planned",
-    workstreams: ["Provider schedules", "Time off", "Service overrides"],
-    actions: ["Set schedule", "Assign services", "Block time"],
-  },
-  {
     path: "/forms",
     title: "Forms",
     eyebrow: "Unified forms",
@@ -221,12 +211,12 @@ const routeDefinitions: RouteDefinition[] = [
   {
     path: "/staff",
     title: "Staff",
-    eyebrow: "Team roster",
-    description: "Team members who can sign in to the dashboard. Roles, invites, and deactivation tools land here.",
-    metric: "Read-only roster",
+    eyebrow: "Team & providers",
+    description: "Sign-in users, service providers, schedules, and direct booking links — all in one place.",
+    metric: "Unified",
     tone: "progress",
-    workstreams: ["User list", "Role assignment", "Invite workflow"],
-    actions: ["View team", "Assign role", "Invite teammate"],
+    workstreams: ["User accounts", "Provider services & locations", "Direct booking link"],
+    actions: ["Add staff", "Assign services", "Toggle online booking"],
     group: "settings-management",
   },
   {
@@ -717,7 +707,7 @@ export function App() {
           />
           <Route path="/customers" element={<SectionPage definition={pageByPath.get("customers") ?? routeDefinitions[0]} />} />
           <Route path="/locations" element={<SectionPage definition={pageByPath.get("locations") ?? routeDefinitions[0]} />} />
-          <Route path="/providers" element={<SectionPage definition={pageByPath.get("providers") ?? routeDefinitions[0]} />} />
+          <Route path="/providers" element={<Navigate to="/staff" replace />} />
           <Route path="/forms" element={<SectionPage definition={pageByPath.get("forms") ?? routeDefinitions[0]} />} />
           <Route
             path="/settings"

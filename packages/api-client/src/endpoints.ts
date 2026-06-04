@@ -30,6 +30,11 @@ import type {
   CreateTenantUserRequest,
   UpdateTenantUserRequest,
   ResetTenantUserPasswordRequest,
+  CreateProviderRequest,
+  UpdateProviderRequest,
+  CreateStaffRequest,
+  CreateStaffResponse,
+  ProviderSummary,
   LocationSummary,
   ProviderListResponse,
   SaveFormDraftRequest,
@@ -108,6 +113,19 @@ export const createPlatformApi = (client: ApiClient) => ({
       `tenants/${tenantSlug}/users/${userId}/password`,
       body,
     ),
+  listProvidersAdmin: (tenantSlug: string) =>
+    client.get<ProviderListResponse>(`tenants/${tenantSlug}/providers/manage`),
+  createProvider: (tenantSlug: string, body: CreateProviderRequest) =>
+    client.post<ProviderSummary, CreateProviderRequest>(`tenants/${tenantSlug}/providers`, body),
+  updateProvider: (tenantSlug: string, providerId: string, body: UpdateProviderRequest) =>
+    client.patch<ProviderSummary, UpdateProviderRequest>(
+      `tenants/${tenantSlug}/providers/${providerId}`,
+      body,
+    ),
+  deactivateProvider: (tenantSlug: string, providerId: string) =>
+    client.delete<ProviderSummary>(`tenants/${tenantSlug}/providers/${providerId}`),
+  createTenantStaff: (tenantSlug: string, body: CreateStaffRequest) =>
+    client.post<CreateStaffResponse, CreateStaffRequest>(`tenants/${tenantSlug}/staff`, body),
   createLocation: (tenantSlug: string, body: CreateLocationRequest) =>
     client.post<LocationSummary, CreateLocationRequest>(`tenants/${tenantSlug}/locations`, body),
   updateLocation: (tenantSlug: string, locationId: string, body: UpdateLocationRequest) =>

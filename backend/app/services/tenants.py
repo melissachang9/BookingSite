@@ -8,7 +8,16 @@ from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
 from app.core.security import hash_password
-from app.db.models import Location, Provider, Service, ServiceLocation, Tenant, User
+from app.db.models import (
+    Location,
+    Provider,
+    ProviderLocation,
+    ProviderService,
+    Service,
+    ServiceLocation,
+    Tenant,
+    User,
+)
 from app.schemas.catalog import (
     CreateLocationRequest,
     CreateServiceRequest,
@@ -32,6 +41,11 @@ from app.schemas.catalog import (
     UpdateTenantUserRequest,
     UpdateTenantWalletMembershipRequest,
     UpdateTenantSettingsRequest,
+    CreateProviderRequest,
+    UpdateProviderRequest,
+    CreateStaffRequest,
+    CreateStaffResponse,
+    ProviderSummaryResponse,
 )
 from app.services.presenters import location_to_summary, provider_to_summary, service_to_summary, tenant_to_summary
 
@@ -595,17 +609,7 @@ async def list_tenant_users(session: AsyncSession, tenant_slug: str) -> "TenantU
         )
     ).all()
     return TenantUserListResponse(
-        users=[
-            TenantUserSummaryResponse(
-                id=user.id,
-                email=user.email,
-                name=user.name,
-                role=user.role,
-                is_active=user.is_active,
-                created_at=user.created_at,
-            )
-            for user in users
-        ]
+        users=[_user_to_summary(user) for user in users]
     )
 
 
@@ -617,6 +621,8 @@ def _user_to_summary(user: User) -> TenantUserSummaryResponse:
         role=user.role,
         is_active=user.is_active,
         created_at=user.created_at,
+        phone=user.phone,
+        avatar_url=user.avatar_url,
     )
 
 
@@ -670,6 +676,8 @@ async def create_tenant_user(
         role=payload.role,
         password_hash=hash_password(payload.initial_password),
         is_active=True,
+        phone=payload.phone,
+        avatar_url=payload.avatar_url,
     )
     session.add(user)
     await session.flush()
@@ -707,6 +715,10 @@ async def update_tenant_user(
         user.role = payload.role
     if payload.is_active is not None:
         user.is_active = payload.is_active
+    if payload.phone is not None:
+        user.phone = _normalize_optional_text(payload.phone)
+    if payload.avatar_url is not None:
+        user.avatar_url = _normalize_optional_text(payload.avatar_url)
 
     await session.commit()
     await session.refresh(user)
@@ -725,4 +737,205 @@ async def reset_tenant_user_password(
     await session.commit()
     await session.refresh(user)
     return _user_to_summary(user)
+
+
+# === Phase B: Providers CRUD + Staff combo ===
+
+
+async def _load_provider_with_links(session: AsyncSession, provider_id: str, tenant_id: str) -> Provider:
+    provider = await session.scalar(
+        select(Provider)
+        .options(selectinload(Provider.service_links), selectinload(Provider.location_links))
+        .where(Provider.id == provider_id, Provider.tenant_id == tenant_id)
+        .execution_options(populate_existing=True)
+    )
+    if provider is None:
+        raise api_exception(404, "provider_not_found", "Provider not found.")
+    return provider
+
+
+async def _validate_tenant_user_link(session: AsyncSession, tenant_id: str, user_id: str | None) -> None:
+    if not user_id:
+        return
+    user = await session.scalar(select(User).where(User.id == user_id, User.tenant_id == tenant_id))
+    if user is None:
+        raise api_exception(400, "invalid_user", "Linked user does not belong to this tenant.")
+
+
+async def _validate_tenant_locations(session: AsyncSession, tenant_id: str, location_ids: list[str]) -> None:
+    if not location_ids:
+        return
+    found = (
+        await session.scalars(
+            select(Location.id).where(Location.tenant_id == tenant_id, Location.id.in_(location_ids))
+        )
+    ).all()
+    if set(found) != set(location_ids):
+        raise api_exception(400, "invalid_locations", "One or more locations are invalid for this tenant.")
+
+
+async def _validate_tenant_services(session: AsyncSession, tenant_id: str, service_ids: list[str]) -> None:
+    if not service_ids:
+        return
+    found = (
+        await session.scalars(
+            select(Service.id).where(Service.tenant_id == tenant_id, Service.id.in_(service_ids))
+        )
+    ).all()
+    if set(found) != set(service_ids):
+        raise api_exception(400, "invalid_services", "One or more services are invalid for this tenant.")
+
+
+async def list_tenant_providers_admin(
+    session: AsyncSession, tenant_slug: str
+) -> ProviderListResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    providers = (
+        await session.scalars(
+            select(Provider)
+            .options(
+                selectinload(Provider.service_links),
+                selectinload(Provider.location_links),
+            )
+            .where(Provider.tenant_id == tenant.id)
+            .order_by(Provider.created_at.asc())
+        )
+    ).all()
+    return ProviderListResponse(providers=[provider_to_summary(p, tenant) for p in providers])
+
+
+async def create_tenant_provider(
+    session: AsyncSession, tenant_slug: str, payload: CreateProviderRequest
+) -> ProviderSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    await _validate_tenant_user_link(session, tenant.id, payload.user_id)
+    await _validate_tenant_locations(session, tenant.id, payload.location_ids)
+    await _validate_tenant_services(session, tenant.id, payload.service_ids)
+
+    provider = Provider(
+        tenant_id=tenant.id,
+        user_id=payload.user_id,
+        name=payload.name.strip(),
+        email=payload.email,
+        is_active=True,
+        is_bookable_online=payload.is_bookable_online,
+    )
+    session.add(provider)
+    await session.flush()
+    for location_id in payload.location_ids:
+        session.add(ProviderLocation(tenant_id=tenant.id, provider_id=provider.id, location_id=location_id))
+    for service_id in payload.service_ids:
+        session.add(ProviderService(tenant_id=tenant.id, provider_id=provider.id, service_id=service_id))
+    await session.commit()
+    provider = await _load_provider_with_links(session, provider.id, tenant.id)
+    return provider_to_summary(provider, tenant)
+
+
+async def update_tenant_provider(
+    session: AsyncSession, tenant_slug: str, provider_id: str, payload: UpdateProviderRequest
+) -> ProviderSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    provider = await _load_provider_with_links(session, provider_id, tenant.id)
+
+    if payload.user_id is not None:
+        await _validate_tenant_user_link(session, tenant.id, payload.user_id or None)
+        provider.user_id = payload.user_id or None
+    if payload.name is not None:
+        provider.name = payload.name.strip()
+    if payload.email is not None:
+        provider.email = payload.email or None
+    if payload.is_active is not None:
+        provider.is_active = payload.is_active
+    if payload.is_bookable_online is not None:
+        provider.is_bookable_online = payload.is_bookable_online
+
+    if payload.location_ids is not None:
+        await _validate_tenant_locations(session, tenant.id, payload.location_ids)
+        existing = {link.location_id: link for link in provider.location_links}
+        wanted = set(payload.location_ids)
+        for loc_id, link in list(existing.items()):
+            if loc_id not in wanted:
+                await session.delete(link)
+        for loc_id in wanted - set(existing.keys()):
+            session.add(ProviderLocation(tenant_id=tenant.id, provider_id=provider.id, location_id=loc_id))
+
+    if payload.service_ids is not None:
+        await _validate_tenant_services(session, tenant.id, payload.service_ids)
+        existing = {link.service_id: link for link in provider.service_links}
+        wanted = set(payload.service_ids)
+        for svc_id, link in list(existing.items()):
+            if svc_id not in wanted:
+                await session.delete(link)
+        for svc_id in wanted - set(existing.keys()):
+            session.add(ProviderService(tenant_id=tenant.id, provider_id=provider.id, service_id=svc_id))
+
+    await session.commit()
+    provider = await _load_provider_with_links(session, provider.id, tenant.id)
+    return provider_to_summary(provider, tenant)
+
+
+async def deactivate_tenant_provider(
+    session: AsyncSession, tenant_slug: str, provider_id: str
+) -> ProviderSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    provider = await _load_provider_with_links(session, provider_id, tenant.id)
+    provider.is_active = False
+    await session.commit()
+    provider = await _load_provider_with_links(session, provider.id, tenant.id)
+    return provider_to_summary(provider, tenant)
+
+
+async def create_tenant_staff(
+    session: AsyncSession, tenant_slug: str, payload: CreateStaffRequest
+) -> CreateStaffResponse:
+    """Create a user and (optionally) a linked provider in a single transaction."""
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+
+    existing = (
+        await session.scalars(select(User).where(func.lower(User.email) == payload.email.lower()))
+    ).one_or_none()
+    if existing is not None:
+        raise api_exception(409, "email_already_registered", "A user with that email already exists.")
+
+    if payload.provider is not None:
+        await _validate_tenant_locations(session, tenant.id, payload.provider.location_ids)
+        await _validate_tenant_services(session, tenant.id, payload.provider.service_ids)
+
+    user = User(
+        tenant_id=tenant.id,
+        email=payload.email,
+        name=payload.name.strip(),
+        role=payload.role,
+        password_hash=hash_password(payload.initial_password),
+        is_active=True,
+        phone=payload.phone,
+        avatar_url=payload.avatar_url,
+    )
+    session.add(user)
+    await session.flush()
+
+    provider_summary: ProviderSummaryResponse | None = None
+    if payload.provider is not None:
+        provider = Provider(
+            tenant_id=tenant.id,
+            user_id=user.id,
+            name=payload.name.strip(),
+            email=payload.email,
+            is_active=True,
+            is_bookable_online=payload.provider.is_bookable_online,
+        )
+        session.add(provider)
+        await session.flush()
+        for location_id in payload.provider.location_ids:
+            session.add(ProviderLocation(tenant_id=tenant.id, provider_id=provider.id, location_id=location_id))
+        for service_id in payload.provider.service_ids:
+            session.add(ProviderService(tenant_id=tenant.id, provider_id=provider.id, service_id=service_id))
+        await session.commit()
+        provider = await _load_provider_with_links(session, provider.id, tenant.id)
+        provider_summary = provider_to_summary(provider, tenant)
+    else:
+        await session.commit()
+
+    await session.refresh(user)
+    return CreateStaffResponse(user=_user_to_summary(user), provider=provider_summary)
 

@@ -355,6 +355,7 @@ class ProviderSummaryResponse(CamelModel):
     image_alt_text: str | None = None
     availability_label: str | None = None
     is_active: bool
+    is_bookable_online: bool = True
     service_ids: list[str]
     location_ids: list[str]
 
@@ -378,6 +379,8 @@ class TenantUserSummaryResponse(CamelModel):
     role: str
     is_active: bool
     created_at: datetime
+    phone: str | None = None
+    avatar_url: str | None = None
 
 
 class TenantUserListResponse(CamelModel):
@@ -409,17 +412,28 @@ def _validate_password(value: str) -> str:
     return value
 
 
+def _normalize_optional(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
 class CreateTenantUserRequest(CamelModel):
     email: str = Field(min_length=3, max_length=255)
     name: str = Field(min_length=1, max_length=255)
     role: str = Field(min_length=1, max_length=32)
     initial_password: str = Field(min_length=8, max_length=255)
+    phone: str | None = Field(default=None, max_length=40)
+    avatar_url: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
     def _validate(self) -> "CreateTenantUserRequest":
         self.email = _validate_email(self.email)
         self.role = _validate_role(self.role)
         self.initial_password = _validate_password(self.initial_password)
+        self.phone = _normalize_optional(self.phone)
+        self.avatar_url = _normalize_optional(self.avatar_url)
         return self
 
 
@@ -427,6 +441,8 @@ class UpdateTenantUserRequest(CamelModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     role: str | None = Field(default=None, min_length=1, max_length=32)
     is_active: bool | None = None
+    phone: str | None = Field(default=None, max_length=40)
+    avatar_url: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
     def _validate(self) -> "UpdateTenantUserRequest":
@@ -442,3 +458,68 @@ class ResetTenantUserPasswordRequest(CamelModel):
     def _validate(self) -> "ResetTenantUserPasswordRequest":
         self.new_password = _validate_password(self.new_password)
         return self
+
+
+class ProviderProfileRequest(CamelModel):
+    """Optional provider sub-payload when creating a staff user."""
+
+    location_ids: list[str] = Field(default_factory=list)
+    service_ids: list[str] = Field(default_factory=list)
+    is_bookable_online: bool = True
+
+
+class CreateProviderRequest(CamelModel):
+    name: str = Field(min_length=1, max_length=255)
+    email: str | None = Field(default=None, max_length=255)
+    user_id: str | None = Field(default=None, max_length=36)
+    location_ids: list[str] = Field(default_factory=list)
+    service_ids: list[str] = Field(default_factory=list)
+    is_bookable_online: bool = True
+
+    @model_validator(mode="after")
+    def _validate(self) -> "CreateProviderRequest":
+        if self.email:
+            self.email = _validate_email(self.email)
+        return self
+
+
+class UpdateProviderRequest(CamelModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    email: str | None = Field(default=None, max_length=255)
+    user_id: str | None = Field(default=None, max_length=36)
+    location_ids: list[str] | None = None
+    service_ids: list[str] | None = None
+    is_active: bool | None = None
+    is_bookable_online: bool | None = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> "UpdateProviderRequest":
+        if self.email:
+            self.email = _validate_email(self.email)
+        return self
+
+
+class CreateStaffRequest(CamelModel):
+    """Combined user-plus-optional-provider creation."""
+
+    email: str = Field(min_length=3, max_length=255)
+    name: str = Field(min_length=1, max_length=255)
+    role: str = Field(min_length=1, max_length=32)
+    initial_password: str = Field(min_length=8, max_length=255)
+    phone: str | None = Field(default=None, max_length=40)
+    avatar_url: str | None = Field(default=None, max_length=2000)
+    provider: ProviderProfileRequest | None = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> "CreateStaffRequest":
+        self.email = _validate_email(self.email)
+        self.role = _validate_role(self.role)
+        self.initial_password = _validate_password(self.initial_password)
+        self.phone = _normalize_optional(self.phone)
+        self.avatar_url = _normalize_optional(self.avatar_url)
+        return self
+
+
+class CreateStaffResponse(CamelModel):
+    user: TenantUserSummaryResponse
+    provider: ProviderSummaryResponse | None = None

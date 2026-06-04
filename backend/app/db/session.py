@@ -81,6 +81,41 @@ async def _ensure_postgres_schema_compatibility() -> None:
             await connection.execute(text("ALTER TABLE customers ADD COLUMN owner_user_id VARCHAR(36)"))
             await connection.execute(text("CREATE INDEX IF NOT EXISTS ix_customers_owner_user_id ON customers (owner_user_id)"))
 
+        user_phone_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'phone'
+                """
+            )
+        )
+        if not user_phone_exists:
+            await connection.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(40)"))
+
+        user_avatar_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'avatar_url'
+                """
+            )
+        )
+        if not user_avatar_exists:
+            await connection.execute(text("ALTER TABLE users ADD COLUMN avatar_url TEXT"))
+
+        provider_bookable_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'providers' AND column_name = 'is_bookable_online'
+                """
+            )
+        )
+        if not provider_bookable_exists:
+            await connection.execute(
+                text("ALTER TABLE providers ADD COLUMN is_bookable_online BOOLEAN NOT NULL DEFAULT TRUE")
+            )
+
 
 async def initialize_database() -> None:
     async with get_engine().begin() as connection:

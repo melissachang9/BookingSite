@@ -41,6 +41,8 @@ class User(Base, IdMixin, TimestampMixin):
     role: Mapped[str] = mapped_column(String(32), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    phone: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="users")
 
@@ -108,6 +110,7 @@ class Provider(Base, IdMixin, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_bookable_online: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="1")
 
     tenant: Mapped[Tenant] = relationship(back_populates="providers")
     service_links: Mapped[list[ProviderService]] = relationship(back_populates="provider", cascade="all, delete-orphan")
