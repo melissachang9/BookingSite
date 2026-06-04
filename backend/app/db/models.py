@@ -170,6 +170,16 @@ class ProviderSchedule(Base, IdMixin, TimestampMixin):
     location: Mapped[Location] = relationship(back_populates="schedules")
 
 
+class ProviderTimeOff(Base, IdMixin, TimestampMixin):
+    __tablename__ = "provider_time_off"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    provider_id: Mapped[str] = mapped_column(String(36), ForeignKey("providers.id"), index=True, nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
 class Booking(Base, IdMixin, TimestampMixin):
     __tablename__ = "bookings"
 

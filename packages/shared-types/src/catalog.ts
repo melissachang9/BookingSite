@@ -177,3 +177,21 @@ export type ProviderSchedule = {
 export type ReplaceProviderScheduleRequest = {
   entries: ProviderScheduleEntry[];
 };
+
+export type ProviderTimeOffEntry = {
+  id: string;
+  providerId: string;
+  startsAt: string;
+  endsAt: string;
+  reason?: string | null;
+};
+
+export type ProviderTimeOffList = {
+  items: ProviderTimeOffEntry[];
+};
+
+export type CreateProviderTimeOffRequest = {
+  startsAt: string;
+  endsAt: string;
+  reason?: string | null;
+};

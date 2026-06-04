@@ -32,10 +32,13 @@ import type {
   ResetTenantUserPasswordRequest,
   CreateProviderRequest,
   UpdateProviderRequest,
+  CreateProviderTimeOffRequest,
   CreateStaffRequest,
   CreateStaffResponse,
   ProviderSchedule,
   ProviderSummary,
+  ProviderTimeOffEntry,
+  ProviderTimeOffList,
   LocationSummary,
   ProviderListResponse,
   ReplaceProviderScheduleRequest,
@@ -136,6 +139,27 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.put<ProviderSchedule, ReplaceProviderScheduleRequest>(
       `tenants/${tenantSlug}/providers/${providerId}/schedule`,
       body,
+    ),
+  listProviderTimeOff: (tenantSlug: string, providerId: string) =>
+    client.get<ProviderTimeOffList>(
+      `tenants/${tenantSlug}/providers/${providerId}/time-off`,
+    ),
+  createProviderTimeOff: (
+    tenantSlug: string,
+    providerId: string,
+    body: CreateProviderTimeOffRequest,
+  ) =>
+    client.post<ProviderTimeOffEntry, CreateProviderTimeOffRequest>(
+      `tenants/${tenantSlug}/providers/${providerId}/time-off`,
+      body,
+    ),
+  deleteProviderTimeOff: (
+    tenantSlug: string,
+    providerId: string,
+    timeOffId: string,
+  ) =>
+    client.delete<void>(
+      `tenants/${tenantSlug}/providers/${providerId}/time-off/${timeOffId}`,
     ),
   createTenantStaff: (tenantSlug: string, body: CreateStaffRequest) =>
     client.post<CreateStaffResponse, CreateStaffRequest>(`tenants/${tenantSlug}/staff`, body),

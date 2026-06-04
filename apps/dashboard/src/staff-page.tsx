@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import type {
   AuthenticatedUser,
   CreateProviderRequest,
+  CreateProviderTimeOffRequest,
   CreateStaffRequest,
   LocationSummary,
   ProviderSchedule,
   ProviderScheduleEntry,
   ProviderSummary,
+  ProviderTimeOffEntry,
   ReplaceProviderScheduleRequest,
   ServiceSummary,
   TenantUserSummary,
@@ -33,7 +35,7 @@ type ModalState =
   | { kind: "password"; user: TenantUserSummary }
   | { kind: "addProviderFor"; user: TenantUserSummary };
 
-type TabKey = "details" | "services" | "schedule";
+type TabKey = "details" | "services" | "schedule" | "timeOff";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Owner",
@@ -300,6 +302,7 @@ function StaffDetail({
     { key: "details", label: "Details" },
     { key: "services", label: "Services", disabled: !provider },
     { key: "schedule", label: "Work hours", disabled: !provider },
+    { key: "timeOff", label: "Time off", disabled: !provider },
   ];
 
   const directBookingLink = provider
@@ -365,6 +368,9 @@ function StaffDetail({
       ) : null}
       {activeTab === "schedule" && provider ? (
         <ScheduleTab tenantSlug={tenantSlug} provider={provider} locations={locations} />
+      ) : null}
+      {activeTab === "timeOff" && provider ? (
+        <TimeOffTab tenantSlug={tenantSlug} provider={provider} />
       ) : null}
     </div>
   );
@@ -1254,5 +1260,195 @@ function ResetPasswordModal({
         </div>
       </form>
     </ModalShell>
+  );
+}
+
+type TimeOffTabProps = {
+  tenantSlug: string;
+  provider: ProviderSummary;
+};
+
+function _toInputValue(iso: string): string {
+  // ISO -> YYYY-MM-DDTHH:MM for datetime-local input
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function _fromInputValue(value: string): string {
+  // datetime-local (local time, no tz) -> ISO with local offset preserved
+  if (!value) return value;
+  return new Date(value).toISOString();
+}
+
+function _formatRange(startIso: string, endIso: string): string {
+  const start = new Date(startIso);
+  const end = new Date(endIso);
+  const opts: Intl.DateTimeFormatOptions = {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  };
+  return `${start.toLocaleString(undefined, opts)} → ${end.toLocaleString(undefined, opts)}`;
+}
+
+function TimeOffTab({ tenantSlug, provider }: TimeOffTabProps) {
+  const [items, setItems] = useState<ProviderTimeOffEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [startsAt, setStartsAt] = useState("");
+  const [endsAt, setEndsAt] = useState("");
+  const [reason, setReason] = useState("");
+
+  function refresh() {
+    setLoading(true);
+    setError(null);
+    return platformApi
+      .listProviderTimeOff(tenantSlug, provider.id)
+      .then((list) => setItems(list.items))
+      .catch((err: unknown) =>
+        setError(err instanceof Error ? err.message : "Failed to load time off"),
+      )
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    setStatus(null);
+    setError(null);
+    setLoading(true);
+    platformApi
+      .listProviderTimeOff(tenantSlug, provider.id)
+      .then((list) => {
+        if (!cancelled) setItems(list.items);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load time off");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantSlug, provider.id]);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!startsAt || !endsAt) {
+      setError("Pick a start and end time");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const payload: CreateProviderTimeOffRequest = {
+        startsAt: _fromInputValue(startsAt),
+        endsAt: _fromInputValue(endsAt),
+        reason: reason.trim() || null,
+      };
+      await platformApi.createProviderTimeOff(tenantSlug, provider.id, payload);
+      setStartsAt("");
+      setEndsAt("");
+      setReason("");
+      setStatus("Time off added");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add time off");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDelete(entry: ProviderTimeOffEntry) {
+    setError(null);
+    setStatus(null);
+    try {
+      await platformApi.deleteProviderTimeOff(tenantSlug, provider.id, entry.id);
+      setStatus("Time off removed");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove time off");
+    }
+  }
+
+  return (
+    <div className="staff-detail-form time-off-tab">
+      <section className="time-off-list">
+        <h4>Scheduled time off</h4>
+        {loading ? (
+          <p className="settings-form-help">Loading…</p>
+        ) : items.length === 0 ? (
+          <p className="settings-form-help">No time off scheduled.</p>
+        ) : (
+          <ul className="time-off-entries">
+            {items.map((entry) => (
+              <li key={entry.id} className="time-off-entry">
+                <div>
+                  <strong>{_formatRange(entry.startsAt, entry.endsAt)}</strong>
+                  {entry.reason ? <span className="time-off-reason"> — {entry.reason}</span> : null}
+                </div>
+                <button
+                  type="button"
+                  className="link-button time-off-remove"
+                  onClick={() => handleDelete(entry)}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <form className="time-off-form" onSubmit={handleSubmit}>
+        <h4>Add time off</h4>
+        <div className="time-off-form-row">
+          <label>
+            <span>Starts</span>
+            <input
+              type="datetime-local"
+              value={startsAt}
+              onChange={(e) => setStartsAt(e.target.value)}
+              required
+            />
+          </label>
+          <label>
+            <span>Ends</span>
+            <input
+              type="datetime-local"
+              value={endsAt}
+              onChange={(e) => setEndsAt(e.target.value)}
+              required
+            />
+          </label>
+        </div>
+        <label className="time-off-reason-field">
+          <span>Reason (optional)</span>
+          <input
+            type="text"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            maxLength={500}
+            placeholder="Vacation, training, etc."
+          />
+        </label>
+        {error ? (
+          <p role="alert" className="settings-error">
+            {error}
+          </p>
+        ) : null}
+        {status ? <p className="settings-form-help">{status}</p> : null}
+        <div className="modal-actions">
+          <button type="submit" className="primary-action" disabled={submitting}>
+            {submitting ? "Saving…" : "Add time off"}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

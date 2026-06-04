@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
-from app.db.models import Booking, Provider, ProviderSchedule, Service, SlotHold
+from app.db.models import Booking, Provider, ProviderSchedule, ProviderTimeOff, Service, SlotHold
 from app.schemas.availability import AvailabilityDayResponse, AvailabilityResponse, SlotAvailabilityResponse
 from app.services.tenants import get_tenant_by_slug
 
@@ -171,6 +171,17 @@ async def list_availability(
         )
     ).all()
 
+    time_off_rows = (
+        await session.scalars(
+            select(ProviderTimeOff).where(
+                ProviderTimeOff.tenant_id == tenant.id,
+                ProviderTimeOff.provider_id.in_(provider_ids),
+                ProviderTimeOff.starts_at < window_end,
+                ProviderTimeOff.ends_at > window_start,
+            )
+        )
+    ).all()
+
     schedule_map: dict[tuple[str, str, int], list[ProviderSchedule]] = defaultdict(list)
     for schedule in schedules:
         schedule_map[(schedule.provider_id, schedule.location_id, schedule.weekday)].append(schedule)
@@ -180,6 +191,10 @@ async def list_availability(
         blocked_map[hold.provider_id].append((_ensure_aware(hold.starts_at), _ensure_aware(hold.ends_at)))
     for booking in bookings:
         blocked_map[booking.provider_id].append((_ensure_aware(booking.starts_at), _ensure_aware(booking.ends_at)))
+    for time_off in time_off_rows:
+        blocked_map[time_off.provider_id].append(
+            (_ensure_aware(time_off.starts_at), _ensure_aware(time_off.ends_at))
+        )
 
     all_slots_by_day: list[list[SlotAvailabilityResponse]] = []
     earliest_slot: SlotAvailabilityResponse | None = None

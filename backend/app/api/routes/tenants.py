@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.auth import require_tenant_permission
@@ -503,3 +503,64 @@ async def put_provider_schedule(
     session: AsyncSession = Depends(get_db_session),
 ) -> ProviderScheduleResponse:
     return await replace_tenant_provider_schedule(session, tenant_slug, provider_id, payload)
+
+
+# === Phase D: Provider time off ===
+
+from app.schemas.catalog import (
+    CreateProviderTimeOffRequest,
+    ProviderTimeOffListResponse,
+    ProviderTimeOffResponse,
+)
+from app.services.tenants import (
+    create_tenant_provider_time_off,
+    delete_tenant_provider_time_off,
+    list_tenant_provider_time_off,
+)
+
+
+@router.get(
+    "/{tenant_slug}/providers/{provider_id}/time-off",
+    response_model=ProviderTimeOffListResponse,
+    summary="List a provider's time off",
+)
+async def list_provider_time_off(
+    tenant_slug: str,
+    provider_id: str,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ProviderTimeOffListResponse:
+    return await list_tenant_provider_time_off(session, tenant_slug, provider_id)
+
+
+@router.post(
+    "/{tenant_slug}/providers/{provider_id}/time-off",
+    response_model=ProviderTimeOffResponse,
+    status_code=201,
+    summary="Create a time off entry for a provider",
+)
+async def create_provider_time_off(
+    tenant_slug: str,
+    provider_id: str,
+    payload: CreateProviderTimeOffRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ProviderTimeOffResponse:
+    return await create_tenant_provider_time_off(session, tenant_slug, provider_id, payload)
+
+
+@router.delete(
+    "/{tenant_slug}/providers/{provider_id}/time-off/{time_off_id}",
+    status_code=204,
+    response_class=Response,
+    summary="Delete a provider time off entry",
+)
+async def delete_provider_time_off(
+    tenant_slug: str,
+    provider_id: str,
+    time_off_id: str,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    await delete_tenant_provider_time_off(session, tenant_slug, provider_id, time_off_id)
+    return Response(status_code=204)

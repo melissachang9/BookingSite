@@ -573,3 +573,32 @@ class ProviderScheduleResponse(CamelModel):
 
 class ReplaceProviderScheduleRequest(CamelModel):
     entries: list[ProviderScheduleEntryRequest] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Provider time off (Phase D)
+# ---------------------------------------------------------------------------
+
+
+class ProviderTimeOffResponse(CamelModel):
+    id: str
+    provider_id: str
+    starts_at: datetime
+    ends_at: datetime
+    reason: str | None = None
+
+
+class ProviderTimeOffListResponse(CamelModel):
+    items: list[ProviderTimeOffResponse]
+
+
+class CreateProviderTimeOffRequest(CamelModel):
+    starts_at: datetime
+    ends_at: datetime
+    reason: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def _validate(self) -> "CreateProviderTimeOffRequest":
+        if self.ends_at <= self.starts_at:
+            raise ValueError("endsAt must be after startsAt")
+        return self

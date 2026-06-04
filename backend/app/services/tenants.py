@@ -14,6 +14,7 @@ from app.db.models import (
     ProviderLocation,
     ProviderSchedule,
     ProviderService,
+    ProviderTimeOff,
     Service,
     ServiceLocation,
     Tenant,
@@ -1052,3 +1053,84 @@ async def replace_tenant_provider_schedule(
 
     rows = await _load_provider_schedule(session, provider.id, tenant.id)
     return _schedule_to_response(provider.id, rows)
+
+
+# ---------------------------------------------------------------------------
+# Phase D: Provider time off
+# ---------------------------------------------------------------------------
+
+from app.schemas.catalog import (  # noqa: E402
+    CreateProviderTimeOffRequest,
+    ProviderTimeOffListResponse,
+    ProviderTimeOffResponse,
+)
+
+
+def _time_off_to_response(row: ProviderTimeOff) -> ProviderTimeOffResponse:
+    return ProviderTimeOffResponse(
+        id=row.id,
+        provider_id=row.provider_id,
+        starts_at=row.starts_at,
+        ends_at=row.ends_at,
+        reason=row.reason,
+    )
+
+
+async def list_tenant_provider_time_off(
+    session: AsyncSession, tenant_slug: str, provider_id: str
+) -> ProviderTimeOffListResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    provider = await _load_provider_with_links(session, provider_id, tenant.id)
+    rows = (
+        await session.scalars(
+            select(ProviderTimeOff)
+            .where(
+                ProviderTimeOff.tenant_id == tenant.id,
+                ProviderTimeOff.provider_id == provider.id,
+            )
+            .order_by(ProviderTimeOff.starts_at.asc())
+        )
+    ).all()
+    return ProviderTimeOffListResponse(items=[_time_off_to_response(row) for row in rows])
+
+
+async def create_tenant_provider_time_off(
+    session: AsyncSession,
+    tenant_slug: str,
+    provider_id: str,
+    payload: CreateProviderTimeOffRequest,
+) -> ProviderTimeOffResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    provider = await _load_provider_with_links(session, provider_id, tenant.id)
+    row = ProviderTimeOff(
+        tenant_id=tenant.id,
+        provider_id=provider.id,
+        starts_at=payload.starts_at,
+        ends_at=payload.ends_at,
+        reason=payload.reason,
+    )
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return _time_off_to_response(row)
+
+
+async def delete_tenant_provider_time_off(
+    session: AsyncSession,
+    tenant_slug: str,
+    provider_id: str,
+    time_off_id: str,
+) -> None:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    provider = await _load_provider_with_links(session, provider_id, tenant.id)
+    row = await session.scalar(
+        select(ProviderTimeOff).where(
+            ProviderTimeOff.id == time_off_id,
+            ProviderTimeOff.tenant_id == tenant.id,
+            ProviderTimeOff.provider_id == provider.id,
+        )
+    )
+    if row is None:
+        raise api_exception(404, "not_found", "Time off entry was not found.")
+    await session.delete(row)
+    await session.commit()

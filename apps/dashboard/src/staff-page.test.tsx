@@ -368,4 +368,65 @@ describe("StaffPage", () => {
       ],
     });
   });
+
+  it("loads provider time off on the Time off tab", async () => {
+    mockListEndpoints();
+    const listSpy = vi.spyOn(platformApi, "listProviderTimeOff").mockResolvedValue({
+      items: [
+        {
+          id: "to1",
+          providerId: "p1",
+          startsAt: "2026-08-01T17:00:00.000Z",
+          endsAt: "2026-08-05T17:00:00.000Z",
+          reason: "Vacation",
+        },
+      ],
+    } as any);
+
+    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("tab", { name: "Time off" }));
+
+    await waitFor(() =>
+      expect(listSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1"),
+    );
+    await waitFor(() => expect(screen.getByText(/Vacation/)).toBeInTheDocument());
+  });
+
+  it("creates a new time off entry from the form", async () => {
+    mockListEndpoints();
+    vi.spyOn(platformApi, "listProviderTimeOff").mockResolvedValue({ items: [] } as any);
+    const createSpy = vi
+      .spyOn(platformApi, "createProviderTimeOff")
+      .mockResolvedValue({
+        id: "new1",
+        providerId: "p1",
+        startsAt: "2026-08-01T17:00:00.000Z",
+        endsAt: "2026-08-02T01:00:00.000Z",
+        reason: null,
+      } as any);
+
+    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("tab", { name: "Time off" }));
+    await waitFor(() => screen.getByLabelText("Starts"));
+
+    fireEvent.change(screen.getByLabelText("Starts"), {
+      target: { value: "2026-08-01T10:00" },
+    });
+    fireEvent.change(screen.getByLabelText("Ends"), {
+      target: { value: "2026-08-01T18:00" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add time off" }));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    const [slug, providerId, payload] = createSpy.mock.calls[0];
+    expect(slug).toBe("brow-beauty-lab");
+    expect(providerId).toBe("p1");
+    expect(payload.reason).toBeNull();
+    expect(typeof payload.startsAt).toBe("string");
+    expect(typeof payload.endsAt).toBe("string");
+  });
 });
