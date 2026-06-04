@@ -369,3 +369,16 @@ class ProviderListResponse(CamelModel):
 
 class LocationListResponse(CamelModel):
     locations: list[LocationSummaryResponse]
+
+
+class TenantUserSummaryResponse(CamelModel):
+    id: str
+    email: str
+    name: str
+    role: str
+    is_active: bool
+    created_at: datetime
+
+
+class TenantUserListResponse(CamelModel):
+    users: list[TenantUserSummaryResponse]

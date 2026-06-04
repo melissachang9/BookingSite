@@ -25,6 +25,7 @@ import type {
   FormResponseSummary,
   HealthResponse,
   LocationListResponse,
+  TenantUserListResponse,
   LocationSummary,
   ProviderListResponse,
   SaveFormDraftRequest,
@@ -88,6 +89,8 @@ export const createPlatformApi = (client: ApiClient) => ({
   listLocations: (tenantSlug: string) => client.get<LocationListResponse>(`tenants/${tenantSlug}/locations`),
   listLocationsAdmin: (tenantSlug: string) =>
     client.get<LocationListResponse>(`tenants/${tenantSlug}/locations/manage`),
+  listTenantUsers: (tenantSlug: string) =>
+    client.get<TenantUserListResponse>(`tenants/${tenantSlug}/users`),
   createLocation: (tenantSlug: string, body: CreateLocationRequest) =>
     client.post<LocationSummary, CreateLocationRequest>(`tenants/${tenantSlug}/locations`, body),
   updateLocation: (tenantSlug: string, locationId: string, body: UpdateLocationRequest) =>

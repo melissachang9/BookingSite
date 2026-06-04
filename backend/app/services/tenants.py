@@ -15,6 +15,8 @@ from app.schemas.catalog import (
     CreateTenantRequest,
     CreateTenantResponse,
     LocationListResponse,
+    TenantUserListResponse,
+    TenantUserSummaryResponse,
     LocationSummaryResponse,
     ProviderListResponse,
     ServiceListResponse,
@@ -579,3 +581,26 @@ async def list_service_providers(
         if any(link.location_id in target_location_ids for link in provider.location_links)
     ]
     return ProviderListResponse(providers=[provider_to_summary(provider, tenant) for provider in compatible_providers])
+
+async def list_tenant_users(session: AsyncSession, tenant_slug: str) -> "TenantUserListResponse":
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    users = (
+        await session.scalars(
+            select(User)
+            .where(User.tenant_id == tenant.id)
+            .order_by(User.created_at.asc())
+        )
+    ).all()
+    return TenantUserListResponse(
+        users=[
+            TenantUserSummaryResponse(
+                id=user.id,
+                email=user.email,
+                name=user.name,
+                role=user.role,
+                is_active=user.is_active,
+                created_at=user.created_at,
+            )
+            for user in users
+        ]
+    )

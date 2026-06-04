@@ -85,3 +85,16 @@ export type ProviderListResponse = {
 export type LocationListResponse = {
   locations: LocationSummary[];
 };
+
+export type TenantUserSummary = {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  isActive: boolean;
+  createdAt: string;
+};
+
+export type TenantUserListResponse = {
+  users: TenantUserSummary[];
+};

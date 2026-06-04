@@ -33,6 +33,7 @@ import { CalendarPage } from "./calendar-page";
 import { BookingsPage } from "./bookings-page";
 import { PaymentsPage } from "./payments-page";
 import { SettingsPage } from "./settings-page";
+import { StaffPage } from "./staff-page";
 import "./styles.css";
 
 type BackendStatusState =
@@ -729,7 +730,15 @@ export function App() {
               />
             }
           />
-          <Route path="/staff" element={<SectionPage definition={pageByPath.get("staff") ?? routeDefinitions[0]} />} />
+          <Route
+            path="/staff"
+            element={
+              <StaffPage
+                definition={pageByPath.get("staff") ?? routeDefinitions[0]}
+                currentUser={session.user}
+              />
+            }
+          />
           <Route path="/resources" element={<SectionPage definition={pageByPath.get("resources") ?? routeDefinitions[0]} />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>

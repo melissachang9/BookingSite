@@ -18,6 +18,7 @@ from app.schemas.catalog import (
     ServiceListResponse,
     ServiceSummaryResponse,
     TenantSummaryResponse,
+    TenantUserListResponse,
     UpdateLocationRequest,
     UpdateTenantBrandingRequest,
     UpdateTenantBusinessHoursRequest,
@@ -38,6 +39,7 @@ from app.services.tenants import (
     list_tenant_locations,
     list_tenant_locations_admin,
     list_tenant_services,
+    list_tenant_users,
     update_tenant_business,
     update_tenant_branding,
     update_tenant_business_hours,
@@ -179,6 +181,19 @@ async def patch_tenant_wallet_membership(
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantSummaryResponse:
     return await update_tenant_wallet_membership(session, tenant_slug, payload)
+
+
+@router.get(
+    "/{tenant_slug}/users",
+    response_model=TenantUserListResponse,
+    summary="List tenant users (read-only roster)",
+)
+async def get_tenant_users(
+    tenant_slug: str,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> TenantUserListResponse:
+    return await list_tenant_users(session, tenant_slug)
 
 
 @router.get(
