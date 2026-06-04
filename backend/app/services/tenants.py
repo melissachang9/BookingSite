@@ -19,6 +19,7 @@ from app.db.models import (
     ServiceLocation,
     Tenant,
     User,
+    UserPermissionOverride,
 )
 from app.schemas.catalog import (
     CreateLocationRequest,
@@ -1134,3 +1135,117 @@ async def delete_tenant_provider_time_off(
         raise api_exception(404, "not_found", "Time off entry was not found.")
     await session.delete(row)
     await session.commit()
+
+
+# ---------------------------------------------------------------------------
+# Per-user permission overrides (Phase E)
+# ---------------------------------------------------------------------------
+
+
+async def get_tenant_user_permissions(
+    session: AsyncSession,
+    tenant_slug: str,
+    user_id: str,
+):
+    from app.schemas.auth import (
+        PermissionGrantResponse,
+        UserPermissionOverrideEntry,
+        UserPermissionsResponse,
+    )
+    from app.services.auth import (
+        ALL_PERMISSION_KEYS,
+        ROLE_PERMISSION_ALLOWLIST,
+        _apply_overrides,
+    )
+
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    user = await _get_tenant_user(session, tenant.id, user_id)
+
+    override_rows = (
+        await session.scalars(
+            select(UserPermissionOverride)
+            .where(UserPermissionOverride.user_id == user.id)
+            .order_by(UserPermissionOverride.permission_key.asc())
+        )
+    ).all()
+    overrides_map = {row.permission_key: row.allowed for row in override_rows}
+
+    if user.role == "owner":
+        effective = [
+            PermissionGrantResponse(key=key, allowed=True) for key in ALL_PERMISSION_KEYS
+        ]
+    else:
+        effective = _apply_overrides(user.role, overrides_map)
+
+    role_defaults = sorted(ROLE_PERMISSION_ALLOWLIST.get(user.role, set()))
+
+    return UserPermissionsResponse(
+        user_id=user.id,
+        role=user.role,
+        role_defaults=role_defaults,
+        overrides=[
+            UserPermissionOverrideEntry(key=row.permission_key, allowed=row.allowed)
+            for row in override_rows
+        ],
+        effective=effective,
+    )
+
+
+async def replace_tenant_user_permissions(
+    session: AsyncSession,
+    tenant_slug: str,
+    user_id: str,
+    payload,
+):
+    from app.services.auth import ALL_PERMISSION_KEYS
+
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    user = await _get_tenant_user(session, tenant.id, user_id)
+
+    if user.role == "owner":
+        raise api_exception(
+            status_code=409,
+            code="owner_permissions_locked",
+            message="Owner permissions cannot be customized.",
+        )
+
+    valid_keys = set(ALL_PERMISSION_KEYS)
+    seen: set[str] = set()
+    cleaned: list[tuple[str, bool]] = []
+    for entry in payload.overrides:
+        key = entry.key.strip()
+        if key not in valid_keys:
+            raise api_exception(
+                status_code=422,
+                code="invalid_permission_key",
+                message=f"Unknown permission key: {entry.key}",
+            )
+        if key in seen:
+            raise api_exception(
+                status_code=422,
+                code="duplicate_permission_override",
+                message=f"Duplicate override for permission: {key}",
+            )
+        seen.add(key)
+        cleaned.append((key, bool(entry.allowed)))
+
+    existing = (
+        await session.scalars(
+            select(UserPermissionOverride).where(UserPermissionOverride.user_id == user.id)
+        )
+    ).all()
+    for row in existing:
+        await session.delete(row)
+    await session.flush()
+
+    for key, allowed in cleaned:
+        session.add(
+            UserPermissionOverride(
+                tenant_id=tenant.id,
+                user_id=user.id,
+                permission_key=key,
+                allowed=allowed,
+            )
+        )
+    await session.commit()
+    return await get_tenant_user_permissions(session, tenant_slug, user_id)

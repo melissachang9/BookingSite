@@ -5,15 +5,21 @@ import type {
   CreateProviderTimeOffRequest,
   CreateStaffRequest,
   LocationSummary,
+  PermissionCatalogResponse,
+  PermissionDefinition,
+  PermissionKey,
   ProviderSchedule,
   ProviderScheduleEntry,
   ProviderSummary,
   ProviderTimeOffEntry,
   ReplaceProviderScheduleRequest,
+  ReplaceUserPermissionsRequest,
   ServiceSummary,
   TenantUserSummary,
   UpdateProviderRequest,
   UpdateTenantUserRequest,
+  UserPermissionOverrideEntry,
+  UserPermissionsResponse,
 } from "@booking/shared-types";
 
 import { platformApi } from "./platform-api";
@@ -35,7 +41,7 @@ type ModalState =
   | { kind: "password"; user: TenantUserSummary }
   | { kind: "addProviderFor"; user: TenantUserSummary };
 
-type TabKey = "details" | "services" | "schedule" | "timeOff";
+type TabKey = "details" | "services" | "schedule" | "timeOff" | "permissions";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Owner",
@@ -303,6 +309,7 @@ function StaffDetail({
     { key: "services", label: "Services", disabled: !provider },
     { key: "schedule", label: "Work hours", disabled: !provider },
     { key: "timeOff", label: "Time off", disabled: !provider },
+    { key: "permissions", label: "Permissions" },
   ];
 
   const directBookingLink = provider
@@ -371,6 +378,9 @@ function StaffDetail({
       ) : null}
       {activeTab === "timeOff" && provider ? (
         <TimeOffTab tenantSlug={tenantSlug} provider={provider} />
+      ) : null}
+      {activeTab === "permissions" ? (
+        <PermissionsTab tenantSlug={tenantSlug} user={user} />
       ) : null}
     </div>
   );
@@ -1449,6 +1459,192 @@ function TimeOffTab({ tenantSlug, provider }: TimeOffTabProps) {
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Permissions tab (Phase E)
+// ---------------------------------------------------------------------------
+
+type PermissionsTabProps = {
+  tenantSlug: string;
+  user: TenantUserSummary;
+};
+
+type PermissionTriState = "inherit" | "allow" | "deny";
+
+function PermissionsTab({ tenantSlug, user }: PermissionsTabProps) {
+  const [loadState, setLoadState] = useState<LoadState>({ kind: "loading" });
+  const [catalog, setCatalog] = useState<PermissionCatalogResponse | null>(null);
+  const [permissions, setPermissions] = useState<UserPermissionsResponse | null>(null);
+  const [overrides, setOverrides] = useState<Record<string, PermissionTriState>>({});
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user.role === "owner") {
+      setLoadState({ kind: "ready" });
+      return;
+    }
+    let cancelled = false;
+    setLoadState({ kind: "loading" });
+    Promise.all([
+      platformApi.getPermissionsCatalog(),
+      platformApi.getUserPermissions(tenantSlug, user.id),
+    ])
+      .then(([catalogResp, permsResp]) => {
+        if (cancelled) return;
+        setCatalog(catalogResp);
+        setPermissions(permsResp);
+        const next: Record<string, PermissionTriState> = {};
+        for (const entry of permsResp.overrides) {
+          next[entry.key] = entry.allowed ? "allow" : "deny";
+        }
+        setOverrides(next);
+        setLoadState({ kind: "ready" });
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : "Failed to load permissions.";
+        setLoadState({ kind: "error", message });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantSlug, user.id]);
+
+  if (user.role === "owner") {
+    return (
+      <div className="permissions-tab">
+        <p className="settings-form-help">
+          Owners have full access to every permission. Customize permissions on managers, staff,
+          and providers instead.
+        </p>
+      </div>
+    );
+  }
+
+  if (loadState.kind === "loading") {
+    return <p className="settings-form-help">Loading permissions…</p>;
+  }
+  if (loadState.kind === "error") {
+    return <p className="error-message">{loadState.message}</p>;
+  }
+  if (!catalog || !permissions) return null;
+
+  const roleDefaults = new Set<string>(permissions.roleDefaults);
+
+  const handleChange = (key: PermissionKey, next: PermissionTriState) => {
+    setOverrides((prev) => {
+      const copy = { ...prev };
+      if (next === "inherit") {
+        delete copy[key];
+      } else {
+        copy[key] = next;
+      }
+      return copy;
+    });
+    setStatus(null);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setStatus(null);
+    const payload: ReplaceUserPermissionsRequest = {
+      overrides: Object.entries(overrides).map(
+        ([key, value]): UserPermissionOverrideEntry => ({
+          key: key as PermissionKey,
+          allowed: value === "allow",
+        }),
+      ),
+    };
+    try {
+      const updated = await platformApi.replaceUserPermissions(tenantSlug, user.id, payload);
+      setPermissions(updated);
+      const next: Record<string, PermissionTriState> = {};
+      for (const entry of updated.overrides) {
+        next[entry.key] = entry.allowed ? "allow" : "deny";
+      }
+      setOverrides(next);
+      setStatus("Permissions saved.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to save permissions.";
+      setStatus(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const grouped = new Map<string, PermissionDefinition[]>();
+  for (const def of catalog.permissions) {
+    const arr = grouped.get(def.category) ?? [];
+    arr.push(def);
+    grouped.set(def.category, arr);
+  }
+
+  return (
+    <div className="permissions-tab">
+      <p className="settings-form-help">
+        Role defaults grant a baseline. Per-user overrides add or remove specific permissions on
+        top of the role.
+      </p>
+      <div className="permissions-groups">
+        {Array.from(grouped.entries()).map(([category, defs]) => (
+          <section key={category} className="permissions-group">
+            <h5>{category}</h5>
+            <ul className="permissions-list">
+              {defs.map((def) => {
+                const current: PermissionTriState = overrides[def.key] ?? "inherit";
+                const inheritedAllowed = roleDefaults.has(def.key);
+                return (
+                  <li key={def.key} className="permissions-row">
+                    <div className="permissions-row-label">
+                      <strong>{def.label}</strong>
+                      <span className="settings-form-help">{def.description}</span>
+                    </div>
+                    <div className="permissions-row-controls" role="radiogroup" aria-label={def.label}>
+                      <label>
+                        <input
+                          type="radio"
+                          name={`perm-${def.key}`}
+                          checked={current === "inherit"}
+                          onChange={() => handleChange(def.key, "inherit")}
+                        />
+                        Inherit ({inheritedAllowed ? "allow" : "deny"})
+                      </label>
+                      <label>
+                        <input
+                          type="radio"
+                          name={`perm-${def.key}`}
+                          checked={current === "allow"}
+                          onChange={() => handleChange(def.key, "allow")}
+                        />
+                        Allow
+                      </label>
+                      <label>
+                        <input
+                          type="radio"
+                          name={`perm-${def.key}`}
+                          checked={current === "deny"}
+                          onChange={() => handleChange(def.key, "deny")}
+                        />
+                        Deny
+                      </label>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
+      </div>
+      <div className="permissions-actions">
+        <button type="button" className="primary-action" onClick={handleSave} disabled={saving}>
+          {saving ? "Saving…" : "Save permissions"}
+        </button>
+        {status ? <span className="settings-form-help">{status}</span> : null}
+      </div>
     </div>
   );
 }

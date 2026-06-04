@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
 from app.core.security import create_access_token, create_refresh_token, decode_token, verify_password
-from app.db.models import User
+from app.db.models import User, UserPermissionOverride
 from app.schemas.auth import AuthenticatedUserResponse, PermissionGrantResponse, SessionResponse
 
 
@@ -140,7 +140,47 @@ def _permission_grants(role: str) -> list[PermissionGrantResponse]:
     return [PermissionGrantResponse(key=key, allowed=key in allowlist) for key in ALL_PERMISSION_KEYS]
 
 
-def _session_response_for_user(user: User) -> SessionResponse:
+def _apply_overrides(role: str, overrides: dict[str, bool]) -> list[PermissionGrantResponse]:
+    role_allowlist = ROLE_PERMISSION_ALLOWLIST.get(role, set())
+    grants: list[PermissionGrantResponse] = []
+    for key in ALL_PERMISSION_KEYS:
+        if key in overrides:
+            allowed = overrides[key]
+        else:
+            allowed = key in role_allowlist
+        grants.append(PermissionGrantResponse(key=key, allowed=allowed))
+    return grants
+
+
+async def _load_user_overrides(session: AsyncSession, user_id: str) -> dict[str, bool]:
+    rows = (
+        await session.scalars(
+            select(UserPermissionOverride).where(UserPermissionOverride.user_id == user_id)
+        )
+    ).all()
+    return {row.permission_key: row.allowed for row in rows}
+
+
+async def effective_permissions_for_user(session: AsyncSession, user: User) -> set[str]:
+    role_allowlist = ROLE_PERMISSION_ALLOWLIST.get(user.role, set())
+    overrides = await _load_user_overrides(session, user.id)
+    effective = set(role_allowlist)
+    for key, allowed in overrides.items():
+        if allowed:
+            effective.add(key)
+        else:
+            effective.discard(key)
+    return effective
+
+
+async def _grants_for_user(session: AsyncSession, user: User) -> list[PermissionGrantResponse]:
+    overrides = await _load_user_overrides(session, user.id)
+    return _apply_overrides(user.role, overrides)
+
+
+def _session_response_for_user(
+    user: User, permissions: list[PermissionGrantResponse]
+) -> SessionResponse:
     tenant_slug = user.tenant.slug if user.tenant is not None else None
     if tenant_slug is None:
         raise api_exception(401, "unauthorized", "User session is no longer active.")
@@ -165,7 +205,7 @@ def _session_response_for_user(user: User) -> SessionResponse:
             email=user.email,
             name=user.name,
             role=user.role,
-            permissions=_permission_grants(user.role),
+            permissions=permissions,
         ),
     )
 
@@ -174,7 +214,8 @@ async def login_user(session: AsyncSession, email: str, password: str) -> Sessio
     user = await session.scalar(select(User).options(selectinload(User.tenant)).where(User.email == email.strip().lower()))
     if user is None or not user.is_active or not verify_password(password, user.password_hash):
         raise api_exception(401, "unauthorized", "Invalid email or password.")
-    return _session_response_for_user(user)
+    grants = await _grants_for_user(session, user)
+    return _session_response_for_user(user, grants)
 
 
 async def refresh_user_session(session: AsyncSession, refresh_token: str) -> SessionResponse:
@@ -189,4 +230,5 @@ async def refresh_user_session(session: AsyncSession, refresh_token: str) -> Ses
     user = await session.scalar(select(User).options(selectinload(User.tenant)).where(User.id == payload.get("sub")))
     if user is None or not user.is_active:
         raise api_exception(401, "unauthorized", "User session is no longer active.")
-    return _session_response_for_user(user)
+    grants = await _grants_for_user(session, user)
+    return _session_response_for_user(user, grants)

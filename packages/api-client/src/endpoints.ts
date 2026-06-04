@@ -35,10 +35,13 @@ import type {
   CreateProviderTimeOffRequest,
   CreateStaffRequest,
   CreateStaffResponse,
+  PermissionCatalogResponse,
   ProviderSchedule,
   ProviderSummary,
   ProviderTimeOffEntry,
   ProviderTimeOffList,
+  ReplaceUserPermissionsRequest,
+  UserPermissionsResponse,
   LocationSummary,
   ProviderListResponse,
   ReplaceProviderScheduleRequest,
@@ -163,6 +166,18 @@ export const createPlatformApi = (client: ApiClient) => ({
     ),
   createTenantStaff: (tenantSlug: string, body: CreateStaffRequest) =>
     client.post<CreateStaffResponse, CreateStaffRequest>(`tenants/${tenantSlug}/staff`, body),
+  getPermissionsCatalog: () => client.get<PermissionCatalogResponse>("auth/permissions/catalog"),
+  getUserPermissions: (tenantSlug: string, userId: string) =>
+    client.get<UserPermissionsResponse>(`tenants/${tenantSlug}/users/${userId}/permissions`),
+  replaceUserPermissions: (
+    tenantSlug: string,
+    userId: string,
+    body: ReplaceUserPermissionsRequest,
+  ) =>
+    client.put<UserPermissionsResponse, ReplaceUserPermissionsRequest>(
+      `tenants/${tenantSlug}/users/${userId}/permissions`,
+      body,
+    ),
   createLocation: (tenantSlug: string, body: CreateLocationRequest) =>
     client.post<LocationSummary, CreateLocationRequest>(`tenants/${tenantSlug}/locations`, body),
   updateLocation: (tenantSlug: string, locationId: string, body: UpdateLocationRequest) =>

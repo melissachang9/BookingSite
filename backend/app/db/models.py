@@ -47,6 +47,18 @@ class User(Base, IdMixin, TimestampMixin):
     tenant: Mapped[Tenant] = relationship(back_populates="users")
 
 
+class UserPermissionOverride(Base, IdMixin, TimestampMixin):
+    __tablename__ = "user_permission_overrides"
+    __table_args__ = (
+        UniqueConstraint("user_id", "permission_key", name="uq_user_permission_override"),
+    )
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True, nullable=False)
+    permission_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    allowed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+
 class Customer(Base, IdMixin, TimestampMixin):
     __tablename__ = "customers"
 

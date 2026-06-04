@@ -564,3 +564,44 @@ async def delete_provider_time_off(
 ) -> Response:
     await delete_tenant_provider_time_off(session, tenant_slug, provider_id, time_off_id)
     return Response(status_code=204)
+
+
+# === Phase E: Per-user permission overrides ===
+
+from app.schemas.auth import (
+    ReplaceUserPermissionsRequest,
+    UserPermissionsResponse,
+)
+from app.services.tenants import (
+    get_tenant_user_permissions,
+    replace_tenant_user_permissions,
+)
+
+
+@router.get(
+    "/{tenant_slug}/users/{user_id}/permissions",
+    response_model=UserPermissionsResponse,
+    summary="Get a user's effective permissions and overrides",
+)
+async def get_user_permissions(
+    tenant_slug: str,
+    user_id: str,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> UserPermissionsResponse:
+    return await get_tenant_user_permissions(session, tenant_slug, user_id)
+
+
+@router.put(
+    "/{tenant_slug}/users/{user_id}/permissions",
+    response_model=UserPermissionsResponse,
+    summary="Replace a user's permission overrides",
+)
+async def put_user_permissions(
+    tenant_slug: str,
+    user_id: str,
+    payload: ReplaceUserPermissionsRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> UserPermissionsResponse:
+    return await replace_tenant_user_permissions(session, tenant_slug, user_id, payload)

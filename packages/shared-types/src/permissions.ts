@@ -46,3 +46,31 @@ export type SessionResponse = {
   expiresAt: string;
   user: AuthenticatedUser;
 };
+export type UserPermissionOverrideEntry = {
+  key: PermissionKey;
+  allowed: boolean;
+};
+
+export type UserPermissionsResponse = {
+  userId: string;
+  role: UserRole;
+  roleDefaults: PermissionKey[];
+  overrides: UserPermissionOverrideEntry[];
+  effective: PermissionGrant[];
+};
+
+export type ReplaceUserPermissionsRequest = {
+  overrides: UserPermissionOverrideEntry[];
+};
+
+export type PermissionDefinition = {
+  key: PermissionKey;
+  category: string;
+  label: string;
+  description: string;
+};
+
+export type PermissionCatalogResponse = {
+  permissions: PermissionDefinition[];
+  roleDefaults: Record<string, PermissionKey[]>;
+};

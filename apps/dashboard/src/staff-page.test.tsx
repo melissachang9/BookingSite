@@ -429,4 +429,96 @@ describe("StaffPage", () => {
     expect(typeof payload.startsAt).toBe("string");
     expect(typeof payload.endsAt).toBe("string");
   });
+
+  it("loads catalog and user permissions on the Permissions tab", async () => {
+    mockListEndpoints();
+    const catalogSpy = vi.spyOn(platformApi, "getPermissionsCatalog").mockResolvedValue({
+      permissions: [
+        {
+          key: "settings.manage",
+          category: "Settings",
+          label: "Manage settings",
+          description: "Edit business settings.",
+        },
+      ],
+      roleDefaults: { staff: [], provider: [] },
+    } as any);
+    const permsSpy = vi.spyOn(platformApi, "getUserPermissions").mockResolvedValue({
+      userId: "u2",
+      role: "provider",
+      roleDefaults: [],
+      overrides: [],
+      effective: [{ key: "settings.manage", allowed: false }],
+    } as any);
+
+    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("tab", { name: "Permissions" }));
+
+    await waitFor(() => expect(catalogSpy).toHaveBeenCalled());
+    await waitFor(() => expect(permsSpy).toHaveBeenCalledWith("brow-beauty-lab", "u2"));
+    await waitFor(() => expect(screen.getByText("Manage settings")).toBeInTheDocument());
+    expect(screen.getByText("Settings")).toBeInTheDocument();
+  });
+
+  it("saves an override when toggled to allow", async () => {
+    mockListEndpoints();
+    vi.spyOn(platformApi, "getPermissionsCatalog").mockResolvedValue({
+      permissions: [
+        {
+          key: "settings.manage",
+          category: "Settings",
+          label: "Manage settings",
+          description: "Edit business settings.",
+        },
+      ],
+      roleDefaults: { provider: [] },
+    } as any);
+    vi.spyOn(platformApi, "getUserPermissions").mockResolvedValue({
+      userId: "u2",
+      role: "provider",
+      roleDefaults: [],
+      overrides: [],
+      effective: [{ key: "settings.manage", allowed: false }],
+    } as any);
+    const saveSpy = vi.spyOn(platformApi, "replaceUserPermissions").mockResolvedValue({
+      userId: "u2",
+      role: "provider",
+      roleDefaults: [],
+      overrides: [{ key: "settings.manage", allowed: true }],
+      effective: [{ key: "settings.manage", allowed: true }],
+    } as any);
+
+    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("tab", { name: "Permissions" }));
+    await waitFor(() => expect(screen.getByText("Manage settings")).toBeInTheDocument());
+
+    const group = screen.getByRole("radiogroup", { name: "Manage settings" });
+    fireEvent.click(within(group).getByLabelText("Allow"));
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+    const [slug, userId, payload] = saveSpy.mock.calls[0];
+    expect(slug).toBe("brow-beauty-lab");
+    expect(userId).toBe("u2");
+    expect(payload).toEqual({ overrides: [{ key: "settings.manage", allowed: true }] });
+  });
+
+  it("shows owner notice instead of permissions matrix for owners", async () => {
+    mockListEndpoints();
+    const catalogSpy = vi.spyOn(platformApi, "getPermissionsCatalog");
+    const permsSpy = vi.spyOn(platformApi, "getUserPermissions");
+
+    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    await waitFor(() => screen.getByRole("button", { name: /Melissa Chang/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Melissa Chang/i }));
+    fireEvent.click(screen.getByRole("tab", { name: "Permissions" }));
+
+    await waitFor(() => expect(screen.getByText(/Owners have full access/i)).toBeInTheDocument());
+    expect(catalogSpy).not.toHaveBeenCalled();
+    expect(permsSpy).not.toHaveBeenCalled();
+  });
 });

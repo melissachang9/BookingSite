@@ -3074,3 +3074,58 @@ body {
 .time-off-form-row { display: flex; gap: 1rem; flex-wrap: wrap; }
 .time-off-form label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
 .time-off-reason-field input { width: 100%; }
+
+/* Permissions tab (Phase E) */
+.permissions-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.permissions-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.permissions-group h5 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.95rem;
+  color: var(--text-strong, #1f2937);
+}
+.permissions-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.permissions-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  background: var(--surface-muted, #f9fafb);
+}
+.permissions-row-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+.permissions-row-controls {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+}
+.permissions-row-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+}
+.permissions-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}

@@ -46,3 +46,24 @@ class SessionResponse(CamelModel):
     refresh_token: str | None = None
     expires_at: datetime
     user: AuthenticatedUserResponse
+
+# ---------------------------------------------------------------------------
+# Per-user permission overrides (Phase E)
+# ---------------------------------------------------------------------------
+
+
+class UserPermissionOverrideEntry(CamelModel):
+    key: str
+    allowed: bool
+
+
+class UserPermissionsResponse(CamelModel):
+    user_id: str
+    role: str
+    role_defaults: list[str]
+    overrides: list[UserPermissionOverrideEntry]
+    effective: list[PermissionGrantResponse]
+
+
+class ReplaceUserPermissionsRequest(CamelModel):
+    overrides: list[UserPermissionOverrideEntry]

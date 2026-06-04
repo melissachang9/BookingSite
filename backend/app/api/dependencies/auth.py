@@ -9,7 +9,7 @@ from app.core.http import api_exception
 from app.core.security import decode_token
 from app.db.models import Tenant, User
 from app.db.session import get_db_session
-from app.services.auth import ROLE_PERMISSION_ALLOWLIST
+from app.services.auth import effective_permissions_for_user
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -68,7 +68,8 @@ def require_tenant_permission(permission_key: str):
         if current_user.tenant_id != tenant.id:
             raise api_exception(403, "forbidden", "You do not have access to this tenant.")
 
-        if permission_key not in ROLE_PERMISSION_ALLOWLIST.get(current_user.role, set()):
+        effective = await effective_permissions_for_user(session, current_user)
+        if permission_key not in effective:
             raise api_exception(403, "forbidden", "You do not have permission to perform this action.")
 
         return current_user
