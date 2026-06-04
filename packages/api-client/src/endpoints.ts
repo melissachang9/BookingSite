@@ -26,6 +26,10 @@ import type {
   HealthResponse,
   LocationListResponse,
   TenantUserListResponse,
+  TenantUserSummary,
+  CreateTenantUserRequest,
+  UpdateTenantUserRequest,
+  ResetTenantUserPasswordRequest,
   LocationSummary,
   ProviderListResponse,
   SaveFormDraftRequest,
@@ -91,6 +95,19 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.get<LocationListResponse>(`tenants/${tenantSlug}/locations/manage`),
   listTenantUsers: (tenantSlug: string) =>
     client.get<TenantUserListResponse>(`tenants/${tenantSlug}/users`),
+  createTenantUser: (tenantSlug: string, body: CreateTenantUserRequest) =>
+    client.post<TenantUserSummary, CreateTenantUserRequest>(`tenants/${tenantSlug}/users`, body),
+  updateTenantUser: (tenantSlug: string, userId: string, body: UpdateTenantUserRequest) =>
+    client.patch<TenantUserSummary, UpdateTenantUserRequest>(`tenants/${tenantSlug}/users/${userId}`, body),
+  resetTenantUserPassword: (
+    tenantSlug: string,
+    userId: string,
+    body: ResetTenantUserPasswordRequest,
+  ) =>
+    client.post<TenantUserSummary, ResetTenantUserPasswordRequest>(
+      `tenants/${tenantSlug}/users/${userId}/password`,
+      body,
+    ),
   createLocation: (tenantSlug: string, body: CreateLocationRequest) =>
     client.post<LocationSummary, CreateLocationRequest>(`tenants/${tenantSlug}/locations`, body),
   updateLocation: (tenantSlug: string, locationId: string, body: UpdateLocationRequest) =>

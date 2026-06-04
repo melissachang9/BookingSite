@@ -98,3 +98,20 @@ export type TenantUserSummary = {
 export type TenantUserListResponse = {
   users: TenantUserSummary[];
 };
+
+export type CreateTenantUserRequest = {
+  email: string;
+  name: string;
+  role: string;
+  initialPassword: string;
+};
+
+export type UpdateTenantUserRequest = {
+  name?: string;
+  role?: string;
+  isActive?: boolean;
+};
+
+export type ResetTenantUserPasswordRequest = {
+  newPassword: string;
+};

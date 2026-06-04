@@ -382,3 +382,63 @@ class TenantUserSummaryResponse(CamelModel):
 
 class TenantUserListResponse(CamelModel):
     users: list[TenantUserSummaryResponse]
+
+
+VALID_USER_ROLES = ("owner", "manager", "staff", "provider")
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _validate_role(value: str, *, field: str = "role") -> str:
+    lowered = value.strip().lower()
+    if lowered not in VALID_USER_ROLES:
+        raise ValueError(f"{field} must be one of {', '.join(VALID_USER_ROLES)}.")
+    return lowered
+
+
+def _validate_email(value: str) -> str:
+    stripped = value.strip()
+    if not _EMAIL_RE.match(stripped):
+        raise ValueError("email must be a valid email address.")
+    return stripped.lower()
+
+
+def _validate_password(value: str) -> str:
+    if len(value) < 8:
+        raise ValueError("password must be at least 8 characters long.")
+    return value
+
+
+class CreateTenantUserRequest(CamelModel):
+    email: str = Field(min_length=3, max_length=255)
+    name: str = Field(min_length=1, max_length=255)
+    role: str = Field(min_length=1, max_length=32)
+    initial_password: str = Field(min_length=8, max_length=255)
+
+    @model_validator(mode="after")
+    def _validate(self) -> "CreateTenantUserRequest":
+        self.email = _validate_email(self.email)
+        self.role = _validate_role(self.role)
+        self.initial_password = _validate_password(self.initial_password)
+        return self
+
+
+class UpdateTenantUserRequest(CamelModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    role: str | None = Field(default=None, min_length=1, max_length=32)
+    is_active: bool | None = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> "UpdateTenantUserRequest":
+        if self.role is not None:
+            self.role = _validate_role(self.role)
+        return self
+
+
+class ResetTenantUserPasswordRequest(CamelModel):
+    new_password: str = Field(min_length=8, max_length=255)
+
+    @model_validator(mode="after")
+    def _validate(self) -> "ResetTenantUserPasswordRequest":
+        self.new_password = _validate_password(self.new_password)
+        return self

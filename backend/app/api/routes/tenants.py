@@ -11,14 +11,17 @@ from app.schemas.catalog import (
     CreateServiceRequest,
     CreateTenantRequest,
     CreateTenantResponse,
+    CreateTenantUserRequest,
     EmailDnsResponse,
     LocationListResponse,
     LocationSummaryResponse,
     ProviderListResponse,
+    ResetTenantUserPasswordRequest,
     ServiceListResponse,
     ServiceSummaryResponse,
     TenantSummaryResponse,
     TenantUserListResponse,
+    TenantUserSummaryResponse,
     UpdateLocationRequest,
     UpdateTenantBrandingRequest,
     UpdateTenantBusinessHoursRequest,
@@ -26,6 +29,7 @@ from app.schemas.catalog import (
     UpdateTenantClientOwnershipRequest,
     UpdateTenantCustomEmailRequest,
     UpdateTenantSettingsRequest,
+    UpdateTenantUserRequest,
     UpdateTenantWalletMembershipRequest,
 )
 from app.services.availability import list_availability
@@ -33,6 +37,7 @@ from app.services.tenants import (
     create_tenant_account,
     create_tenant_location,
     create_tenant_service,
+    create_tenant_user,
     deactivate_tenant_location,
     get_tenant_summary,
     list_service_providers,
@@ -40,11 +45,13 @@ from app.services.tenants import (
     list_tenant_locations_admin,
     list_tenant_services,
     list_tenant_users,
+    reset_tenant_user_password,
     update_tenant_business,
     update_tenant_branding,
     update_tenant_business_hours,
     update_tenant_client_ownership,
     update_tenant_custom_email,
+    update_tenant_user,
     update_tenant_wallet_membership,
     get_tenant_email_dns,
     update_tenant_location,
@@ -194,6 +201,51 @@ async def get_tenant_users(
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantUserListResponse:
     return await list_tenant_users(session, tenant_slug)
+
+
+@router.post(
+    "/{tenant_slug}/users",
+    response_model=TenantUserSummaryResponse,
+    status_code=201,
+    summary="Create a tenant user",
+)
+async def post_tenant_user(
+    tenant_slug: str,
+    payload: CreateTenantUserRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> TenantUserSummaryResponse:
+    return await create_tenant_user(session, tenant_slug, payload)
+
+
+@router.patch(
+    "/{tenant_slug}/users/{user_id}",
+    response_model=TenantUserSummaryResponse,
+    summary="Update a tenant user (name, role, active)",
+)
+async def patch_tenant_user(
+    tenant_slug: str,
+    user_id: str,
+    payload: UpdateTenantUserRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> TenantUserSummaryResponse:
+    return await update_tenant_user(session, tenant_slug, user_id, payload)
+
+
+@router.post(
+    "/{tenant_slug}/users/{user_id}/password",
+    response_model=TenantUserSummaryResponse,
+    summary="Reset a tenant user's password",
+)
+async def post_tenant_user_password(
+    tenant_slug: str,
+    user_id: str,
+    payload: ResetTenantUserPasswordRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> TenantUserSummaryResponse:
+    return await reset_tenant_user_password(session, tenant_slug, user_id, payload)
 
 
 @router.get(

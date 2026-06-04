@@ -14,11 +14,13 @@ from app.schemas.catalog import (
     CreateServiceRequest,
     CreateTenantRequest,
     CreateTenantResponse,
+    CreateTenantUserRequest,
     LocationListResponse,
     TenantUserListResponse,
     TenantUserSummaryResponse,
     LocationSummaryResponse,
     ProviderListResponse,
+    ResetTenantUserPasswordRequest,
     ServiceListResponse,
     TenantSummaryResponse,
     UpdateLocationRequest,
@@ -27,6 +29,7 @@ from app.schemas.catalog import (
     UpdateTenantBusinessRequest,
     UpdateTenantClientOwnershipRequest,
     UpdateTenantCustomEmailRequest,
+    UpdateTenantUserRequest,
     UpdateTenantWalletMembershipRequest,
     UpdateTenantSettingsRequest,
 )
@@ -604,3 +607,122 @@ async def list_tenant_users(session: AsyncSession, tenant_slug: str) -> "TenantU
             for user in users
         ]
     )
+
+
+def _user_to_summary(user: User) -> TenantUserSummaryResponse:
+    return TenantUserSummaryResponse(
+        id=user.id,
+        email=user.email,
+        name=user.name,
+        role=user.role,
+        is_active=user.is_active,
+        created_at=user.created_at,
+    )
+
+
+async def _get_tenant_user(session: AsyncSession, tenant_id: str, user_id: str) -> User:
+    user = (
+        await session.scalars(
+            select(User).where(User.id == user_id, User.tenant_id == tenant_id)
+        )
+    ).one_or_none()
+    if user is None:
+        raise api_exception(status_code=404, code="user_not_found", message="User not found.")
+    return user
+
+
+async def _count_active_owners(session: AsyncSession, tenant_id: str) -> int:
+    return int(
+        (
+            await session.scalar(
+                select(func.count())
+                .select_from(User)
+                .where(
+                    User.tenant_id == tenant_id,
+                    User.role == "owner",
+                    User.is_active == True,  # noqa: E712
+                )
+            )
+        )
+        or 0
+    )
+
+
+async def create_tenant_user(
+    session: AsyncSession,
+    tenant_slug: str,
+    payload: CreateTenantUserRequest,
+) -> TenantUserSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    existing = (
+        await session.scalars(select(User).where(func.lower(User.email) == payload.email.lower()))
+    ).one_or_none()
+    if existing is not None:
+        raise api_exception(
+            status_code=409,
+            code="email_already_registered",
+            message="A user with that email already exists.",
+        )
+    user = User(
+        tenant_id=tenant.id,
+        email=payload.email,
+        name=payload.name.strip(),
+        role=payload.role,
+        password_hash=hash_password(payload.initial_password),
+        is_active=True,
+    )
+    session.add(user)
+    await session.flush()
+    await session.commit()
+    await session.refresh(user)
+    return _user_to_summary(user)
+
+
+async def update_tenant_user(
+    session: AsyncSession,
+    tenant_slug: str,
+    user_id: str,
+    payload: UpdateTenantUserRequest,
+) -> TenantUserSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    user = await _get_tenant_user(session, tenant.id, user_id)
+
+    new_role = payload.role if payload.role is not None else user.role
+    new_active = payload.is_active if payload.is_active is not None else user.is_active
+
+    # Last-active-owner guard: prevent demotion or deactivation if it would leave
+    # the tenant with zero active owners.
+    if user.role == "owner" and user.is_active and (new_role != "owner" or new_active is False):
+        active_owners = await _count_active_owners(session, tenant.id)
+        if active_owners <= 1:
+            raise api_exception(
+                status_code=409,
+                code="last_active_owner",
+                message="At least one active owner is required.",
+            )
+
+    if payload.name is not None:
+        user.name = payload.name.strip()
+    if payload.role is not None:
+        user.role = payload.role
+    if payload.is_active is not None:
+        user.is_active = payload.is_active
+
+    await session.commit()
+    await session.refresh(user)
+    return _user_to_summary(user)
+
+
+async def reset_tenant_user_password(
+    session: AsyncSession,
+    tenant_slug: str,
+    user_id: str,
+    payload: ResetTenantUserPasswordRequest,
+) -> TenantUserSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    user = await _get_tenant_user(session, tenant.id, user_id)
+    user.password_hash = hash_password(payload.new_password)
+    await session.commit()
+    await session.refresh(user)
+    return _user_to_summary(user)
+
