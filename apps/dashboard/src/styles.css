@@ -1824,7 +1824,10 @@ body {
   border-radius: 0 var(--ui-radius-lg) var(--ui-radius-lg) 0;
   background: var(--ui-ivory);
   box-shadow: var(--ui-shadow-lg);
-  overflow: hidden;
+  /* overflow: clip preserves the rounded-corner clipping without creating a
+     scroll container, which would otherwise break position: sticky for
+     descendants such as the settings anchor nav. */
+  overflow: clip;
 }
 
 .ops-topbar {
