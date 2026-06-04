@@ -2782,7 +2782,6 @@ body {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
   gap: 2rem;
-  align-items: start;
 }
 @media (max-width: 880px) {
   .settings-layout {
@@ -2792,6 +2791,9 @@ body {
 .settings-anchor-nav {
   position: sticky;
   top: 1rem;
+  align-self: start;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
