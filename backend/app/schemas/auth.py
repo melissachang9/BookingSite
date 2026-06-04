@@ -19,6 +19,18 @@ class PermissionGrantResponse(CamelModel):
     allowed: bool
 
 
+class PermissionDefinitionResponse(CamelModel):
+    key: str
+    category: str
+    label: str
+    description: str
+
+
+class PermissionCatalogResponse(CamelModel):
+    permissions: list[PermissionDefinitionResponse]
+    role_defaults: dict[str, list[str]]
+
+
 class AuthenticatedUserResponse(CamelModel):
     id: str
     tenant_id: str
