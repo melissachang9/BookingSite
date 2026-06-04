@@ -463,3 +463,43 @@ async def post_tenant_staff(
     session: AsyncSession = Depends(get_db_session),
 ) -> CreateStaffResponse:
     return await create_tenant_staff(session, tenant_slug, payload)
+
+# === Phase C: Provider weekly schedule ===
+
+from app.schemas.catalog import (
+    ProviderScheduleResponse,
+    ReplaceProviderScheduleRequest,
+)
+from app.services.tenants import (
+    get_tenant_provider_schedule,
+    replace_tenant_provider_schedule,
+)
+
+
+@router.get(
+    "/{tenant_slug}/providers/{provider_id}/schedule",
+    response_model=ProviderScheduleResponse,
+    summary="Get a provider's weekly schedule",
+)
+async def get_provider_schedule(
+    tenant_slug: str,
+    provider_id: str,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ProviderScheduleResponse:
+    return await get_tenant_provider_schedule(session, tenant_slug, provider_id)
+
+
+@router.put(
+    "/{tenant_slug}/providers/{provider_id}/schedule",
+    response_model=ProviderScheduleResponse,
+    summary="Replace a provider's weekly schedule",
+)
+async def put_provider_schedule(
+    tenant_slug: str,
+    provider_id: str,
+    payload: ReplaceProviderScheduleRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ProviderScheduleResponse:
+    return await replace_tenant_provider_schedule(session, tenant_slug, provider_id, payload)

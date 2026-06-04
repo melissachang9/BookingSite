@@ -34,9 +34,11 @@ import type {
   UpdateProviderRequest,
   CreateStaffRequest,
   CreateStaffResponse,
+  ProviderSchedule,
   ProviderSummary,
   LocationSummary,
   ProviderListResponse,
+  ReplaceProviderScheduleRequest,
   SaveFormDraftRequest,
   ServiceListResponse,
   ServiceSummary,
@@ -124,6 +126,17 @@ export const createPlatformApi = (client: ApiClient) => ({
     ),
   deactivateProvider: (tenantSlug: string, providerId: string) =>
     client.delete<ProviderSummary>(`tenants/${tenantSlug}/providers/${providerId}`),
+  getProviderSchedule: (tenantSlug: string, providerId: string) =>
+    client.get<ProviderSchedule>(`tenants/${tenantSlug}/providers/${providerId}/schedule`),
+  replaceProviderSchedule: (
+    tenantSlug: string,
+    providerId: string,
+    body: ReplaceProviderScheduleRequest,
+  ) =>
+    client.put<ProviderSchedule, ReplaceProviderScheduleRequest>(
+      `tenants/${tenantSlug}/providers/${providerId}/schedule`,
+      body,
+    ),
   createTenantStaff: (tenantSlug: string, body: CreateStaffRequest) =>
     client.post<CreateStaffResponse, CreateStaffRequest>(`tenants/${tenantSlug}/staff`, body),
   createLocation: (tenantSlug: string, body: CreateLocationRequest) =>

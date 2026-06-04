@@ -523,3 +523,53 @@ class CreateStaffRequest(CamelModel):
 class CreateStaffResponse(CamelModel):
     user: TenantUserSummaryResponse
     provider: ProviderSummaryResponse | None = None
+
+
+# ---------------------------------------------------------------------------
+# Provider weekly schedule (Phase C)
+# ---------------------------------------------------------------------------
+
+
+def _validate_time_string(value: str, field: str) -> str:
+    parts = value.split(":")
+    if len(parts) != 2:
+        raise ValueError(f"{field} must use HH:MM format")
+    try:
+        hour = int(parts[0])
+        minute = int(parts[1])
+    except ValueError as exc:
+        raise ValueError(f"{field} must use HH:MM format") from exc
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        raise ValueError(f"{field} must be a valid time of day")
+    return f"{hour:02d}:{minute:02d}"
+
+
+class ProviderScheduleEntryRequest(CamelModel):
+    weekday: int = Field(ge=0, le=6)
+    location_id: str = Field(min_length=1)
+    start_time: str
+    end_time: str
+
+    @model_validator(mode="after")
+    def _validate(self) -> "ProviderScheduleEntryRequest":
+        self.start_time = _validate_time_string(self.start_time, "startTime")
+        self.end_time = _validate_time_string(self.end_time, "endTime")
+        if self.end_time <= self.start_time:
+            raise ValueError("endTime must be after startTime")
+        return self
+
+
+class ProviderScheduleEntryResponse(CamelModel):
+    weekday: int
+    location_id: str
+    start_time: str
+    end_time: str
+
+
+class ProviderScheduleResponse(CamelModel):
+    provider_id: str
+    entries: list[ProviderScheduleEntryResponse]
+
+
+class ReplaceProviderScheduleRequest(CamelModel):
+    entries: list[ProviderScheduleEntryRequest] = Field(default_factory=list)

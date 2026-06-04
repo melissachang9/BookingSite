@@ -4,7 +4,10 @@ import type {
   CreateProviderRequest,
   CreateStaffRequest,
   LocationSummary,
+  ProviderSchedule,
+  ProviderScheduleEntry,
   ProviderSummary,
+  ReplaceProviderScheduleRequest,
   ServiceSummary,
   TenantUserSummary,
   UpdateProviderRequest,
@@ -360,7 +363,9 @@ function StaffDetail({
           onSaved={onSaved}
         />
       ) : null}
-      {activeTab === "schedule" && provider ? <SchedulePlaceholder /> : null}
+      {activeTab === "schedule" && provider ? (
+        <ScheduleTab tenantSlug={tenantSlug} provider={provider} locations={locations} />
+      ) : null}
     </div>
   );
 }
@@ -650,6 +655,199 @@ function SchedulePlaceholder() {
         Weekly work hours editor lands in the next phase. Schedules currently follow tenant business hours.
       </p>
     </div>
+  );
+}
+
+const WEEKDAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+type ScheduleTabProps = {
+  tenantSlug: string;
+  provider: ProviderSummary;
+  locations: LocationSummary[];
+};
+
+function ScheduleTab({ tenantSlug, provider, locations }: ScheduleTabProps) {
+  const providerLocations = useMemo(
+    () => locations.filter((loc) => provider.locationIds.includes(loc.id)),
+    [locations, provider.locationIds],
+  );
+
+  const [entries, setEntries] = useState<ProviderScheduleEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setStatus(null);
+    platformApi
+      .getProviderSchedule(tenantSlug, provider.id)
+      .then((schedule: ProviderSchedule) => {
+        if (!cancelled) {
+          setEntries(schedule.entries);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load schedule");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantSlug, provider.id]);
+
+  function updateEntry(index: number, patch: Partial<ProviderScheduleEntry>) {
+    setEntries((current) =>
+      current.map((entry, idx) => (idx === index ? { ...entry, ...patch } : entry)),
+    );
+  }
+
+  function removeEntry(index: number) {
+    setEntries((current) => current.filter((_, idx) => idx !== index));
+  }
+
+  function addEntry(weekday: number) {
+    const defaultLocationId = providerLocations[0]?.id;
+    if (!defaultLocationId) {
+      return;
+    }
+    setEntries((current) => [
+      ...current,
+      { weekday, locationId: defaultLocationId, startTime: "09:00", endTime: "17:00" },
+    ]);
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const payload: ReplaceProviderScheduleRequest = { entries };
+      const result = await platformApi.replaceProviderSchedule(tenantSlug, provider.id, payload);
+      setEntries(result.entries);
+      setStatus("Schedule saved");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save schedule");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="staff-detail-form">
+        <p className="settings-form-help">Loading schedule…</p>
+      </div>
+    );
+  }
+
+  if (providerLocations.length === 0) {
+    return (
+      <div className="staff-detail-form">
+        <p className="settings-form-help">
+          Assign this provider to at least one location before setting work hours.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <form className="staff-detail-form schedule-week" onSubmit={handleSubmit}>
+      {WEEKDAY_LABELS.map((label, weekday) => {
+        const dayEntries = entries
+          .map((entry, index) => ({ entry, index }))
+          .filter(({ entry }) => entry.weekday === weekday);
+        return (
+          <div key={weekday} className="schedule-day-row">
+            <div className="schedule-day-header">
+              <h4>{label}</h4>
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => addEntry(weekday)}
+              >
+                + Add time window
+              </button>
+            </div>
+            {dayEntries.length === 0 ? (
+              <p className="settings-form-help schedule-day-empty">No hours.</p>
+            ) : (
+              <ul className="schedule-entry-list">
+                {dayEntries.map(({ entry, index }) => (
+                  <li key={index} className="schedule-entry">
+                    <label className="schedule-entry-field">
+                      <span>Location</span>
+                      <select
+                        value={entry.locationId}
+                        onChange={(event) =>
+                          updateEntry(index, { locationId: event.target.value })
+                        }
+                      >
+                        {providerLocations.map((loc) => (
+                          <option key={loc.id} value={loc.id}>
+                            {loc.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="schedule-entry-field">
+                      <span>Start</span>
+                      <input
+                        type="time"
+                        value={entry.startTime}
+                        onChange={(event) =>
+                          updateEntry(index, { startTime: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label className="schedule-entry-field">
+                      <span>End</span>
+                      <input
+                        type="time"
+                        value={entry.endTime}
+                        onChange={(event) =>
+                          updateEntry(index, { endTime: event.target.value })
+                        }
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="link-button schedule-entry-remove"
+                      onClick={() => removeEntry(index)}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })}
+
+      {error ? (
+        <p role="alert" className="settings-error">
+          {error}
+        </p>
+      ) : null}
+      {status ? <p className="settings-form-help">{status}</p> : null}
+
+      <div className="modal-actions">
+        <button type="submit" className="primary-action" disabled={submitting}>
+          {submitting ? "Saving…" : "Save schedule"}
+        </button>
+      </div>
+    </form>
   );
 }
 

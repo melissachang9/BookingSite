@@ -310,4 +310,62 @@ describe("StaffPage", () => {
     render(<StaffPage definition={definition} currentUser={ownerUser} />);
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/boom/));
   });
+
+  it("loads provider schedule entries on the Work hours tab", async () => {
+    mockListEndpoints();
+    const getScheduleSpy = vi
+      .spyOn(platformApi, "getProviderSchedule")
+      .mockResolvedValue({
+        providerId: "p1",
+        entries: [
+          { weekday: 0, locationId: "loc1", startTime: "09:00", endTime: "17:00" },
+        ],
+      } as any);
+
+    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
+
+    await waitFor(() =>
+      expect(getScheduleSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1"),
+    );
+    await waitFor(() => expect(screen.getByDisplayValue("09:00")).toBeInTheDocument());
+    expect(screen.getByDisplayValue("17:00")).toBeInTheDocument();
+  });
+
+  it("saves a new schedule entry via replaceProviderSchedule", async () => {
+    mockListEndpoints();
+    vi.spyOn(platformApi, "getProviderSchedule").mockResolvedValue({
+      providerId: "p1",
+      entries: [],
+    } as any);
+    const replaceSpy = vi
+      .spyOn(platformApi, "replaceProviderSchedule")
+      .mockResolvedValue({
+        providerId: "p1",
+        entries: [
+          { weekday: 0, locationId: "loc1", startTime: "09:00", endTime: "17:00" },
+        ],
+      } as any);
+
+    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
+
+    await waitFor(() => screen.getAllByRole("button", { name: /Add time window/ }));
+    // Monday is the first day row
+    const addButtons = screen.getAllByRole("button", { name: /Add time window/ });
+    fireEvent.click(addButtons[0]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
+
+    await waitFor(() => expect(replaceSpy).toHaveBeenCalledTimes(1));
+    expect(replaceSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1", {
+      entries: [
+        { weekday: 0, locationId: "loc1", startTime: "09:00", endTime: "17:00" },
+      ],
+    });
+  });
 });

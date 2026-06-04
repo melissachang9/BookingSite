@@ -162,3 +162,18 @@ export type CreateStaffResponse = {
   user: TenantUserSummary;
   provider: ProviderSummary | null;
 };
+export type ProviderScheduleEntry = {
+  weekday: number;
+  locationId: string;
+  startTime: string;
+  endTime: string;
+};
+
+export type ProviderSchedule = {
+  providerId: string;
+  entries: ProviderScheduleEntry[];
+};
+
+export type ReplaceProviderScheduleRequest = {
+  entries: ProviderScheduleEntry[];
+};

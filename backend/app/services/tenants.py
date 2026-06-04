@@ -12,6 +12,7 @@ from app.db.models import (
     Location,
     Provider,
     ProviderLocation,
+    ProviderSchedule,
     ProviderService,
     Service,
     ServiceLocation,
@@ -939,3 +940,115 @@ async def create_tenant_staff(
     await session.refresh(user)
     return CreateStaffResponse(user=_user_to_summary(user), provider=provider_summary)
 
+
+
+# === Phase C: Provider weekly schedule ===
+
+from datetime import time as _time
+
+from app.schemas.catalog import (
+    ProviderScheduleEntryResponse,
+    ProviderScheduleResponse,
+    ReplaceProviderScheduleRequest,
+)
+
+
+def _format_time(value: _time) -> str:
+    return f"{value.hour:02d}:{value.minute:02d}"
+
+
+def _parse_time(value: str) -> _time:
+    hour, minute = value.split(":")
+    return _time(hour=int(hour), minute=int(minute))
+
+
+async def _load_provider_schedule(
+    session: AsyncSession, provider_id: str, tenant_id: str
+) -> list[ProviderSchedule]:
+    rows = await session.scalars(
+        select(ProviderSchedule)
+        .where(
+            ProviderSchedule.provider_id == provider_id,
+            ProviderSchedule.tenant_id == tenant_id,
+        )
+        .order_by(ProviderSchedule.weekday, ProviderSchedule.start_time)
+    )
+    return list(rows.all())
+
+
+def _schedule_to_response(provider_id: str, rows: list[ProviderSchedule]) -> ProviderScheduleResponse:
+    return ProviderScheduleResponse(
+        provider_id=provider_id,
+        entries=[
+            ProviderScheduleEntryResponse(
+                weekday=row.weekday,
+                location_id=row.location_id,
+                start_time=_format_time(row.start_time),
+                end_time=_format_time(row.end_time),
+            )
+            for row in rows
+        ],
+    )
+
+
+async def get_tenant_provider_schedule(
+    session: AsyncSession, tenant_slug: str, provider_id: str
+) -> ProviderScheduleResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    provider = await _load_provider_with_links(session, provider_id, tenant.id)
+    rows = await _load_provider_schedule(session, provider.id, tenant.id)
+    return _schedule_to_response(provider.id, rows)
+
+
+async def replace_tenant_provider_schedule(
+    session: AsyncSession,
+    tenant_slug: str,
+    provider_id: str,
+    payload: ReplaceProviderScheduleRequest,
+) -> ProviderScheduleResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    provider = await _load_provider_with_links(session, provider_id, tenant.id)
+
+    # Validate each entry's location is one of the tenant's locations AND linked
+    # to this provider. Use a single round-trip to fetch valid tenant location ids.
+    if payload.entries:
+        tenant_location_ids = set(
+            (await session.scalars(
+                select(Location.id).where(Location.tenant_id == tenant.id)
+            )).all()
+        )
+        provider_location_ids = {link.location_id for link in provider.location_links}
+        for entry in payload.entries:
+            if entry.location_id not in tenant_location_ids:
+                raise api_exception(
+                    422,
+                    "invalid_location",
+                    f"Location {entry.location_id} does not belong to this tenant.",
+                )
+            if entry.location_id not in provider_location_ids:
+                raise api_exception(
+                    422,
+                    "invalid_location",
+                    "Provider is not assigned to that location. Add the location on the Services tab first.",
+                )
+
+    # Replace semantics: delete existing rows, insert new set, all in one txn.
+    existing = await _load_provider_schedule(session, provider.id, tenant.id)
+    for row in existing:
+        await session.delete(row)
+    await session.flush()
+    for entry in payload.entries:
+        session.add(
+            ProviderSchedule(
+                tenant_id=tenant.id,
+                provider_id=provider.id,
+                location_id=entry.location_id,
+                weekday=entry.weekday,
+                start_time=_parse_time(entry.start_time),
+                end_time=_parse_time(entry.end_time),
+            )
+        )
+    await session.commit()
+
+    rows = await _load_provider_schedule(session, provider.id, tenant.id)
+    return _schedule_to_response(provider.id, rows)
