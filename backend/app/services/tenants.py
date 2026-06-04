@@ -24,6 +24,7 @@ from app.schemas.catalog import (
     UpdateTenantBusinessHoursRequest,
     UpdateTenantBusinessRequest,
     UpdateTenantClientOwnershipRequest,
+    UpdateTenantCustomEmailRequest,
     UpdateTenantSettingsRequest,
 )
 from app.services.presenters import location_to_summary, provider_to_summary, service_to_summary, tenant_to_summary
@@ -60,6 +61,7 @@ DEFAULT_TENANT_SETTINGS = {
     "businessHours": deepcopy(DEFAULT_BUSINESS_HOURS),
     "clientOwnershipEnabled": False,
     "onlineBookingOwnerAssignmentEnabled": False,
+    "customEmail": {"fromAddress": None, "domain": None, "verified": False},
 }
 
 
@@ -186,6 +188,56 @@ async def update_tenant_client_ownership(
     await session.commit()
     await session.refresh(tenant)
     return tenant_to_summary(tenant)
+
+
+def _normalize_optional_str(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped if stripped else None
+
+
+async def update_tenant_custom_email(
+    session: AsyncSession, tenant_slug: str, payload: UpdateTenantCustomEmailRequest
+) -> TenantSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    current = dict(tenant.settings_json or {})
+    current_email = dict(current.get("customEmail") or {"fromAddress": None, "domain": None, "verified": False})
+
+    if "fromAddress" in payload.model_fields_set or payload.from_address is not None:
+        current_email["fromAddress"] = _normalize_optional_str(payload.from_address)
+    if "domain" in payload.model_fields_set or payload.domain is not None:
+        current_email["domain"] = _normalize_optional_str(payload.domain)
+    # Verification is always false until a real verification flow exists.
+    current_email["verified"] = False
+
+    current["customEmail"] = current_email
+    tenant.settings_json = current
+    await session.commit()
+    await session.refresh(tenant)
+    return tenant_to_summary(tenant)
+
+
+def build_email_dns_records(domain: str | None) -> list[dict[str, str]]:
+    if not domain:
+        return []
+    return [
+        {"type": "CNAME", "host": f"booking._domainkey.{domain}", "value": "dkim.bookingsoftware.email"},
+        {"type": "TXT", "host": domain, "value": "v=spf1 include:bookingsoftware.email ~all"},
+        {"type": "TXT", "host": f"_dmarc.{domain}", "value": "v=DMARC1; p=none; rua=mailto:dmarc@bookingsoftware.email"},
+    ]
+
+
+async def get_tenant_email_dns(session: AsyncSession, tenant_slug: str) -> dict[str, object]:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    settings = tenant.settings_json or {}
+    custom_email = settings.get("customEmail") or {}
+    domain = custom_email.get("domain")
+    return {
+        "domain": domain,
+        "records": build_email_dns_records(domain),
+        "verified": bool(custom_email.get("verified", False)),
+    }
 
 
 async def update_tenant_business_hours(

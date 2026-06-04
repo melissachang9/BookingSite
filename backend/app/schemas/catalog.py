@@ -80,6 +80,12 @@ class BusinessHoursWeekResponse(CamelModel):
     sun: BusinessHoursDayResponse = Field(default_factory=lambda: BusinessHoursDayResponse(closed=True))
 
 
+class CustomEmailSettingsResponse(CamelModel):
+    from_address: str | None = None
+    domain: str | None = None
+    verified: bool = False
+
+
 class TenantSettingsResponse(CamelModel):
     cancellation_window_hours: int
     refund_inside_window: bool
@@ -100,6 +106,7 @@ class TenantSettingsResponse(CamelModel):
     business_hours: BusinessHoursWeekResponse = Field(default_factory=BusinessHoursWeekResponse)
     client_ownership_enabled: bool = False
     online_booking_owner_assignment_enabled: bool = False
+    custom_email: CustomEmailSettingsResponse = Field(default_factory=CustomEmailSettingsResponse)
 
 
 _HHMM_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
@@ -140,6 +147,33 @@ class UpdateTenantBusinessHoursRequest(CamelModel):
 class UpdateTenantClientOwnershipRequest(CamelModel):
     client_ownership_enabled: bool | None = None
     online_booking_owner_assignment_enabled: bool | None = None
+
+
+class UpdateTenantCustomEmailRequest(CamelModel):
+    from_address: str | None = None
+    domain: str | None = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> "UpdateTenantCustomEmailRequest":
+        if self.from_address is not None and self.from_address.strip():
+            if "@" not in self.from_address or self.from_address.strip() != self.from_address:
+                raise ValueError("fromAddress must be a valid email address.")
+        if self.domain is not None and self.domain.strip():
+            if " " in self.domain or "." not in self.domain:
+                raise ValueError("domain must be a valid host name.")
+        return self
+
+
+class EmailDnsRecordResponse(CamelModel):
+    type: str
+    host: str
+    value: str
+
+
+class EmailDnsResponse(CamelModel):
+    domain: str | None = None
+    records: list[EmailDnsRecordResponse] = Field(default_factory=list)
+    verified: bool = False
 
 
 class UpdateTenantSettingsRequest(CamelModel):

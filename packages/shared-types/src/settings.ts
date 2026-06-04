@@ -75,6 +75,13 @@ export type TenantSettings = {
   businessHours: BusinessHoursWeek;
   clientOwnershipEnabled: boolean;
   onlineBookingOwnerAssignmentEnabled: boolean;
+  customEmail: CustomEmailSettings;
+};
+
+export type CustomEmailSettings = {
+  fromAddress: string | null;
+  domain: string | null;
+  verified: boolean;
 };
 
 export type UpdateTenantSettingsRequest = {
@@ -107,6 +114,23 @@ export type UpdateTenantBrandingRequest = {
 export type UpdateTenantClientOwnershipRequest = {
   clientOwnershipEnabled?: boolean;
   onlineBookingOwnerAssignmentEnabled?: boolean;
+};
+
+export type UpdateTenantCustomEmailRequest = {
+  fromAddress?: string | null;
+  domain?: string | null;
+};
+
+export type EmailDnsRecord = {
+  type: string;
+  host: string;
+  value: string;
+};
+
+export type EmailDnsResponse = {
+  domain: string | null;
+  records: EmailDnsRecord[];
+  verified: boolean;
 };
 
 export const SUPPORTED_CURRENCIES = ["USD", "CAD", "EUR", "GBP", "AUD", "MXN"] as const;

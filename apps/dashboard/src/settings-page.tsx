@@ -6,6 +6,7 @@ import {
   type BusinessHoursDay,
   type BusinessHoursWeek,
   type BusinessHoursWeekdayKey,
+  type EmailDnsRecord,
   type LocationSummary,
   type SessionResponse,
   type TenantBranding,
@@ -90,8 +91,7 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
     title: "Custom Email",
     eyebrow: "Advanced",
     description: "Send notifications from your own domain.",
-    status: "planned",
-    plannedPhase: "Phase 9",
+    status: "available",
   },
   {
     id: "wallet-membership",
@@ -233,6 +233,13 @@ export function SettingsPage({
                 <PayrollSection />
               ) : section.id === "client-ownership" ? (
                 <ClientOwnershipSection
+                  canManageSettings={canManageSettings}
+                  tenant={tenant}
+                  onTenantUpdated={onTenantUpdated}
+                  tenantSlug={currentUser.tenantSlug}
+                />
+              ) : section.id === "custom-email" ? (
+                <CustomEmailSection
                   canManageSettings={canManageSettings}
                   tenant={tenant}
                   onTenantUpdated={onTenantUpdated}
@@ -1398,6 +1405,158 @@ function ClientOwnershipSection({
         {!canManageSettings ? (
           <p className="settings-permission-note">You do not have permission to edit client ownership.</p>
         ) : null}
+      </div>
+    </form>
+  );
+}
+
+function CustomEmailSection({
+  canManageSettings,
+  tenant,
+  onTenantUpdated,
+  tenantSlug,
+}: {
+  canManageSettings: boolean;
+  tenant: TenantSummary | null;
+  onTenantUpdated: (tenant: TenantSummary) => void;
+  tenantSlug: string;
+}) {
+  const [fromAddress, setFromAddress] = useState<string>("");
+  const [domain, setDomain] = useState<string>("");
+  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
+  const [records, setRecords] = useState<EmailDnsRecord[]>([]);
+  const [dnsDomain, setDnsDomain] = useState<string | null>(null);
+  const [dnsError, setDnsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (tenant) {
+      setFromAddress(tenant.settings.customEmail?.fromAddress ?? "");
+      setDomain(tenant.settings.customEmail?.domain ?? "");
+    }
+  }, [tenant]);
+
+  useEffect(() => {
+    const configuredDomain = tenant?.settings.customEmail?.domain ?? null;
+    if (!configuredDomain) {
+      setRecords([]);
+      setDnsDomain(null);
+      setDnsError(null);
+      return;
+    }
+    let cancelled = false;
+    platformApi
+      .getTenantEmailDns(tenantSlug)
+      .then((response) => {
+        if (cancelled) return;
+        setRecords(response.records);
+        setDnsDomain(response.domain);
+        setDnsError(null);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setDnsError(error instanceof Error ? error.message : "Unable to load DNS records.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantSlug, tenant?.settings.customEmail?.domain]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canManageSettings) return;
+    setSaveState({ kind: "submitting" });
+    try {
+      const updated = await platformApi.updateTenantCustomEmail(tenantSlug, {
+        fromAddress: fromAddress.trim() === "" ? null : fromAddress.trim(),
+        domain: domain.trim() === "" ? null : domain.trim(),
+      });
+      onTenantUpdated(updated);
+      setSaveState({ kind: "success", message: "Custom email settings saved." });
+    } catch (error) {
+      setSaveState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to save custom email.",
+      });
+    }
+  };
+
+  if (tenant === null) {
+    return <p>Loading current settings…</p>;
+  }
+
+  const disabled = !canManageSettings || saveState.kind === "submitting";
+  const verified = Boolean(tenant.settings.customEmail?.verified);
+
+  return (
+    <form className="settings-form custom-email-section" onSubmit={handleSubmit}>
+      <p className="settings-form-help">
+        Use your own domain for outgoing emails. After saving, add the DNS records below at your
+        domain registrar.
+      </p>
+      <label className="settings-field">
+        <span>From address</span>
+        <input
+          type="text"
+          value={fromAddress}
+          onChange={(event) => setFromAddress(event.target.value)}
+          placeholder="hello@yourdomain.com"
+          disabled={disabled}
+        />
+      </label>
+      <label className="settings-field">
+        <span>Sending domain</span>
+        <input
+          type="text"
+          value={domain}
+          onChange={(event) => setDomain(event.target.value)}
+          placeholder="yourdomain.com"
+          disabled={disabled}
+        />
+      </label>
+
+      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+
+      <div className="settings-actions">
+        <button type="submit" className="primary-action" disabled={disabled}>
+          {saveState.kind === "submitting" ? "Saving…" : "Save custom email"}
+        </button>
+        {!canManageSettings ? (
+          <p className="settings-permission-note">You do not have permission to edit custom email.</p>
+        ) : null}
+      </div>
+
+      <div className="settings-subsection">
+        <h5>DNS records</h5>
+        {dnsError ? <p role="alert" className="settings-error">{dnsError}</p> : null}
+        {dnsDomain === null || records.length === 0 ? (
+          <p className="settings-form-help">Save a sending domain to see the records you need to add.</p>
+        ) : (
+          <table className="settings-table">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Host</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {records.map((record) => (
+                <tr key={`${record.type}-${record.host}`}>
+                  <td>{record.type}</td>
+                  <td><code>{record.host}</code></td>
+                  <td><code>{record.value}</code></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <div className="settings-actions">
+          <button type="button" className="primary-action" disabled aria-disabled="true">
+            {verified ? "Verified" : "Verify"}
+          </button>
+          <p className="settings-permission-note">Verification ships in a later release.</p>
+        </div>
       </div>
     </form>
   );

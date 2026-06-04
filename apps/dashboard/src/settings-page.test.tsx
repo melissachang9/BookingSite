@@ -74,6 +74,11 @@ const tenant: TenantSummary = {
     },
     clientOwnershipEnabled: false,
     onlineBookingOwnerAssignmentEnabled: false,
+    customEmail: {
+      fromAddress: null,
+      domain: null,
+      verified: false,
+    },
   },
 };
 
@@ -115,7 +120,6 @@ describe("SettingsPage", () => {
       />,
     );
 
-    expect(screen.getByText(/ships in Phase 9/i)).toBeInTheDocument();
     expect(screen.getByText(/ships in Phase 10/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save calendar hours/i })).toBeEnabled();
   });
@@ -413,5 +417,59 @@ describe("SettingsPage", () => {
       onlineBookingOwnerAssignmentEnabled: true,
     });
     expect(onTenantUpdated).toHaveBeenCalledWith(updated);
+  });
+
+  it("saves custom email settings via platformApi.updateTenantCustomEmail", async () => {
+    const updated = {
+      ...tenant,
+      settings: {
+        ...tenant.settings,
+        customEmail: {
+          fromAddress: "hello@browbeautylab.com",
+          domain: "browbeautylab.com",
+          verified: false,
+        },
+      },
+    };
+    const saveSpy = vi
+      .spyOn(platformApi, "updateTenantCustomEmail")
+      .mockResolvedValue(updated as any);
+    const dnsSpy = vi.spyOn(platformApi, "getTenantEmailDns").mockResolvedValue({
+      domain: "browbeautylab.com",
+      verified: false,
+      records: [
+        { type: "CNAME", host: "booking._domainkey.browbeautylab.com", value: "dkim.example" },
+        { type: "TXT", host: "browbeautylab.com", value: "v=spf1" },
+        { type: "TXT", host: "_dmarc.browbeautylab.com", value: "v=DMARC1" },
+      ],
+    } as any);
+    const onTenantUpdated = vi.fn();
+
+    render(
+      <SettingsPage
+        definition={definition}
+        currentUser={ownerUser}
+        tenant={tenant}
+        onTenantUpdated={onTenantUpdated}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/from address/i), {
+      target: { value: "hello@browbeautylab.com" },
+    });
+    fireEvent.change(screen.getByLabelText(/sending domain/i), {
+      target: { value: "browbeautylab.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save custom email/i }));
+
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+    expect(saveSpy).toHaveBeenCalledWith("brow-beauty-lab", {
+      fromAddress: "hello@browbeautylab.com",
+      domain: "browbeautylab.com",
+    });
+    expect(onTenantUpdated).toHaveBeenCalledWith(updated);
+    expect(screen.getByRole("button", { name: /^verify$/i })).toBeDisabled();
+    expect(screen.getByText(/verification ships in a later release/i)).toBeInTheDocument();
+    void dnsSpy;
   });
 });

@@ -21,6 +21,7 @@ import type {
   SendPaymentReminderResponse,
   CustomerLookupQuery,
   CustomerLookupResponse,
+  EmailDnsResponse,
   FormResponseSummary,
   HealthResponse,
   LocationListResponse,
@@ -40,6 +41,7 @@ import type {
   UpdateTenantBusinessHoursRequest,
   UpdateTenantBusinessRequest,
   UpdateTenantClientOwnershipRequest,
+  UpdateTenantCustomEmailRequest,
   UpdateTenantSettingsRequest,
   UpsertCustomerRequest,
 } from "@booking/shared-types";
@@ -67,6 +69,13 @@ export const createPlatformApi = (client: ApiClient) => ({
       `tenants/${tenantSlug}/client-ownership`,
       body,
     ),
+  updateTenantCustomEmail: (tenantSlug: string, body: UpdateTenantCustomEmailRequest) =>
+    client.patch<TenantSummary, UpdateTenantCustomEmailRequest>(
+      `tenants/${tenantSlug}/custom-email`,
+      body,
+    ),
+  getTenantEmailDns: (tenantSlug: string) =>
+    client.get<EmailDnsResponse>(`tenants/${tenantSlug}/email-dns`),
   listServices: (tenantSlug: string) => client.get<ServiceListResponse>(`tenants/${tenantSlug}/services`),
   createService: (tenantSlug: string, body: CreateServiceRequest) =>
     client.post<ServiceSummary, CreateServiceRequest>(`tenants/${tenantSlug}/services`, body),

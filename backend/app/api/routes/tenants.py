@@ -11,6 +11,7 @@ from app.schemas.catalog import (
     CreateServiceRequest,
     CreateTenantRequest,
     CreateTenantResponse,
+    EmailDnsResponse,
     LocationListResponse,
     LocationSummaryResponse,
     ProviderListResponse,
@@ -22,6 +23,7 @@ from app.schemas.catalog import (
     UpdateTenantBusinessHoursRequest,
     UpdateTenantBusinessRequest,
     UpdateTenantClientOwnershipRequest,
+    UpdateTenantCustomEmailRequest,
     UpdateTenantSettingsRequest,
 )
 from app.services.availability import list_availability
@@ -39,6 +41,8 @@ from app.services.tenants import (
     update_tenant_branding,
     update_tenant_business_hours,
     update_tenant_client_ownership,
+    update_tenant_custom_email,
+    get_tenant_email_dns,
     update_tenant_location,
     update_tenant_settings,
 )
@@ -131,6 +135,34 @@ async def patch_tenant_client_ownership(
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantSummaryResponse:
     return await update_tenant_client_ownership(session, tenant_slug, payload)
+
+
+@router.patch(
+    "/{tenant_slug}/custom-email",
+    response_model=TenantSummaryResponse,
+    summary="Update tenant custom-email from-address and domain",
+)
+async def patch_tenant_custom_email(
+    tenant_slug: str,
+    payload: UpdateTenantCustomEmailRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> TenantSummaryResponse:
+    return await update_tenant_custom_email(session, tenant_slug, payload)
+
+
+@router.get(
+    "/{tenant_slug}/email-dns",
+    response_model=EmailDnsResponse,
+    summary="Get computed DNS records for the tenant's custom email domain",
+)
+async def get_tenant_email_dns_route(
+    tenant_slug: str,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> EmailDnsResponse:
+    data = await get_tenant_email_dns(session, tenant_slug)
+    return EmailDnsResponse(**data)
 
 
 @router.get(
