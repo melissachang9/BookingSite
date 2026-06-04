@@ -107,6 +107,9 @@ class TenantSettingsResponse(CamelModel):
     client_ownership_enabled: bool = False
     online_booking_owner_assignment_enabled: bool = False
     custom_email: CustomEmailSettingsResponse = Field(default_factory=CustomEmailSettingsResponse)
+    wallet_enabled: bool = False
+    wallet_expiration_months: int | None = None
+    membership_enabled: bool = False
 
 
 _HHMM_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
@@ -147,6 +150,18 @@ class UpdateTenantBusinessHoursRequest(CamelModel):
 class UpdateTenantClientOwnershipRequest(CamelModel):
     client_ownership_enabled: bool | None = None
     online_booking_owner_assignment_enabled: bool | None = None
+
+
+class UpdateTenantWalletMembershipRequest(CamelModel):
+    wallet_enabled: bool | None = None
+    wallet_expiration_months: int | None = None
+    membership_enabled: bool | None = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> "UpdateTenantWalletMembershipRequest":
+        if self.wallet_expiration_months is not None and self.wallet_expiration_months <= 0:
+            raise ValueError("walletExpirationMonths must be a positive integer.")
+        return self
 
 
 class UpdateTenantCustomEmailRequest(CamelModel):

@@ -25,6 +25,7 @@ from app.schemas.catalog import (
     UpdateTenantClientOwnershipRequest,
     UpdateTenantCustomEmailRequest,
     UpdateTenantSettingsRequest,
+    UpdateTenantWalletMembershipRequest,
 )
 from app.services.availability import list_availability
 from app.services.tenants import (
@@ -42,6 +43,7 @@ from app.services.tenants import (
     update_tenant_business_hours,
     update_tenant_client_ownership,
     update_tenant_custom_email,
+    update_tenant_wallet_membership,
     get_tenant_email_dns,
     update_tenant_location,
     update_tenant_settings,
@@ -163,6 +165,20 @@ async def get_tenant_email_dns_route(
 ) -> EmailDnsResponse:
     data = await get_tenant_email_dns(session, tenant_slug)
     return EmailDnsResponse(**data)
+
+
+@router.patch(
+    "/{tenant_slug}/wallet-membership",
+    response_model=TenantSummaryResponse,
+    summary="Update tenant wallet and membership toggles",
+)
+async def patch_tenant_wallet_membership(
+    tenant_slug: str,
+    payload: UpdateTenantWalletMembershipRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> TenantSummaryResponse:
+    return await update_tenant_wallet_membership(session, tenant_slug, payload)
 
 
 @router.get(

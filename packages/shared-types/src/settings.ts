@@ -76,6 +76,9 @@ export type TenantSettings = {
   clientOwnershipEnabled: boolean;
   onlineBookingOwnerAssignmentEnabled: boolean;
   customEmail: CustomEmailSettings;
+  walletEnabled: boolean;
+  walletExpirationMonths: number | null;
+  membershipEnabled: boolean;
 };
 
 export type CustomEmailSettings = {
@@ -131,6 +134,12 @@ export type EmailDnsResponse = {
   domain: string | null;
   records: EmailDnsRecord[];
   verified: boolean;
+};
+
+export type UpdateTenantWalletMembershipRequest = {
+  walletEnabled?: boolean;
+  walletExpirationMonths?: number | null;
+  membershipEnabled?: boolean;
 };
 
 export const SUPPORTED_CURRENCIES = ["USD", "CAD", "EUR", "GBP", "AUD", "MXN"] as const;

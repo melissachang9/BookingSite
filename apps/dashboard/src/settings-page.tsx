@@ -98,8 +98,7 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
     title: "Wallet & Membership",
     eyebrow: "Advanced",
     description: "Enable wallet credit and membership program toggles.",
-    status: "planned",
-    plannedPhase: "Phase 10",
+    status: "available",
   },
 ];
 
@@ -240,6 +239,13 @@ export function SettingsPage({
                 />
               ) : section.id === "custom-email" ? (
                 <CustomEmailSection
+                  canManageSettings={canManageSettings}
+                  tenant={tenant}
+                  onTenantUpdated={onTenantUpdated}
+                  tenantSlug={currentUser.tenantSlug}
+                />
+              ) : section.id === "wallet-membership" ? (
+                <WalletMembershipSection
                   canManageSettings={canManageSettings}
                   tenant={tenant}
                   onTenantUpdated={onTenantUpdated}
@@ -1557,6 +1563,132 @@ function CustomEmailSection({
           </button>
           <p className="settings-permission-note">Verification ships in a later release.</p>
         </div>
+      </div>
+    </form>
+  );
+}
+
+function WalletMembershipSection({
+  canManageSettings,
+  tenant,
+  onTenantUpdated,
+  tenantSlug,
+}: {
+  canManageSettings: boolean;
+  tenant: TenantSummary | null;
+  onTenantUpdated: (tenant: TenantSummary) => void;
+  tenantSlug: string;
+}) {
+  const [walletEnabled, setWalletEnabled] = useState<boolean>(false);
+  const [walletExpiration, setWalletExpiration] = useState<string>("");
+  const [membershipEnabled, setMembershipEnabled] = useState<boolean>(false);
+  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
+
+  useEffect(() => {
+    if (tenant) {
+      setWalletEnabled(Boolean(tenant.settings.walletEnabled));
+      setWalletExpiration(
+        tenant.settings.walletExpirationMonths === null ||
+          tenant.settings.walletExpirationMonths === undefined
+          ? ""
+          : String(tenant.settings.walletExpirationMonths),
+      );
+      setMembershipEnabled(Boolean(tenant.settings.membershipEnabled));
+    }
+  }, [tenant]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canManageSettings) return;
+    let expirationValue: number | null = null;
+    if (walletExpiration.trim() !== "") {
+      const parsed = Number.parseInt(walletExpiration.trim(), 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setSaveState({
+          kind: "error",
+          message: "Wallet expiration must be a positive whole number of months, or blank.",
+        });
+        return;
+      }
+      expirationValue = parsed;
+    }
+    setSaveState({ kind: "submitting" });
+    try {
+      const updated = await platformApi.updateTenantWalletMembership(tenantSlug, {
+        walletEnabled,
+        walletExpirationMonths: expirationValue,
+        membershipEnabled,
+      });
+      onTenantUpdated(updated);
+      setSaveState({ kind: "success", message: "Wallet & membership saved." });
+    } catch (error) {
+      setSaveState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to save wallet & membership.",
+      });
+    }
+  };
+
+  if (tenant === null) {
+    return <p>Loading current settings…</p>;
+  }
+
+  const disabled = !canManageSettings || saveState.kind === "submitting";
+
+  return (
+    <form className="settings-form wallet-membership-section" onSubmit={handleSubmit}>
+      <p className="settings-form-help">
+        Toggle wallet credit and membership programs. Balances and tiers are not yet implemented;
+        these flags reserve the capability for future releases.
+      </p>
+      <label className="settings-toggle-field">
+        <input
+          type="checkbox"
+          checked={walletEnabled}
+          onChange={(event) => setWalletEnabled(event.target.checked)}
+          disabled={disabled}
+        />
+        <span>
+          <strong>Enable wallet credit</strong>
+          <small>Allow customer balances to be applied at checkout in a later release.</small>
+        </span>
+      </label>
+      <label className="settings-field">
+        <span>Wallet credit expiration (months)</span>
+        <input
+          type="number"
+          inputMode="numeric"
+          min={1}
+          step={1}
+          value={walletExpiration}
+          onChange={(event) => setWalletExpiration(event.target.value)}
+          placeholder="Leave blank for no expiration"
+          disabled={disabled || !walletEnabled}
+        />
+      </label>
+      <label className="settings-toggle-field">
+        <input
+          type="checkbox"
+          checked={membershipEnabled}
+          onChange={(event) => setMembershipEnabled(event.target.checked)}
+          disabled={disabled}
+        />
+        <span>
+          <strong>Enable membership program</strong>
+          <small>Reserve a paid-membership tier for future pricing/perks features.</small>
+        </span>
+      </label>
+
+      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+
+      <div className="settings-actions">
+        <button type="submit" className="primary-action" disabled={disabled}>
+          {saveState.kind === "submitting" ? "Saving…" : "Save wallet & membership"}
+        </button>
+        {!canManageSettings ? (
+          <p className="settings-permission-note">You do not have permission to edit wallet & membership.</p>
+        ) : null}
       </div>
     </form>
   );

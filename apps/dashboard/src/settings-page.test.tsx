@@ -79,6 +79,9 @@ const tenant: TenantSummary = {
       domain: null,
       verified: false,
     },
+    walletEnabled: false,
+    walletExpirationMonths: null,
+    membershipEnabled: false,
   },
 };
 
@@ -120,7 +123,6 @@ describe("SettingsPage", () => {
       />,
     );
 
-    expect(screen.getByText(/ships in Phase 10/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save calendar hours/i })).toBeEnabled();
   });
 
@@ -471,5 +473,45 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: /^verify$/i })).toBeDisabled();
     expect(screen.getByText(/verification ships in a later release/i)).toBeInTheDocument();
     void dnsSpy;
+  });
+
+  it("saves wallet & membership via platformApi.updateTenantWalletMembership", async () => {
+    const updated = {
+      ...tenant,
+      settings: {
+        ...tenant.settings,
+        walletEnabled: true,
+        walletExpirationMonths: 12,
+        membershipEnabled: true,
+      },
+    };
+    const spy = vi
+      .spyOn(platformApi, "updateTenantWalletMembership")
+      .mockResolvedValue(updated as any);
+    const onTenantUpdated = vi.fn();
+
+    render(
+      <SettingsPage
+        definition={definition}
+        currentUser={ownerUser}
+        tenant={tenant}
+        onTenantUpdated={onTenantUpdated}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /enable wallet credit/i }));
+    fireEvent.change(screen.getByLabelText(/wallet credit expiration/i), {
+      target: { value: "12" },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: /enable membership program/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save wallet & membership/i }));
+
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+    expect(spy).toHaveBeenCalledWith("brow-beauty-lab", {
+      walletEnabled: true,
+      walletExpirationMonths: 12,
+      membershipEnabled: true,
+    });
+    expect(onTenantUpdated).toHaveBeenCalledWith(updated);
   });
 });

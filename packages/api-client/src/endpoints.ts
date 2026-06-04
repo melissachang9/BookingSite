@@ -43,6 +43,7 @@ import type {
   UpdateTenantClientOwnershipRequest,
   UpdateTenantCustomEmailRequest,
   UpdateTenantSettingsRequest,
+  UpdateTenantWalletMembershipRequest,
   UpsertCustomerRequest,
 } from "@booking/shared-types";
 import type { ApiClient } from "./client";
@@ -76,6 +77,11 @@ export const createPlatformApi = (client: ApiClient) => ({
     ),
   getTenantEmailDns: (tenantSlug: string) =>
     client.get<EmailDnsResponse>(`tenants/${tenantSlug}/email-dns`),
+  updateTenantWalletMembership: (tenantSlug: string, body: UpdateTenantWalletMembershipRequest) =>
+    client.patch<TenantSummary, UpdateTenantWalletMembershipRequest>(
+      `tenants/${tenantSlug}/wallet-membership`,
+      body,
+    ),
   listServices: (tenantSlug: string) => client.get<ServiceListResponse>(`tenants/${tenantSlug}/services`),
   createService: (tenantSlug: string, body: CreateServiceRequest) =>
     client.post<ServiceSummary, CreateServiceRequest>(`tenants/${tenantSlug}/services`, body),

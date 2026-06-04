@@ -25,6 +25,7 @@ from app.schemas.catalog import (
     UpdateTenantBusinessRequest,
     UpdateTenantClientOwnershipRequest,
     UpdateTenantCustomEmailRequest,
+    UpdateTenantWalletMembershipRequest,
     UpdateTenantSettingsRequest,
 )
 from app.services.presenters import location_to_summary, provider_to_summary, service_to_summary, tenant_to_summary
@@ -62,6 +63,9 @@ DEFAULT_TENANT_SETTINGS = {
     "clientOwnershipEnabled": False,
     "onlineBookingOwnerAssignmentEnabled": False,
     "customEmail": {"fromAddress": None, "domain": None, "verified": False},
+    "walletEnabled": False,
+    "walletExpirationMonths": None,
+    "membershipEnabled": False,
 }
 
 
@@ -183,6 +187,26 @@ async def update_tenant_client_ownership(
         current["clientOwnershipEnabled"] = payload.client_ownership_enabled
     if payload.online_booking_owner_assignment_enabled is not None:
         current["onlineBookingOwnerAssignmentEnabled"] = payload.online_booking_owner_assignment_enabled
+
+    tenant.settings_json = current
+    await session.commit()
+    await session.refresh(tenant)
+    return tenant_to_summary(tenant)
+
+
+async def update_tenant_wallet_membership(
+    session: AsyncSession, tenant_slug: str, payload: UpdateTenantWalletMembershipRequest
+) -> TenantSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    current = dict(tenant.settings_json or {})
+
+    fields_set = payload.model_fields_set
+    if "walletEnabled" in fields_set or "wallet_enabled" in fields_set:
+        current["walletEnabled"] = bool(payload.wallet_enabled)
+    if "walletExpirationMonths" in fields_set or "wallet_expiration_months" in fields_set:
+        current["walletExpirationMonths"] = payload.wallet_expiration_months
+    if "membershipEnabled" in fields_set or "membership_enabled" in fields_set:
+        current["membershipEnabled"] = bool(payload.membership_enabled)
 
     tenant.settings_json = current
     await session.commit()
