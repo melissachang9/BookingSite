@@ -45,6 +45,7 @@ const baseBooking = {
     imageAltText: null,
     locationIds: ["location-1"],
     formIds: [],
+    sortOrder: 0,
   },
   provider: {
     id: "provider-1",
