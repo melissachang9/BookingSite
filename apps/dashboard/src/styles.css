@@ -3129,3 +3129,38 @@ body {
   align-items: center;
   gap: 0.75rem;
 }
+
+/* Provider services/locations editor polish (Phase F) */
+.staff-fieldset-count {
+  font-weight: 400;
+  color: var(--text-muted, #6b7280);
+  font-size: 0.85rem;
+  margin-left: 0.4rem;
+}
+.staff-list-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+.staff-list-search {
+  flex: 1 1 200px;
+  min-width: 160px;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-muted, #d1d5db);
+  font-size: 0.9rem;
+}
+.staff-pickable span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.staff-pickable-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted, #6b7280);
+}
+.staff-pickable.is-inactive {
+  opacity: 0.6;
+}

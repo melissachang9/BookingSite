@@ -241,7 +241,7 @@ describe("StaffPage", () => {
     await waitFor(() => screen.getByText("Services performed"));
 
     // Add Facial (svc2) to provider's services
-    fireEvent.click(screen.getByLabelText("Facial"));
+    fireEvent.click(screen.getByLabelText(/Facial/));
     fireEvent.click(screen.getByRole("button", { name: "Save provider" }));
 
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
@@ -520,5 +520,91 @@ describe("StaffPage", () => {
     await waitFor(() => expect(screen.getByText(/Owners have full access/i)).toBeInTheDocument());
     expect(catalogSpy).not.toHaveBeenCalled();
     expect(permsSpy).not.toHaveBeenCalled();
+  });
+
+  it("filters services by search query in the Services tab", async () => {
+    mockListEndpoints();
+
+    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("tab", { name: "Services" }));
+    await waitFor(() => screen.getByText("Services performed"));
+
+    expect(screen.getByLabelText(/Brow Shaping/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Facial/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Search services"), {
+      target: { value: "fac" },
+    });
+
+    expect(screen.queryByLabelText(/Brow Shaping/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Facial/)).toBeInTheDocument();
+  });
+
+  it("bulk Select all adds all visible services to the provider", async () => {
+    mockListEndpoints();
+    const updateSpy = vi.spyOn(platformApi, "updateProvider").mockResolvedValue({} as any);
+
+    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("tab", { name: "Services" }));
+    await waitFor(() => screen.getByText("Services performed"));
+
+    const serviceFieldset = screen.getByText("Services performed").closest("fieldset")!;
+    const selectAll = within(serviceFieldset).getByRole("button", { name: /Select all/ });
+    fireEvent.click(selectAll);
+    fireEvent.click(screen.getByRole("button", { name: "Save provider" }));
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    const payload = updateSpy.mock.calls[0][2];
+    expect(payload.serviceIds.sort()).toEqual(["svc1", "svc2"]);
+  });
+
+  it("bulk Clear shown removes only filtered locations", async () => {
+    mockListEndpoints();
+    // Provider currently has loc1 only; set both selected so "Clear shown" has effect.
+    const providers = [
+      {
+        ...baseProviders[0],
+        locationIds: ["loc1", "loc2"],
+      },
+    ];
+    vi.spyOn(platformApi, "listProvidersAdmin").mockResolvedValue({ providers } as any);
+    const updateSpy = vi.spyOn(platformApi, "updateProvider").mockResolvedValue({} as any);
+
+    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("tab", { name: "Services" }));
+    await waitFor(() => screen.getByText("Locations"));
+
+    fireEvent.change(screen.getByLabelText("Search locations"), {
+      target: { value: "uptown" },
+    });
+
+    const locFieldset = screen.getByText(/^Locations/).closest("fieldset")!;
+    fireEvent.click(within(locFieldset).getByRole("button", { name: /Clear shown/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save provider" }));
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(updateSpy.mock.calls[0][2].locationIds).toEqual(["loc1"]);
+  });
+
+  it("disables Save provider until services or locations change", async () => {
+    mockListEndpoints();
+
+    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("tab", { name: "Services" }));
+    await waitFor(() => screen.getByText("Services performed"));
+
+    const save = screen.getByRole("button", { name: "Save provider" });
+    expect(save).toBeDisabled();
+
+    fireEvent.click(screen.getByLabelText(/Facial/));
+    expect(save).not.toBeDisabled();
   });
 });

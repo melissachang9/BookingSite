@@ -556,6 +556,8 @@ function ServicesTab({
   const [isActive, setIsActive] = useState(provider.isActive);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [locationQuery, setLocationQuery] = useState("");
+  const [serviceQuery, setServiceQuery] = useState("");
 
   useEffect(() => {
     setLocationIds(provider.locationIds);
@@ -566,6 +568,38 @@ function ServicesTab({
 
   const toggle = (list: string[], id: string): string[] =>
     list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+
+  const filteredLocations = useMemo(() => {
+    const q = locationQuery.trim().toLowerCase();
+    if (!q) return locations;
+    return locations.filter((loc) => loc.name.toLowerCase().includes(q));
+  }, [locations, locationQuery]);
+
+  const filteredServices = useMemo(() => {
+    const q = serviceQuery.trim().toLowerCase();
+    if (!q) return services;
+    return services.filter((svc) => svc.name.toLowerCase().includes(q));
+  }, [services, serviceQuery]);
+
+  const selectAll = (ids: string[], setter: (next: string[]) => void, filtered: { id: string }[]) => {
+    const next = new Set(ids);
+    for (const item of filtered) next.add(item.id);
+    setter(Array.from(next));
+  };
+  const clearFiltered = (
+    ids: string[],
+    setter: (next: string[]) => void,
+    filtered: { id: string }[],
+  ) => {
+    const drop = new Set(filtered.map((item) => item.id));
+    setter(ids.filter((id) => !drop.has(id)));
+  };
+
+  const isDirty =
+    !sameIds(locationIds, provider.locationIds) ||
+    !sameIds(serviceIds, provider.serviceIds) ||
+    isBookableOnline !== provider.isBookableOnline ||
+    isActive !== provider.isActive;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -590,42 +624,128 @@ function ServicesTab({
   return (
     <form className="staff-detail-form" onSubmit={submit}>
       <fieldset className="staff-fieldset">
-        <legend>Locations</legend>
+        <legend>
+          Locations <span className="staff-fieldset-count">{locationIds.length} of {locations.length}</span>
+        </legend>
         {locations.length === 0 ? (
           <p className="settings-form-help">No locations configured.</p>
         ) : (
-          <div className="staff-checkbox-grid">
-            {locations.map((loc) => (
-              <label key={loc.id} className="settings-toggle">
-                <input
-                  type="checkbox"
-                  checked={locationIds.includes(loc.id)}
-                  onChange={() => setLocationIds(toggle(locationIds, loc.id))}
-                />
-                <span>{loc.name}</span>
-              </label>
-            ))}
-          </div>
+          <>
+            <div className="staff-list-toolbar">
+              <input
+                type="search"
+                className="staff-list-search"
+                placeholder="Search locations…"
+                value={locationQuery}
+                onChange={(event) => setLocationQuery(event.target.value)}
+                aria-label="Search locations"
+              />
+              <button
+                type="button"
+                className="ghost-action"
+                onClick={() => selectAll(locationIds, setLocationIds, filteredLocations)}
+                disabled={filteredLocations.length === 0}
+              >
+                Select all{locationQuery ? " shown" : ""}
+              </button>
+              <button
+                type="button"
+                className="ghost-action"
+                onClick={() => clearFiltered(locationIds, setLocationIds, filteredLocations)}
+                disabled={filteredLocations.length === 0}
+              >
+                Clear{locationQuery ? " shown" : ""}
+              </button>
+            </div>
+            {filteredLocations.length === 0 ? (
+              <p className="settings-form-help">No locations match that search.</p>
+            ) : (
+              <div className="staff-checkbox-grid">
+                {filteredLocations.map((loc) => (
+                  <label
+                    key={loc.id}
+                    className={`settings-toggle staff-pickable${loc.isActive ? "" : " is-inactive"}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={locationIds.includes(loc.id)}
+                      onChange={() => setLocationIds(toggle(locationIds, loc.id))}
+                    />
+                    <span>
+                      <strong>{loc.name}</strong>
+                      <span className="staff-pickable-meta">
+                        {loc.timeZone}
+                        {loc.isActive ? "" : " · Inactive"}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </fieldset>
 
       <fieldset className="staff-fieldset">
-        <legend>Services performed</legend>
+        <legend>
+          Services performed <span className="staff-fieldset-count">{serviceIds.length} of {services.length}</span>
+        </legend>
         {services.length === 0 ? (
           <p className="settings-form-help">No services configured.</p>
         ) : (
-          <div className="staff-checkbox-grid">
-            {services.map((svc) => (
-              <label key={svc.id} className="settings-toggle">
-                <input
-                  type="checkbox"
-                  checked={serviceIds.includes(svc.id)}
-                  onChange={() => setServiceIds(toggle(serviceIds, svc.id))}
-                />
-                <span>{svc.name}</span>
-              </label>
-            ))}
-          </div>
+          <>
+            <div className="staff-list-toolbar">
+              <input
+                type="search"
+                className="staff-list-search"
+                placeholder="Search services…"
+                value={serviceQuery}
+                onChange={(event) => setServiceQuery(event.target.value)}
+                aria-label="Search services"
+              />
+              <button
+                type="button"
+                className="ghost-action"
+                onClick={() => selectAll(serviceIds, setServiceIds, filteredServices)}
+                disabled={filteredServices.length === 0}
+              >
+                Select all{serviceQuery ? " shown" : ""}
+              </button>
+              <button
+                type="button"
+                className="ghost-action"
+                onClick={() => clearFiltered(serviceIds, setServiceIds, filteredServices)}
+                disabled={filteredServices.length === 0}
+              >
+                Clear{serviceQuery ? " shown" : ""}
+              </button>
+            </div>
+            {filteredServices.length === 0 ? (
+              <p className="settings-form-help">No services match that search.</p>
+            ) : (
+              <div className="staff-checkbox-grid">
+                {filteredServices.map((svc) => (
+                  <label
+                    key={svc.id}
+                    className={`settings-toggle staff-pickable${svc.isActive ? "" : " is-inactive"}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={serviceIds.includes(svc.id)}
+                      onChange={() => setServiceIds(toggle(serviceIds, svc.id))}
+                    />
+                    <span>
+                      <strong>{svc.name}</strong>
+                      <span className="staff-pickable-meta">
+                        {formatDurationMinutes(svc.durationMinutes)} · {formatPriceCents(svc.priceCents)}
+                        {svc.isActive ? "" : " · Inactive"}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </fieldset>
 
@@ -656,12 +776,31 @@ function ServicesTab({
       ) : null}
 
       <div className="modal-actions">
-        <button type="submit" className="primary-action" disabled={submitting}>
+        {isDirty ? <span className="settings-form-help">Unsaved changes</span> : null}
+        <button type="submit" className="primary-action" disabled={submitting || !isDirty}>
           {submitting ? "Saving…" : "Save provider"}
         </button>
       </div>
     </form>
   );
+}
+
+function sameIds(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const setA = new Set(a);
+  for (const id of b) if (!setA.has(id)) return false;
+  return true;
+}
+
+function formatDurationMinutes(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours} hr` : `${hours} hr ${rest} min`;
+}
+
+function formatPriceCents(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
 }
 
 function SchedulePlaceholder() {
