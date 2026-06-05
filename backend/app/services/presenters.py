@@ -139,6 +139,8 @@ def service_to_summary(service: Service, tenant: Tenant | None = None) -> Servic
         image_alt_text=image_alt_text,
         location_ids=[link.location_id for link in service.location_links],
         form_ids=[],
+        category_id=service.category_id,
+        sort_order=service.sort_order,
     )
 
 

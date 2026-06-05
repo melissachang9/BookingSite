@@ -48,6 +48,8 @@ export type ServiceSummary = AuditFields &
     imageAltText?: string | null;
     locationIds: UUID[];
     formIds: UUID[];
+    categoryId?: string | null;
+    sortOrder: number;
   };
 
 export type CreateServiceRequest = {
@@ -58,6 +60,60 @@ export type CreateServiceRequest = {
   depositCents: number;
   locationIds: UUID[];
   isActive?: boolean;
+  categoryId?: string | null;
+};
+
+export type UpdateServiceRequest = {
+  name?: string;
+  description?: string;
+  durationMinutes?: number;
+  priceCents?: number;
+  depositCents?: number;
+  locationIds?: UUID[];
+  isActive?: boolean;
+  categoryId?: string | null;
+  clearCategory?: boolean;
+  clearDescription?: boolean;
+};
+
+export type ServiceCategorySummary = AuditFields &
+  TenantScoped & {
+    name: string;
+    sortOrder: number;
+    isActive: boolean;
+  };
+
+export type ServiceCategoryListResponse = {
+  categories: ServiceCategorySummary[];
+};
+
+export type CreateServiceCategoryRequest = {
+  name: string;
+};
+
+export type UpdateServiceCategoryRequest = {
+  name?: string;
+  isActive?: boolean;
+};
+
+export type ReorderRequest = {
+  orderedIds: UUID[];
+};
+
+export type ProviderServiceVariantEntry = {
+  providerId: UUID;
+  priceCents?: number | null;
+  durationMinutes?: number | null;
+  depositCents?: number | null;
+};
+
+export type ProviderServiceVariantListResponse = {
+  serviceId: UUID;
+  variants: ProviderServiceVariantEntry[];
+};
+
+export type ReplaceProviderServiceVariantsRequest = {
+  variants: ProviderServiceVariantEntry[];
 };
 
 export type ProviderSummary = AuditFields &

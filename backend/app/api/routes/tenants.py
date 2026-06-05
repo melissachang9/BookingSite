@@ -605,3 +605,177 @@ async def put_user_permissions(
     session: AsyncSession = Depends(get_db_session),
 ) -> UserPermissionsResponse:
     return await replace_tenant_user_permissions(session, tenant_slug, user_id, payload)
+
+
+# === Phase G: Service categories, reorder, duplicate, variants, update ===
+
+from app.schemas.catalog import (
+    CreateServiceCategoryRequest,
+    ProviderServiceVariantListResponse,
+    ReorderRequest,
+    ReplaceProviderServiceVariantsRequest,
+    ServiceCategoryListResponse,
+    ServiceCategorySummaryResponse,
+    UpdateServiceCategoryRequest,
+    UpdateServiceRequest,
+)
+from app.services.tenants import (
+    create_tenant_service_category,
+    delete_tenant_service_category,
+    duplicate_tenant_service,
+    list_tenant_service_categories,
+    list_tenant_service_provider_variants,
+    reorder_tenant_service_categories,
+    reorder_tenant_services,
+    replace_tenant_service_provider_variants,
+    update_tenant_service,
+    update_tenant_service_category,
+)
+
+
+@router.get(
+    "/{tenant_slug}/service-categories",
+    response_model=ServiceCategoryListResponse,
+    summary="List service categories",
+)
+async def list_service_categories(
+    tenant_slug: str,
+    _: object = Depends(require_tenant_permission("services.view")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ServiceCategoryListResponse:
+    return await list_tenant_service_categories(session, tenant_slug)
+
+
+@router.post(
+    "/{tenant_slug}/service-categories",
+    response_model=ServiceCategorySummaryResponse,
+    status_code=201,
+    summary="Create a service category",
+)
+async def create_service_category(
+    tenant_slug: str,
+    payload: CreateServiceCategoryRequest,
+    _: object = Depends(require_tenant_permission("services.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ServiceCategorySummaryResponse:
+    return await create_tenant_service_category(session, tenant_slug, payload)
+
+
+@router.patch(
+    "/{tenant_slug}/service-categories/{category_id}",
+    response_model=ServiceCategorySummaryResponse,
+    summary="Update a service category",
+)
+async def patch_service_category(
+    tenant_slug: str,
+    category_id: str,
+    payload: UpdateServiceCategoryRequest,
+    _: object = Depends(require_tenant_permission("services.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ServiceCategorySummaryResponse:
+    return await update_tenant_service_category(session, tenant_slug, category_id, payload)
+
+
+@router.delete(
+    "/{tenant_slug}/service-categories/{category_id}",
+    status_code=204,
+    response_class=Response,
+    summary="Delete a service category",
+)
+async def delete_service_category(
+    tenant_slug: str,
+    category_id: str,
+    _: object = Depends(require_tenant_permission("services.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    await delete_tenant_service_category(session, tenant_slug, category_id)
+    return Response(status_code=204)
+
+
+@router.put(
+    "/{tenant_slug}/service-categories/reorder",
+    response_model=ServiceCategoryListResponse,
+    summary="Reorder service categories",
+)
+async def put_service_categories_reorder(
+    tenant_slug: str,
+    payload: ReorderRequest,
+    _: object = Depends(require_tenant_permission("services.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ServiceCategoryListResponse:
+    return await reorder_tenant_service_categories(session, tenant_slug, payload)
+
+
+@router.put(
+    "/{tenant_slug}/services/reorder",
+    response_model=ServiceListResponse,
+    summary="Reorder services",
+)
+async def put_services_reorder(
+    tenant_slug: str,
+    payload: ReorderRequest,
+    _: object = Depends(require_tenant_permission("services.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ServiceListResponse:
+    return await reorder_tenant_services(session, tenant_slug, payload)
+
+
+@router.patch(
+    "/{tenant_slug}/services/{service_id}",
+    response_model=ServiceSummaryResponse,
+    summary="Update a service",
+)
+async def patch_service(
+    tenant_slug: str,
+    service_id: str,
+    payload: UpdateServiceRequest,
+    _: object = Depends(require_tenant_permission("services.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ServiceSummaryResponse:
+    return await update_tenant_service(session, tenant_slug, service_id, payload)
+
+
+@router.post(
+    "/{tenant_slug}/services/{service_id}/duplicate",
+    response_model=ServiceSummaryResponse,
+    status_code=201,
+    summary="Duplicate a service",
+)
+async def post_service_duplicate(
+    tenant_slug: str,
+    service_id: str,
+    _: object = Depends(require_tenant_permission("services.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ServiceSummaryResponse:
+    return await duplicate_tenant_service(session, tenant_slug, service_id)
+
+
+@router.get(
+    "/{tenant_slug}/services/{service_id}/provider-variants",
+    response_model=ProviderServiceVariantListResponse,
+    summary="List per-provider variants for a service",
+)
+async def get_service_provider_variants(
+    tenant_slug: str,
+    service_id: str,
+    _: object = Depends(require_tenant_permission("services.view")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ProviderServiceVariantListResponse:
+    return await list_tenant_service_provider_variants(session, tenant_slug, service_id)
+
+
+@router.put(
+    "/{tenant_slug}/services/{service_id}/provider-variants",
+    response_model=ProviderServiceVariantListResponse,
+    summary="Replace per-provider variants for a service",
+)
+async def put_service_provider_variants(
+    tenant_slug: str,
+    service_id: str,
+    payload: ReplaceProviderServiceVariantsRequest,
+    _: object = Depends(require_tenant_permission("services.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ProviderServiceVariantListResponse:
+    return await replace_tenant_service_provider_variants(
+        session, tenant_slug, service_id, payload
+    )

@@ -116,6 +116,47 @@ async def _ensure_postgres_schema_compatibility() -> None:
                 text("ALTER TABLE providers ADD COLUMN is_bookable_online BOOLEAN NOT NULL DEFAULT TRUE")
             )
 
+        service_category_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'services' AND column_name = 'category_id'
+                """
+            )
+        )
+        if not service_category_exists:
+            await connection.execute(text("ALTER TABLE services ADD COLUMN category_id VARCHAR(36)"))
+            await connection.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_services_category_id ON services (category_id)")
+            )
+
+        service_sort_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'services' AND column_name = 'sort_order'
+                """
+            )
+        )
+        if not service_sort_exists:
+            await connection.execute(
+                text("ALTER TABLE services ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0")
+            )
+
+        for override_column in ("price_cents_override", "duration_minutes_override", "deposit_cents_override"):
+            exists = await connection.scalar(
+                text(
+                    f"""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = 'provider_services' AND column_name = '{override_column}'
+                    """
+                )
+            )
+            if not exists:
+                await connection.execute(
+                    text(f"ALTER TABLE provider_services ADD COLUMN {override_column} INTEGER")
+                )
+
 
 async def initialize_database() -> None:
     async with get_engine().begin() as connection:

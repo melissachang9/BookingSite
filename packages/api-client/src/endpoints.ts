@@ -9,6 +9,7 @@ import type {
   BookingSummary,
   CancelManageBookingRequest,
   CustomerManageBooking,
+  CreateServiceCategoryRequest,
   CreateServiceRequest,
   CreateTenantRequest,
   CreateTenantResponse,
@@ -37,15 +38,20 @@ import type {
   CreateStaffResponse,
   PermissionCatalogResponse,
   ProviderSchedule,
+  ProviderServiceVariantListResponse,
   ProviderSummary,
   ProviderTimeOffEntry,
   ProviderTimeOffList,
+  ReorderRequest,
+  ReplaceProviderServiceVariantsRequest,
   ReplaceUserPermissionsRequest,
   UserPermissionsResponse,
   LocationSummary,
   ProviderListResponse,
   ReplaceProviderScheduleRequest,
   SaveFormDraftRequest,
+  ServiceCategoryListResponse,
+  ServiceCategorySummary,
   ServiceListResponse,
   ServiceSummary,
   SessionResponse,
@@ -55,6 +61,8 @@ import type {
   UpdateBookingStatusRequest,
   UpdateBookingDraftRequest,
   UpdateLocationRequest,
+  UpdateServiceCategoryRequest,
+  UpdateServiceRequest,
   UpdateTenantBrandingRequest,
   UpdateTenantBusinessHoursRequest,
   UpdateTenantBusinessRequest,
@@ -103,6 +111,57 @@ export const createPlatformApi = (client: ApiClient) => ({
   listServices: (tenantSlug: string) => client.get<ServiceListResponse>(`tenants/${tenantSlug}/services`),
   createService: (tenantSlug: string, body: CreateServiceRequest) =>
     client.post<ServiceSummary, CreateServiceRequest>(`tenants/${tenantSlug}/services`, body),
+  updateService: (tenantSlug: string, serviceId: string, body: UpdateServiceRequest) =>
+    client.patch<ServiceSummary, UpdateServiceRequest>(
+      `tenants/${tenantSlug}/services/${serviceId}`,
+      body,
+    ),
+  duplicateService: (tenantSlug: string, serviceId: string) =>
+    client.post<ServiceSummary, Record<string, never>>(
+      `tenants/${tenantSlug}/services/${serviceId}/duplicate`,
+      {},
+    ),
+  reorderServices: (tenantSlug: string, body: ReorderRequest) =>
+    client.put<ServiceListResponse, ReorderRequest>(
+      `tenants/${tenantSlug}/services/reorder`,
+      body,
+    ),
+  listServiceCategories: (tenantSlug: string) =>
+    client.get<ServiceCategoryListResponse>(`tenants/${tenantSlug}/service-categories`),
+  createServiceCategory: (tenantSlug: string, body: CreateServiceCategoryRequest) =>
+    client.post<ServiceCategorySummary, CreateServiceCategoryRequest>(
+      `tenants/${tenantSlug}/service-categories`,
+      body,
+    ),
+  updateServiceCategory: (
+    tenantSlug: string,
+    categoryId: string,
+    body: UpdateServiceCategoryRequest,
+  ) =>
+    client.patch<ServiceCategorySummary, UpdateServiceCategoryRequest>(
+      `tenants/${tenantSlug}/service-categories/${categoryId}`,
+      body,
+    ),
+  deleteServiceCategory: (tenantSlug: string, categoryId: string) =>
+    client.delete<void>(`tenants/${tenantSlug}/service-categories/${categoryId}`),
+  reorderServiceCategories: (tenantSlug: string, body: ReorderRequest) =>
+    client.put<ServiceCategoryListResponse, ReorderRequest>(
+      `tenants/${tenantSlug}/service-categories/reorder`,
+      body,
+    ),
+  getServiceProviderVariants: (tenantSlug: string, serviceId: string) =>
+    client.get<ProviderServiceVariantListResponse>(
+      `tenants/${tenantSlug}/services/${serviceId}/provider-variants`,
+    ),
+  replaceServiceProviderVariants: (
+    tenantSlug: string,
+    serviceId: string,
+    body: ReplaceProviderServiceVariantsRequest,
+  ) =>
+    client.put<ProviderServiceVariantListResponse, ReplaceProviderServiceVariantsRequest>(
+      `tenants/${tenantSlug}/services/${serviceId}/provider-variants`,
+      body,
+    ),
   listLocations: (tenantSlug: string) => client.get<LocationListResponse>(`tenants/${tenantSlug}/locations`),
   listLocationsAdmin: (tenantSlug: string) =>
     client.get<LocationListResponse>(`tenants/${tenantSlug}/locations/manage`),

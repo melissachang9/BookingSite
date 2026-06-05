@@ -105,13 +105,29 @@ class Service(Base, IdMixin, TimestampMixin):
     price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     deposit_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    category_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("service_categories.id"), nullable=True, index=True
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     tenant: Mapped[Tenant] = relationship(back_populates="services")
+    category: Mapped[Optional["ServiceCategory"]] = relationship(back_populates="services")
     provider_links: Mapped[list[ProviderService]] = relationship(back_populates="service", cascade="all, delete-orphan")
     location_links: Mapped[list[ServiceLocation]] = relationship(back_populates="service", cascade="all, delete-orphan")
     bookings: Mapped[list[Booking]] = relationship(back_populates="service")
     booking_drafts: Mapped[list[BookingDraft]] = relationship(back_populates="service")
     form_attachments: Mapped[list[ServiceFormAttachment]] = relationship(back_populates="service", cascade="all, delete-orphan")
+
+
+class ServiceCategory(Base, IdMixin, TimestampMixin):
+    __tablename__ = "service_categories"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="1")
+
+    services: Mapped[list[Service]] = relationship(back_populates="category")
 
 
 class Provider(Base, IdMixin, TimestampMixin):
@@ -139,6 +155,9 @@ class ProviderService(Base, IdMixin, TimestampMixin):
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
     provider_id: Mapped[str] = mapped_column(String(36), ForeignKey("providers.id"), index=True, nullable=False)
     service_id: Mapped[str] = mapped_column(String(36), ForeignKey("services.id"), index=True, nullable=False)
+    price_cents_override: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    duration_minutes_override: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    deposit_cents_override: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     provider: Mapped[Provider] = relationship(back_populates="service_links")
     service: Mapped[Service] = relationship(back_populates="provider_links")

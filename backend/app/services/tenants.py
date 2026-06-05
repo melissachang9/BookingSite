@@ -16,6 +16,7 @@ from app.db.models import (
     ProviderService,
     ProviderTimeOff,
     Service,
+    ServiceCategory,
     ServiceLocation,
     Tenant,
     User,
@@ -370,7 +371,7 @@ async def list_tenant_services(session: AsyncSession, tenant_slug: str) -> Servi
             select(Service)
             .options(selectinload(Service.location_links))
             .where(Service.tenant_id == tenant.id, Service.is_active.is_(True))
-            .order_by(Service.created_at.asc())
+            .order_by(Service.sort_order.asc(), Service.created_at.asc())
         )
     ).all()
     return ServiceListResponse(services=[service_to_summary(service, tenant) for service in services])
@@ -1249,3 +1250,429 @@ async def replace_tenant_user_permissions(
         )
     await session.commit()
     return await get_tenant_user_permissions(session, tenant_slug, user_id)
+
+
+# ---------------------------------------------------------------------------
+# Phase G: Service categories, reorder, duplicate, per-provider variants,
+# service update
+# ---------------------------------------------------------------------------
+
+
+async def _load_service_for_tenant(session: AsyncSession, tenant_id: str, service_id: str) -> Service:
+    service = (
+        await session.scalars(
+            select(Service)
+            .options(selectinload(Service.location_links), selectinload(Service.provider_links))
+            .where(Service.id == service_id, Service.tenant_id == tenant_id)
+        )
+    ).one_or_none()
+    if service is None:
+        raise api_exception(status_code=404, code="service_not_found", message="Service not found.")
+    return service
+
+
+async def _load_category_for_tenant(
+    session: AsyncSession, tenant_id: str, category_id: str
+) -> ServiceCategory:
+    category = (
+        await session.scalars(
+            select(ServiceCategory).where(
+                ServiceCategory.id == category_id, ServiceCategory.tenant_id == tenant_id
+            )
+        )
+    ).one_or_none()
+    if category is None:
+        raise api_exception(
+            status_code=404, code="service_category_not_found", message="Service category not found."
+        )
+    return category
+
+
+def _category_to_summary(category: ServiceCategory):
+    from app.schemas.catalog import ServiceCategorySummaryResponse
+
+    return ServiceCategorySummaryResponse(
+        id=category.id,
+        tenant_id=category.tenant_id,
+        created_at=category.created_at,
+        updated_at=category.updated_at,
+        name=category.name,
+        sort_order=category.sort_order,
+        is_active=category.is_active,
+    )
+
+
+async def list_tenant_service_categories(session: AsyncSession, tenant_slug: str):
+    from app.schemas.catalog import ServiceCategoryListResponse
+
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    categories = (
+        await session.scalars(
+            select(ServiceCategory)
+            .where(ServiceCategory.tenant_id == tenant.id)
+            .order_by(ServiceCategory.sort_order.asc(), ServiceCategory.created_at.asc())
+        )
+    ).all()
+    return ServiceCategoryListResponse(categories=[_category_to_summary(c) for c in categories])
+
+
+async def create_tenant_service_category(session: AsyncSession, tenant_slug: str, payload):
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    name = payload.name.strip()
+    existing = await session.scalar(
+        select(ServiceCategory.id).where(
+            ServiceCategory.tenant_id == tenant.id,
+            func.lower(ServiceCategory.name) == name.lower(),
+        )
+    )
+    if existing is not None:
+        raise api_exception(
+            status_code=409, code="conflict", message="A service category with that name already exists."
+        )
+    max_sort = (
+        await session.scalar(
+            select(func.max(ServiceCategory.sort_order)).where(ServiceCategory.tenant_id == tenant.id)
+        )
+    )
+    category = ServiceCategory(
+        tenant_id=tenant.id,
+        name=name,
+        sort_order=(int(max_sort) + 1) if max_sort is not None else 0,
+        is_active=True,
+    )
+    session.add(category)
+    await session.commit()
+    await session.refresh(category)
+    return _category_to_summary(category)
+
+
+async def update_tenant_service_category(
+    session: AsyncSession, tenant_slug: str, category_id: str, payload
+):
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    category = await _load_category_for_tenant(session, tenant.id, category_id)
+    if payload.name is not None:
+        new_name = payload.name.strip()
+        if new_name.lower() != category.name.lower():
+            duplicate = await session.scalar(
+                select(ServiceCategory.id).where(
+                    ServiceCategory.tenant_id == tenant.id,
+                    func.lower(ServiceCategory.name) == new_name.lower(),
+                    ServiceCategory.id != category.id,
+                )
+            )
+            if duplicate is not None:
+                raise api_exception(
+                    status_code=409,
+                    code="conflict",
+                    message="A service category with that name already exists.",
+                )
+        category.name = new_name
+    if payload.is_active is not None:
+        category.is_active = payload.is_active
+    await session.commit()
+    await session.refresh(category)
+    return _category_to_summary(category)
+
+
+async def delete_tenant_service_category(
+    session: AsyncSession, tenant_slug: str, category_id: str
+) -> None:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    category = await _load_category_for_tenant(session, tenant.id, category_id)
+    # Detach services rather than cascade delete
+    services = (
+        await session.scalars(
+            select(Service).where(Service.tenant_id == tenant.id, Service.category_id == category.id)
+        )
+    ).all()
+    for service in services:
+        service.category_id = None
+    await session.delete(category)
+    await session.commit()
+
+
+async def reorder_tenant_service_categories(session: AsyncSession, tenant_slug: str, payload):
+    from app.schemas.catalog import ServiceCategoryListResponse
+
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    categories = (
+        await session.scalars(
+            select(ServiceCategory).where(ServiceCategory.tenant_id == tenant.id)
+        )
+    ).all()
+    by_id = {c.id: c for c in categories}
+    seen: set[str] = set()
+    for index, category_id in enumerate(payload.ordered_ids):
+        if category_id in seen:
+            raise api_exception(
+                status_code=422,
+                code="duplicate_id",
+                message=f"Duplicate category id in reorder payload: {category_id}",
+            )
+        seen.add(category_id)
+        category = by_id.get(category_id)
+        if category is None:
+            raise api_exception(
+                status_code=404,
+                code="service_category_not_found",
+                message=f"Category not found: {category_id}",
+            )
+        category.sort_order = index
+    await session.commit()
+    return await list_tenant_service_categories(session, tenant_slug)
+
+
+async def reorder_tenant_services(session: AsyncSession, tenant_slug: str, payload):
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    services = (
+        await session.scalars(
+            select(Service)
+            .options(selectinload(Service.location_links))
+            .where(Service.tenant_id == tenant.id)
+        )
+    ).all()
+    by_id = {s.id: s for s in services}
+    seen: set[str] = set()
+    for index, service_id in enumerate(payload.ordered_ids):
+        if service_id in seen:
+            raise api_exception(
+                status_code=422,
+                code="duplicate_id",
+                message=f"Duplicate service id in reorder payload: {service_id}",
+            )
+        seen.add(service_id)
+        service = by_id.get(service_id)
+        if service is None:
+            raise api_exception(
+                status_code=404,
+                code="service_not_found",
+                message=f"Service not found: {service_id}",
+            )
+        service.sort_order = index
+    await session.commit()
+    return await list_tenant_services(session, tenant_slug)
+
+
+async def update_tenant_service(
+    session: AsyncSession, tenant_slug: str, service_id: str, payload
+):
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    service = await _load_service_for_tenant(session, tenant.id, service_id)
+
+    if payload.name is not None:
+        new_name = payload.name.strip()
+        if new_name.lower() != service.name.lower():
+            existing_id = await session.scalar(
+                select(Service.id).where(
+                    Service.tenant_id == tenant.id,
+                    func.lower(Service.name) == new_name.lower(),
+                    Service.id != service.id,
+                )
+            )
+            if existing_id is not None:
+                raise api_exception(
+                    status_code=409,
+                    code="conflict",
+                    message="A service with this name already exists for the tenant.",
+                )
+        service.name = new_name
+    if payload.clear_description:
+        service.description = None
+    elif payload.description is not None:
+        cleaned = payload.description.strip()
+        service.description = cleaned if cleaned else None
+    if payload.duration_minutes is not None:
+        service.duration_minutes = payload.duration_minutes
+    if payload.price_cents is not None:
+        service.price_cents = payload.price_cents
+    if payload.deposit_cents is not None:
+        service.deposit_cents = payload.deposit_cents
+    if service.deposit_cents > service.price_cents:
+        raise api_exception(
+            status_code=422,
+            code="invalid_deposit",
+            message="Deposit cannot exceed the service price.",
+        )
+    if payload.is_active is not None:
+        service.is_active = payload.is_active
+    if payload.clear_category:
+        service.category_id = None
+    elif payload.category_id is not None:
+        category = await _load_category_for_tenant(session, tenant.id, payload.category_id)
+        service.category_id = category.id
+
+    if payload.location_ids is not None:
+        requested = list(dict.fromkeys(payload.location_ids))
+        if requested:
+            located = (
+                await session.scalars(
+                    select(Location).where(
+                        Location.tenant_id == tenant.id,
+                        Location.id.in_(requested),
+                    )
+                )
+            ).all()
+            found = {loc.id for loc in located}
+            missing = [lid for lid in requested if lid not in found]
+            if missing:
+                raise api_exception(
+                    status_code=404,
+                    code="not_found",
+                    message="One or more locations were not found for this tenant.",
+                )
+        for link in list(service.location_links):
+            await session.delete(link)
+        await session.flush()
+        service.location_links = [
+            ServiceLocation(tenant_id=tenant.id, location_id=lid) for lid in requested
+        ]
+    await session.commit()
+    service = await _load_service_for_tenant(session, tenant.id, service.id)
+    return service_to_summary(service, tenant)
+
+
+async def duplicate_tenant_service(session: AsyncSession, tenant_slug: str, service_id: str):
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    source = await _load_service_for_tenant(session, tenant.id, service_id)
+
+    base = f"{source.name} (Copy)"
+    candidate = base
+    suffix = 2
+    while True:
+        existing = await session.scalar(
+            select(Service.id).where(
+                Service.tenant_id == tenant.id,
+                func.lower(Service.name) == candidate.lower(),
+            )
+        )
+        if existing is None:
+            break
+        candidate = f"{base} {suffix}"
+        suffix += 1
+
+    max_sort = await session.scalar(
+        select(func.max(Service.sort_order)).where(Service.tenant_id == tenant.id)
+    )
+    duplicate = Service(
+        tenant_id=tenant.id,
+        name=candidate,
+        description=source.description,
+        duration_minutes=source.duration_minutes,
+        price_cents=source.price_cents,
+        deposit_cents=source.deposit_cents,
+        is_active=source.is_active,
+        category_id=source.category_id,
+        sort_order=(int(max_sort) + 1) if max_sort is not None else 0,
+    )
+    duplicate.location_links = [
+        ServiceLocation(tenant_id=tenant.id, location_id=link.location_id)
+        for link in source.location_links
+    ]
+    session.add(duplicate)
+    await session.commit()
+    duplicate = await _load_service_for_tenant(session, tenant.id, duplicate.id)
+    return service_to_summary(duplicate, tenant)
+
+
+async def list_tenant_service_provider_variants(
+    session: AsyncSession, tenant_slug: str, service_id: str
+):
+    from app.schemas.catalog import (
+        ProviderServiceVariantEntry,
+        ProviderServiceVariantListResponse,
+    )
+
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    service = await _load_service_for_tenant(session, tenant.id, service_id)
+    rows = (
+        await session.scalars(
+            select(ProviderService)
+            .where(ProviderService.service_id == service.id, ProviderService.tenant_id == tenant.id)
+            .order_by(ProviderService.created_at.asc())
+        )
+    ).all()
+    return ProviderServiceVariantListResponse(
+        service_id=service.id,
+        variants=[
+            ProviderServiceVariantEntry(
+                provider_id=row.provider_id,
+                price_cents=row.price_cents_override,
+                duration_minutes=row.duration_minutes_override,
+                deposit_cents=row.deposit_cents_override,
+            )
+            for row in rows
+        ],
+    )
+
+
+async def replace_tenant_service_provider_variants(
+    session: AsyncSession, tenant_slug: str, service_id: str, payload
+):
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    service = await _load_service_for_tenant(session, tenant.id, service_id)
+
+    # Build by provider for upsert
+    rows = (
+        await session.scalars(
+            select(ProviderService).where(
+                ProviderService.service_id == service.id, ProviderService.tenant_id == tenant.id
+            )
+        )
+    ).all()
+    by_provider = {row.provider_id: row for row in rows}
+
+    seen: set[str] = set()
+    for entry in payload.variants:
+        if entry.provider_id in seen:
+            raise api_exception(
+                status_code=422,
+                code="duplicate_provider",
+                message=f"Duplicate provider in variants: {entry.provider_id}",
+            )
+        seen.add(entry.provider_id)
+
+        row = by_provider.get(entry.provider_id)
+        if row is None:
+            # Verify provider belongs to tenant and is linked to service.
+            provider = (
+                await session.scalars(
+                    select(Provider).where(
+                        Provider.id == entry.provider_id, Provider.tenant_id == tenant.id
+                    )
+                )
+            ).one_or_none()
+            if provider is None:
+                raise api_exception(
+                    status_code=404,
+                    code="provider_not_found",
+                    message=f"Provider not found: {entry.provider_id}",
+                )
+            row = ProviderService(
+                tenant_id=tenant.id,
+                provider_id=entry.provider_id,
+                service_id=service.id,
+            )
+            session.add(row)
+
+        if entry.deposit_cents is not None:
+            base_price = entry.price_cents if entry.price_cents is not None else service.price_cents
+            if entry.deposit_cents > base_price:
+                raise api_exception(
+                    status_code=422,
+                    code="invalid_deposit",
+                    message="Variant deposit cannot exceed the effective price.",
+                )
+        row.price_cents_override = entry.price_cents
+        row.duration_minutes_override = entry.duration_minutes
+        row.deposit_cents_override = entry.deposit_cents
+
+    # For provider variants not in payload, clear overrides (preserve link).
+    for provider_id, row in by_provider.items():
+        if provider_id not in seen:
+            row.price_cents_override = None
+            row.duration_minutes_override = None
+            row.deposit_cents_override = None
+
+    await session.commit()
+    return await list_tenant_service_provider_variants(session, tenant_slug, service_id)

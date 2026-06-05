@@ -324,6 +324,8 @@ class ServiceSummaryResponse(CamelModel):
     image_alt_text: str | None = None
     location_ids: list[str]
     form_ids: list[str]
+    category_id: str | None = None
+    sort_order: int = 0
 
 
 class CreateServiceRequest(CamelModel):
@@ -334,12 +336,69 @@ class CreateServiceRequest(CamelModel):
     deposit_cents: int = Field(ge=0, le=500_000)
     location_ids: list[str] = Field(min_length=1)
     is_active: bool = True
+    category_id: str | None = None
 
     @model_validator(mode="after")
     def validate_deposit(self) -> "CreateServiceRequest":
         if self.deposit_cents > self.price_cents:
             raise ValueError("Deposit cannot exceed the service price.")
         return self
+
+
+class UpdateServiceRequest(CamelModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    duration_minutes: int | None = Field(default=None, ge=15, le=480)
+    price_cents: int | None = Field(default=None, ge=0, le=500_000)
+    deposit_cents: int | None = Field(default=None, ge=0, le=500_000)
+    location_ids: list[str] | None = None
+    is_active: bool | None = None
+    category_id: str | None = None
+    clear_category: bool = False
+    clear_description: bool = False
+
+
+class ServiceCategorySummaryResponse(CamelModel):
+    id: str
+    tenant_id: str
+    created_at: datetime
+    updated_at: datetime
+    name: str
+    sort_order: int
+    is_active: bool
+
+
+class ServiceCategoryListResponse(CamelModel):
+    categories: list[ServiceCategorySummaryResponse]
+
+
+class CreateServiceCategoryRequest(CamelModel):
+    name: str = Field(min_length=1, max_length=255)
+
+
+class UpdateServiceCategoryRequest(CamelModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    is_active: bool | None = None
+
+
+class ReorderRequest(CamelModel):
+    ordered_ids: list[str] = Field(min_length=0)
+
+
+class ProviderServiceVariantEntry(CamelModel):
+    provider_id: str
+    price_cents: int | None = Field(default=None, ge=0, le=500_000)
+    duration_minutes: int | None = Field(default=None, ge=15, le=480)
+    deposit_cents: int | None = Field(default=None, ge=0, le=500_000)
+
+
+class ProviderServiceVariantListResponse(CamelModel):
+    service_id: str
+    variants: list[ProviderServiceVariantEntry]
+
+
+class ReplaceProviderServiceVariantsRequest(CamelModel):
+    variants: list[ProviderServiceVariantEntry]
 
 
 class ProviderSummaryResponse(CamelModel):
