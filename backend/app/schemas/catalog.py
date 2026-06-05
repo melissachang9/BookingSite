@@ -358,6 +358,25 @@ class UpdateServiceRequest(CamelModel):
     clear_description: bool = False
 
 
+class ValueStackItem(CamelModel):
+    label: str = Field(min_length=1, max_length=255)
+    est_value_cents: int | None = Field(default=None, ge=0, le=10_000_000)
+
+
+class SocialProof(CamelModel):
+    quote: str = Field(min_length=1, max_length=2000)
+    author: str | None = Field(default=None, max_length=255)
+    image_url: str | None = Field(default=None, max_length=2048)
+
+
+class CategoryFaqItem(CamelModel):
+    question: str = Field(min_length=1, max_length=500)
+    answer: str = Field(min_length=1, max_length=4000)
+
+
+FEATURED_LABELS = ("signature", "most_popular", "new", "limited")
+
+
 class ServiceCategorySummaryResponse(CamelModel):
     id: str
     tenant_id: str
@@ -366,6 +385,19 @@ class ServiceCategorySummaryResponse(CamelModel):
     name: str
     sort_order: int
     is_active: bool
+    slug: str | None = None
+    outcome_headline: str | None = None
+    subheadline: str | None = None
+    hero_image_url: str | None = None
+    hero_image_alt: str | None = None
+    value_stack: list[ValueStackItem] = Field(default_factory=list)
+    bonuses: list[ValueStackItem] = Field(default_factory=list)
+    guarantee_text: str | None = None
+    social_proof: SocialProof | None = None
+    scarcity_hint: str | None = None
+    featured_label: str | None = None
+    meta_description: str | None = None
+    faqs: list[CategoryFaqItem] = Field(default_factory=list)
 
 
 class ServiceCategoryListResponse(CamelModel):
@@ -374,11 +406,48 @@ class ServiceCategoryListResponse(CamelModel):
 
 class CreateServiceCategoryRequest(CamelModel):
     name: str = Field(min_length=1, max_length=255)
+    slug: str | None = Field(default=None, max_length=255)
 
 
 class UpdateServiceCategoryRequest(CamelModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     is_active: bool | None = None
+    slug: str | None = Field(default=None, max_length=255)
+    outcome_headline: str | None = Field(default=None, max_length=255)
+    subheadline: str | None = Field(default=None, max_length=4000)
+    hero_image_url: str | None = Field(default=None, max_length=2048)
+    hero_image_alt: str | None = Field(default=None, max_length=255)
+    value_stack: list[ValueStackItem] | None = Field(default=None, max_length=12)
+    bonuses: list[ValueStackItem] | None = Field(default=None, max_length=12)
+    guarantee_text: str | None = Field(default=None, max_length=2000)
+    social_proof: SocialProof | None = None
+    scarcity_hint: str | None = Field(default=None, max_length=255)
+    featured_label: str | None = Field(default=None, max_length=32)
+    meta_description: str | None = Field(default=None, max_length=320)
+    faqs: list[CategoryFaqItem] | None = Field(default=None, max_length=20)
+    clear_slug: bool = False
+    clear_outcome_headline: bool = False
+    clear_subheadline: bool = False
+    clear_hero_image: bool = False
+    clear_guarantee_text: bool = False
+    clear_social_proof: bool = False
+    clear_scarcity_hint: bool = False
+    clear_featured_label: bool = False
+    clear_meta_description: bool = False
+
+    @model_validator(mode="after")
+    def _validate(self) -> "UpdateServiceCategoryRequest":
+        if self.featured_label is not None and self.featured_label.strip():
+            if self.featured_label.strip() not in FEATURED_LABELS:
+                raise ValueError(
+                    f"featuredLabel must be one of: {', '.join(FEATURED_LABELS)}."
+                )
+        return self
+
+
+class PublicCategoryResponse(CamelModel):
+    category: ServiceCategorySummaryResponse
+    services: list[ServiceSummaryResponse]
 
 
 class ReorderRequest(CamelModel):

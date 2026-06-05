@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 
 from sqlalchemy import func, select
@@ -418,6 +419,7 @@ async def create_tenant_service(
         price_cents=payload.price_cents,
         deposit_cents=payload.deposit_cents,
         is_active=payload.is_active,
+        category_id=payload.category_id,
     )
     service.location_links = [
         ServiceLocation(tenant_id=tenant.id, location_id=location_id)
@@ -1289,7 +1291,12 @@ async def _load_category_for_tenant(
 
 
 def _category_to_summary(category: ServiceCategory):
-    from app.schemas.catalog import ServiceCategorySummaryResponse
+    from app.schemas.catalog import (
+        CategoryFaqItem,
+        ServiceCategorySummaryResponse,
+        SocialProof,
+        ValueStackItem,
+    )
 
     return ServiceCategorySummaryResponse(
         id=category.id,
@@ -1299,7 +1306,52 @@ def _category_to_summary(category: ServiceCategory):
         name=category.name,
         sort_order=category.sort_order,
         is_active=category.is_active,
+        slug=category.slug,
+        outcome_headline=category.outcome_headline,
+        subheadline=category.subheadline,
+        hero_image_url=category.hero_image_url,
+        hero_image_alt=category.hero_image_alt,
+        value_stack=[ValueStackItem(**item) for item in (category.value_stack or [])],
+        bonuses=[ValueStackItem(**item) for item in (category.bonuses or [])],
+        guarantee_text=category.guarantee_text,
+        social_proof=SocialProof(**category.social_proof) if category.social_proof else None,
+        scarcity_hint=category.scarcity_hint,
+        featured_label=category.featured_label,
+        meta_description=category.meta_description,
+        faqs=[CategoryFaqItem(**item) for item in (category.faqs or [])],
     )
+
+
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _slugify(value: str) -> str:
+    base = _SLUG_RE.sub("-", value.lower()).strip("-")
+    return base[:120] or "category"
+
+
+async def _ensure_unique_category_slug(
+    session: AsyncSession,
+    tenant_id: str,
+    desired: str | None,
+    fallback_name: str,
+    exclude_id: str | None = None,
+) -> str:
+    candidate = _slugify(desired) if (desired and desired.strip()) else _slugify(fallback_name)
+    base = candidate
+    suffix = 2
+    while True:
+        existing = await session.scalar(
+            select(ServiceCategory.id).where(
+                ServiceCategory.tenant_id == tenant_id,
+                ServiceCategory.slug == candidate,
+                ServiceCategory.id != (exclude_id or ""),
+            )
+        )
+        if existing is None:
+            return candidate
+        candidate = f"{base}-{suffix}"
+        suffix += 1
 
 
 async def list_tenant_service_categories(session: AsyncSession, tenant_slug: str):
@@ -1314,6 +1366,51 @@ async def list_tenant_service_categories(session: AsyncSession, tenant_slug: str
         )
     ).all()
     return ServiceCategoryListResponse(categories=[_category_to_summary(c) for c in categories])
+
+
+async def get_public_category_by_slug(
+    session: AsyncSession, tenant_slug: str, category_slug: str
+):
+    from app.schemas.catalog import PublicCategoryResponse
+
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    normalized = category_slug.strip().lower()
+    category = (
+        await session.scalars(
+            select(ServiceCategory).where(
+                ServiceCategory.tenant_id == tenant.id,
+                func.lower(ServiceCategory.slug) == normalized,
+            )
+        )
+    ).one_or_none()
+    if category is None:
+        raise api_exception(
+            status_code=404,
+            code="service_category_not_found",
+            message="Category not found.",
+        )
+    if not category.is_active:
+        raise api_exception(
+            status_code=404,
+            code="service_category_not_active",
+            message="Category is not currently available.",
+        )
+    services = (
+        await session.scalars(
+            select(Service)
+            .options(selectinload(Service.location_links))
+            .where(
+                Service.tenant_id == tenant.id,
+                Service.category_id == category.id,
+                Service.is_active.is_(True),
+            )
+            .order_by(Service.sort_order.asc(), Service.created_at.asc())
+        )
+    ).all()
+    return PublicCategoryResponse(
+        category=_category_to_summary(category),
+        services=[service_to_summary(service, tenant) for service in services],
+    )
 
 
 async def create_tenant_service_category(session: AsyncSession, tenant_slug: str, payload):
@@ -1334,11 +1431,15 @@ async def create_tenant_service_category(session: AsyncSession, tenant_slug: str
             select(func.max(ServiceCategory.sort_order)).where(ServiceCategory.tenant_id == tenant.id)
         )
     )
+    slug = await _ensure_unique_category_slug(
+        session, tenant.id, getattr(payload, "slug", None), name
+    )
     category = ServiceCategory(
         tenant_id=tenant.id,
         name=name,
         sort_order=(int(max_sort) + 1) if max_sort is not None else 0,
         is_active=True,
+        slug=slug,
     )
     session.add(category)
     await session.commit()
@@ -1370,6 +1471,47 @@ async def update_tenant_service_category(
         category.name = new_name
     if payload.is_active is not None:
         category.is_active = payload.is_active
+    if getattr(payload, "slug", None) is not None and payload.slug.strip():
+        category.slug = await _ensure_unique_category_slug(
+            session, tenant.id, payload.slug, category.name, exclude_id=category.id
+        )
+    elif getattr(payload, "clear_slug", False):
+        category.slug = await _ensure_unique_category_slug(
+            session, tenant.id, None, category.name, exclude_id=category.id
+        )
+    # Merchandising fields: set when provided, clear when corresponding flag set.
+    for field, clear_flag in (
+        ("outcome_headline", "clear_outcome_headline"),
+        ("subheadline", "clear_subheadline"),
+        ("guarantee_text", "clear_guarantee_text"),
+        ("scarcity_hint", "clear_scarcity_hint"),
+        ("featured_label", "clear_featured_label"),
+        ("meta_description", "clear_meta_description"),
+    ):
+        value = getattr(payload, field, None)
+        if value is not None:
+            stripped = value.strip()
+            setattr(category, field, stripped or None)
+        elif getattr(payload, clear_flag, False):
+            setattr(category, field, None)
+    if getattr(payload, "clear_hero_image", False):
+        category.hero_image_url = None
+        category.hero_image_alt = None
+    else:
+        if payload.hero_image_url is not None:
+            category.hero_image_url = payload.hero_image_url.strip() or None
+        if payload.hero_image_alt is not None:
+            category.hero_image_alt = payload.hero_image_alt.strip() or None
+    if payload.value_stack is not None:
+        category.value_stack = [item.model_dump(by_alias=False) for item in payload.value_stack] or None
+    if payload.bonuses is not None:
+        category.bonuses = [item.model_dump(by_alias=False) for item in payload.bonuses] or None
+    if getattr(payload, "clear_social_proof", False):
+        category.social_proof = None
+    elif payload.social_proof is not None:
+        category.social_proof = payload.social_proof.model_dump(by_alias=False)
+    if payload.faqs is not None:
+        category.faqs = [item.model_dump(by_alias=False) for item in payload.faqs] or None
     await session.commit()
     await session.refresh(category)
     return _category_to_summary(category)

@@ -42,6 +42,7 @@ import type {
   ProviderSummary,
   ProviderTimeOffEntry,
   ProviderTimeOffList,
+  PublicCategoryPayload,
   ReorderRequest,
   ReplaceProviderServiceVariantsRequest,
   ReplaceUserPermissionsRequest,
@@ -149,6 +150,8 @@ export const createPlatformApi = (client: ApiClient) => ({
       `tenants/${tenantSlug}/service-categories/reorder`,
       body,
     ),
+  getPublicCategory: (tenantSlug: string, categorySlug: string) =>
+    client.get<PublicCategoryPayload>(`tenants/${tenantSlug}/c/${categorySlug}`),
   getServiceProviderVariants: (tenantSlug: string, serviceId: string) =>
     client.get<ProviderServiceVariantListResponse>(
       `tenants/${tenantSlug}/services/${serviceId}/provider-variants`,

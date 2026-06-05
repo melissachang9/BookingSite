@@ -3483,3 +3483,126 @@ body {
     grid-column: 1 / -1;
   }
 }
+
+/* Category detail panel — Hormozi merchandising fields */
+.category-detail-panel fieldset {
+  border: 1px solid var(--ui-border, #e5e7eb);
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.category-detail-panel fieldset legend {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+  padding: 0 0.3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.category-detail-panel .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+.category-detail-panel .field > span {
+  font-weight: 500;
+}
+.category-detail-panel .field input[type="text"],
+.category-detail-panel .field input[type="url"],
+.category-detail-panel .field select,
+.category-detail-panel .field textarea {
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--ui-border, #d1d5db);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.85rem;
+}
+.category-detail-panel .field-help {
+  font-size: 0.75rem;
+  color: var(--text-muted, #6b7280);
+  margin: 0;
+}
+.category-detail-panel .inline-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted, #6b7280);
+  background: rgba(0, 0, 0, 0.03);
+  padding: 0.4rem 0.55rem;
+  border-radius: 6px;
+}
+.category-detail-panel .inline-link a {
+  word-break: break-all;
+}
+.category-detail-panel .copy-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted, #6b7280);
+}
+.category-detail-panel .toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+}
+.category-detail-panel .service-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.5rem;
+}
+.category-detail-panel .stack-editor,
+.category-detail-panel .faq-editor {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.category-detail-panel .stack-editor li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8rem auto;
+  gap: 0.5rem;
+}
+.category-detail-panel .stack-editor input {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--ui-border, #d1d5db);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+.category-detail-panel .faq-editor li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "question remove"
+    "answer remove";
+  gap: 0.4rem 0.5rem;
+}
+.category-detail-panel .faq-editor li input {
+  grid-area: question;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--ui-border, #d1d5db);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+.category-detail-panel .faq-editor li textarea {
+  grid-area: answer;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--ui-border, #d1d5db);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.85rem;
+}
+.category-detail-panel .faq-editor li button {
+  grid-area: remove;
+  align-self: flex-start;
+}
+.category-detail-panel .service-detail-locked {
+  font-size: 0.85rem;
+  color: var(--text-muted, #6b7280);
+  font-style: italic;
+}

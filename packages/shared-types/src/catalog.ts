@@ -76,11 +76,46 @@ export type UpdateServiceRequest = {
   clearDescription?: boolean;
 };
 
+export type ValueStackItem = {
+  label: string;
+  estValueCents?: number | null;
+};
+
+export type SocialProof = {
+  quote: string;
+  author?: string | null;
+  imageUrl?: string | null;
+};
+
+export type CategoryFaqItem = {
+  question: string;
+  answer: string;
+};
+
+export type CategoryFeaturedLabel =
+  | "signature"
+  | "most_popular"
+  | "new"
+  | "limited";
+
 export type ServiceCategorySummary = AuditFields &
   TenantScoped & {
     name: string;
+    slug?: string | null;
     sortOrder: number;
     isActive: boolean;
+    outcomeHeadline?: string | null;
+    subheadline?: string | null;
+    heroImageUrl?: string | null;
+    heroImageAlt?: string | null;
+    valueStack?: ValueStackItem[];
+    bonuses?: ValueStackItem[];
+    guaranteeText?: string | null;
+    socialProof?: SocialProof | null;
+    scarcityHint?: string | null;
+    featuredLabel?: CategoryFeaturedLabel | null;
+    metaDescription?: string | null;
+    faqs?: CategoryFaqItem[];
   };
 
 export type ServiceCategoryListResponse = {
@@ -89,11 +124,39 @@ export type ServiceCategoryListResponse = {
 
 export type CreateServiceCategoryRequest = {
   name: string;
+  slug?: string | null;
 };
 
 export type UpdateServiceCategoryRequest = {
   name?: string;
   isActive?: boolean;
+  slug?: string | null;
+  outcomeHeadline?: string | null;
+  subheadline?: string | null;
+  heroImageUrl?: string | null;
+  heroImageAlt?: string | null;
+  valueStack?: ValueStackItem[];
+  bonuses?: ValueStackItem[];
+  guaranteeText?: string | null;
+  socialProof?: SocialProof | null;
+  scarcityHint?: string | null;
+  featuredLabel?: CategoryFeaturedLabel | null;
+  metaDescription?: string | null;
+  faqs?: CategoryFaqItem[];
+  clearSlug?: boolean;
+  clearOutcomeHeadline?: boolean;
+  clearSubheadline?: boolean;
+  clearHeroImage?: boolean;
+  clearGuaranteeText?: boolean;
+  clearSocialProof?: boolean;
+  clearScarcityHint?: boolean;
+  clearFeaturedLabel?: boolean;
+  clearMetaDescription?: boolean;
+};
+
+export type PublicCategoryPayload = {
+  category: ServiceCategorySummary;
+  services: ServiceSummary[];
 };
 
 export type ReorderRequest = {

@@ -270,6 +270,20 @@ async def list_services(
     return await list_tenant_services(session, tenant_slug)
 
 
+@router.get(
+    "/{tenant_slug}/c/{category_slug}",
+    summary="Public category landing page payload",
+)
+async def get_public_category(
+    tenant_slug: str,
+    category_slug: str,
+    session: AsyncSession = Depends(get_db_session),
+):
+    from app.services.tenants import get_public_category_by_slug
+
+    return await get_public_category_by_slug(session, tenant_slug, category_slug)
+
+
 @router.post(
     "/{tenant_slug}/services",
     response_model=ServiceSummaryResponse,

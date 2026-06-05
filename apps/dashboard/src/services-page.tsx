@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type {
   AuthenticatedUser,
+  CategoryFaqItem,
+  CategoryFeaturedLabel,
   CreateServiceCategoryRequest,
   CreateServiceRequest,
   LocationSummary,
@@ -10,9 +12,11 @@ import type {
   ReplaceProviderServiceVariantsRequest,
   ServiceCategorySummary,
   ServiceSummary,
+  SocialProof,
   TenantSummary,
   UpdateServiceCategoryRequest,
   UpdateServiceRequest,
+  ValueStackItem,
 } from "@booking/shared-types";
 
 import { platformApi } from "./platform-api";
@@ -375,20 +379,7 @@ export function ServicesPage({
 
   return (
     <main className="ops-page-stack">
-      <section className="ops-hero ops-hero--compact">
-        <div className="ops-hero-copy">
-          <p className="eyebrow">{definition.eyebrow}</p>
-          <h3>{definition.title}</h3>
-          <p>{definition.description}</p>
-        </div>
-        <div className="ops-hero-panel">
-          <p className="eyebrow">Catalog state</p>
-          <strong>{services.length} services</strong>
-          <span>
-            {categories.length} categor{categories.length === 1 ? "y" : "ies"}
-          </span>
-        </div>
-      </section>
+      <h3>{definition.title}</h3>
 
       {status ? (
         <div className="message-banner" role="status">
@@ -595,9 +586,21 @@ export function ServicesPage({
               onDeselect={() => setSelection({ kind: "none" })}
               onStatus={setStatus}
             />
+          ) : selectedCategory ? (
+            <CategoryDetailPanel
+              key={selectedCategory.id}
+              tenantSlug={tenantSlug}
+              category={selectedCategory}
+              canManage={canManage}
+              onChanged={async (msg) => {
+                await refreshCategories();
+                if (msg) setStatus(msg);
+              }}
+              onStatus={setStatus}
+            />
           ) : (
             <div className="services-detail-empty">
-              <p>Select a service to edit pricing, description, locations, and per-provider variants.</p>
+              <p>Select a service to edit pricing, description, locations, and per-provider variants. Select a category to edit its landing-page merchandising.</p>
             </div>
           )}
         </aside>
@@ -1513,5 +1516,576 @@ function CreateServiceDialog({
         </form>
       </div>
     </div>
+  );
+}
+
+// ===========================================================================
+// Category detail panel — Hormozi-aligned landing-page merchandising
+// ===========================================================================
+
+const FEATURED_LABEL_OPTIONS: Array<{ value: "" | CategoryFeaturedLabel; label: string }> = [
+  { value: "", label: "None" },
+  { value: "signature", label: "Signature" },
+  { value: "most_popular", label: "Most popular" },
+  { value: "new", label: "New" },
+  { value: "limited", label: "Limited" },
+];
+
+type CategoryFormState = {
+  name: string;
+  slug: string;
+  isActive: boolean;
+  outcomeHeadline: string;
+  subheadline: string;
+  heroImageUrl: string;
+  heroImageAlt: string;
+  scarcityHint: string;
+  guaranteeText: string;
+  metaDescription: string;
+  featuredLabel: "" | CategoryFeaturedLabel;
+  socialQuote: string;
+  socialAuthor: string;
+  socialImageUrl: string;
+  valueStack: ValueStackItem[];
+  bonuses: ValueStackItem[];
+  faqs: CategoryFaqItem[];
+};
+
+function categoryToFormState(category: ServiceCategorySummary): CategoryFormState {
+  return {
+    name: category.name,
+    slug: category.slug ?? "",
+    isActive: category.isActive,
+    outcomeHeadline: category.outcomeHeadline ?? "",
+    subheadline: category.subheadline ?? "",
+    heroImageUrl: category.heroImageUrl ?? "",
+    heroImageAlt: category.heroImageAlt ?? "",
+    scarcityHint: category.scarcityHint ?? "",
+    guaranteeText: category.guaranteeText ?? "",
+    metaDescription: category.metaDescription ?? "",
+    featuredLabel: category.featuredLabel ?? "",
+    socialQuote: category.socialProof?.quote ?? "",
+    socialAuthor: category.socialProof?.author ?? "",
+    socialImageUrl: category.socialProof?.imageUrl ?? "",
+    valueStack: category.valueStack ?? [],
+    bonuses: category.bonuses ?? [],
+    faqs: category.faqs ?? [],
+  };
+}
+
+function CategoryDetailPanel({
+  tenantSlug,
+  category,
+  canManage,
+  onChanged,
+  onStatus,
+}: {
+  tenantSlug: string;
+  category: ServiceCategorySummary;
+  canManage: boolean;
+  onChanged: (status?: string | null) => Promise<void>;
+  onStatus: (msg: string) => void;
+}) {
+  const [form, setForm] = useState<CategoryFormState>(() => categoryToFormState(category));
+  const [saving, setSaving] = useState(false);
+  const [copyHint, setCopyHint] = useState<string | null>(null);
+  const copyTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setForm(categoryToFormState(category));
+  }, [category]);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  const landingHref = form.slug.trim()
+    ? `${storefrontBaseUrl}/${tenantSlug}/c/${form.slug.trim()}`
+    : null;
+
+  const handleCopyLink = async () => {
+    if (!landingHref) return;
+    try {
+      await navigator.clipboard.writeText(landingHref);
+      setCopyHint("Link copied!");
+    } catch {
+      setCopyHint("Copy failed — select and copy manually.");
+    }
+    if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = window.setTimeout(() => setCopyHint(null), 2000);
+  };
+
+  const handleSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canManage) return;
+    const name = form.name.trim();
+    if (!name) {
+      onStatus("Category name is required.");
+      return;
+    }
+
+    const body: UpdateServiceCategoryRequest = {
+      name,
+      isActive: form.isActive,
+    };
+
+    const slug = form.slug.trim();
+    if (slug) {
+      body.slug = slug;
+    } else if (category.slug) {
+      body.clearSlug = true;
+    }
+
+    const setOrClear = (
+      value: string,
+      original: string | null | undefined,
+      field: keyof UpdateServiceCategoryRequest,
+      clearFlag: keyof UpdateServiceCategoryRequest,
+    ) => {
+      const trimmed = value.trim();
+      if (trimmed) {
+        (body as Record<string, unknown>)[field as string] = trimmed;
+      } else if (original) {
+        (body as Record<string, unknown>)[clearFlag as string] = true;
+      }
+    };
+
+    setOrClear(form.outcomeHeadline, category.outcomeHeadline, "outcomeHeadline", "clearOutcomeHeadline");
+    setOrClear(form.subheadline, category.subheadline, "subheadline", "clearSubheadline");
+    setOrClear(form.scarcityHint, category.scarcityHint, "scarcityHint", "clearScarcityHint");
+    setOrClear(form.guaranteeText, category.guaranteeText, "guaranteeText", "clearGuaranteeText");
+    setOrClear(form.metaDescription, category.metaDescription, "metaDescription", "clearMetaDescription");
+
+    const heroUrl = form.heroImageUrl.trim();
+    const heroAlt = form.heroImageAlt.trim();
+    if (heroUrl) {
+      body.heroImageUrl = heroUrl;
+      body.heroImageAlt = heroAlt || null;
+    } else if (category.heroImageUrl) {
+      body.clearHeroImage = true;
+    }
+
+    if (form.featuredLabel) {
+      body.featuredLabel = form.featuredLabel;
+    } else if (category.featuredLabel) {
+      body.clearFeaturedLabel = true;
+    }
+
+    const socialQuote = form.socialQuote.trim();
+    if (socialQuote) {
+      body.socialProof = {
+        quote: socialQuote,
+        author: form.socialAuthor.trim() || null,
+        imageUrl: form.socialImageUrl.trim() || null,
+      };
+    } else if (category.socialProof) {
+      body.clearSocialProof = true;
+    }
+
+    body.valueStack = form.valueStack
+      .map((item) => ({
+        label: item.label.trim(),
+        estValueCents:
+          typeof item.estValueCents === "number" && Number.isFinite(item.estValueCents)
+            ? item.estValueCents
+            : null,
+      }))
+      .filter((item) => item.label.length > 0);
+
+    body.bonuses = form.bonuses
+      .map((item) => ({
+        label: item.label.trim(),
+        estValueCents:
+          typeof item.estValueCents === "number" && Number.isFinite(item.estValueCents)
+            ? item.estValueCents
+            : null,
+      }))
+      .filter((item) => item.label.length > 0);
+
+    body.faqs = form.faqs
+      .map((item) => ({ question: item.question.trim(), answer: item.answer.trim() }))
+      .filter((item) => item.question.length > 0 && item.answer.length > 0);
+
+    setSaving(true);
+    try {
+      await platformApi.updateServiceCategory(tenantSlug, category.id, body);
+      await onChanged(`Category "${name}" saved.`);
+    } catch (error) {
+      onStatus(readErrorMessage(error, "Unable to save category."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form className="service-detail-panel category-detail-panel" onSubmit={handleSave}>
+      <header className="service-detail-header">
+        <div>
+          <p className="eyebrow">Category</p>
+          <h4>{category.name}</h4>
+        </div>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={form.isActive}
+            disabled={!canManage}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, isActive: event.target.checked }))
+            }
+          />
+          <span>{form.isActive ? "Active" : "Hidden"}</span>
+        </label>
+      </header>
+
+      <fieldset disabled={!canManage}>
+        <legend>Basics</legend>
+        <label className="field">
+          <span>Category name</span>
+          <input
+            type="text"
+            value={form.name}
+            onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+            required
+          />
+        </label>
+        <label className="field">
+          <span>URL slug</span>
+          <input
+            type="text"
+            value={form.slug}
+            placeholder="auto-generated from name when blank"
+            onChange={(event) =>
+              setForm((prev) => ({
+                ...prev,
+                slug: event.target.value.toLowerCase().replace(/\s+/g, "-"),
+              }))
+            }
+          />
+          <small className="field-help">
+            Lowercase letters, numbers, and hyphens only. Leave blank to regenerate from the name.
+          </small>
+        </label>
+        {landingHref ? (
+          <div className="inline-link">
+            <span>
+              Landing page:&nbsp;
+              <a href={landingHref} target="_blank" rel="noreferrer">
+                {landingHref}
+              </a>
+            </span>
+            <button type="button" className="ghost-action" onClick={handleCopyLink}>
+              Copy
+            </button>
+            {copyHint ? <span className="copy-hint">{copyHint}</span> : null}
+          </div>
+        ) : (
+          <p className="field-help">Save with a slug to publish a public landing page.</p>
+        )}
+        <label className="field">
+          <span>Featured label</span>
+          <select
+            value={form.featuredLabel}
+            onChange={(event) =>
+              setForm((prev) => ({
+                ...prev,
+                featuredLabel: event.target.value as "" | CategoryFeaturedLabel,
+              }))
+            }
+          >
+            {FEATURED_LABEL_OPTIONS.map((opt) => (
+              <option key={opt.value || "none"} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </fieldset>
+
+      <fieldset disabled={!canManage}>
+        <legend>Hero</legend>
+        <label className="field">
+          <span>Outcome headline</span>
+          <input
+            type="text"
+            value={form.outcomeHeadline}
+            placeholder="The result your customer wants in one line"
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, outcomeHeadline: event.target.value }))
+            }
+          />
+        </label>
+        <label className="field">
+          <span>Subheadline</span>
+          <textarea
+            value={form.subheadline}
+            rows={2}
+            placeholder="One or two sentences expanding on the outcome."
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, subheadline: event.target.value }))
+            }
+          />
+        </label>
+        <label className="field">
+          <span>Hero image URL</span>
+          <input
+            type="url"
+            value={form.heroImageUrl}
+            placeholder="https://…"
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, heroImageUrl: event.target.value }))
+            }
+          />
+        </label>
+        <label className="field">
+          <span>Hero image alt text</span>
+          <input
+            type="text"
+            value={form.heroImageAlt}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, heroImageAlt: event.target.value }))
+            }
+          />
+        </label>
+        <label className="field">
+          <span>Scarcity hint</span>
+          <input
+            type="text"
+            value={form.scarcityHint}
+            placeholder="e.g. Only 3 slots left this week"
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, scarcityHint: event.target.value }))
+            }
+          />
+        </label>
+      </fieldset>
+
+      <ValueStackEditor
+        legend="Value stack"
+        help="Itemize what the customer is actually getting and what each piece is worth."
+        items={form.valueStack}
+        disabled={!canManage}
+        onChange={(next) => setForm((prev) => ({ ...prev, valueStack: next }))}
+      />
+
+      <ValueStackEditor
+        legend="Bonuses"
+        help="Extras included at no additional charge — risk reducers and surprise-and-delight items."
+        items={form.bonuses}
+        disabled={!canManage}
+        onChange={(next) => setForm((prev) => ({ ...prev, bonuses: next }))}
+      />
+
+      <fieldset disabled={!canManage}>
+        <legend>Guarantee</legend>
+        <label className="field">
+          <span>Guarantee text</span>
+          <textarea
+            value={form.guaranteeText}
+            rows={3}
+            placeholder="The reversal: what you promise the customer if they're not happy."
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, guaranteeText: event.target.value }))
+            }
+          />
+        </label>
+      </fieldset>
+
+      <fieldset disabled={!canManage}>
+        <legend>Social proof</legend>
+        <label className="field">
+          <span>Quote</span>
+          <textarea
+            value={form.socialQuote}
+            rows={3}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, socialQuote: event.target.value }))
+            }
+          />
+        </label>
+        <label className="field">
+          <span>Author</span>
+          <input
+            type="text"
+            value={form.socialAuthor}
+            placeholder="First name + last initial works great"
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, socialAuthor: event.target.value }))
+            }
+          />
+        </label>
+        <label className="field">
+          <span>Author photo URL</span>
+          <input
+            type="url"
+            value={form.socialImageUrl}
+            placeholder="https://…"
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, socialImageUrl: event.target.value }))
+            }
+          />
+        </label>
+      </fieldset>
+
+      <FaqEditor
+        items={form.faqs}
+        disabled={!canManage}
+        onChange={(next) => setForm((prev) => ({ ...prev, faqs: next }))}
+      />
+
+      <fieldset disabled={!canManage}>
+        <legend>SEO</legend>
+        <label className="field">
+          <span>Meta description</span>
+          <textarea
+            value={form.metaDescription}
+            rows={2}
+            placeholder="Used for search engine snippets and social previews."
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, metaDescription: event.target.value }))
+            }
+          />
+        </label>
+      </fieldset>
+
+      {canManage ? (
+        <div className="service-detail-actions">
+          <button type="submit" className="primary-action" disabled={saving}>
+            {saving ? "Saving…" : "Save category"}
+          </button>
+        </div>
+      ) : (
+        <p className="service-detail-locked">
+          You don't have permission to edit categories.
+        </p>
+      )}
+    </form>
+  );
+}
+
+function ValueStackEditor({
+  legend,
+  help,
+  items,
+  disabled,
+  onChange,
+}: {
+  legend: string;
+  help: string;
+  items: ValueStackItem[];
+  disabled: boolean;
+  onChange: (next: ValueStackItem[]) => void;
+}) {
+  return (
+    <fieldset disabled={disabled}>
+      <legend>{legend}</legend>
+      <p className="field-help">{help}</p>
+      <ul className="stack-editor">
+        {items.map((item, idx) => (
+          <li key={idx}>
+            <input
+              type="text"
+              value={item.label}
+              placeholder="Item label"
+              onChange={(event) => {
+                const next = [...items];
+                next[idx] = { ...next[idx], label: event.target.value };
+                onChange(next);
+              }}
+            />
+            <input
+              type="text"
+              inputMode="decimal"
+              value={
+                typeof item.estValueCents === "number"
+                  ? (item.estValueCents / 100).toString()
+                  : ""
+              }
+              placeholder="Est. value $"
+              onChange={(event) => {
+                const cents = parseMoneyInput(event.target.value);
+                const next = [...items];
+                next[idx] = { ...next[idx], estValueCents: cents };
+                onChange(next);
+              }}
+            />
+            <button
+              type="button"
+              className="ghost-action"
+              onClick={() => onChange(items.filter((_, i) => i !== idx))}
+            >
+              Remove
+            </button>
+          </li>
+        ))}
+      </ul>
+      <button
+        type="button"
+        className="ghost-action"
+        onClick={() => onChange([...items, { label: "", estValueCents: null }])}
+      >
+        + Add item
+      </button>
+    </fieldset>
+  );
+}
+
+function FaqEditor({
+  items,
+  disabled,
+  onChange,
+}: {
+  items: CategoryFaqItem[];
+  disabled: boolean;
+  onChange: (next: CategoryFaqItem[]) => void;
+}) {
+  return (
+    <fieldset disabled={disabled}>
+      <legend>FAQ</legend>
+      <p className="field-help">
+        Address the friction points and objections customers raise before booking.
+      </p>
+      <ul className="faq-editor">
+        {items.map((item, idx) => (
+          <li key={idx}>
+            <input
+              type="text"
+              value={item.question}
+              placeholder="Question"
+              onChange={(event) => {
+                const next = [...items];
+                next[idx] = { ...next[idx], question: event.target.value };
+                onChange(next);
+              }}
+            />
+            <textarea
+              value={item.answer}
+              rows={2}
+              placeholder="Answer"
+              onChange={(event) => {
+                const next = [...items];
+                next[idx] = { ...next[idx], answer: event.target.value };
+                onChange(next);
+              }}
+            />
+            <button
+              type="button"
+              className="ghost-action"
+              onClick={() => onChange(items.filter((_, i) => i !== idx))}
+            >
+              Remove
+            </button>
+          </li>
+        ))}
+      </ul>
+      <button
+        type="button"
+        className="ghost-action"
+        onClick={() => onChange([...items, { question: "", answer: "" }])}
+      >
+        + Add question
+      </button>
+    </fieldset>
   );
 }
