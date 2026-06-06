@@ -1,6 +1,8 @@
 import { startTransition, useEffect, useState } from "react";
 import type {
   AuthenticatedUser,
+  BookingFormResponseEntry,
+  BookingFormResponseList,
   CustomerBookingEntry,
   CustomerListResponse,
   CustomerProfileResponse,
@@ -24,6 +26,12 @@ type ProfileState =
   | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "ready"; profile: CustomerProfileResponse }
+  | { kind: "error"; message: string };
+
+type FormResponsesState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "ready"; items: BookingFormResponseEntry[] }
   | { kind: "error"; message: string };
 
 function hasPermission(user: AuthenticatedUser, key: string): boolean {
@@ -110,6 +118,9 @@ export function CustomersPage({
   const [profileState, setProfileState] = useState<ProfileState>({
     kind: "idle",
   });
+  const [formResponsesState, setFormResponsesState] = useState<FormResponsesState>({
+    kind: "idle",
+  });
 
   const loadCustomers = async (searchQuery?: string) => {
     try {
@@ -156,6 +167,34 @@ export function CustomersPage({
         setProfileState({
           kind: "error",
           message: readErrorMessage(error, "Unable to load customer profile."),
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantSlug, selectedCustomerId, canView]);
+
+  useEffect(() => {
+    if (!canView || !tenantSlug || selectedCustomerId === null) {
+      setFormResponsesState({ kind: "idle" });
+      return;
+    }
+
+    let cancelled = false;
+    setFormResponsesState({ kind: "loading" });
+
+    platformApi
+      .listCustomerFormResponses(tenantSlug, selectedCustomerId)
+      .then((response: BookingFormResponseList) => {
+        if (cancelled) return;
+        setFormResponsesState({ kind: "ready", items: response.items });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setFormResponsesState({
+          kind: "error",
+          message: readErrorMessage(error, "Unable to load form responses."),
         });
       });
 
@@ -292,6 +331,7 @@ export function CustomersPage({
               <CustomerProfilePanel
                 customer={selectedCustomer}
                 profileState={profileState}
+                formResponsesState={formResponsesState}
               />
             ) : (
               <div className="staff-detail-empty">
@@ -308,9 +348,11 @@ export function CustomersPage({
 function CustomerProfilePanel({
   customer,
   profileState,
+  formResponsesState,
 }: {
   customer: CustomerSummary;
   profileState: ProfileState;
+  formResponsesState: FormResponsesState;
 }) {
   return (
     <div className="customer-profile">
@@ -384,6 +426,29 @@ function CustomerProfilePanel({
           <p className="staff-list-empty">Select a customer to load bookings.</p>
         )}
       </section>
+
+      <section className="customer-profile-section">
+        <p className="rail-section-kicker">Form responses</p>
+        {formResponsesState.kind === "loading" ? (
+          <p>Loading form responses...</p>
+        ) : formResponsesState.kind === "error" ? (
+          <div className="message-banner message-banner--error" role="alert">
+            {formResponsesState.message}
+          </div>
+        ) : formResponsesState.kind === "ready" ? (
+          formResponsesState.items.length === 0 ? (
+            <p className="staff-list-empty">No form responses yet.</p>
+          ) : (
+            <ul className="customer-booking-list">
+              {formResponsesState.items.map((response) => (
+                <CustomerFormResponseRow key={response.id} response={response} />
+              ))}
+            </ul>
+          )
+        ) : (
+          <p className="staff-list-empty">Select a customer to load form responses.</p>
+        )}
+      </section>
     </div>
   );
 }
@@ -410,6 +475,26 @@ function CustomerBookingRow({ booking }: { booking: CustomerBookingEntry }) {
             {formatMoney(booking.balanceDueCents)} due
           </span>
         ) : null}
+      </div>
+    </li>
+  );
+}
+
+function CustomerFormResponseRow({ response }: { response: BookingFormResponseEntry }) {
+  const timingLabel = response.customerPromptTiming?.replaceAll("_", " ") ?? response.scope;
+  const answerCount = Object.keys(response.answers).length;
+  return (
+    <li className="customer-booking-row">
+      <div className="customer-booking-row__main">
+        <div className="customer-booking-row__header">
+          <strong>{response.formName}</strong>
+          <span className="customer-booking-status customer-booking-status--confirmed">
+            v{response.formVersionNumber}
+          </span>
+        </div>
+        <p className="customer-booking-row__meta">
+          {formatDateTime(response.submittedAt)} · {timingLabel} · {answerCount} field{answerCount !== 1 ? "s" : ""}
+        </p>
       </div>
     </li>
   );

@@ -8,14 +8,20 @@ from app.core.http import api_exception
 from app.db.models import User
 from app.db.session import get_db_session
 from app.schemas.customers import CustomerListResponse, CustomerLookupResponse, CustomerProfileResponse
+from app.schemas.forms import BookingFormResponseListResponse
 from app.services.auth import ROLE_PERMISSION_ALLOWLIST
+from app.services.booking_forms import list_customer_form_responses
 from app.services.customers import get_customer_profile, list_tenant_customers, lookup_tenant_customers
 
 
-router = APIRouter(prefix="/customers", tags=["customers"])
+router = APIRouter(tags=["customers"])
 
 
-@router.get("", response_model=CustomerLookupResponse, summary="Lookup customers for the authenticated tenant")
+@router.get(
+    "/customers",
+    response_model=CustomerLookupResponse,
+    summary="Lookup customers for the authenticated tenant",
+)
 async def lookup_customers(
     search: str = Query(..., min_length=1),
     limit: int = Query(8, ge=1, le=20),
@@ -63,3 +69,17 @@ async def get_customer(
     session: AsyncSession = Depends(get_db_session),
 ) -> CustomerProfileResponse:
     return await get_customer_profile(session, tenant_slug, customer_id)
+
+
+@router.get(
+    "/tenants/{tenant_slug}/customers/{customer_id}/form-responses",
+    response_model=BookingFormResponseListResponse,
+    summary="List submitted form responses for a customer",
+)
+async def list_customer_form_responses_route(
+    tenant_slug: str,
+    customer_id: str,
+    _: object = Depends(require_tenant_permission("customers.view")),
+    session: AsyncSession = Depends(get_db_session),
+) -> BookingFormResponseListResponse:
+    return await list_customer_form_responses(session, tenant_slug, customer_id)

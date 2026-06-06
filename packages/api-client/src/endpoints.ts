@@ -373,6 +373,8 @@ export const createPlatformApi = (client: ApiClient) => ({
     }),
   getCustomerProfile: (tenantSlug: string, customerId: string) =>
     client.get<CustomerProfileResponse>(`tenants/${tenantSlug}/customers/${customerId}`),
+  listCustomerFormResponses: (tenantSlug: string, customerId: string) =>
+    client.get<BookingFormResponseList>(`tenants/${tenantSlug}/customers/${customerId}/form-responses`),
   listForms: (tenantSlug: string) =>
     client.get<FormListResponse>(`tenants/${tenantSlug}/forms`),
   createForm: (tenantSlug: string, body: CreateFormRequest) =>

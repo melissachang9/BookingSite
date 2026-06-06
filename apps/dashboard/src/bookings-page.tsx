@@ -8,6 +8,7 @@ import type {
   CreateCheckoutSessionRequest,
   CreateCheckoutSessionResponse,
   RecordManualPaymentRequest,
+  SendFormReminderResponse,
   UpdateBookingStatusRequest,
 } from "@booking/shared-types";
 
@@ -37,6 +38,7 @@ export type BookingsPageApi = {
   recordManualPayment: (tenantSlug: string, bookingId: string, body: RecordManualPaymentRequest) => Promise<BookingSummary>;
   updateBookingStatus: (tenantSlug: string, bookingId: string, body: UpdateBookingStatusRequest) => Promise<BookingSummary>;
   createCheckoutSession: (body: CreateCheckoutSessionRequest) => Promise<CreateCheckoutSessionResponse>;
+  sendBookingFormReminder: (tenantSlug: string, bookingId: string) => Promise<SendFormReminderResponse>;
 };
 
 type BookingsPageProps = {
@@ -420,6 +422,17 @@ export function BookingsPage({
     });
   };
 
+  const handleSendFormReminder = (booking: BookingSummary) => {
+    if (!tenantSlug) {
+      return;
+    }
+
+    void runBookingAction(booking.id, "Sending form reminder...", async () => {
+      const result = await api.sendBookingFormReminder(tenantSlug, booking.id);
+      return `Sent form reminder to ${result.recipientEmail} (${result.pendingRequirementCount} pending).`;
+    });
+  };
+
   const actionableBookings =
     bookingsState.kind === "ready"
       ? bookingsState.items.filter(
@@ -631,6 +644,19 @@ export function BookingsPage({
                           }}
                         >
                           Mark no-show
+                        </button>
+                      ) : null}
+
+                      {booking.status === "confirmed" ? (
+                        <button
+                          type="button"
+                          className="secondary-action"
+                          disabled={isSubmitting}
+                          onClick={() => {
+                            handleSendFormReminder(booking);
+                          }}
+                        >
+                          Send form reminder
                         </button>
                       ) : null}
 

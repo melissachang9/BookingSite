@@ -129,6 +129,7 @@ describe("BookingsPage", () => {
       recordManualPayment: vi.fn(),
       updateBookingStatus: vi.fn().mockResolvedValue({ ...baseBooking, status: "completed", paymentResolution: "follow_up" }),
       createCheckoutSession: vi.fn(),
+      sendBookingFormReminder: vi.fn(),
     };
 
     renderBookingsPage(api);
@@ -147,12 +148,39 @@ describe("BookingsPage", () => {
     expect(await screen.findByText("Marked the visit completed with balance follow-up still due.")).toBeInTheDocument();
   });
 
+  it("sends a form reminder for a confirmed booking", async () => {
+    const api: BookingsPageApi = {
+      listBookings: vi.fn().mockResolvedValue(listResponse),
+      recordManualPayment: vi.fn(),
+      updateBookingStatus: vi.fn(),
+      createCheckoutSession: vi.fn(),
+      sendBookingFormReminder: vi.fn().mockResolvedValue({
+        bookingId: "booking-1",
+        pendingRequirementCount: 2,
+        recipientEmail: "guest@example.com",
+        provider: "resend",
+        providerMessageId: "msg_123",
+      }),
+    };
+
+    renderBookingsPage(api);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Send form reminder" }));
+
+    await waitFor(() => {
+      expect(api.sendBookingFormReminder).toHaveBeenCalledWith("brow-beauty-lab", "booking-1");
+    });
+
+    expect(await screen.findByText("Sent form reminder to guest@example.com (2 pending).")).toBeInTheDocument();
+  });
+
   it("shows a read-only notice when the role cannot complete or collect payments", async () => {
     const api: BookingsPageApi = {
       listBookings: vi.fn().mockResolvedValue(listResponse),
       recordManualPayment: vi.fn(),
       updateBookingStatus: vi.fn(),
       createCheckoutSession: vi.fn(),
+      sendBookingFormReminder: vi.fn(),
     };
 
     renderBookingsPage(api, providerUser);
@@ -173,6 +201,7 @@ describe("BookingsPage", () => {
       recordManualPayment: vi.fn().mockResolvedValue({ ...baseBooking, amountPaidCents: 10525, balanceDueCents: 0 }),
       updateBookingStatus: vi.fn().mockResolvedValue({ ...baseBooking, status: "completed", paymentResolution: "collected", amountPaidCents: 10525, balanceDueCents: 0 }),
       createCheckoutSession: vi.fn(),
+      sendBookingFormReminder: vi.fn(),
     };
 
     renderBookingsPage(api);
@@ -206,6 +235,7 @@ describe("BookingsPage", () => {
         expiresAt: "2026-05-25T00:00:00.000Z",
         kind: "booking_balance",
       }),
+      sendBookingFormReminder: vi.fn(),
     };
 
     renderBookingsPage(api);

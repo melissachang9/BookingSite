@@ -15,6 +15,7 @@ from app.db.models import (
     Booking,
     BookingDraft,
     BookingDraftFormRequirement,
+    Customer,
     FormDefinition,
     FormResponse,
     FormVersion,
@@ -435,3 +436,55 @@ async def send_booking_form_reminder(
         sent_at=delivery.sent_at,
         manage_url=manage_url,
     )
+
+
+async def list_customer_form_responses(
+    session: AsyncSession,
+    tenant_slug: str,
+    customer_id: str,
+) -> BookingFormResponseListResponse:
+    """List all submitted form responses for a customer (operator-facing)."""
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+
+    customer = await session.scalar(
+        select(Customer).where(Customer.tenant_id == tenant.id, Customer.id == customer_id)
+    )
+    if customer is None:
+        raise api_exception(404, "not_found", "Customer was not found for this tenant.")
+
+    responses = (
+        await session.scalars(
+            select(FormResponse)
+            .options(
+                selectinload(FormResponse.form_version).selectinload(FormVersion.form),
+            )
+            .where(
+                FormResponse.tenant_id == tenant.id,
+                FormResponse.customer_id == customer_id,
+            )
+            .order_by(FormResponse.submitted_at.desc())
+            .limit(50)
+        )
+    ).all()
+
+    items: list[BookingFormResponseEntry] = []
+    for response in responses:
+        version = response.form_version
+        form: FormDefinition | None = version.form if version is not None else None
+        schema = version.schema_json if version is not None and isinstance(version.schema_json, dict) else None
+        items.append(
+            BookingFormResponseEntry(
+                id=response.id,
+                form_id=response.form_id,
+                form_version_id=response.form_version_id,
+                form_name=form.name if form is not None else "Form",
+                form_version_number=version.version_number if version is not None else 0,
+                scope=response.scope,
+                customer_prompt_timing=response.customer_prompt_timing,
+                submitted_at=response.submitted_at,
+                answers=response.answers_json,
+                schema=schema,
+            )
+        )
+
+    return BookingFormResponseListResponse(items=items)

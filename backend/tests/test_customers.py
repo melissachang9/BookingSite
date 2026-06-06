@@ -88,3 +88,159 @@ def test_lookup_customers_requires_authentication(client) -> None:
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "unauthorized"
+
+
+def _seed_customer_form_responses() -> dict[str, str]:
+    async def _run() -> dict[str, str]:
+        from datetime import datetime, timezone
+
+        from sqlalchemy import select
+
+        from app.db.models import (
+            Customer,
+            FormDefinition,
+            FormResponse,
+            FormVersion,
+            Tenant,
+        )
+        from app.db.session import get_session_maker
+
+        async with get_session_maker()() as session:
+            tenant = await session.scalar(select(Tenant).where(Tenant.slug == "brow-beauty-lab"))
+            assert tenant is not None
+
+            other_tenant = Tenant(
+                slug="form-responses-other-tenant",
+                name="Form Responses Other Tenant",
+                timezone="America/New_York",
+                branding_json={},
+                settings_json={
+                    "cancellationWindowHours": 24,
+                    "refundInsideWindow": False,
+                    "reminderHoursBefore": 24,
+                    "minLeadTimeMinutes": 60,
+                    "maxAdvanceBookingDays": 45,
+                    "defaultDepositCents": 2500,
+                    "noShowFeeCents": 5000,
+                    "autoChargeNoShowFee": False,
+                },
+            )
+            session.add(other_tenant)
+            await session.flush()
+
+            customer = Customer(tenant_id=tenant.id, name="Form Guest", email="formguest@example.com")
+            other_customer = Customer(
+                tenant_id=other_tenant.id,
+                name="Other Guest",
+                email="otherguest@example.com",
+            )
+            session.add_all([customer, other_customer])
+            await session.flush()
+
+            form = FormDefinition(
+                tenant_id=tenant.id,
+                name="Intake Consent",
+                scope="customer",
+                customer_prompt_timing="pre_visit",
+            )
+            session.add(form)
+            await session.flush()
+
+            schema = {"fields": [{"key": "allergies", "label": "Allergies", "type": "text"}]}
+            version = FormVersion(
+                tenant_id=tenant.id,
+                form_id=form.id,
+                version_number=2,
+                schema_json=schema,
+            )
+            session.add(version)
+            await session.flush()
+
+            response = FormResponse(
+                tenant_id=tenant.id,
+                form_id=form.id,
+                form_version_id=version.id,
+                customer_id=customer.id,
+                scope="customer",
+                customer_prompt_timing="pre_visit",
+                submitted_at=datetime(2024, 6, 1, 15, 0, tzinfo=timezone.utc),
+                answers_json={"allergies": "None"},
+            )
+            # A response for a different tenant/customer that must never leak.
+            other_form = FormDefinition(
+                tenant_id=other_tenant.id,
+                name="Other Intake",
+                scope="customer",
+                customer_prompt_timing="pre_visit",
+            )
+            session.add(other_form)
+            await session.flush()
+            other_version = FormVersion(
+                tenant_id=other_tenant.id,
+                form_id=other_form.id,
+                version_number=1,
+                schema_json=schema,
+            )
+            session.add(other_version)
+            await session.flush()
+            other_response = FormResponse(
+                tenant_id=other_tenant.id,
+                form_id=other_form.id,
+                form_version_id=other_version.id,
+                customer_id=other_customer.id,
+                scope="customer",
+                customer_prompt_timing="pre_visit",
+                submitted_at=datetime(2024, 6, 2, 15, 0, tzinfo=timezone.utc),
+                answers_json={"allergies": "Latex"},
+            )
+            session.add_all([response, other_response])
+            await session.commit()
+
+            return {
+                "tenant_slug": tenant.slug,
+                "customer_id": customer.id,
+                "other_tenant_slug": other_tenant.slug,
+                "other_customer_id": other_customer.id,
+            }
+
+    return asyncio.run(_run())
+
+
+def test_list_customer_form_responses_returns_customer_responses(client, demo_credentials) -> None:
+    seeded = _seed_customer_form_responses()
+
+    response = client.get(
+        f"/api/v1/tenants/{seeded['tenant_slug']}/customers/{seeded['customer_id']}/form-responses",
+        headers=_auth_headers(client, demo_credentials),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["items"]) == 1
+    entry = payload["items"][0]
+    assert entry["formName"] == "Intake Consent"
+    assert entry["formVersionNumber"] == 2
+    assert entry["scope"] == "customer"
+    assert entry["customerPromptTiming"] == "pre_visit"
+    assert entry["answers"] == {"allergies": "None"}
+    assert entry["schema"] == {"fields": [{"key": "allergies", "label": "Allergies", "type": "text"}]}
+
+
+def test_list_customer_form_responses_is_tenant_isolated(client, demo_credentials) -> None:
+    seeded = _seed_customer_form_responses()
+
+    response = client.get(
+        f"/api/v1/tenants/{seeded['tenant_slug']}/customers/{seeded['other_customer_id']}/form-responses",
+        headers=_auth_headers(client, demo_credentials),
+    )
+
+    assert response.status_code == 404
+
+
+def test_list_customer_form_responses_requires_authentication(client) -> None:
+    response = client.get(
+        "/api/v1/tenants/brow-beauty-lab/customers/missing/form-responses",
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "unauthorized"
