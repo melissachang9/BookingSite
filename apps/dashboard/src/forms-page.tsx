@@ -2,10 +2,12 @@ import { useEffect, useState, type FormEvent } from "react";
 import type {
   AuthenticatedUser,
   CreateFormRequest,
+  CustomerPromptTiming,
   FormField,
   FormFieldType,
   FormListResponse,
   FormSchema,
+  FormScope,
   FormSummaryResponse,
   ServiceSummary,
   UpdateFormRequest,
@@ -280,8 +282,8 @@ function FormBuilderModal({
   const existingForm = isEdit ? builder.form : null;
 
   const [name, setName] = useState(existingForm?.name ?? "");
-  const [scope, setScope] = useState<string>(existingForm?.scope ?? "customer");
-  const [timing, setTiming] = useState(existingForm?.customerPromptTiming ?? "");
+  const [scope, setScope] = useState<FormScope>(existingForm?.scope ?? "customer");
+  const [timing, setTiming] = useState<CustomerPromptTiming | "">(existingForm?.customerPromptTiming ?? "");
   const [reviewRequired, setReviewRequired] = useState(existingForm?.reviewRequired ?? false);
   const [description, setDescription] = useState(existingForm?.schema?.description ?? "");
   const [fields, setFields] = useState<FormField[]>(existingForm?.schema?.fields ?? []);

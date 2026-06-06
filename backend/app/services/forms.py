@@ -24,6 +24,7 @@ async def list_tenant_forms(
     forms = (
         await session.scalars(
             select(FormDefinition)
+            .options(selectinload(FormDefinition.service_attachments))
             .where(FormDefinition.tenant_id == tenant.id)
             .order_by(FormDefinition.name.asc())
         )

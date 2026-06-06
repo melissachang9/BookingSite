@@ -126,6 +126,7 @@ export type CreateFormRequest = {
   name: string;
   scope?: FormScope;
   customerPromptTiming?: CustomerPromptTiming | null;
+  reviewRequired?: boolean;
   schema?: FormSchema;
 };
 
@@ -133,6 +134,7 @@ export type UpdateFormRequest = {
   name?: string;
   scope?: FormScope;
   customerPromptTiming?: CustomerPromptTiming | null;
+  reviewRequired?: boolean;
   isActive?: boolean;
   schema?: FormSchema;
 };
