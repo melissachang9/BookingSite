@@ -284,6 +284,20 @@ async def get_public_category(
     return await get_public_category_by_slug(session, tenant_slug, category_slug)
 
 
+@router.get(
+    "/{tenant_slug}/s/{service_slug}",
+    summary="Public service detail payload",
+)
+async def get_public_service(
+    tenant_slug: str,
+    service_slug: str,
+    session: AsyncSession = Depends(get_db_session),
+):
+    from app.services.tenants import get_public_service_by_slug
+
+    return await get_public_service_by_slug(session, tenant_slug, service_slug)
+
+
 @router.post(
     "/{tenant_slug}/services",
     response_model=ServiceSummaryResponse,

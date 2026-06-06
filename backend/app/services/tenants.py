@@ -416,6 +416,8 @@ async def create_tenant_service(
         name=payload.name.strip(),
         description=payload.description.strip() if isinstance(payload.description, str) and payload.description.strip() else None,
         duration_minutes=payload.duration_minutes,
+        setup_buffer_minutes=payload.setup_buffer_minutes,
+        cleanup_buffer_minutes=payload.cleanup_buffer_minutes,
         price_cents=payload.price_cents,
         deposit_cents=payload.deposit_cents,
         is_active=payload.is_active,
@@ -425,6 +427,9 @@ async def create_tenant_service(
         ServiceLocation(tenant_id=tenant.id, location_id=location_id)
         for location_id in requested_location_ids
     ]
+    service.slug = await _ensure_unique_service_slug(
+        session, tenant.id, getattr(payload, "slug", None), service.name
+    )
     session.add(service)
     await session.commit()
     return service_to_summary(service, tenant)
@@ -1330,6 +1335,11 @@ def _slugify(value: str) -> str:
     return base[:120] or "category"
 
 
+def _slugify_service(value: str) -> str:
+    base = _SLUG_RE.sub("-", value.lower()).strip("-")
+    return base[:120] or "service"
+
+
 async def _ensure_unique_category_slug(
     session: AsyncSession,
     tenant_id: str,
@@ -1346,6 +1356,34 @@ async def _ensure_unique_category_slug(
                 ServiceCategory.tenant_id == tenant_id,
                 ServiceCategory.slug == candidate,
                 ServiceCategory.id != (exclude_id or ""),
+            )
+        )
+        if existing is None:
+            return candidate
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+
+
+async def _ensure_unique_service_slug(
+    session: AsyncSession,
+    tenant_id: str,
+    desired: str | None,
+    fallback_name: str,
+    exclude_id: str | None = None,
+) -> str:
+    candidate = (
+        _slugify_service(desired)
+        if (desired and desired.strip())
+        else _slugify_service(fallback_name)
+    )
+    base = candidate
+    suffix = 2
+    while True:
+        existing = await session.scalar(
+            select(Service.id).where(
+                Service.tenant_id == tenant_id,
+                Service.slug == candidate,
+                Service.id != (exclude_id or ""),
             )
         )
         if existing is None:
@@ -1410,6 +1448,46 @@ async def get_public_category_by_slug(
     return PublicCategoryResponse(
         category=_category_to_summary(category),
         services=[service_to_summary(service, tenant) for service in services],
+    )
+
+
+async def get_public_service_by_slug(
+    session: AsyncSession, tenant_slug: str, service_slug: str
+):
+    from app.schemas.catalog import PublicServiceResponse
+
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    normalized = service_slug.strip().lower()
+    service = (
+        await session.scalars(
+            select(Service)
+            .options(selectinload(Service.location_links))
+            .where(
+                Service.tenant_id == tenant.id,
+                func.lower(Service.slug) == normalized,
+            )
+        )
+    ).one_or_none()
+    if service is None:
+        raise api_exception(
+            status_code=404,
+            code="service_not_found",
+            message="Service not found.",
+        )
+    if not service.is_active:
+        raise api_exception(
+            status_code=404,
+            code="service_not_active",
+            message="Service is not currently available.",
+        )
+    category = None
+    if service.category_id:
+        category_row = await session.get(ServiceCategory, service.category_id)
+        if category_row is not None and category_row.tenant_id == tenant.id:
+            category = _category_to_summary(category_row)
+    return PublicServiceResponse(
+        service=service_to_summary(service, tenant),
+        category=category,
     )
 
 
@@ -1626,6 +1704,10 @@ async def update_tenant_service(
         service.description = cleaned if cleaned else None
     if payload.duration_minutes is not None:
         service.duration_minutes = payload.duration_minutes
+    if payload.setup_buffer_minutes is not None:
+        service.setup_buffer_minutes = payload.setup_buffer_minutes
+    if payload.cleanup_buffer_minutes is not None:
+        service.cleanup_buffer_minutes = payload.cleanup_buffer_minutes
     if payload.price_cents is not None:
         service.price_cents = payload.price_cents
     if payload.deposit_cents is not None:
@@ -1669,6 +1751,77 @@ async def update_tenant_service(
         service.location_links = [
             ServiceLocation(tenant_id=tenant.id, location_id=lid) for lid in requested
         ]
+
+    # Phase J: merchandising fields
+    if getattr(payload, "slug", None) is not None and payload.slug.strip():
+        service.slug = await _ensure_unique_service_slug(
+            session, tenant.id, payload.slug, service.name, exclude_id=service.id
+        )
+    elif getattr(payload, "clear_slug", False):
+        service.slug = await _ensure_unique_service_slug(
+            session, tenant.id, None, service.name, exclude_id=service.id
+        )
+    for field, clear_flag in (
+        ("outcome_headline", "clear_outcome_headline"),
+        ("subheadline", "clear_subheadline"),
+        ("guarantee_text", "clear_guarantee_text"),
+        ("scarcity_hint", "clear_scarcity_hint"),
+        ("featured_label", "clear_featured_label"),
+        ("meta_description", "clear_meta_description"),
+    ):
+        value = getattr(payload, field, None)
+        if value is not None:
+            stripped = value.strip()
+            setattr(service, field, stripped or None)
+        elif getattr(payload, clear_flag, False):
+            setattr(service, field, None)
+    if getattr(payload, "compare_at_price_cents", None) is not None:
+        service.compare_at_price_cents = payload.compare_at_price_cents
+    elif getattr(payload, "clear_compare_at_price", False):
+        service.compare_at_price_cents = None
+    if getattr(payload, "clear_image", False):
+        service.image_url = None
+        service.image_alt_text = None
+    else:
+        if getattr(payload, "image_url", None) is not None:
+            value = payload.image_url.strip()
+            service.image_url = value or None
+        if getattr(payload, "image_alt_text", None) is not None:
+            value = payload.image_alt_text.strip()
+            service.image_alt_text = value or None
+    if getattr(payload, "clear_before_image", False):
+        service.before_image_url = None
+        service.before_image_alt = None
+    else:
+        if getattr(payload, "before_image_url", None) is not None:
+            value = payload.before_image_url.strip()
+            service.before_image_url = value or None
+        if getattr(payload, "before_image_alt", None) is not None:
+            value = payload.before_image_alt.strip()
+            service.before_image_alt = value or None
+    if getattr(payload, "clear_after_image", False):
+        service.after_image_url = None
+        service.after_image_alt = None
+    else:
+        if getattr(payload, "after_image_url", None) is not None:
+            value = payload.after_image_url.strip()
+            service.after_image_url = value or None
+        if getattr(payload, "after_image_alt", None) is not None:
+            value = payload.after_image_alt.strip()
+            service.after_image_alt = value or None
+    if getattr(payload, "value_stack", None) is not None:
+        service.value_stack = [
+            item.model_dump(by_alias=False) for item in payload.value_stack
+        ]
+    if getattr(payload, "bonuses", None) is not None:
+        service.bonuses = [
+            item.model_dump(by_alias=False) for item in payload.bonuses
+        ]
+    if getattr(payload, "clear_social_proof", False):
+        service.social_proof = None
+    elif getattr(payload, "social_proof", None) is not None:
+        service.social_proof = payload.social_proof.model_dump(by_alias=False)
+
     await session.commit()
     service = await _load_service_for_tenant(session, tenant.id, service.id)
     return service_to_summary(service, tenant)
@@ -1701,6 +1854,8 @@ async def duplicate_tenant_service(session: AsyncSession, tenant_slug: str, serv
         name=candidate,
         description=source.description,
         duration_minutes=source.duration_minutes,
+        setup_buffer_minutes=source.setup_buffer_minutes,
+        cleanup_buffer_minutes=source.cleanup_buffer_minutes,
         price_cents=source.price_cents,
         deposit_cents=source.deposit_cents,
         is_active=source.is_active,

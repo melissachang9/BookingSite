@@ -67,6 +67,12 @@ type DragState =
   | { kind: "service"; serviceId: string; fromCategoryKey: string }
   | { kind: "category"; categoryId: string };
 
+type DragOverTarget =
+  | { kind: "none" }
+  | { kind: "category"; categoryId: string }
+  | { kind: "service"; serviceId: string }
+  | { kind: "group"; groupKey: string };
+
 export function ServicesPage({
   definition,
   currentUser,
@@ -88,8 +94,15 @@ export function ServicesPage({
   const [providers, setProviders] = useState<ProviderSummary[]>([]);
   const [selection, setSelection] = useState<SelectionState>({ kind: "none" });
   const [drag, setDrag] = useState<DragState>({ kind: "none" });
+  const [dragOverTarget, setDragOverTarget] = useState<DragOverTarget>({ kind: "none" });
   const [showCreate, setShowCreate] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [categoryModal, setCategoryModal] = useState<
+    | { kind: "none" }
+    | { kind: "create" }
+    | { kind: "rename"; category: ServiceCategorySummary }
+    | { kind: "delete"; category: ServiceCategorySummary }
+  >({ kind: "none" });
 
   useEffect(() => {
     if (!canView || !tenantSlug) {
@@ -238,57 +251,19 @@ export function ServicesPage({
     setCategories(resp.categories);
   };
 
-  const handleCreateCategory = async () => {
+  const handleCreateCategory = () => {
     if (!canManage) return;
-    const raw = window.prompt("New category name");
-    if (!raw) return;
-    const name = raw.trim();
-    if (!name) return;
-    try {
-      const body: CreateServiceCategoryRequest = { name };
-      await platformApi.createServiceCategory(tenantSlug, body);
-      await refreshCategories();
-      setStatus(`Category "${name}" created.`);
-    } catch (error) {
-      setStatus(readErrorMessage(error, "Unable to create category."));
-    }
+    setCategoryModal({ kind: "create" });
   };
 
-  const handleRenameCategory = async (category: ServiceCategorySummary) => {
+  const handleRenameCategory = (category: ServiceCategorySummary) => {
     if (!canManage) return;
-    const raw = window.prompt("Rename category", category.name);
-    if (raw === null) return;
-    const name = raw.trim();
-    if (!name || name === category.name) return;
-    try {
-      const body: UpdateServiceCategoryRequest = { name };
-      await platformApi.updateServiceCategory(tenantSlug, category.id, body);
-      await refreshCategories();
-      setStatus(`Renamed to "${name}".`);
-    } catch (error) {
-      setStatus(readErrorMessage(error, "Unable to rename category."));
-    }
+    setCategoryModal({ kind: "rename", category });
   };
 
-  const handleDeleteCategory = async (category: ServiceCategorySummary) => {
+  const handleDeleteCategory = (category: ServiceCategorySummary) => {
     if (!canManage) return;
-    if (
-      !window.confirm(
-        `Delete category "${category.name}"? Services in this category will become uncategorized.`,
-      )
-    ) {
-      return;
-    }
-    try {
-      await platformApi.deleteServiceCategory(tenantSlug, category.id);
-      await Promise.all([refreshCategories(), refreshServices()]);
-      if (selection.kind === "category" && selection.categoryId === category.id) {
-        setSelection({ kind: "none" });
-      }
-      setStatus(`Category "${category.name}" deleted.`);
-    } catch (error) {
-      setStatus(readErrorMessage(error, "Unable to delete category."));
-    }
+    setCategoryModal({ kind: "delete", category });
   };
 
   const handleDuplicateService = async (service: ServiceSummary) => {
@@ -424,13 +399,41 @@ export function ServicesPage({
               const isActive =
                 selection.kind === "category" &&
                 selection.categoryId === category.id;
+              const isDragOver =
+                dragOverTarget.kind === "category" &&
+                dragOverTarget.categoryId === category.id;
+              const isDragging =
+                drag.kind === "category" && drag.categoryId === category.id;
               return (
                 <li
                   key={category.id}
+                  className={[
+                    isDragging ? "services-category-dragging" : "",
+                    isDragOver ? "services-category-drop-target" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   draggable={canManage}
                   onDragStart={() =>
                     setDrag({ kind: "category", categoryId: category.id })
                   }
+                  onDragEnd={() => {
+                    setDrag({ kind: "none" });
+                    setDragOverTarget({ kind: "none" });
+                  }}
+                  onDragEnter={() => {
+                    if (drag.kind === "category") {
+                      setDragOverTarget({ kind: "category", categoryId: category.id });
+                    }
+                  }}
+                  onDragLeave={(event) => {
+                    if (
+                      drag.kind === "category" &&
+                      !(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node)
+                    ) {
+                      setDragOverTarget({ kind: "none" });
+                    }
+                  }}
                   onDragOver={(event) => {
                     if (drag.kind === "category") event.preventDefault();
                   }}
@@ -443,6 +446,7 @@ export function ServicesPage({
                     const idx = moved.indexOf(category.id);
                     moved.splice(idx, 0, drag.categoryId);
                     setDrag({ kind: "none" });
+                    setDragOverTarget({ kind: "none" });
                     void handleReorderCategories(moved);
                   }}
                 >
@@ -457,7 +461,24 @@ export function ServicesPage({
                       setSelection({ kind: "category", categoryId: category.id })
                     }
                   >
-                    <span>{category.name}</span>
+                    <span className="services-category-btn__text">
+                      <span className="services-category-btn__name">
+                        <span className="services-category-handle" aria-hidden="true">
+                          ⋮⋮
+                        </span>
+                        {category.name}
+                      </span>
+                      {category.subheadline ? (
+                        <span className="services-category-btn__subheadline">
+                          {category.subheadline}
+                        </span>
+                      ) : null}
+                      {category.featuredLabel ? (
+                        <span className={`services-category-badge services-category-badge--${category.featuredLabel}`}>
+                          {FEATURED_LABEL_DISPLAY[category.featuredLabel] ?? category.featuredLabel}
+                        </span>
+                      ) : null}
+                    </span>
                     <span className="services-category-count">{count}</span>
                   </button>
                 </li>
@@ -536,6 +557,8 @@ export function ServicesPage({
             servicesByCategory,
             selection,
             canManage,
+            drag,
+            dragOverTarget,
             onSelectService: (id) =>
               setSelection({ kind: "service", serviceId: id }),
             onDuplicate: handleDuplicateService,
@@ -545,10 +568,31 @@ export function ServicesPage({
                 serviceId,
                 fromCategoryKey,
               }),
+            onDragEnd: () => {
+              setDrag({ kind: "none" });
+              setDragOverTarget({ kind: "none" });
+            },
+            onDragEnterService: (serviceId) => {
+              if (drag.kind === "service") {
+                setDragOverTarget({ kind: "service", serviceId });
+              }
+            },
+            onDragLeaveService: () => {
+              setDragOverTarget({ kind: "none" });
+            },
+            onDragEnterGroup: (groupKey) => {
+              if (drag.kind === "service") {
+                setDragOverTarget({ kind: "group", groupKey });
+              }
+            },
+            onDragLeaveGroup: () => {
+              setDragOverTarget({ kind: "none" });
+            },
             onDropOnService: (targetCategoryKey, targetServiceId) => {
               if (drag.kind !== "service") return;
               const movedId = drag.serviceId;
               setDrag({ kind: "none" });
+              setDragOverTarget({ kind: "none" });
               void handleReorderServicesAcrossCategories(
                 targetCategoryKey,
                 movedId,
@@ -559,6 +603,7 @@ export function ServicesPage({
               if (drag.kind !== "service") return;
               const movedId = drag.serviceId;
               setDrag({ kind: "none" });
+              setDragOverTarget({ kind: "none" });
               void handleReorderServicesAcrossCategories(
                 targetCategoryKey,
                 movedId,
@@ -627,6 +672,50 @@ export function ServicesPage({
           }}
         />
       ) : null}
+
+      {categoryModal.kind === "create" ? (
+        <CreateCategoryDialog
+          tenantSlug={tenantSlug}
+          onClose={() => setCategoryModal({ kind: "none" })}
+          onCreated={async (name) => {
+            await refreshCategories();
+            setStatus(`Category "${name}" created.`);
+            setCategoryModal({ kind: "none" });
+          }}
+          onStatus={setStatus}
+        />
+      ) : null}
+
+      {categoryModal.kind === "rename" ? (
+        <RenameCategoryDialog
+          tenantSlug={tenantSlug}
+          category={categoryModal.category}
+          onClose={() => setCategoryModal({ kind: "none" })}
+          onRenamed={async (name) => {
+            await refreshCategories();
+            setStatus(`Renamed to "${name}".`);
+            setCategoryModal({ kind: "none" });
+          }}
+          onStatus={setStatus}
+        />
+      ) : null}
+
+      {categoryModal.kind === "delete" ? (
+        <DeleteCategoryDialog
+          tenantSlug={tenantSlug}
+          category={categoryModal.category}
+          onClose={() => setCategoryModal({ kind: "none" })}
+          onDeleted={async (name, categoryId) => {
+            await Promise.all([refreshCategories(), refreshServices()]);
+            if (selection.kind === "category" && selection.categoryId === categoryId) {
+              setSelection({ kind: "none" });
+            }
+            setStatus(`Category "${name}" deleted.`);
+            setCategoryModal({ kind: "none" });
+          }}
+          onStatus={setStatus}
+        />
+      ) : null}
     </main>
   );
 }
@@ -640,21 +729,35 @@ function renderGroupedServices({
   servicesByCategory,
   selection,
   canManage,
+  drag,
+  dragOverTarget,
   onSelectService,
   onDuplicate,
   onDragStartService,
   onDropOnService,
   onDropOnCategory,
+  onDragEnd,
+  onDragEnterService,
+  onDragLeaveService,
+  onDragEnterGroup,
+  onDragLeaveGroup,
 }: {
   orderedCategories: ServiceCategorySummary[];
   servicesByCategory: Map<string, ServiceSummary[]>;
   selection: SelectionState;
   canManage: boolean;
+  drag: DragState;
+  dragOverTarget: DragOverTarget;
   onSelectService: (serviceId: string) => void;
   onDuplicate: (service: ServiceSummary) => void;
   onDragStartService: (serviceId: string, fromCategoryKey: string) => void;
   onDropOnService: (targetCategoryKey: string, targetServiceId: string) => void;
   onDropOnCategory: (targetCategoryKey: string) => void;
+  onDragEnd: () => void;
+  onDragEnterService: (serviceId: string) => void;
+  onDragLeaveService: (serviceId: string) => void;
+  onDragEnterGroup: (groupKey: string) => void;
+  onDragLeaveGroup: (groupKey: string) => void;
 }) {
   const groupsToShow: Array<{ key: string; label: string; list: ServiceSummary[] }> = [];
   if (selection.kind === "category") {
@@ -681,82 +784,126 @@ function renderGroupedServices({
 
   return (
     <div className="services-groups">
-      {groupsToShow.map((group) => (
-        <section
-          key={group.key}
-          className="services-group"
-          onDragOver={(event) => {
-            event.preventDefault();
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
-            onDropOnCategory(group.key);
-          }}
-        >
-          <header className="services-group-header">
-            <h5>{group.label}</h5>
-            <span className="services-category-count">{group.list.length}</span>
-          </header>
-          {group.list.length === 0 ? (
-            <p className="services-group-empty">No services yet.</p>
-          ) : (
-            <ul className="services-row-list">
-              {group.list.map((service) => {
-                const isSelected =
-                  selection.kind === "service" &&
-                  selection.serviceId === service.id;
-                return (
-                  <li
-                    key={service.id}
-                    draggable={canManage}
-                    onDragStart={() =>
-                      onDragStartService(service.id, group.key)
-                    }
-                    onDragOver={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                    }}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      onDropOnService(group.key, service.id);
-                    }}
-                  >
-                    <button
-                      type="button"
-                      className={
-                        isSelected
-                          ? "services-row-btn is-selected"
-                          : "services-row-btn"
+      {groupsToShow.map((group) => {
+        const isGroupDragOver =
+          dragOverTarget.kind === "group" && dragOverTarget.groupKey === group.key;
+        return (
+          <section
+            key={group.key}
+            className={`services-group${isGroupDragOver ? " services-group--drop-target" : ""}`}
+            onDragEnter={() => {
+              if (drag.kind === "service") {
+                onDragEnterGroup(group.key);
+              }
+            }}
+            onDragLeave={(event) => {
+              if (
+                drag.kind === "service" &&
+                !(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node)
+              ) {
+                onDragLeaveGroup(group.key);
+              }
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              onDropOnCategory(group.key);
+            }}
+          >
+            <header className="services-group-header">
+              <h5>{group.label}</h5>
+              <span className="services-category-count">{group.list.length}</span>
+            </header>
+            {group.list.length === 0 ? (
+              <p className="services-group-empty">
+                {drag.kind === "service" ? "Drop service here" : "No services yet."}
+              </p>
+            ) : (
+              <ul className="services-row-list">
+                {group.list.map((service) => {
+                  const isSelected =
+                    selection.kind === "service" &&
+                    selection.serviceId === service.id;
+                  const isServiceDragOver =
+                    dragOverTarget.kind === "service" &&
+                    dragOverTarget.serviceId === service.id;
+                  const isServiceDragging =
+                    drag.kind === "service" && drag.serviceId === service.id;
+                  return (
+                    <li
+                      key={service.id}
+                      className={[
+                        isServiceDragging ? "services-row-dragging" : "",
+                        isServiceDragOver ? "services-row-drop-target" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      draggable={canManage}
+                      onDragStart={() =>
+                        onDragStartService(service.id, group.key)
                       }
-                      onClick={() => onSelectService(service.id)}
+                      onDragEnd={onDragEnd}
+                      onDragEnter={() => {
+                        if (drag.kind === "service") {
+                          onDragEnterService(service.id);
+                        }
+                      }}
+                      onDragLeave={(event) => {
+                        if (
+                          drag.kind === "service" &&
+                          !(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node)
+                        ) {
+                          onDragLeaveService(service.id);
+                        }
+                      }}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onDropOnService(group.key, service.id);
+                      }}
                     >
-                      <span className="services-row-name">
-                        <span className="services-row-handle" aria-hidden="true">
-                          ⋮⋮
-                        </span>
-                        {service.name}
-                      </span>
-                      <span className="services-row-meta">
-                        {service.durationMinutes} min · {formatMoney(service.priceCents)}
-                      </span>
-                    </button>
-                    {canManage ? (
                       <button
                         type="button"
-                        className="ghost-action"
-                        onClick={() => onDuplicate(service)}
+                        className={
+                          isSelected
+                            ? "services-row-btn is-selected"
+                            : "services-row-btn"
+                        }
+                        onClick={() => onSelectService(service.id)}
                       >
-                        Duplicate
+                        <span className="services-row-name">
+                          <span className="services-row-handle" aria-hidden="true">
+                            ⋮⋮
+                          </span>
+                          {service.name}
+                        </span>
+                        <span className="services-row-meta">
+                          {service.durationMinutes} min · {formatMoney(service.priceCents)}
+                        </span>
                       </button>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-      ))}
+                      {canManage ? (
+                        <button
+                          type="button"
+                          className="ghost-action"
+                          onClick={() => onDuplicate(service)}
+                        >
+                          Duplicate
+                        </button>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        );
+      })}
     </div>
   );
 }
@@ -769,6 +916,8 @@ type ServiceFormState = {
   name: string;
   description: string;
   durationMinutes: string;
+  setupBufferMinutes: string;
+  cleanupBufferMinutes: string;
   priceAmount: string;
   depositAmount: string;
   categoryId: string;
@@ -781,6 +930,8 @@ function toFormState(service: ServiceSummary): ServiceFormState {
     name: service.name,
     description: service.description ?? "",
     durationMinutes: String(service.durationMinutes),
+    setupBufferMinutes: String(service.setupBufferMinutes ?? 0),
+    cleanupBufferMinutes: String(service.cleanupBufferMinutes ?? 0),
     priceAmount: (service.priceCents / 100).toFixed(2),
     depositAmount: (service.depositCents / 100).toFixed(2),
     categoryId: service.categoryId ?? "",
@@ -891,6 +1042,8 @@ function ServiceDetailPanel({
     const body: UpdateServiceRequest = {
       name,
       durationMinutes,
+      setupBufferMinutes: Number(form.setupBufferMinutes) || 0,
+      cleanupBufferMinutes: Number(form.cleanupBufferMinutes) || 0,
       priceCents,
       depositCents,
       locationIds: form.locationIds,
@@ -1072,6 +1225,38 @@ function ServiceDetailPanel({
                 }
                 required
               />
+            </label>
+            <label>
+              <span>Setup buffer (minutes)</span>
+              <input
+                type="number"
+                min={0}
+                step={5}
+                value={form.setupBufferMinutes}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    setupBufferMinutes: event.target.value,
+                  }))
+                }
+              />
+              <small className="field-help">Time blocked before the appointment for room prep.</small>
+            </label>
+            <label>
+              <span>Cleanup buffer (minutes)</span>
+              <input
+                type="number"
+                min={0}
+                step={5}
+                value={form.cleanupBufferMinutes}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    cleanupBufferMinutes: event.target.value,
+                  }))
+                }
+              />
+              <small className="field-help">Time blocked after the appointment for turnover.</small>
             </label>
             <label>
               <span>Price</span>
@@ -1342,6 +1527,8 @@ function CreateServiceDialog({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [durationMinutes, setDurationMinutes] = useState("60");
+  const [setupBufferMinutes, setSetupBufferMinutes] = useState("0");
+  const [cleanupBufferMinutes, setCleanupBufferMinutes] = useState("0");
   const [priceAmount, setPriceAmount] = useState("");
   const [depositAmount, setDepositAmount] = useState(
     (defaultDepositCents / 100).toFixed(2),
@@ -1378,6 +1565,8 @@ function CreateServiceDialog({
       name: trimmedName,
       description: description.trim() || undefined,
       durationMinutes: duration,
+      setupBufferMinutes: Number(setupBufferMinutes) || 0,
+      cleanupBufferMinutes: Number(cleanupBufferMinutes) || 0,
       priceCents,
       depositCents,
       locationIds,
@@ -1441,6 +1630,28 @@ function CreateServiceDialog({
                 onChange={(event) => setDurationMinutes(event.target.value)}
                 required
               />
+            </label>
+            <label>
+              <span>Setup buffer (minutes)</span>
+              <input
+                type="number"
+                min={0}
+                step={5}
+                value={setupBufferMinutes}
+                onChange={(event) => setSetupBufferMinutes(event.target.value)}
+              />
+              <small className="field-help">Time blocked before the appointment for room prep.</small>
+            </label>
+            <label>
+              <span>Cleanup buffer (minutes)</span>
+              <input
+                type="number"
+                min={0}
+                step={5}
+                value={cleanupBufferMinutes}
+                onChange={(event) => setCleanupBufferMinutes(event.target.value)}
+              />
+              <small className="field-help">Time blocked after the appointment for turnover.</small>
             </label>
             <label>
               <span>Price</span>
@@ -1520,6 +1731,228 @@ function CreateServiceDialog({
 }
 
 // ===========================================================================
+// Create Category Dialog
+// ===========================================================================
+
+function CreateCategoryDialog({
+  tenantSlug,
+  onClose,
+  onCreated,
+  onStatus,
+}: {
+  tenantSlug: string;
+  onClose: () => void;
+  onCreated: (name: string) => Promise<void> | void;
+  onStatus: (message: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError("Enter a category name.");
+      return;
+    }
+    const body: CreateServiceCategoryRequest = { name: trimmedName };
+    setSaving(true);
+    try {
+      await platformApi.createServiceCategory(tenantSlug, body);
+      await onCreated(trimmedName);
+    } catch (err) {
+      onStatus(readErrorMessage(err, "Unable to create category."));
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Add category">
+      <div className="modal-panel">
+        <header className="modal-header">
+          <h4>Add category</h4>
+          <button type="button" className="ghost-action" onClick={onClose}>
+            Close
+          </button>
+        </header>
+        <form className="modal-form" onSubmit={handleSubmit}>
+          {error ? (
+            <div className="message-banner message-banner--error">{error}</div>
+          ) : null}
+          <label>
+            <span>Category name</span>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="e.g. Brows, Facials, Lamination"
+              autoFocus
+            />
+          </label>
+          <div className="modal-actions">
+            <button type="button" className="ghost-action" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="primary-action" disabled={saving}>
+              {saving ? "Creating…" : "Create category"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
+// Rename Category Dialog
+// ===========================================================================
+
+function RenameCategoryDialog({
+  tenantSlug,
+  category,
+  onClose,
+  onRenamed,
+  onStatus,
+}: {
+  tenantSlug: string;
+  category: ServiceCategorySummary;
+  onClose: () => void;
+  onRenamed: (name: string) => Promise<void> | void;
+  onStatus: (message: string) => void;
+}) {
+  const [name, setName] = useState(category.name);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError("Enter a category name.");
+      return;
+    }
+    if (trimmedName === category.name) {
+      onClose();
+      return;
+    }
+    const body: UpdateServiceCategoryRequest = { name: trimmedName };
+    setSaving(true);
+    try {
+      await platformApi.updateServiceCategory(tenantSlug, category.id, body);
+      await onRenamed(trimmedName);
+    } catch (err) {
+      onStatus(readErrorMessage(err, "Unable to rename category."));
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Rename category">
+      <div className="modal-panel">
+        <header className="modal-header">
+          <h4>Rename category</h4>
+          <button type="button" className="ghost-action" onClick={onClose}>
+            Close
+          </button>
+        </header>
+        <form className="modal-form" onSubmit={handleSubmit}>
+          {error ? (
+            <div className="message-banner message-banner--error">{error}</div>
+          ) : null}
+          <label>
+            <span>Category name</span>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              autoFocus
+            />
+          </label>
+          <div className="modal-actions">
+            <button type="button" className="ghost-action" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="primary-action" disabled={saving}>
+              {saving ? "Saving…" : "Rename"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
+// Delete Category Dialog
+// ===========================================================================
+
+function DeleteCategoryDialog({
+  tenantSlug,
+  category,
+  onClose,
+  onDeleted,
+  onStatus,
+}: {
+  tenantSlug: string;
+  category: ServiceCategorySummary;
+  onClose: () => void;
+  onDeleted: (name: string, categoryId: string) => Promise<void> | void;
+  onStatus: (message: string) => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await platformApi.deleteServiceCategory(tenantSlug, category.id);
+      await onDeleted(category.name, category.id);
+    } catch (err) {
+      onStatus(readErrorMessage(err, "Unable to delete category."));
+      onClose();
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Delete category">
+      <div className="modal-panel">
+        <header className="modal-header">
+          <h4>Delete category</h4>
+          <button type="button" className="ghost-action" onClick={onClose}>
+            Close
+          </button>
+        </header>
+        <div className="modal-form">
+          <p>
+            Delete category <strong>{category.name}</strong>? Services in this
+            category will become uncategorized.
+          </p>
+          <div className="modal-actions">
+            <button type="button" className="ghost-action" onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="primary-action"
+              disabled={deleting}
+              onClick={handleDelete}
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
 // Category detail panel — Hormozi-aligned landing-page merchandising
 // ===========================================================================
 
@@ -1530,6 +1963,13 @@ const FEATURED_LABEL_OPTIONS: Array<{ value: "" | CategoryFeaturedLabel; label: 
   { value: "new", label: "New" },
   { value: "limited", label: "Limited" },
 ];
+
+const FEATURED_LABEL_DISPLAY: Record<string, string> = {
+  signature: "Signature",
+  most_popular: "Most popular",
+  new: "New",
+  limited: "Limited",
+};
 
 type CategoryFormState = {
   name: string;

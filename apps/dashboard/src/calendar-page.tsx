@@ -61,10 +61,19 @@ type CalendarAppointment = {
   providerId: string;
   providerName: string;
   customerName: string;
+  customerEmail?: string | null;
+  customerPhone?: string | null;
   serviceId: string;
   serviceName: string;
+  serviceDescription?: string | null;
   status: BookingSummary["status"];
   paymentResolution: BookingSummary["paymentResolution"];
+  priceCents: number;
+  depositCents: number;
+  amountPaidCents: number;
+  balanceDueCents: number;
+  durationMinutes: number;
+  notes?: string | null;
 };
 
 type ScheduleColumn = {
@@ -358,6 +367,15 @@ function getBookingStatusLabel(status: BookingSummary["status"]): string {
   }
 }
 
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
+
+function formatMoney(cents: number): string {
+  return currencyFormatter.format(cents / 100);
+}
+
 function getPaymentResolutionLabel(resolution: BookingSummary["paymentResolution"]): string {
   switch (resolution) {
     case "pending":
@@ -397,10 +415,19 @@ function createCalendarAppointment(booking: BookingSummary): CalendarAppointment
     providerId: booking.providerId,
     providerName: booking.provider.name,
     customerName: booking.customer.name,
+    customerEmail: booking.customer.email ?? null,
+    customerPhone: booking.customer.phone ?? null,
     serviceId: booking.serviceId,
     serviceName: booking.service.name,
+    serviceDescription: booking.service.description ?? null,
     status: booking.status,
     paymentResolution: booking.paymentResolution,
+    priceCents: booking.service.priceCents,
+    depositCents: booking.service.depositCents,
+    amountPaidCents: booking.amountPaidCents,
+    balanceDueCents: booking.balanceDueCents,
+    durationMinutes: booking.service.durationMinutes,
+    notes: booking.notes ?? null,
   };
 }
 
@@ -1410,14 +1437,6 @@ export function CalendarPage({
     }
   };
 
-  const selectedAppointmentTimeLabel = selectedAppointment ? formatDateTime(selectedAppointment.startAt) : "Select an appointment";
-  const selectedProviderLabel = selectedAppointment?.providerName ?? "Select an appointment";
-  const selectedCustomerLabel = selectedAppointment?.customerName ?? "Select an appointment";
-  const selectedServiceLabel = selectedAppointment?.serviceName ?? "Select an appointment";
-  const selectedStatusLabel = selectedAppointment ? getBookingStatusLabel(selectedAppointment.status) : "Select an appointment";
-  const selectedPaymentLabel = selectedAppointment
-    ? getPaymentResolutionLabel(selectedAppointment.paymentResolution)
-    : "Select an appointment";
   const draftHref =
     draftCreationState.kind === "success"
       ? `${storefrontBaseUrl}/${tenantSlug}/book/${draftCreationState.draftId}`
@@ -1568,12 +1587,6 @@ export function CalendarPage({
         selectedAppointment={selectedAppointment}
         formResponsesState={formResponsesState}
         intakeStatus={selectedAppointment ? (intakeStatusByBookingId[selectedAppointment.id] ?? "unknown") : "unknown"}
-        selectedCustomerLabel={selectedCustomerLabel}
-        selectedServiceLabel={selectedServiceLabel}
-        selectedAppointmentTimeLabel={selectedAppointmentTimeLabel}
-        selectedProviderLabel={selectedProviderLabel}
-        selectedStatusLabel={selectedStatusLabel}
-        selectedPaymentLabel={selectedPaymentLabel}
         onClose={handleCloseAppointmentDrawer}
       />
       <TimeBlockDetailsDrawer
@@ -2677,32 +2690,24 @@ type AppointmentDetailsDrawerProps = {
   selectedAppointment: SelectedCalendarAppointment | null;
   formResponsesState: FormResponsesState;
   intakeStatus: IntakeStatus;
-  selectedCustomerLabel: string;
-  selectedServiceLabel: string;
-  selectedAppointmentTimeLabel: string;
-  selectedProviderLabel: string;
-  selectedStatusLabel: string;
-  selectedPaymentLabel: string;
   onClose: () => void;
+  onComplete?: (appointment: SelectedCalendarAppointment) => void;
 };
 
 function AppointmentDetailsDrawer({
   selectedAppointment,
   formResponsesState,
   intakeStatus,
-  selectedCustomerLabel,
-  selectedServiceLabel,
-  selectedAppointmentTimeLabel,
-  selectedProviderLabel,
-  selectedStatusLabel,
-  selectedPaymentLabel,
   onClose,
+  onComplete,
 }: AppointmentDetailsDrawerProps): ReactElement | null {
   if (!selectedAppointment) {
     return null;
   }
 
   const selectedAppointmentClockLabel = timeFormatter.format(new Date(selectedAppointment.startAt));
+  const statusLabel = getBookingStatusLabel(selectedAppointment.status);
+  const isConfirmed = selectedAppointment.status === "confirmed";
 
   return (
     <>
@@ -2716,11 +2721,18 @@ function AppointmentDetailsDrawer({
         <header className="appointment-details-drawer__header">
           <span className="appointment-status-chip">
             <span aria-hidden="true" />
-            {selectedStatusLabel}
+            {statusLabel}
           </span>
-          <button type="button" className="appointment-drawer-outline-action" onClick={onClose}>
-            Close
-          </button>
+          <div className="slot-action-drawer__header-actions">
+            {isConfirmed ? (
+              <button type="button" className="appointment-drawer-outline-action">
+                Check in
+              </button>
+            ) : null}
+            <button type="button" className="appointment-drawer-outline-action" onClick={onClose}>
+              Close
+            </button>
+          </div>
         </header>
 
         <div className="appointment-drawer-when" aria-label="Appointment timing">
@@ -2732,7 +2744,7 @@ function AppointmentDetailsDrawer({
           </div>
         </div>
 
-        <section className="booking-rail-section booking-rail-section--customer" aria-label="Customer summary">
+        <section className="booking-rail-section booking-rail-section--customer" aria-label="Customer details">
           <p className="rail-section-kicker">Customer</p>
           <div className="appointment-customer-card">
             <span className="appointment-customer-avatar" aria-hidden="true">{getInitials(selectedAppointment.customerName)}</span>
@@ -2741,44 +2753,53 @@ function AppointmentDetailsDrawer({
               <span>Client profile</span>
             </div>
           </div>
-          <div className="drawer-form-preview">
-            <label>
-              <span>Customer</span>
-              <input value={selectedCustomerLabel} readOnly />
-            </label>
-            <label>
-              <span>Provider</span>
-              <input value={selectedProviderLabel} readOnly />
-            </label>
+          <div className="appointment-customer-fields">
+            {selectedAppointment.customerPhone ? (
+              <div className="appointment-customer-field">
+                <span className="appointment-customer-field__label">Phone</span>
+                <span className="appointment-customer-field__value">{selectedAppointment.customerPhone}</span>
+              </div>
+            ) : null}
+            {selectedAppointment.customerEmail ? (
+              <div className="appointment-customer-field">
+                <span className="appointment-customer-field__label">Email</span>
+                <span className="appointment-customer-field__value">{selectedAppointment.customerEmail}</span>
+              </div>
+            ) : null}
           </div>
         </section>
 
-        <section className="booking-rail-section" aria-label="Appointment details preview">
+        <section className="booking-rail-section" aria-label="Appointment details">
           <p className="rail-section-kicker">Appointment</p>
           <div className="appointment-summary-card">
-            <div>
-              <strong>{selectedServiceLabel}</strong>
-              <span>{selectedPaymentLabel}</span>
+            <div className="appointment-summary-card__row">
+              <strong>{selectedAppointment.serviceName}</strong>
+              <span className="appointment-summary-card__price">{formatMoney(selectedAppointment.priceCents)}</span>
             </div>
-            <p>{`${selectedAppointmentTimeLabel} · ${selectedProviderLabel}`}</p>
+            <p className="appointment-summary-card__meta">
+              {selectedAppointment.durationMinutes} min · {selectedAppointment.providerName}
+            </p>
+            {selectedAppointment.notes ? (
+              <p className="appointment-summary-card__notes">{selectedAppointment.notes}</p>
+            ) : null}
           </div>
-          <div className="drawer-form-preview drawer-form-preview--compact">
-            <label>
-              <span>Service</span>
-              <input value={selectedServiceLabel} readOnly />
-            </label>
-            <label>
-              <span>Scheduled time</span>
-              <input value={selectedAppointmentTimeLabel} readOnly />
-            </label>
-            <label>
-              <span>Booking status</span>
-              <input value={selectedStatusLabel} readOnly />
-            </label>
-            <label>
-              <span>Payment status</span>
-              <input value={selectedPaymentLabel} readOnly />
-            </label>
+          <div className="appointment-payment-summary">
+            {selectedAppointment.depositCents > 0 ? (
+              <div className="appointment-payment-row">
+                <span>Deposit</span>
+                <span>{formatMoney(selectedAppointment.depositCents)}</span>
+              </div>
+            ) : null}
+            <div className="appointment-payment-row">
+              <span>Paid</span>
+              <span>{formatMoney(selectedAppointment.amountPaidCents)}</span>
+            </div>
+            {selectedAppointment.balanceDueCents > 0 ? (
+              <div className="appointment-payment-row appointment-payment-row--due">
+                <span>Balance due</span>
+                <span>{formatMoney(selectedAppointment.balanceDueCents)}</span>
+              </div>
+            ) : null}
           </div>
         </section>
 
@@ -2789,6 +2810,25 @@ function AppointmentDetailsDrawer({
             intakeStatus={intakeStatus}
           />
         </section>
+
+        {isConfirmed ? (
+          <div className="appointment-drawer-footer">
+            <div className="appointment-drawer-footer__actions">
+              <button type="button" className="text-action">Message</button>
+              <span className="text-action-separator">·</span>
+              <button type="button" className="text-action">Reschedule</button>
+            </div>
+            {onComplete ? (
+              <button
+                type="button"
+                className="primary-action"
+                onClick={() => onComplete(selectedAppointment)}
+              >
+                Complete
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </aside>
     </>
   );

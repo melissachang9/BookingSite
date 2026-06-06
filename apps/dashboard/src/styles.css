@@ -2318,6 +2318,129 @@ body {
   font-size: 0.82rem;
 }
 
+.appointment-summary-card__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.appointment-summary-card__price {
+  flex: 0 0 auto;
+  color: var(--ui-ink);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.appointment-summary-card__meta {
+  margin: 0;
+  color: var(--ui-ink-soft);
+  font-size: 0.82rem;
+}
+
+.appointment-summary-card__notes {
+  margin: 0;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(106, 87, 69, 0.25);
+  color: var(--ui-ink-soft);
+  font-size: 0.82rem;
+  font-style: italic;
+}
+
+.appointment-customer-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.appointment-customer-field {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr);
+  gap: 0.7rem;
+  align-items: center;
+  padding: 0.55rem 0;
+  border-bottom: 1px dashed rgba(106, 87, 69, 0.3);
+}
+
+.appointment-customer-field:last-child {
+  border-bottom: 0;
+}
+
+.appointment-customer-field__label {
+  color: var(--ui-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.appointment-customer-field__value {
+  color: var(--ui-ink);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.appointment-payment-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.appointment-payment-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px dashed rgba(106, 87, 69, 0.25);
+  font-size: 0.82rem;
+  color: var(--ui-ink-soft);
+}
+
+.appointment-payment-row:last-child {
+  border-bottom: 0;
+}
+
+.appointment-payment-row--due {
+  color: var(--ui-ink);
+  font-weight: 700;
+}
+
+.appointment-drawer-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(106, 87, 69, 0.35);
+  margin-top: auto;
+}
+
+.appointment-drawer-footer__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.text-action {
+  background: transparent;
+  border: 0;
+  color: var(--ui-ink);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  padding: 0;
+}
+
+.text-action-separator {
+  color: var(--ui-muted);
+  opacity: 0.4;
+  user-select: none;
+}
+
 .time-block-summary-card {
   background: repeating-linear-gradient(135deg, #d6c8b0, #d6c8b0 6px, #c4b298 6px, #c4b298 12px);
 }
@@ -3064,6 +3187,145 @@ body {
 .schedule-entry-field input, .schedule-entry-field select { min-width: 8rem; }
 .schedule-entry-remove { color: var(--color-danger, #b91c1c); }
 
+/* Customer CRM */
+.customer-search-bar {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--color-border, rgba(0,0,0,0.08));
+}
+.customer-search-bar input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--color-border, rgba(0,0,0,0.18));
+  border-radius: 6px;
+  background: #fff;
+}
+.staff-list-empty {
+  padding: 1rem;
+  color: var(--text-muted, #6b7280);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+.staff-detail-panel {
+  padding: 1.25rem 1.5rem;
+  min-width: 0;
+}
+.staff-detail-empty {
+  padding: 2rem 0;
+  color: var(--text-muted, #6b7280);
+  font-size: 0.9rem;
+  font-style: italic;
+  text-align: center;
+}
+.customer-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.customer-profile-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.customer-profile-header h4 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+.customer-profile-since {
+  margin: 0.15rem 0 0;
+  color: var(--ui-ink-soft, #6b4a36);
+  font-size: 0.82rem;
+}
+.customer-profile-section {
+  padding-top: 1rem;
+  border-top: 1px solid rgba(106, 87, 69, 0.35);
+}
+.customer-profile-notes {
+  margin: 0.5rem 0 0;
+  color: var(--ui-ink-soft, #6b4a36);
+  font-size: 0.88rem;
+  font-style: italic;
+  line-height: 1.5;
+}
+.customer-booking-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.customer-booking-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--ui-border, #e5e7eb);
+  border-radius: 8px;
+  background: var(--ui-paper, #fff);
+}
+.customer-booking-row__main {
+  min-width: 0;
+  flex: 1;
+}
+.customer-booking-row__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.customer-booking-row__header strong {
+  font-size: 0.9rem;
+}
+.customer-booking-row__meta {
+  margin: 0.25rem 0 0;
+  color: var(--ui-ink-soft, #6b4a36);
+  font-size: 0.8rem;
+}
+.customer-booking-row__payment {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.customer-booking-row__balance {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #b8896b;
+}
+.customer-booking-status {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+.customer-booking-status--confirmed {
+  background: #e8d6b8;
+  color: #6b4a36;
+}
+.customer-booking-status--completed {
+  background: #d4dcc4;
+  color: #4a5a3a;
+}
+.customer-booking-status--canceled {
+  background: rgba(179, 38, 30, 0.1);
+  color: #b3261e;
+}
+.customer-booking-status--no_show {
+  background: rgba(179, 38, 30, 0.08);
+  color: #8a1a14;
+}
+
 /* Provider time off */
 .time-off-tab { gap: 1.5rem; }
 .time-off-list h4, .time-off-form h4 { margin: 0 0 0.5rem; font-size: 0.95rem; }
@@ -3210,11 +3472,76 @@ body {
   padding: 0.5rem 0.6rem;
   cursor: pointer;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.5rem;
   font-size: 0.9rem;
   color: var(--ui-ink, #111827);
+}
+.services-category-btn__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+.services-category-btn__name {
+  font-weight: inherit;
+  line-height: 1.3;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.services-category-handle {
+  color: var(--text-muted, #9ca3af);
+  cursor: grab;
+  font-size: 0.8rem;
+  user-select: none;
+  flex-shrink: 0;
+}
+.services-category-dragging {
+  opacity: 0.4;
+}
+.services-category-drop-target {
+  background: rgba(200, 153, 104, 0.12);
+  border-radius: 8px;
+  outline: 2px dashed rgba(200, 153, 104, 0.5);
+  outline-offset: -2px;
+}
+.services-category-btn__subheadline {
+  font-size: 0.75rem;
+  color: var(--text-muted, #6b7280);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.services-category-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  margin-top: 0.15rem;
+}
+.services-category-badge--signature {
+  background: rgba(200, 153, 104, 0.18);
+  color: #a47744;
+}
+.services-category-badge--most_popular {
+  background: rgba(107, 74, 54, 0.12);
+  color: #6b4a36;
+}
+.services-category-badge--new {
+  background: rgba(74, 52, 41, 0.1);
+  color: #4a3429;
+}
+.services-category-badge--limited {
+  background: rgba(168, 150, 143, 0.15);
+  color: #8a7a72;
 }
 .services-category-btn:hover {
   background: rgba(244, 216, 207, 0.18);
@@ -3318,6 +3645,29 @@ body {
   cursor: grab;
   font-size: 0.85rem;
   user-select: none;
+}
+.services-row-dragging {
+  opacity: 0.35;
+}
+.services-row-drop-target {
+  position: relative;
+}
+.services-row-drop-target::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--amber, #c89968);
+  border-radius: 2px;
+  z-index: 1;
+}
+.services-group--drop-target {
+  background: rgba(200, 153, 104, 0.08);
+  border-radius: 8px;
+  outline: 2px dashed rgba(200, 153, 104, 0.4);
+  outline-offset: -2px;
 }
 .services-row-meta {
   font-size: 0.8rem;

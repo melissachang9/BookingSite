@@ -309,55 +309,6 @@ class UpdateLocationRequest(CamelModel):
         return self
 
 
-class ServiceSummaryResponse(CamelModel):
-    id: str
-    tenant_id: str
-    created_at: datetime
-    updated_at: datetime
-    name: str
-    description: str | None = None
-    duration_minutes: int
-    price_cents: int
-    deposit_cents: int
-    is_active: bool
-    image_url: str | None = None
-    image_alt_text: str | None = None
-    location_ids: list[str]
-    form_ids: list[str]
-    category_id: str | None = None
-    sort_order: int = 0
-
-
-class CreateServiceRequest(CamelModel):
-    name: str = Field(min_length=1, max_length=255)
-    description: str | None = Field(default=None, max_length=2000)
-    duration_minutes: int = Field(ge=15, le=480)
-    price_cents: int = Field(ge=0, le=500_000)
-    deposit_cents: int = Field(ge=0, le=500_000)
-    location_ids: list[str] = Field(min_length=1)
-    is_active: bool = True
-    category_id: str | None = None
-
-    @model_validator(mode="after")
-    def validate_deposit(self) -> "CreateServiceRequest":
-        if self.deposit_cents > self.price_cents:
-            raise ValueError("Deposit cannot exceed the service price.")
-        return self
-
-
-class UpdateServiceRequest(CamelModel):
-    name: str | None = Field(default=None, min_length=1, max_length=255)
-    description: str | None = Field(default=None, max_length=2000)
-    duration_minutes: int | None = Field(default=None, ge=15, le=480)
-    price_cents: int | None = Field(default=None, ge=0, le=500_000)
-    deposit_cents: int | None = Field(default=None, ge=0, le=500_000)
-    location_ids: list[str] | None = None
-    is_active: bool | None = None
-    category_id: str | None = None
-    clear_category: bool = False
-    clear_description: bool = False
-
-
 class ValueStackItem(CamelModel):
     label: str = Field(min_length=1, max_length=255)
     est_value_cents: int | None = Field(default=None, ge=0, le=10_000_000)
@@ -375,6 +326,126 @@ class CategoryFaqItem(CamelModel):
 
 
 FEATURED_LABELS = ("signature", "most_popular", "new", "limited")
+
+
+class ServiceSummaryResponse(CamelModel):
+    id: str
+    tenant_id: str
+    created_at: datetime
+    updated_at: datetime
+    name: str
+    description: str | None = None
+    duration_minutes: int
+    setup_buffer_minutes: int = 0
+    cleanup_buffer_minutes: int = 0
+    price_cents: int
+    deposit_cents: int
+    is_active: bool
+    image_url: str | None = None
+    image_alt_text: str | None = None
+    location_ids: list[str]
+    form_ids: list[str]
+    category_id: str | None = None
+    sort_order: int = 0
+    slug: str | None = None
+    outcome_headline: str | None = None
+    subheadline: str | None = None
+    compare_at_price_cents: int | None = None
+    featured_label: str | None = None
+    value_stack: list[ValueStackItem] = Field(default_factory=list)
+    bonuses: list[ValueStackItem] = Field(default_factory=list)
+    guarantee_text: str | None = None
+    social_proof: SocialProof | None = None
+    scarcity_hint: str | None = None
+    before_image_url: str | None = None
+    before_image_alt: str | None = None
+    after_image_url: str | None = None
+    after_image_alt: str | None = None
+    meta_description: str | None = None
+
+
+class CreateServiceRequest(CamelModel):
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    duration_minutes: int = Field(ge=15, le=480)
+    setup_buffer_minutes: int = Field(default=0, ge=0, le=120)
+    cleanup_buffer_minutes: int = Field(default=0, ge=0, le=120)
+    price_cents: int = Field(ge=0, le=500_000)
+    deposit_cents: int = Field(ge=0, le=500_000)
+    location_ids: list[str] = Field(min_length=1)
+    is_active: bool = True
+    category_id: str | None = None
+    slug: str | None = Field(default=None, max_length=255)
+
+    @model_validator(mode="after")
+    def validate_deposit(self) -> "CreateServiceRequest":
+        if self.deposit_cents > self.price_cents:
+            raise ValueError("Deposit cannot exceed the service price.")
+        return self
+
+
+class UpdateServiceRequest(CamelModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    duration_minutes: int | None = Field(default=None, ge=15, le=480)
+    setup_buffer_minutes: int | None = Field(default=None, ge=0, le=120)
+    cleanup_buffer_minutes: int | None = Field(default=None, ge=0, le=120)
+    price_cents: int | None = Field(default=None, ge=0, le=500_000)
+    deposit_cents: int | None = Field(default=None, ge=0, le=500_000)
+    location_ids: list[str] | None = None
+    is_active: bool | None = None
+    category_id: str | None = None
+    clear_category: bool = False
+    clear_description: bool = False
+    slug: str | None = Field(default=None, max_length=255)
+    outcome_headline: str | None = Field(default=None, max_length=255)
+    subheadline: str | None = Field(default=None, max_length=4000)
+    compare_at_price_cents: int | None = Field(default=None, ge=0, le=500_000)
+    featured_label: str | None = Field(default=None, max_length=32)
+    value_stack: list[ValueStackItem] | None = Field(default=None, max_length=12)
+    bonuses: list[ValueStackItem] | None = Field(default=None, max_length=12)
+    guarantee_text: str | None = Field(default=None, max_length=2000)
+    social_proof: SocialProof | None = None
+    scarcity_hint: str | None = Field(default=None, max_length=255)
+    image_url: str | None = Field(default=None, max_length=2048)
+    image_alt_text: str | None = Field(default=None, max_length=255)
+    before_image_url: str | None = Field(default=None, max_length=2048)
+    before_image_alt: str | None = Field(default=None, max_length=255)
+    after_image_url: str | None = Field(default=None, max_length=2048)
+    after_image_alt: str | None = Field(default=None, max_length=255)
+    meta_description: str | None = Field(default=None, max_length=320)
+    clear_slug: bool = False
+    clear_outcome_headline: bool = False
+    clear_subheadline: bool = False
+    clear_compare_at_price: bool = False
+    clear_featured_label: bool = False
+    clear_guarantee_text: bool = False
+    clear_social_proof: bool = False
+    clear_scarcity_hint: bool = False
+    clear_image: bool = False
+    clear_before_image: bool = False
+    clear_after_image: bool = False
+    clear_meta_description: bool = False
+
+    @model_validator(mode="after")
+    def _validate(self) -> "UpdateServiceRequest":
+        if (
+            self.featured_label is not None
+            and self.featured_label.strip()
+            and self.featured_label.strip() not in FEATURED_LABELS
+        ):
+            raise ValueError(
+                f"featuredLabel must be one of: {', '.join(FEATURED_LABELS)}."
+            )
+        if (
+            self.compare_at_price_cents is not None
+            and self.price_cents is not None
+            and self.compare_at_price_cents <= self.price_cents
+        ):
+            raise ValueError(
+                "compareAtPriceCents must be greater than priceCents to act as an anchor."
+            )
+        return self
 
 
 class ServiceCategorySummaryResponse(CamelModel):
@@ -448,6 +519,11 @@ class UpdateServiceCategoryRequest(CamelModel):
 class PublicCategoryResponse(CamelModel):
     category: ServiceCategorySummaryResponse
     services: list[ServiceSummaryResponse]
+
+
+class PublicServiceResponse(CamelModel):
+    service: ServiceSummaryResponse
+    category: ServiceCategorySummaryResponse | None = None
 
 
 class ReorderRequest(CamelModel):

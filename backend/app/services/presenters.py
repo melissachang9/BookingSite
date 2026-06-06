@@ -123,7 +123,12 @@ def location_to_summary(location: Location) -> LocationSummaryResponse:
 
 
 def service_to_summary(service: Service, tenant: Tenant | None = None) -> ServiceSummaryResponse:
-    image_url, image_alt_text = _service_media_for(service, tenant)
+    fallback_image_url, fallback_image_alt = _service_media_for(service, tenant)
+    image_url = service.image_url or fallback_image_url
+    image_alt_text = service.image_alt_text or fallback_image_alt
+    value_stack = service.value_stack if isinstance(service.value_stack, list) else []
+    bonuses = service.bonuses if isinstance(service.bonuses, list) else []
+    social_proof = service.social_proof if isinstance(service.social_proof, dict) else None
     return ServiceSummaryResponse(
         id=service.id,
         tenant_id=service.tenant_id,
@@ -132,6 +137,8 @@ def service_to_summary(service: Service, tenant: Tenant | None = None) -> Servic
         name=service.name,
         description=service.description,
         duration_minutes=service.duration_minutes,
+        setup_buffer_minutes=service.setup_buffer_minutes,
+        cleanup_buffer_minutes=service.cleanup_buffer_minutes,
         price_cents=service.price_cents,
         deposit_cents=service.deposit_cents,
         is_active=service.is_active,
@@ -141,6 +148,21 @@ def service_to_summary(service: Service, tenant: Tenant | None = None) -> Servic
         form_ids=[],
         category_id=service.category_id,
         sort_order=service.sort_order,
+        slug=service.slug,
+        outcome_headline=service.outcome_headline,
+        subheadline=service.subheadline,
+        compare_at_price_cents=service.compare_at_price_cents,
+        featured_label=service.featured_label,
+        value_stack=value_stack,
+        bonuses=bonuses,
+        guarantee_text=service.guarantee_text,
+        social_proof=social_proof,
+        scarcity_hint=service.scarcity_hint,
+        before_image_url=service.before_image_url,
+        before_image_alt=service.before_image_alt,
+        after_image_url=service.after_image_url,
+        after_image_alt=service.after_image_alt,
+        meta_description=service.meta_description,
     )
 
 

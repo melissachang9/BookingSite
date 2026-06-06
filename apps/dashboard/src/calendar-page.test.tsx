@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type {
   BookingDraftSummary,
@@ -38,6 +38,8 @@ const baseBooking = {
     name: "Signature Facial",
     description: "A 60-minute facial.",
     durationMinutes: 60,
+    setupBufferMinutes: 0,
+    cleanupBufferMinutes: 0,
     priceCents: 10000,
     depositCents: 2500,
     isActive: true,
@@ -194,17 +196,16 @@ describe("CalendarPage", () => {
 
       expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
       expect(screen.queryByRole("dialog", { name: "Appointment details" })).not.toBeInTheDocument();
-      expect(screen.queryByLabelText("Customer")).not.toBeInTheDocument();
       expect(screen.getAllByText("Intake not checked").length).toBeGreaterThan(0);
 
       fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
 
       expect(await screen.findByRole("dialog", { name: "Appointment details" })).toBeInTheDocument();
-      expect(screen.getByLabelText("Customer")).toHaveValue("Taylor Guest");
-      expect(screen.getByLabelText("Service")).toHaveValue("Signature Facial");
-      expect(screen.getByLabelText("Provider")).toHaveValue("Jordan Rivera");
-      expect(screen.getByLabelText("Booking status")).toHaveValue("Confirmed");
-      expect(screen.getByLabelText("Payment status")).toHaveValue("Pending");
+      const dialog = screen.getByRole("dialog", { name: "Appointment details" });
+      // Customer section
+      expect(within(dialog).getAllByText("Taylor Guest").length).toBeGreaterThan(0);
+      // Status chip
+      expect(within(dialog).getByText("Confirmed")).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: "Close" }));
       expect(screen.queryByRole("dialog", { name: "Appointment details" })).not.toBeInTheDocument();

@@ -50,6 +50,8 @@ const baseCategories: any[] = [
     tenantId: "tenant-1",
     name: "Brows",
     sortOrder: 0,
+    subheadline: "Shape, tint, and define",
+    featuredLabel: "signature",
     createdAt: "",
     updatedAt: "",
   },
@@ -58,6 +60,8 @@ const baseCategories: any[] = [
     tenantId: "tenant-1",
     name: "Facials",
     sortOrder: 1,
+    subheadline: null,
+    featuredLabel: null,
     createdAt: "",
     updatedAt: "",
   },
@@ -98,6 +102,8 @@ const baseServices: any[] = [
     name: "Brow Shape",
     description: "30-min shaping",
     durationMinutes: 30,
+    setupBufferMinutes: 0,
+    cleanupBufferMinutes: 0,
     priceCents: 5000,
     depositCents: 0,
     isActive: true,
@@ -114,6 +120,8 @@ const baseServices: any[] = [
     name: "Signature Facial",
     description: "",
     durationMinutes: 60,
+    setupBufferMinutes: 15,
+    cleanupBufferMinutes: 15,
     priceCents: 12000,
     depositCents: 2500,
     isActive: true,
@@ -130,6 +138,8 @@ const baseServices: any[] = [
     name: "Lash Tint",
     description: "",
     durationMinutes: 20,
+    setupBufferMinutes: 0,
+    cleanupBufferMinutes: 0,
     priceCents: 3500,
     depositCents: 0,
     isActive: true,
@@ -191,6 +201,46 @@ describe("ServicesPage", () => {
     expect(within(facials).getByText("1")).toBeInTheDocument();
     const uncategorized = screen.getByRole("button", { name: /Uncategorized/ });
     expect(within(uncategorized).getByText("1")).toBeInTheDocument();
+  });
+
+  it("renders category subheadline in the sidebar", async () => {
+    mockLoaders();
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /All services/ })).toBeInTheDocument(),
+    );
+
+    const brows = screen.getByRole("button", { name: /^Brows/ });
+    expect(within(brows).getByText("Shape, tint, and define")).toBeInTheDocument();
+  });
+
+  it("renders featured label badge in the sidebar", async () => {
+    mockLoaders();
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /All services/ })).toBeInTheDocument(),
+    );
+
+    const brows = screen.getByRole("button", { name: /^Brows/ });
+    expect(within(brows).getByText("Signature")).toBeInTheDocument();
+  });
+
+  it("does not render subheadline or badge when category has none", async () => {
+    mockLoaders();
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /All services/ })).toBeInTheDocument(),
+    );
+
+    const facials = screen.getByRole("button", { name: /^Facials/ });
+    // Facials has no subheadline or featuredLabel
+    expect(within(facials).queryByText("Signature")).toBeNull();
+    expect(within(facials).queryByText("Most popular")).toBeNull();
+    expect(within(facials).queryByText("New")).toBeNull();
+    expect(within(facials).queryByText("Limited")).toBeNull();
   });
 
   it("filters the main list when a category is selected", async () => {
@@ -306,5 +356,232 @@ describe("ServicesPage", () => {
       screen.getByText(/You do not have permission to view the service catalog\./),
     ).toBeInTheDocument();
     expect(platformApi.getTenantBySlug).not.toHaveBeenCalled();
+  });
+
+  it("opens the Add category modal when + Add category is clicked", async () => {
+    mockLoaders();
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /\+ Add category/ })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /\+ Add category/ }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Add category" })).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("heading", { name: "Add category" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("e.g. Brows, Facials, Lamination")).toBeInTheDocument();
+  });
+
+  it("creates a category through the modal and closes it", async () => {
+    mockLoaders();
+    const createSpy = vi
+      .spyOn(platformApi, "createServiceCategory")
+      .mockResolvedValue({} as any);
+    vi.spyOn(platformApi, "listServiceCategories").mockResolvedValue({
+      categories: [...baseCategories, { id: "cat-new", tenantId: "tenant-1", name: "Lamination", sortOrder: 2, createdAt: "", updatedAt: "" }],
+    } as any);
+
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /\+ Add category/ })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /\+ Add category/ }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Add category" })).toBeInTheDocument(),
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("e.g. Brows, Facials, Lamination"), {
+      target: { value: "Lamination" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create category" }));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledWith(
+      "brow-beauty-lab",
+      { name: "Lamination" },
+    ));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Add category" })).toBeNull(),
+    );
+  });
+
+  it("shows an error in the create modal when the name is empty", async () => {
+    mockLoaders();
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /\+ Add category/ })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /\+ Add category/ }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Add category" })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Create category" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Enter a category name.")).toBeInTheDocument(),
+    );
+  });
+
+  it("closes the create modal when Cancel is clicked", async () => {
+    mockLoaders();
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /\+ Add category/ })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /\+ Add category/ }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Add category" })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Add category" })).toBeNull(),
+    );
+  });
+
+  it("opens the Rename modal when Rename is clicked on a selected category", async () => {
+    mockLoaders();
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^Brows/ })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^Brows/ }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Rename category" })).toBeInTheDocument(),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Rename category" });
+    const input = within(dialog).getByDisplayValue("Brows") as HTMLInputElement;
+    expect(input).toBeInTheDocument();
+  });
+
+  it("renames a category through the modal", async () => {
+    mockLoaders();
+    const updateSpy = vi
+      .spyOn(platformApi, "updateServiceCategory")
+      .mockResolvedValue({} as any);
+    // First load returns original categories; refresh after rename returns updated
+    vi.spyOn(platformApi, "listServiceCategories")
+      .mockResolvedValueOnce({ categories: baseCategories } as any)
+      .mockResolvedValue({ categories: [{ ...baseCategories[0], name: "Brow Services" }, baseCategories[1]] } as any);
+
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^Brows/ })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^Brows/ }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Rename category" })).toBeInTheDocument(),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Rename category" });
+    const input = within(dialog).getByDisplayValue("Brows");
+    fireEvent.change(input, { target: { value: "Brow Services" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Rename" }));
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledWith(
+      "brow-beauty-lab",
+      "cat-brows",
+      { name: "Brow Services" },
+    ));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Rename category" })).toBeNull(),
+    );
+  });
+
+  it("opens the Delete confirmation modal when Delete is clicked", async () => {
+    mockLoaders();
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^Brows/ })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^Brows/ }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Delete category" })).toBeInTheDocument(),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Delete category" });
+    expect(within(dialog).getByRole("heading", { name: "Delete category" })).toBeInTheDocument();
+    expect(within(dialog).getByText(/Services in this category will become uncategorized/)).toBeInTheDocument();
+  });
+
+  it("deletes a category through the confirmation modal", async () => {
+    mockLoaders();
+    const deleteSpy = vi
+      .spyOn(platformApi, "deleteServiceCategory")
+      .mockResolvedValue(undefined);
+    vi.spyOn(platformApi, "listServiceCategories")
+      .mockResolvedValueOnce({ categories: baseCategories } as any)
+      .mockResolvedValue({ categories: [baseCategories[1]] } as any);
+    vi.spyOn(platformApi, "listServices")
+      .mockResolvedValueOnce({ services: baseServices } as any)
+      .mockResolvedValue({ services: baseServices } as any);
+
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^Brows/ })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^Brows/ }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Delete category" })).toBeInTheDocument(),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Delete category" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => expect(deleteSpy).toHaveBeenCalledWith(
+      "brow-beauty-lab",
+      "cat-brows",
+    ));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Delete category" })).toBeNull(),
+    );
   });
 });

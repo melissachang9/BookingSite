@@ -136,6 +136,9 @@ async def list_availability(
     min_start = datetime.now(timezone.utc) + timedelta(minutes=int(settings["minLeadTimeMinutes"]))
     max_start = datetime.now(timezone.utc) + timedelta(days=int(settings["maxAdvanceBookingDays"]))
     duration = timedelta(minutes=service.duration_minutes)
+    setup_buffer = timedelta(minutes=service.setup_buffer_minutes)
+    cleanup_buffer = timedelta(minutes=service.cleanup_buffer_minutes)
+    total_block = duration + setup_buffer + cleanup_buffer
     window_start = datetime.combine(requested_date, time.min, tzinfo=tenant_timezone).astimezone(timezone.utc)
     window_end = datetime.combine(requested_date + timedelta(days=resolved_window_days), time.min, tzinfo=tenant_timezone).astimezone(timezone.utc)
     provider_ids = [context.provider.id for context in provider_contexts]
@@ -235,13 +238,15 @@ async def list_availability(
                             effective_end = business_close
                     cursor = datetime.combine(current_date, effective_start, tzinfo=tenant_timezone)
                     end_boundary = datetime.combine(current_date, effective_end, tzinfo=tenant_timezone)
-                    while cursor + duration <= end_boundary:
+                    while cursor + total_block <= end_boundary:
                         slot_start = cursor.astimezone(timezone.utc)
                         slot_end = (cursor + duration).astimezone(timezone.utc)
+                        block_start = (cursor - setup_buffer).astimezone(timezone.utc)
+                        block_end = (cursor + duration + cleanup_buffer).astimezone(timezone.utc)
                         if slot_start < min_start or slot_start > max_start:
                             cursor += timedelta(minutes=30)
                             continue
-                        if _overlaps(slot_start, slot_end, blocked_map.get(context.provider.id, [])):
+                        if _overlaps(block_start, block_end, blocked_map.get(context.provider.id, [])):
                             cursor += timedelta(minutes=30)
                             continue
                         response = SlotAvailabilityResponse(

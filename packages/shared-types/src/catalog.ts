@@ -41,6 +41,8 @@ export type ServiceSummary = AuditFields &
     name: string;
     description?: string;
     durationMinutes: number;
+    setupBufferMinutes: number;
+    cleanupBufferMinutes: number;
     priceCents: number;
     depositCents: number;
     isActive: boolean;
@@ -56,6 +58,8 @@ export type CreateServiceRequest = {
   name: string;
   description?: string;
   durationMinutes: number;
+  setupBufferMinutes?: number;
+  cleanupBufferMinutes?: number;
   priceCents: number;
   depositCents: number;
   locationIds: UUID[];
@@ -67,6 +71,8 @@ export type UpdateServiceRequest = {
   name?: string;
   description?: string;
   durationMinutes?: number;
+  setupBufferMinutes?: number;
+  cleanupBufferMinutes?: number;
   priceCents?: number;
   depositCents?: number;
   locationIds?: UUID[];

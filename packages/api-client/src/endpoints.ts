@@ -17,6 +17,8 @@ import type {
   CreateCheckoutSessionRequest,
   CreateCheckoutSessionResponse,
   CreateLocationRequest,
+  CustomerListResponse,
+  CustomerProfileResponse,
   DepositPaymentFollowUpListResponse,
   RecordManualPaymentRequest,
   SendPaymentReminderResponse,
@@ -340,4 +342,10 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.post<BookingSummary, UpdateBookingStatusRequest>(`tenants/${tenantSlug}/bookings/${bookingId}/status`, body),
   listBookingFormResponses: (tenantSlug: string, bookingId: string) =>
     client.get<BookingFormResponseList>(`tenants/${tenantSlug}/bookings/${bookingId}/form-responses`),
+  listCustomers: (tenantSlug: string, search?: string) =>
+    client.get<CustomerListResponse>(`tenants/${tenantSlug}/customers`, {
+      query: search ? { search } : undefined,
+    }),
+  getCustomerProfile: (tenantSlug: string, customerId: string) =>
+    client.get<CustomerProfileResponse>(`tenants/${tenantSlug}/customers/${customerId}`),
 });

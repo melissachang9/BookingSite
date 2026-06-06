@@ -23,6 +23,26 @@ export type CustomerLookupQuery = {
 
 export type CustomerLookupResponse = PaginatedResponse<CustomerSummary>;
 
+export type CustomerListResponse = PaginatedResponse<CustomerSummary>;
+
+export type CustomerBookingEntry = {
+  id: UUID;
+  serviceName: string;
+  providerName: string;
+  status: string;
+  startsAt: ISODateString;
+  endsAt: ISODateString;
+  priceCents: number;
+  depositCents: number;
+  amountPaidCents: number;
+  balanceDueCents: number;
+};
+
+export type CustomerProfileResponse = {
+  customer: CustomerSummary;
+  bookings: CustomerBookingEntry[];
+};
+
 export type UpsertCustomerRequest = {
   name: string;
   email?: string;

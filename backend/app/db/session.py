@@ -216,6 +216,67 @@ async def _ensure_postgres_schema_compatibility() -> None:
                 )
             )
 
+        # Phase J: service merchandising columns
+        service_columns = {
+            "slug": "VARCHAR(255)",
+            "outcome_headline": "VARCHAR(255)",
+            "subheadline": "TEXT",
+            "compare_at_price_cents": "INTEGER",
+            "featured_label": "VARCHAR(32)",
+            "value_stack": "JSON",
+            "bonuses": "JSON",
+            "guarantee_text": "TEXT",
+            "social_proof": "JSON",
+            "scarcity_hint": "VARCHAR(255)",
+            "image_url": "TEXT",
+            "image_alt_text": "VARCHAR(255)",
+            "before_image_url": "TEXT",
+            "before_image_alt": "VARCHAR(255)",
+            "after_image_url": "TEXT",
+            "after_image_alt": "VARCHAR(255)",
+            "meta_description": "TEXT",
+        }
+        for column_name, column_type in service_columns.items():
+            exists = await connection.scalar(
+                text(
+                    f"""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = 'services' AND column_name = '{column_name}'
+                    """
+                )
+            )
+            if not exists:
+                await connection.execute(
+                    text(f"ALTER TABLE services ADD COLUMN {column_name} {column_type}")
+                )
+        service_slug_index_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1 FROM pg_indexes
+                WHERE schemaname = 'public' AND indexname = 'ix_services_slug'
+                """
+            )
+        )
+        if not service_slug_index_exists:
+            await connection.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_services_slug ON services (slug)")
+            )
+        service_slug_unique_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1 FROM pg_indexes
+                WHERE schemaname = 'public' AND indexname = 'uq_services_tenant_slug'
+                """
+            )
+        )
+        if not service_slug_unique_exists:
+            await connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_services_tenant_slug "
+                    "ON services (tenant_id, slug) WHERE slug IS NOT NULL"
+                )
+            )
+
 
 async def initialize_database() -> None:
     async with get_engine().begin() as connection:

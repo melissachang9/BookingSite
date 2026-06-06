@@ -32,6 +32,8 @@ import { PaymentsPage } from "./payments-page";
 import { SettingsPage } from "./settings-page";
 import { StaffPage } from "./staff-page";
 import { ServicesPage } from "./services-page";
+import { CustomersPage } from "./customers-page";
+import { LocationsPage } from "./locations-page";
 import "./styles.css";
 
 type BackendStatusState =
@@ -683,8 +685,8 @@ export function App() {
             path="/services"
             element={<ServicesPage definition={pageByPath.get("services") ?? routeDefinitions[0]} currentUser={session.user} />}
           />
-          <Route path="/customers" element={<SectionPage definition={pageByPath.get("customers") ?? routeDefinitions[0]} />} />
-          <Route path="/locations" element={<SectionPage definition={pageByPath.get("locations") ?? routeDefinitions[0]} />} />
+          <Route path="/customers" element={<CustomersPage definition={pageByPath.get("customers") ?? routeDefinitions[0]} currentUser={session.user} />} />
+          <Route path="/locations" element={<LocationsPage definition={pageByPath.get("locations") ?? routeDefinitions[0]} currentUser={session.user} />} />
           <Route path="/providers" element={<Navigate to="/staff" replace />} />
           <Route path="/forms" element={<SectionPage definition={pageByPath.get("forms") ?? routeDefinitions[0]} />} />
           <Route
