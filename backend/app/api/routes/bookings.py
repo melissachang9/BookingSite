@@ -15,10 +15,20 @@ from app.schemas.bookings import (
     CustomerManageBookingResponse,
     UpdateBookingStatusRequest,
 )
-from app.schemas.forms import BookingFormResponseListResponse
+from app.schemas.forms import (
+    BookingFormResponseListResponse,
+    FormResponseSummaryResponse,
+    SendFormReminderResponse,
+    SubmitFormRequirementRequest,
+)
 from app.schemas.payments import RecordManualPaymentRequest
 from app.services.booking_drafts import cancel_manage_booking, get_booking, get_manage_booking
-from app.services.booking_forms import list_booking_form_responses
+from app.services.booking_forms import (
+    list_booking_form_responses,
+    list_booking_form_requirements_by_token,
+    send_booking_form_reminder,
+    submit_booking_form_requirement_by_token,
+)
 from app.services.bookings import list_bookings, record_manual_payment, update_booking_status
 
 
@@ -138,3 +148,42 @@ async def list_booking_form_responses_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingFormResponseListResponse:
     return await list_booking_form_responses(session, tenant_slug, booking_id)
+
+
+@router.post(
+    "/tenants/{tenant_slug}/bookings/{booking_id}/form-reminder",
+    response_model=SendFormReminderResponse,
+    summary="Send the customer a reminder to complete pending forms",
+)
+async def send_booking_form_reminder_route(
+    tenant_slug: str,
+    booking_id: str,
+    current_user: User = Depends(require_tenant_permission("bookings.view")),
+    session: AsyncSession = Depends(get_db_session),
+) -> SendFormReminderResponse:
+    return await send_booking_form_reminder(session, tenant_slug, booking_id, current_user)
+
+
+@router.get(
+    "/bookings/manage/{token}/form-requirements",
+    summary="List pending form requirements for a confirmed booking (customer-facing)",
+)
+async def list_manage_booking_form_requirements_route(
+    token: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> list[dict[str, object]]:
+    return await list_booking_form_requirements_by_token(session, token)
+
+
+@router.post(
+    "/bookings/manage/{token}/form-requirements/{requirement_id}/submit",
+    response_model=FormResponseSummaryResponse,
+    summary="Submit a form requirement for a confirmed booking (customer-facing)",
+)
+async def submit_manage_booking_form_requirement_route(
+    token: str,
+    requirement_id: str,
+    payload: SubmitFormRequirementRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> FormResponseSummaryResponse:
+    return await submit_booking_form_requirement_by_token(session, token, requirement_id, payload)

@@ -82,6 +82,8 @@ import type {
   UpdateTenantSettingsRequest,
   UpdateTenantWalletMembershipRequest,
   UpsertCustomerRequest,
+  BookingFormRequirementSummary,
+  SendFormReminderResponse,
 } from "@booking/shared-types";
 import type { ApiClient } from "./client";
 
@@ -290,6 +292,17 @@ export const createPlatformApi = (client: ApiClient) => ({
   getManageBooking: (token: string) => client.get<CustomerManageBooking>(`bookings/manage/${token}`),
   cancelManageBooking: (token: string, body: CancelManageBookingRequest) =>
     client.post<CustomerManageBooking, CancelManageBookingRequest>(`bookings/manage/${token}/cancel`, body),
+  listManageBookingFormRequirements: (token: string) =>
+    client.get<BookingFormRequirementSummary[]>(`bookings/manage/${token}/form-requirements`),
+  submitManageBookingFormRequirement: (
+    token: string,
+    requirementId: string,
+    body: SubmitFormRequirementRequest,
+  ) =>
+    client.post<FormResponseSummary, SubmitFormRequirementRequest>(
+      `bookings/manage/${token}/form-requirements/${requirementId}/submit`,
+      body,
+    ),
   saveBookingFormDraft: (bookingDraftId: string, body: SaveFormDraftRequest) =>
     client.post<BookingDraftSummary, SaveFormDraftRequest>(`booking-drafts/${bookingDraftId}/forms/draft`, body),
   submitBookingForm: (bookingDraftId: string, body: SubmitFormResponseRequest) =>
@@ -313,6 +326,10 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.get<DepositPaymentFollowUpListResponse>(`tenants/${tenantSlug}/payments/follow-up`),
   sendPaymentReminder: (tenantSlug: string, bookingDraftId: string) =>
     client.request<SendPaymentReminderResponse>(`tenants/${tenantSlug}/payments/follow-up/${bookingDraftId}/send-reminder`, {
+      method: "POST",
+    }),
+  sendBookingFormReminder: (tenantSlug: string, bookingId: string) =>
+    client.request<SendFormReminderResponse>(`tenants/${tenantSlug}/bookings/${bookingId}/form-reminder`, {
       method: "POST",
     }),
   completeCheckoutSession: (tenantSlug: string, sessionId: string) =>

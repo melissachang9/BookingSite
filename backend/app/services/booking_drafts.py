@@ -168,6 +168,42 @@ def _has_pending_pre_booking_requirements(draft: BookingDraft) -> bool:
     )
 
 
+async def _attach_post_confirmation_form_requirements(
+    session: AsyncSession,
+    draft: BookingDraft,
+    booking: Booking,
+) -> None:
+    """Create pre-visit and post-visit form requirements linked to the confirmed booking."""
+    attachments = (
+        await session.scalars(
+            select(ServiceFormAttachment)
+            .options(selectinload(ServiceFormAttachment.form), selectinload(ServiceFormAttachment.form_version))
+            .where(
+                ServiceFormAttachment.tenant_id == draft.tenant_id,
+                ServiceFormAttachment.service_id == draft.service_id,
+                ServiceFormAttachment.customer_prompt_timing.in_(["pre_visit", "post_visit"]),
+            )
+        )
+    ).all()
+
+    for attachment in attachments:
+        scope = attachment.form.scope if attachment.form is not None else "customer"
+        session.add(
+            BookingDraftFormRequirement(
+                tenant_id=draft.tenant_id,
+                booking_draft_id=draft.id,
+                booking_id=booking.id,
+                form_id=attachment.form_id,
+                form_version_id=attachment.form_version_id,
+                scope=scope,
+                customer_prompt_timing=attachment.customer_prompt_timing,
+                status="pending",
+            )
+        )
+
+    await session.flush()
+
+
 async def _load_booking_draft(
     session: AsyncSession,
     booking_draft_id: str,
@@ -263,6 +299,9 @@ async def _promote_draft_to_booking(
     draft.confirmed_booking_id = booking.id
     if draft.hold is not None:
         await session.delete(draft.hold)
+
+    # Create pre-visit and post-visit form requirements linked to the booking
+    await _attach_post_confirmation_form_requirements(session, draft, booking)
 
     return booking
 

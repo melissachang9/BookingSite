@@ -186,3 +186,24 @@ export type BookingFormResponseEntry = {
 export type BookingFormResponseList = {
   items: BookingFormResponseEntry[];
 };
+
+export type BookingFormRequirementSummary = {
+  id: UUID;
+  formId: UUID;
+  formName: string;
+  formDescription?: string | null;
+  scope: FormScope;
+  customerPromptTiming?: CustomerPromptTiming | null;
+  status: FormRequirementStatus;
+  schema?: FormSchema | null;
+};
+
+export type SendFormReminderResponse = {
+  bookingId: UUID;
+  pendingRequirementCount: number;
+  recipientEmail: string;
+  provider: string;
+  providerMessageId: string;
+  sentAt: ISODateString;
+  manageUrl: string;
+};

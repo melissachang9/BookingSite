@@ -450,6 +450,7 @@ class FormResponse(Base, IdMixin, TimestampMixin):
     form_version_id: Mapped[str] = mapped_column(String(36), ForeignKey("form_versions.id"), index=True, nullable=False)
     customer_id: Mapped[str] = mapped_column(String(36), ForeignKey("customers.id"), index=True, nullable=False)
     booking_draft_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("booking_drafts.id"), nullable=True)
+    booking_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("bookings.id"), nullable=True)
     scope: Mapped[str] = mapped_column(String(32), nullable=False)
     customer_prompt_timing: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -464,6 +465,7 @@ class BookingDraftFormRequirement(Base, IdMixin, TimestampMixin):
 
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
     booking_draft_id: Mapped[str] = mapped_column(String(36), ForeignKey("booking_drafts.id"), index=True, nullable=False)
+    booking_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("bookings.id"), nullable=True)
     form_id: Mapped[str] = mapped_column(String(36), ForeignKey("forms.id"), index=True, nullable=False)
     form_version_id: Mapped[str] = mapped_column(String(36), ForeignKey("form_versions.id"), index=True, nullable=False)
     scope: Mapped[str] = mapped_column(String(32), nullable=False)

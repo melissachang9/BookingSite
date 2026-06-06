@@ -120,3 +120,13 @@ class BookingFormResponseEntry(CamelModel):
 
 class BookingFormResponseListResponse(CamelModel):
     items: list[BookingFormResponseEntry] = Field(default_factory=list)
+
+
+class SendFormReminderResponse(CamelModel):
+    booking_id: str
+    pending_requirement_count: int
+    recipient_email: str
+    provider: str
+    provider_message_id: str
+    sent_at: datetime
+    manage_url: str
