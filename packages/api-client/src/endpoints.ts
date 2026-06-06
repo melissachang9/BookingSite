@@ -16,10 +16,14 @@ import type {
   CreateBookingDraftRequest,
   CreateCheckoutSessionRequest,
   CreateCheckoutSessionResponse,
+  CreateFormRequest,
   CreateLocationRequest,
+  CreateResourceRequest,
   CustomerListResponse,
   CustomerProfileResponse,
   DepositPaymentFollowUpListResponse,
+  FormListResponse,
+  FormSummaryResponse,
   RecordManualPaymentRequest,
   SendPaymentReminderResponse,
   CustomerLookupQuery,
@@ -48,6 +52,9 @@ import type {
   ReorderRequest,
   ReplaceProviderServiceVariantsRequest,
   ReplaceUserPermissionsRequest,
+  ResourceListResponse,
+  ResourceSummary,
+  UpdateFormRequest,
   UserPermissionsResponse,
   LocationSummary,
   ProviderListResponse,
@@ -64,6 +71,7 @@ import type {
   UpdateBookingStatusRequest,
   UpdateBookingDraftRequest,
   UpdateLocationRequest,
+  UpdateResourceRequest,
   UpdateServiceCategoryRequest,
   UpdateServiceRequest,
   UpdateTenantBrandingRequest,
@@ -348,4 +356,16 @@ export const createPlatformApi = (client: ApiClient) => ({
     }),
   getCustomerProfile: (tenantSlug: string, customerId: string) =>
     client.get<CustomerProfileResponse>(`tenants/${tenantSlug}/customers/${customerId}`),
+  listForms: (tenantSlug: string) =>
+    client.get<FormListResponse>(`tenants/${tenantSlug}/forms`),
+  createForm: (tenantSlug: string, body: CreateFormRequest) =>
+    client.post<FormSummaryResponse, CreateFormRequest>(`tenants/${tenantSlug}/forms`, body),
+  updateForm: (tenantSlug: string, formId: string, body: UpdateFormRequest) =>
+    client.patch<FormSummaryResponse, UpdateFormRequest>(`tenants/${tenantSlug}/forms/${formId}`, body),
+  listResources: (tenantSlug: string) =>
+    client.get<ResourceListResponse>(`tenants/${tenantSlug}/resources`),
+  createResource: (tenantSlug: string, body: CreateResourceRequest) =>
+    client.post<ResourceSummary, CreateResourceRequest>(`tenants/${tenantSlug}/resources`, body),
+  updateResource: (tenantSlug: string, resourceId: string, body: UpdateResourceRequest) =>
+    client.patch<ResourceSummary, UpdateResourceRequest>(`tenants/${tenantSlug}/resources/${resourceId}`, body),
 });

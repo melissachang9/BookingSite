@@ -105,6 +105,36 @@ export type FormRequirement = AuditFields & {
   schema?: FormSchema | null;
 };
 
+export type FormSummaryResponse = AuditFields &
+  TenantScoped & {
+    name: string;
+    scope: FormScope;
+    customerPromptTiming?: CustomerPromptTiming | null;
+    isActive: boolean;
+    currentVersionId?: UUID | null;
+    currentVersionNumber?: number | null;
+    schema?: FormSchema | null;
+  };
+
+export type FormListResponse = {
+  items: FormSummaryResponse[];
+};
+
+export type CreateFormRequest = {
+  name: string;
+  scope?: FormScope;
+  customerPromptTiming?: CustomerPromptTiming | null;
+  schema?: FormSchema;
+};
+
+export type UpdateFormRequest = {
+  name?: string;
+  scope?: FormScope;
+  customerPromptTiming?: CustomerPromptTiming | null;
+  isActive?: boolean;
+  schema?: FormSchema;
+};
+
 export type FormResponseSummary = AuditFields &
   TenantScoped & {
     formId: UUID;

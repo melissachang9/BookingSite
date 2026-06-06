@@ -1,0 +1,141 @@
+from __future__ import annotations
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.http import api_exception
+from app.db.models import FormDefinition, FormVersion
+from app.schemas.forms import (
+    CreateFormRequest,
+    FormListResponse,
+    FormSchemaPayload,
+    FormSummaryResponse,
+    UpdateFormRequest,
+)
+from app.services.tenants import get_tenant_by_slug
+
+
+async def list_tenant_forms(
+    session: AsyncSession,
+    tenant_slug: str,
+) -> FormListResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    forms = (
+        await session.scalars(
+            select(FormDefinition)
+            .where(FormDefinition.tenant_id == tenant.id)
+            .order_by(FormDefinition.name.asc())
+        )
+    ).all()
+
+    items: list[FormSummaryResponse] = []
+    for form in forms:
+        latest_version = await _get_latest_version(session, form.id)
+        items.append(_form_to_summary(form, latest_version))
+
+    return FormListResponse(items=items)
+
+
+async def create_tenant_form(
+    session: AsyncSession,
+    tenant_slug: str,
+    payload: CreateFormRequest,
+) -> FormSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    form = FormDefinition(
+        tenant_id=tenant.id,
+        name=payload.name.strip(),
+        scope=payload.scope,
+        is_active=True,
+    )
+    session.add(form)
+    await session.flush()
+
+    version = FormVersion(
+        tenant_id=tenant.id,
+        form_id=form.id,
+        version_number=1,
+        schema_json=payload.schema.model_dump() if payload.schema else {},
+    )
+    session.add(version)
+    await session.commit()
+
+    return _form_to_summary(form, version)
+
+
+async def update_tenant_form(
+    session: AsyncSession,
+    tenant_slug: str,
+    form_id: str,
+    payload: UpdateFormRequest,
+) -> FormSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    form = await session.scalar(
+        select(FormDefinition).where(
+            FormDefinition.tenant_id == tenant.id,
+            FormDefinition.id == form_id,
+        )
+    )
+    if form is None:
+        raise api_exception(404, "not_found", "Form was not found for this tenant.")
+
+    if payload.name is not None:
+        form.name = payload.name.strip()
+    if payload.scope is not None:
+        form.scope = payload.scope
+    if payload.is_active is not None:
+        form.is_active = payload.is_active
+
+    latest_version = await _get_latest_version(session, form.id)
+
+    if payload.schema is not None:
+        new_version = FormVersion(
+            tenant_id=tenant.id,
+            form_id=form.id,
+            version_number=(latest_version.version_number + 1) if latest_version else 1,
+            schema_json=payload.schema.model_dump(),
+        )
+        session.add(new_version)
+        await session.commit()
+        return _form_to_summary(form, new_version)
+
+    await session.commit()
+    return _form_to_summary(form, latest_version)
+
+
+async def _get_latest_version(
+    session: AsyncSession,
+    form_id: str,
+) -> FormVersion | None:
+    return await session.scalar(
+        select(FormVersion)
+        .where(FormVersion.form_id == form_id)
+        .order_by(FormVersion.version_number.desc())
+        .limit(1)
+    )
+
+
+def _form_to_summary(
+    form: FormDefinition,
+    version: FormVersion | None,
+) -> FormSummaryResponse:
+    schema = None
+    if version is not None and version.schema_json:
+        try:
+            schema = FormSchemaPayload(**version.schema_json)
+        except Exception:
+            schema = None
+
+    return FormSummaryResponse(
+        id=form.id,
+        tenant_id=form.tenant_id,
+        created_at=form.created_at,
+        updated_at=form.updated_at,
+        name=form.name,
+        scope=form.scope,
+        customer_prompt_timing=None,
+        is_active=form.is_active,
+        current_version_id=version.id if version else None,
+        current_version_number=version.version_number if version else None,
+        schema=schema,
+    )

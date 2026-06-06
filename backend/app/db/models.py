@@ -472,3 +472,14 @@ class BookingDraftFormRequirement(Base, IdMixin, TimestampMixin):
     booking_draft: Mapped[BookingDraft] = relationship(back_populates="form_requirements")
     form_version: Mapped[FormVersion] = relationship()
     satisfied_by_response: Mapped[Optional[FormResponse]] = relationship()
+
+
+class Resource(Base, IdMixin, TimestampMixin):
+    __tablename__ = "resources"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False, default="room")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    location_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("locations.id"), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

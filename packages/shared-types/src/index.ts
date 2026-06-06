@@ -6,4 +6,5 @@ export * from "./forms";
 export * from "./health";
 export * from "./payments";
 export * from "./permissions";
+export * from "./resources";
 export * from "./settings";

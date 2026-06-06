@@ -3326,6 +3326,39 @@ body {
   color: #8a1a14;
 }
 
+/* Forms page */
+.form-field-preview-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.form-field-preview-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--ui-border, #e5e7eb);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+.form-field-preview-type {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted, #6b7280);
+  background: rgba(0, 0, 0, 0.04);
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.form-field-preview-label {
+  color: var(--ui-ink, #111827);
+}
+
 /* Provider time off */
 .time-off-tab { gap: 1.5rem; }
 .time-off-list h4, .time-off-form h4 { margin: 0 0 0.5rem; font-size: 0.95rem; }

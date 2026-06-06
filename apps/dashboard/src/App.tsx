@@ -34,6 +34,8 @@ import { StaffPage } from "./staff-page";
 import { ServicesPage } from "./services-page";
 import { CustomersPage } from "./customers-page";
 import { LocationsPage } from "./locations-page";
+import { FormsPage } from "./forms-page";
+import { ResourcesPage } from "./resources-page";
 import "./styles.css";
 
 type BackendStatusState =
@@ -688,7 +690,7 @@ export function App() {
           <Route path="/customers" element={<CustomersPage definition={pageByPath.get("customers") ?? routeDefinitions[0]} currentUser={session.user} />} />
           <Route path="/locations" element={<LocationsPage definition={pageByPath.get("locations") ?? routeDefinitions[0]} currentUser={session.user} />} />
           <Route path="/providers" element={<Navigate to="/staff" replace />} />
-          <Route path="/forms" element={<SectionPage definition={pageByPath.get("forms") ?? routeDefinitions[0]} />} />
+          <Route path="/forms" element={<FormsPage definition={pageByPath.get("forms") ?? routeDefinitions[0]} currentUser={session.user} />} />
           <Route
             path="/settings"
             element={
@@ -709,7 +711,7 @@ export function App() {
               />
             }
           />
-          <Route path="/resources" element={<SectionPage definition={pageByPath.get("resources") ?? routeDefinitions[0]} />} />
+          <Route path="/resources" element={<ResourcesPage definition={pageByPath.get("resources") ?? routeDefinitions[0]} currentUser={session.user} />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       )}
