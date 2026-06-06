@@ -110,10 +110,12 @@ export type FormSummaryResponse = AuditFields &
     name: string;
     scope: FormScope;
     customerPromptTiming?: CustomerPromptTiming | null;
+    reviewRequired: boolean;
     isActive: boolean;
     currentVersionId?: UUID | null;
     currentVersionNumber?: number | null;
     schema?: FormSchema | null;
+    serviceIds: UUID[];
   };
 
 export type FormListResponse = {

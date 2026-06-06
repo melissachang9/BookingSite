@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
-from app.db.models import FormDefinition, FormVersion
+from app.db.models import FormDefinition, FormVersion, Service, ServiceFormAttachment
 from app.schemas.forms import (
     CreateFormRequest,
     FormListResponse,
@@ -46,6 +47,8 @@ async def create_tenant_form(
         tenant_id=tenant.id,
         name=payload.name.strip(),
         scope=payload.scope,
+        customer_prompt_timing=payload.customer_prompt_timing,
+        review_required=payload.review_required,
         is_active=True,
     )
     session.add(form)
@@ -83,6 +86,10 @@ async def update_tenant_form(
         form.name = payload.name.strip()
     if payload.scope is not None:
         form.scope = payload.scope
+    if payload.customer_prompt_timing is not None:
+        form.customer_prompt_timing = payload.customer_prompt_timing
+    if payload.review_required is not None:
+        form.review_required = payload.review_required
     if payload.is_active is not None:
         form.is_active = payload.is_active
 
@@ -133,9 +140,11 @@ def _form_to_summary(
         updated_at=form.updated_at,
         name=form.name,
         scope=form.scope,
-        customer_prompt_timing=None,
+        customer_prompt_timing=form.customer_prompt_timing,
+        review_required=form.review_required,
         is_active=form.is_active,
         current_version_id=version.id if version else None,
         current_version_number=version.version_number if version else None,
         schema=schema,
+        service_ids=[att.service_id for att in form.service_attachments] if form.service_attachments else [],
     )

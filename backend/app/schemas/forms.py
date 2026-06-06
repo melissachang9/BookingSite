@@ -39,10 +39,12 @@ class FormSummaryResponse(CamelModel):
     name: str
     scope: str
     customer_prompt_timing: str | None = None
+    review_required: bool = False
     is_active: bool
     current_version_id: str | None = None
     current_version_number: int | None = None
     schema: FormSchemaPayload | None = None
+    service_ids: list[str] = Field(default_factory=list)
 
 
 class FormListResponse(CamelModel):
@@ -53,6 +55,7 @@ class CreateFormRequest(CamelModel):
     name: str = Field(min_length=1, max_length=255)
     scope: str = Field(default="customer")
     customer_prompt_timing: str | None = None
+    review_required: bool = False
     schema: FormSchemaPayload = Field(default_factory=FormSchemaPayload)
 
 
@@ -60,6 +63,7 @@ class UpdateFormRequest(CamelModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     scope: str | None = None
     customer_prompt_timing: str | None = None
+    review_required: bool | None = None
     is_active: bool | None = None
     schema: FormSchemaPayload | None = None
 

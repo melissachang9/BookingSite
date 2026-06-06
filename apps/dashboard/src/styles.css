@@ -3359,6 +3359,96 @@ body {
   color: var(--ui-ink, #111827);
 }
 
+/* Form builder */
+.form-builder-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+.form-builder-field-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.form-builder-field {
+  border: 1px solid var(--ui-border, #e5e7eb);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.form-builder-field__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.6rem;
+  background: rgba(0, 0, 0, 0.03);
+  border-bottom: 1px solid var(--ui-border, #e5e7eb);
+}
+.form-builder-field__type {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted, #6b7280);
+}
+.form-builder-field__controls {
+  display: flex;
+  gap: 0.2rem;
+}
+.form-builder-field__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem;
+}
+.form-builder-field__body label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.form-builder-field__body label.settings-toggle {
+  flex-direction: row;
+  align-items: center;
+  font-weight: 500;
+}
+.form-builder-field__body input,
+.form-builder-field__body textarea {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--color-border, rgba(0,0,0,0.18));
+  border-radius: 6px;
+  background: #fff;
+}
+.form-builder-field__row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-end;
+}
+.form-builder-field__options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.form-builder-field__options-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+}
+.form-builder-field__option-row {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+.form-builder-field__option-row input {
+  flex: 1;
+}
+
 /* Provider time off */
 .time-off-tab { gap: 1.5rem; }
 .time-off-list h4, .time-off-form h4 { margin: 0 0 0.5rem; font-size: 0.95rem; }

@@ -404,6 +404,8 @@ class FormDefinition(Base, IdMixin, TimestampMixin):
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     scope: Mapped[str] = mapped_column(String(32), nullable=False)
+    customer_prompt_timing: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    review_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     versions: Mapped[list[FormVersion]] = relationship(back_populates="form", cascade="all, delete-orphan")
