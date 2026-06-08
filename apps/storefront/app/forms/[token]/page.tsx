@@ -131,6 +131,19 @@ function renderRequirementField(field: FormField) {
     );
   }
 
+  if (field.type === "file_upload") {
+    return (
+      <label key={field.id} className="requirement-form-field">
+        <span>
+          {field.label}
+          {field.required ? " *" : ""}
+        </span>
+        {field.helpText ? <small>{field.helpText}</small> : null}
+        <input name={field.id} type="file" required={field.required} />
+      </label>
+    );
+  }
+
   return (
     <label key={field.id} className="requirement-form-field">
       <span>
@@ -163,7 +176,7 @@ function renderRequirementPanel(token: string, requirement: BookingFormRequireme
       <span>{timingLabel}</span>
       <strong>{title}</strong>
       {description ? <p>{description}</p> : null}
-      <form action={submitManageBookingFormRequirementAction} className="requirement-form">
+      <form action={submitManageBookingFormRequirementAction} className="requirement-form" encType="multipart/form-data">
         <input type="hidden" name="token" value={token} />
         <input type="hidden" name="requirementId" value={requirement.id} />
         <input type="hidden" name="schemaJson" value={JSON.stringify(requirement.schema)} />

@@ -88,7 +88,18 @@ function renderRequirementField(field: FormField) {
       </label>
     );
   }
-
+  if (field.type === "file_upload") {
+    return (
+      <label key={field.id} className="requirement-form-field">
+        <span>
+          {field.label}
+          {field.required ? " *" : ""}
+        </span>
+        {field.helpText ? <small>{field.helpText}</small> : null}
+        <input name={field.id} type="file" required={field.required} />
+      </label>
+    );
+  }
   return (
     <label key={field.id} className="requirement-form-field">
       <span>
@@ -137,7 +148,7 @@ function renderRequirementPanel(
 
       <p className="requirement-form-description">{description}</p>
 
-      <form action={submitBookingRequirementAction} className="requirement-form">
+      <form action={submitBookingRequirementAction} className="requirement-form" encType="multipart/form-data">
         <input type="hidden" name="tenantSlug" value={tenantSlug} />
         <input type="hidden" name="bookingDraftId" value={bookingDraftId} />
         <input type="hidden" name="requirementId" value={requirement.id} />
