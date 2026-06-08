@@ -892,8 +892,11 @@ export function CalendarPage({
       return;
     }
 
+    // Only auto-reset if focusedDate is in the future but not in the loaded window.
+    // Past dates are valid — operators use them to view booking history.
+    const today = toIsoDate(new Date());
     const hasFocusedDate = calendarState.days.some((day) => day.date === focusedDate);
-    if (!hasFocusedDate) {
+    if (!hasFocusedDate && focusedDate >= today) {
       setFocusedDate(calendarState.days[0]?.date ?? getUpcomingDate(1));
     }
   }, [calendarState, focusedDate]);
@@ -916,14 +919,33 @@ export function CalendarPage({
     }
 
     const focusIndex = calendarState.days.findIndex((day) => day.date === focusedDate);
-    const safeFocusIndex = focusIndex >= 0 ? focusIndex : 0;
 
-    if (viewMode === "day") {
-      return calendarState.days.slice(safeFocusIndex, safeFocusIndex + 1);
+    if (focusIndex >= 0) {
+      if (viewMode === "day") {
+        return calendarState.days.slice(focusIndex, focusIndex + 1);
+      }
+      const weekStartIndex = Math.floor(focusIndex / 7) * 7;
+      return calendarState.days.slice(weekStartIndex, weekStartIndex + 7);
     }
 
-    const weekStartIndex = Math.floor(safeFocusIndex / 7) * 7;
-    return calendarState.days.slice(weekStartIndex, weekStartIndex + 7);
+    // Past date selected — generate synthetic days for the week containing this date
+    const focusDate = parseIsoDate(focusedDate);
+    const dayOfWeek = focusDate.getUTCDay();
+    const weekStart = new Date(focusDate);
+    weekStart.setUTCDate(focusDate.getUTCDate() - dayOfWeek);
+
+    const syntheticDays: CalendarDay[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart);
+      d.setUTCDate(weekStart.getUTCDate() + i);
+      const dateStr = toIsoDate(d);
+      syntheticDays.push({ date: dateStr, label: getDateLabel(dateStr), appointments: [], openings: [] });
+    }
+
+    if (viewMode === "day") {
+      return syntheticDays.filter((d) => d.date === focusedDate);
+    }
+    return syntheticDays;
   }, [calendarState, focusedDate, viewMode]);
 
   const visibleDateRangeLabel = useMemo(() => {
@@ -970,14 +992,10 @@ export function CalendarPage({
   }, [calendarState]);
 
   const moveFocus = (step: number) => {
-    if (calendarState.kind !== "ready") {
-      return;
-    }
-
-    const currentIndex = calendarState.days.findIndex((day) => day.date === focusedDate);
-    const safeIndex = currentIndex >= 0 ? currentIndex : 0;
-    const nextIndex = Math.max(0, Math.min(calendarState.days.length - 1, safeIndex + step));
-    setFocusedDate(calendarState.days[nextIndex].date);
+    const focusDate = parseIsoDate(focusedDate);
+    const offset = viewMode === "day" ? step : step * 7;
+    focusDate.setUTCDate(focusDate.getUTCDate() + offset);
+    setFocusedDate(toIsoDate(focusDate));
   };
 
   const handleSelectAppointment = (appointmentId: string) => {
@@ -1660,7 +1678,7 @@ function MonthRail({
               key={date}
               type="button"
               role="gridcell"
-              disabled={!isInCurrentMonth}
+              disabled={!isInCurrentMonth && !dayData && !dayData}
               aria-pressed={isFocused}
               aria-label={getDateLabel(date)}
               className={[
