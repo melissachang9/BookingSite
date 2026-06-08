@@ -181,6 +181,7 @@ export type BookingFormResponseEntry = {
   submittedAt: ISODateString;
   answers: FormAnswers;
   schema?: FormSchema | null;
+  attachments?: FormAttachment[];
 };
 
 export type BookingFormResponseList = {

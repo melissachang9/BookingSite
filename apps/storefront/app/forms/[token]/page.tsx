@@ -156,7 +156,7 @@ function renderRequirementField(field: FormField) {
   );
 }
 
-function renderRequirementPanel(token: string, requirement: BookingFormRequirementSummary) {
+function renderRequirementPanel(token: string, requirement: BookingFormRequirementSummary, tenantId: string) {
   const timingLabel = requirement.customerPromptTiming?.replaceAll("_", " ") ?? requirement.scope;
   const title = requirement.formName;
   const description = requirement.formDescription ?? null;
@@ -179,6 +179,7 @@ function renderRequirementPanel(token: string, requirement: BookingFormRequireme
       <form action={submitManageBookingFormRequirementAction} className="requirement-form" encType="multipart/form-data">
         <input type="hidden" name="token" value={token} />
         <input type="hidden" name="requirementId" value={requirement.id} />
+        <input type="hidden" name="tenantId" value={tenantId} />
         <input type="hidden" name="schemaJson" value={JSON.stringify(requirement.schema)} />
         {requirement.schema.fields.map((field) => renderRequirementField(field))}
         <button type="submit" className="store-button">
@@ -265,7 +266,7 @@ export default async function ManageBookingFormsPage({ params, searchParams }: F
               </div>
             </div>
             <div className="requirement-grid">
-              {pendingRequirements.map((requirement) => renderRequirementPanel(token, requirement))}
+              {pendingRequirements.map((requirement) => renderRequirementPanel(token, requirement, tenant.id))}
             </div>
           </section>
         ) : null}

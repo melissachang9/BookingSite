@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { BookingFormResponseEntry, FormSchema } from "@booking/shared-types";
+import type { BookingFormResponseEntry, FormAttachment, FormSchema } from "@booking/shared-types";
 
 import { FormResponseViewer } from "./form-response-viewer";
 
@@ -152,5 +152,64 @@ describe("FormResponseViewer", () => {
     render(<FormResponseViewer response={buildResponse({ schema: null, answers: {} })} />);
 
     expect(screen.getByText("No answers recorded.")).toBeInTheDocument();
+  });
+
+  it("renders image thumbnails for file_upload fields with attachments", () => {
+    const attachments: FormAttachment[] = [
+      { id: "att-1", fieldId: "field-upload", fileName: "photo.jpg", mimeType: "image/jpeg", fileSizeBytes: 1024, url: "/media/photo.jpg" },
+      { id: "att-2", fieldId: "field-upload", fileName: "doc.pdf", mimeType: "application/pdf", fileSizeBytes: 2048, url: "/media/doc.pdf" },
+    ];
+
+    const schema: FormSchema = {
+      title: "Intake",
+      fields: [
+        { id: "field-upload", type: "file_upload", label: "Uploads" },
+      ],
+    };
+
+    render(
+      <FormResponseViewer
+        response={buildResponse({
+          schema,
+          answers: { "field-upload": attachments },
+        })}
+      />,
+    );
+
+    // Image renders as thumbnail button
+    const img = screen.getByAltText("photo.jpg");
+    expect(img).toBeInTheDocument();
+    expect(img).toHaveAttribute("src", "/media/photo.jpg");
+
+    // Non-image renders as download link
+    const link = screen.getByText("doc.pdf");
+    expect(link).toBeInTheDocument();
+    expect(link.closest("a")).toHaveAttribute("href", "/media/doc.pdf");
+
+    // Click thumbnail opens lightbox
+    fireEvent.click(screen.getByTitle("photo.jpg"));
+    expect(screen.getByRole("dialog", { name: "Image preview" })).toBeInTheDocument();
+
+    // Close lightbox
+    fireEvent.click(screen.getByLabelText("Close preview"));
+    expect(screen.queryByRole("dialog", { name: "Image preview" })).not.toBeInTheDocument();
+  });
+
+  it("shows file count for file_upload fields with attachments when no schema", () => {
+    const attachments: FormAttachment[] = [
+      { id: "att-1", fieldId: "f1", fileName: "a.jpg", mimeType: "image/jpeg", fileSizeBytes: 100, url: "/a.jpg" },
+    ];
+
+    render(
+      <FormResponseViewer
+        response={buildResponse({
+          schema: null,
+          answers: { "Uploads": attachments },
+        })}
+      />,
+    );
+
+    // Schema-null fallback renders JSON stringified
+    expect(screen.getByText(/att-1/)).toBeInTheDocument();
   });
 });

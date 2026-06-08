@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     stripe_webhook_tolerance_seconds: int = 300
     stripe_api_base_url: str = "https://api.stripe.com/v1"
     storefront_public_base_url: str = "http://localhost:3001"
+    media_root: str = "/media"
+    media_base_url: str = "http://localhost:8000/api/v1/forms/files"
     cors_origins: str = (
         "http://localhost:5173,http://127.0.0.1:5173,"
         "http://localhost:3000,http://127.0.0.1:3000,"

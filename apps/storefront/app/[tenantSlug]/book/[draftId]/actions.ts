@@ -2,9 +2,9 @@
 
 import { redirect } from "next/navigation";
 
-import type { FormAnswers, FormField, FormSchema, IntakeCompletionTiming } from "@booking/shared-types";
+import type { FormAnswers, FormAttachment, FormField, FormSchema, IntakeCompletionTiming } from "@booking/shared-types";
 
-import { storefrontApi } from "../../../lib/storefront-api";
+import { storefrontApi, uploadFormFile } from "../../../lib/storefront-api";
 
 const readRequiredField = (formData: FormData, key: string): string => {
   const value = formData.get(key);
@@ -34,7 +34,7 @@ const readRequirementSchema = (formData: FormData): FormSchema => {
   return parsedSchema as FormSchema;
 };
 
-const readFieldAnswer = (formData: FormData, field: FormField) => {
+const readFieldAnswer = async (formData: FormData, field: FormField, tenantId: string) => {
   if (field.type === "section" || field.type === "static_text") {
     return undefined;
   }
@@ -54,16 +54,30 @@ const readFieldAnswer = (formData: FormData, field: FormField) => {
     return formData.get(field.id) === "on";
   }
 
+  if (field.type === "file_upload") {
+    const files = formData.getAll(field.id).filter(
+      (entry): entry is File => entry instanceof File && entry.size > 0,
+    );
+    if (files.length === 0) return undefined;
+
+    const attachments: FormAttachment[] = [];
+    for (const file of files) {
+      const attachment = await uploadFormFile(file, tenantId);
+      attachments.push(attachment);
+    }
+    return attachments;
+  }
+
   const value = formData.get(field.id);
   return typeof value === "string" ? value.trim() : undefined;
 };
 
-const readRequirementAnswers = (formData: FormData): FormAnswers => {
+const readRequirementAnswers = async (formData: FormData, tenantId: string): Promise<FormAnswers> => {
   const schema = readRequirementSchema(formData);
   const answers: FormAnswers = {};
 
   for (const field of schema.fields) {
-    const value = readFieldAnswer(formData, field);
+    const value = await readFieldAnswer(formData, field, tenantId);
     if (value !== undefined) {
       answers[field.id] = value;
     }
@@ -126,9 +140,10 @@ export async function submitBookingRequirementAction(formData: FormData) {
   const tenantSlug = readRequiredField(formData, "tenantSlug");
   const bookingDraftId = readRequiredField(formData, "bookingDraftId");
   const requirementId = readRequiredField(formData, "requirementId");
+  const tenantId = readRequiredField(formData, "tenantId");
 
   await storefrontApi.submitBookingFormRequirement(tenantSlug, bookingDraftId, requirementId, {
-    answers: readRequirementAnswers(formData),
+    answers: await readRequirementAnswers(formData, tenantId),
   });
 
   redirect(`/${tenantSlug}/book/${bookingDraftId}`);

@@ -117,6 +117,7 @@ function renderRequirementPanel(
   tenantSlug: string,
   bookingDraftId: string,
   lockedUntilContactDetails: boolean,
+  tenantId: string,
 ) {
   const timingLabel = requirement.customerPromptTiming?.replaceAll("_", " ") ?? requirement.scope;
   const title = requirement.formTitle ?? `Required form ${requirement.formVersionId}`;
@@ -152,6 +153,7 @@ function renderRequirementPanel(
         <input type="hidden" name="tenantSlug" value={tenantSlug} />
         <input type="hidden" name="bookingDraftId" value={bookingDraftId} />
         <input type="hidden" name="requirementId" value={requirement.id} />
+        <input type="hidden" name="tenantId" value={tenantId} />
         <input type="hidden" name="schemaJson" value={JSON.stringify(requirement.schema)} />
 
         {requirement.schema.fields.map((field) => renderRequirementField(field))}
@@ -308,7 +310,7 @@ export default async function BookingDraftPage({ params }: BookingDraftPageProps
               {draft.formRequirements.length > 0 ? (
                 <div className="requirement-stack">
                   {draft.formRequirements.map((requirement) =>
-                    renderRequirementPanel(requirement, tenantSlug, draft.id, needsContactDetails),
+                    renderRequirementPanel(requirement, tenantSlug, draft.id, needsContactDetails, tenant.id),
                   )}
                 </div>
               ) : (

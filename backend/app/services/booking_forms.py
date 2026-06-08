@@ -67,7 +67,18 @@ def _validation_issues(schema: dict[str, object], answers: dict[str, object]) ->
     return issues
 
 
+def _extract_attachments(answers: dict[str, Any]) -> list[dict[str, Any]]:
+    attachments: list[dict[str, Any]] = []
+    for value in answers.values():
+        if isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict) and "id" in item and "url" in item:
+                    attachments.append(item)
+    return attachments
+
+
 def _form_response_to_summary(response: FormResponse) -> FormResponseSummaryResponse:
+    attachments = _extract_attachments(response.answers_json)
     return FormResponseSummaryResponse(
         id=response.id,
         tenant_id=response.tenant_id,
@@ -83,7 +94,7 @@ def _form_response_to_summary(response: FormResponse) -> FormResponseSummaryResp
         submitted_at=response.submitted_at,
         filled_by_user_id=None,
         answers=response.answers_json,
-        attachments=[],
+        attachments=attachments,
     )
 
 
@@ -192,6 +203,7 @@ async def list_booking_form_responses(
         version = response.form_version
         form: FormDefinition | None = version.form if version is not None else None
         schema = version.schema_json if version is not None and isinstance(version.schema_json, dict) else None
+        attachments = _extract_attachments(response.answers_json)
         items.append(
             BookingFormResponseEntry(
                 id=response.id,
@@ -204,6 +216,7 @@ async def list_booking_form_responses(
                 submitted_at=response.submitted_at,
                 answers=response.answers_json,
                 schema=schema,
+                attachments=attachments,
             )
         )
 
@@ -472,6 +485,7 @@ async def list_customer_form_responses(
         version = response.form_version
         form: FormDefinition | None = version.form if version is not None else None
         schema = version.schema_json if version is not None and isinstance(version.schema_json, dict) else None
+        attachments = _extract_attachments(response.answers_json)
         items.append(
             BookingFormResponseEntry(
                 id=response.id,
@@ -484,6 +498,7 @@ async def list_customer_form_responses(
                 submitted_at=response.submitted_at,
                 answers=response.answers_json,
                 schema=schema,
+                attachments=attachments,
             )
         )
 

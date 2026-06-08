@@ -1,5 +1,5 @@
-import type { ReactElement } from "react";
-import type { BookingFormResponseEntry, FormField, FormSchema } from "@booking/shared-types";
+import { useState, type ReactElement } from "react";
+import type { BookingFormResponseEntry, FormAttachment, FormField, FormSchema } from "@booking/shared-types";
 
 type FormResponseViewerProps = {
   response: BookingFormResponseEntry;
@@ -23,6 +23,22 @@ function formatDateTime(value: string): string {
 
 function formatDateValue(value: string): string {
   return dateFormatter.format(new Date(value));
+}
+
+function isImageMime(mimeType: string): boolean {
+  return mimeType.startsWith("image/");
+}
+
+function isAttachmentArray(value: unknown): value is FormAttachment[] {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  return value.every(
+    (item) =>
+      typeof item === "object" &&
+      item !== null &&
+      "id" in item &&
+      "url" in item &&
+      "fileName" in item,
+  );
 }
 
 function formatAnswerValue(value: unknown, field: FormField): string {
@@ -50,6 +66,9 @@ function formatAnswerValue(value: unknown, field: FormField): string {
       return String(value);
     case "file_upload":
     case "signature":
+      if (isAttachmentArray(value)) {
+        return `${value.length} file${value.length !== 1 ? "s" : ""}`;
+      }
       return "Attachment preview coming soon";
     case "section":
     case "static_text":
@@ -79,6 +98,7 @@ export function FormResponseViewer({ response }: FormResponseViewerProps): React
   const promptableFields = getPromptableFields(schema);
   const sectionFields = getSectionFields(schema);
   const hasSchema = schema && schema.fields.length > 0;
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const timingLabel = response.customerPromptTiming?.replaceAll("_", " ") ?? response.scope;
 
@@ -137,12 +157,50 @@ export function FormResponseViewer({ response }: FormResponseViewerProps): React
                   );
                 }
                 const answer = response.answers[field.id];
+                const isAttachmentField = field.type === "file_upload" || field.type === "signature";
+                const attachments = isAttachmentField && isAttachmentArray(answer) ? (answer as FormAttachment[]) : null;
+
                 return (
                   <div key={field.id} className="form-response-viewer__answer">
                     <dt className="form-response-viewer__label">{field.label}</dt>
-                    <dd className="form-response-viewer__value">
-                      {formatAnswerValue(answer, field)}
-                    </dd>
+                    {attachments ? (
+                      <dd className="form-response-viewer__value">
+                        <div className="form-response-viewer__thumbnails">
+                          {attachments.map((att) =>
+                            isImageMime(att.mimeType) ? (
+                              <button
+                                key={att.id}
+                                type="button"
+                                className="form-response-viewer__thumbnail-btn"
+                                onClick={() => setLightboxUrl(att.url)}
+                                title={att.fileName}
+                              >
+                                <img
+                                  src={att.url}
+                                  alt={att.fileName}
+                                  className="form-response-viewer__thumbnail"
+                                  loading="lazy"
+                                />
+                              </button>
+                            ) : (
+                              <a
+                                key={att.id}
+                                href={att.url}
+                                className="form-response-viewer__file-link"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                {att.fileName}
+                              </a>
+                            ),
+                          )}
+                        </div>
+                      </dd>
+                    ) : (
+                      <dd className="form-response-viewer__value">
+                        {formatAnswerValue(answer, field)}
+                      </dd>
+                    )}
                   </div>
                 );
               })}
@@ -150,6 +208,30 @@ export function FormResponseViewer({ response }: FormResponseViewerProps): React
           )}
         </div>
       )}
+
+      {lightboxUrl ? (
+        <div
+          className="form-response-viewer__lightbox-backdrop"
+          role="dialog"
+          aria-label="Image preview"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            type="button"
+            className="form-response-viewer__lightbox-close"
+            onClick={() => setLightboxUrl(null)}
+            aria-label="Close preview"
+          >
+            &times;
+          </button>
+          <img
+            src={lightboxUrl}
+            alt=""
+            className="form-response-viewer__lightbox-image"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

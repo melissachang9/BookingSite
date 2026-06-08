@@ -10,6 +10,7 @@ from app.api.routes.payments import router as payments_router
 from app.api.routes.resources import router as resources_router
 from app.api.routes.tenants import router as tenants_router
 from app.api.routes.testing import router as testing_router
+from app.api.routes.uploads import router as uploads_router
 from app.core.config import get_settings
 
 
@@ -36,3 +37,4 @@ api_router.include_router(payments_router)
 api_router.include_router(resources_router)
 api_router.include_router(health_router)
 api_router.include_router(testing_router)
+api_router.include_router(uploads_router)

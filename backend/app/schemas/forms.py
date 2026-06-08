@@ -116,6 +116,7 @@ class BookingFormResponseEntry(CamelModel):
     submitted_at: datetime
     answers: dict[str, Any]
     schema: dict[str, Any] | None = None
+    attachments: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class BookingFormResponseListResponse(CamelModel):

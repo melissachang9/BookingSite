@@ -4184,6 +4184,96 @@ body {
   color: var(--ui-muted, #64748b);
 }
 
+.form-response-viewer__thumbnails {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.form-response-viewer__thumbnail-btn {
+  display: block;
+  padding: 0;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 120ms ease;
+}
+
+.form-response-viewer__thumbnail-btn:hover,
+.form-response-viewer__thumbnail-btn:focus-visible {
+  border-color: var(--ui-ink-soft, #475569);
+  outline: none;
+}
+
+.form-response-viewer__thumbnail {
+  display: block;
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+}
+
+.form-response-viewer__file-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--ui-ink-soft, #475569);
+  text-decoration: none;
+  transition: background 120ms ease;
+}
+
+.form-response-viewer__file-link:hover {
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.form-response-viewer__lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.85);
+  cursor: pointer;
+}
+
+.form-response-viewer__lightbox-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.form-response-viewer__lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.form-response-viewer__lightbox-image {
+  max-width: 90vw;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: 8px;
+  cursor: default;
+}
+
 /* ---------------------------------------------------------------- */
 /* Calendar drawer: compact form response rows + "View form" button  */
 /* ---------------------------------------------------------------- */
