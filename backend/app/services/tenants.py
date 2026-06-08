@@ -370,7 +370,7 @@ async def list_tenant_services(session: AsyncSession, tenant_slug: str) -> Servi
     services = (
         await session.scalars(
             select(Service)
-            .options(selectinload(Service.location_links))
+            .options(selectinload(Service.location_links), selectinload(Service.form_attachments))
             .where(Service.tenant_id == tenant.id, Service.is_active.is_(True))
             .order_by(Service.sort_order.asc(), Service.created_at.asc())
         )
