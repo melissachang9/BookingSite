@@ -680,13 +680,19 @@ export function CalendarPage({
 
     const loadCalendar = async () => {
       try {
-        const requestedDates = Array.from({ length: 28 }, (_, index) => getUpcomingDate(index + 1));
+        // Load 14 days before today through 42 days after (56-day window)
+        const today = toIsoDate(new Date());
+        const requestedDates: string[] = [];
+        for (let i = -14; i < 42; i++) {
+          requestedDates.push(addDays(today, i));
+        }
+
         const [bookingsResult, servicesResult] = await Promise.allSettled([
           api.listBookings(tenantSlug, {
-            status: ["confirmed"],
+            status: ["confirmed", "completed", "canceled", "no_show"],
             startsAtGte: `${addDays(requestedDates[0], -1)}T00:00:00.000Z`,
             startsAtLte: `${addDays(requestedDates[requestedDates.length - 1], 1)}T23:59:59.999Z`,
-            limit: 100,
+            limit: 200,
           }),
           api.listServices(tenantSlug),
         ]);
@@ -739,8 +745,11 @@ export function CalendarPage({
         startTransition(() => {
           setCalendarState({ kind: "ready", days, services, providers });
           if (days.length > 0) {
-            setFocusedDate(days[0].date);
-            setMonthCursorDate(monthAnchor(days[0].date));
+            const todayDate = toIsoDate(new Date());
+            const todayIndex = days.findIndex((d) => d.date === todayDate);
+            const initialDate = todayIndex >= 0 ? days[todayIndex].date : days[0].date;
+            setFocusedDate(initialDate);
+            setMonthCursorDate(monthAnchor(initialDate));
           }
           setSelectedServiceId((current) => (current !== null && services.some((service) => service.id === current) ? current : null));
         });

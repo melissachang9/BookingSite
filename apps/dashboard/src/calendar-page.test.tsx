@@ -297,6 +297,7 @@ describe("CalendarPage", () => {
         />,
       );
 
+      fireEvent.click(await screen.findByRole("gridcell", { name: "Wed, May 27" }));
       fireEvent.click(await screen.findByRole("button", { name: "Day" }));
 
       expect(await screen.findByLabelText("Jordan Rivera column")).toBeInTheDocument();
@@ -502,6 +503,7 @@ describe("CalendarPage", () => {
       );
 
       expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("gridcell", { name: "Wed, May 27" }));
       fireEvent.click(screen.getByRole("button", { name: "Day" }));
 
       await vi.waitFor(() => {
@@ -604,8 +606,8 @@ describe("CalendarPage", () => {
       expect(api.listBookings).toHaveBeenCalledWith(
         "brow-beauty-lab",
         expect.objectContaining({
-          status: ["confirmed"],
-          limit: 100,
+          status: ["confirmed", "completed", "canceled", "no_show"],
+          limit: 200,
         }),
       );
     } finally {
@@ -695,7 +697,7 @@ describe("CalendarPage", () => {
       expect(
         await screen.findByRole("button", { name: /Time block .* with Jordan Rivera/i }),
       ).toBeInTheDocument();
-      expect(screen.getByLabelText("Duration")).toHaveValue("45 min");
+      expect(screen.getByLabelText("Duration")).toHaveValue("3 hrs 45 min");
       expect(drawer).toHaveTextContent("Appointments blocked");
       expect(drawer).toHaveTextContent("Taylor Guest");
 
