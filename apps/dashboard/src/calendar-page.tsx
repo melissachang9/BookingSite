@@ -20,6 +20,7 @@ import type {
 } from "@booking/shared-types";
 
 import { FormResponseViewer } from "./form-response-viewer";
+import { platformApi } from "./platform-api";
 
 type CalendarDataState =
   | { kind: "loading" }
