@@ -48,7 +48,7 @@ async def list_bookings_route(
     provider_id: str | None = Query(default=None, alias="providerId"),
     customer_id: str | None = Query(default=None, alias="customerId"),
     location_id: str | None = Query(default=None, alias="locationId"),
-    limit: int = Query(default=25, ge=1, le=100),
+    limit: int = Query(default=25, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     _: object = Depends(require_tenant_permission("bookings.view")),
     session: AsyncSession = Depends(get_db_session),
