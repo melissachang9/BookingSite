@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from sqlalchemy import inspect as sa_inspect
+
 from app.core.security import create_customer_manage_token
 from app.db.models import Booking, BookingDraft, BookingDraftFormRequirement, BookingDraftIntakePlan, Customer, Location, Provider, Service, Tenant
 from app.schemas.bookings import BookingSummaryResponse
@@ -24,6 +26,17 @@ def _tenant_tax_rate_percent(tenant: Tenant | None) -> float:
         return float(raw_value)
 
     return 0
+
+
+def _safe_form_ids(service: Service) -> list[str]:
+    """Return form_ids from the service's form_attachments relationship, or [] if not loaded."""
+    insp = sa_inspect(service)
+    if insp is None:
+        return []
+    # Check if the relationship was eagerly loaded; avoid lazy-load in async context
+    if "form_attachments" not in insp.unloaded:
+        return [att.form_id for att in service.form_attachments]
+    return []
 
 
 def booking_tax_cents(booking: Booking) -> int:
@@ -145,7 +158,7 @@ def service_to_summary(service: Service, tenant: Tenant | None = None) -> Servic
         image_url=image_url,
         image_alt_text=image_alt_text,
         location_ids=[link.location_id for link in service.location_links],
-        form_ids=[att.form_id for att in (service.form_attachments if hasattr(service, "form_attachments") and service.form_attachments else [])],
+        form_ids=_safe_form_ids(service),
         category_id=service.category_id,
         sort_order=service.sort_order,
         slug=service.slug,
