@@ -121,32 +121,45 @@ async def _seed_brow_prep_form(session: AsyncSession, tenant: Tenant, brow_servi
     existing_version = await session.scalar(
         select(FormVersion).where(FormVersion.tenant_id == tenant.id, FormVersion.form_id == existing_form.id, FormVersion.version_number == 1)
     )
+
+    v1_schema = {
+        "title": "Brow Prep Check-In",
+        "description": "A quick pre-booking check to keep the brow appointment safe and on time.",
+        "fields": [
+            {
+                "id": "recentRetinoidUse",
+                "type": "yes_no",
+                "label": "Have you used retinoids or exfoliating acids in the last 5 days?",
+                "required": True,
+            },
+            {
+                "id": "skinSensitivityNotes",
+                "type": "long_text",
+                "label": "Anything else we should know before your brow appointment?",
+                "required": True,
+                "placeholder": "Share allergies, recent treatments, or anything that could affect tinting.",
+            },
+            {
+                "id": "browPhoto",
+                "type": "file_upload",
+                "label": "Upload a brow photo",
+                "required": False,
+            },
+        ],
+    }
+
     if existing_version is None:
         existing_version = FormVersion(
             tenant_id=tenant.id,
             form_id=existing_form.id,
             version_number=1,
-            schema_json={
-                "title": "Brow Prep Check-In",
-                "description": "A quick pre-booking check to keep the brow appointment safe and on time.",
-                "fields": [
-                    {
-                        "id": "recentRetinoidUse",
-                        "type": "yes_no",
-                        "label": "Have you used retinoids or exfoliating acids in the last 5 days?",
-                        "required": True,
-                    },
-                    {
-                        "id": "skinSensitivityNotes",
-                        "type": "long_text",
-                        "label": "Anything else we should know before your brow appointment?",
-                        "required": True,
-                        "placeholder": "Share allergies, recent treatments, or anything that could affect tinting.",
-                    },
-                ],
-            },
+            schema_json=v1_schema,
         )
         session.add(existing_version)
+        await session.flush()
+    else:
+        # Ensure existing version 1 has the file_upload field
+        existing_version.schema_json = v1_schema
         await session.flush()
 
     existing_attachment = await session.scalar(

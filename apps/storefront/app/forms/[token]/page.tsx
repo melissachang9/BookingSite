@@ -176,7 +176,7 @@ function renderRequirementPanel(token: string, requirement: BookingFormRequireme
       <span>{timingLabel}</span>
       <strong>{title}</strong>
       {description ? <p>{description}</p> : null}
-      <form action={submitManageBookingFormRequirementAction} className="requirement-form" encType="multipart/form-data">
+      <form action={submitManageBookingFormRequirementAction} className="requirement-form">
         <input type="hidden" name="token" value={token} />
         <input type="hidden" name="requirementId" value={requirement.id} />
         <input type="hidden" name="tenantId" value={tenantId} />

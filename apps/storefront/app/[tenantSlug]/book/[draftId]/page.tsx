@@ -149,7 +149,7 @@ function renderRequirementPanel(
 
       <p className="requirement-form-description">{description}</p>
 
-      <form action={submitBookingRequirementAction} className="requirement-form" encType="multipart/form-data">
+      <form action={submitBookingRequirementAction} className="requirement-form">
         <input type="hidden" name="tenantSlug" value={tenantSlug} />
         <input type="hidden" name="bookingDraftId" value={bookingDraftId} />
         <input type="hidden" name="requirementId" value={requirement.id} />

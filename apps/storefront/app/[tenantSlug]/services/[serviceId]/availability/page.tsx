@@ -186,6 +186,7 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
         dayNumber: index + 1,
         slotCount: dayMap.get(cellDate) ?? 0,
         isSelected: cellDate === selectedDate,
+        isPast: cellDate < today,
       };
     });
     const leadingBlankCount = new Date(`${monthStart}T12:00:00Z`).getUTCDay();

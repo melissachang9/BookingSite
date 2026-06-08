@@ -46,14 +46,14 @@ const readFieldAnswer = async (formData: FormData, field: FormField, tenantId: s
   }
 
   if (field.type === "file_upload") {
-    const files = formData.getAll(field.id).filter(
-      (entry): entry is File => entry instanceof File && entry.size > 0,
+    const entries = formData.getAll(field.id).filter(
+      (entry): entry is File => typeof entry === "object" && entry !== null && "size" in entry && (entry as File).size > 0,
     );
-    if (files.length === 0) return undefined;
+    if (entries.length === 0) return undefined;
 
     const attachments: FormAttachment[] = [];
-    for (const file of files) {
-      const attachment = await uploadFormFile(file, tenantId);
+    for (const file of entries) {
+      const attachment = await uploadFormFile(file as File, tenantId);
       attachments.push(attachment);
     }
     return attachments;
