@@ -1655,6 +1655,16 @@ button:disabled {
   visibility: hidden;
 }
 
+.appointment-day--past {
+  color: var(--ui-muted, #9ca3af);
+  cursor: default;
+  opacity: 0.5;
+}
+
+.appointment-day--past strong {
+  font-weight: 400;
+}
+
 .appointment-times-panel {
   display: grid;
   gap: 1.35rem;

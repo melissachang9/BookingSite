@@ -21,6 +21,7 @@ type MonthCell = {
   dayNumber: number;
   slotCount: number;
   isSelected: boolean;
+  isPast: boolean;
 };
 
 type SlotGroup = {
@@ -247,7 +248,16 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
               {Array.from({ length: leadingBlankCount }, (_, index) => (
                 <span key={`blank-${index}`} className="appointment-day appointment-day--blank" />
               ))}
-              {monthCells.map((cell) => (
+              {monthCells.map((cell) =>
+                cell.isPast ? (
+                  <span
+                    key={cell.date}
+                    className="appointment-day appointment-day--past"
+                    aria-label={`${cell.date}, past`}
+                  >
+                    <strong>{cell.dayNumber}</strong>
+                  </span>
+                ) : (
                 <Link
                   key={cell.date}
                   href={pathWithQuery(availabilityPath, { ...baseQuery, month: activeMonth, date: cell.date })}
