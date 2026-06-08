@@ -98,6 +98,7 @@ class TenantSettingsResponse(CamelModel):
     auto_charge_no_show_fee: bool | None = None
     calendar_display_start_hour: int = 9
     calendar_display_end_hour: int = 19
+    week_starts_on: int = 0  # 0=Sunday, 1=Monday, ..., 6=Saturday
     country: str = "US"
     currency: str = "USD"
     sms_phone: str | None = None
@@ -194,6 +195,7 @@ class EmailDnsResponse(CamelModel):
 class UpdateTenantSettingsRequest(CamelModel):
     calendar_display_start_hour: int | None = Field(default=None, ge=0, le=23)
     calendar_display_end_hour: int | None = Field(default=None, ge=1, le=24)
+    week_starts_on: int | None = Field(default=None, ge=0, le=6)
 
 
 SUPPORTED_CURRENCIES = ("USD", "CAD", "EUR", "GBP", "AUD", "MXN")

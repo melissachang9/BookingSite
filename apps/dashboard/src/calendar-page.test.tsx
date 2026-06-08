@@ -194,7 +194,7 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
       expect(screen.queryByRole("dialog", { name: "Appointment details" })).not.toBeInTheDocument();
       expect(screen.getAllByText("Intake not checked").length).toBeGreaterThan(0);
 
@@ -243,7 +243,7 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
 
       // Wait for availability load to finish painting unavailable bands.
       expect(await screen.findByLabelText("Availability for")).toHaveValue("");
@@ -344,7 +344,7 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
       expect(await screen.findByRole("button", { name: /Taylor Guest booked/i })).toBeInTheDocument();
       expect(await screen.findByRole("button", { name: /Morgan Ellis booked/i })).toBeInTheDocument();
 
@@ -381,7 +381,7 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
       expect(await screen.findByRole("group", { name: "Week provider view" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "All providers" })).toHaveAttribute("aria-pressed", "true");
       expect(screen.getByRole("button", { name: "Jordan Rivera" })).toBeInTheDocument();
@@ -423,7 +423,7 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
 
       await vi.waitFor(() => {
         expect(container.querySelectorAll(".schedule-unavailable").length).toBeGreaterThan(0);
@@ -501,7 +501,7 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Day" }));
 
       await vi.waitFor(() => {
@@ -559,13 +559,13 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
       expect(screen.getByText("May 2026")).toBeInTheDocument();
 
       const juneFourth = screen.getByRole("gridcell", { name: "Thu, Jun 4" });
       fireEvent.click(juneFourth);
 
-      expect(await screen.findByText("Wed, Jun 3 - Tue, Jun 9")).toBeInTheDocument();
+      expect(await screen.findByText("Sun, May 31 - Sat, Jun 6")).toBeInTheDocument();
       expect(juneFourth).toHaveAttribute("aria-pressed", "true");
     } finally {
       vi.useRealTimers();
@@ -594,12 +594,12 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /Taylor Guest booked Thu, Jun 4/i })).not.toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("gridcell", { name: "Thu, Jun 4" }));
 
-      expect(await screen.findByText("Wed, Jun 3 - Tue, Jun 9")).toBeInTheDocument();
+      expect(await screen.findByText("Sun, May 31 - Sat, Jun 6")).toBeInTheDocument();
       expect(await screen.findByRole("button", { name: /Taylor Guest booked Thu, Jun 4/i })).toBeInTheDocument();
       expect(api.listBookings).toHaveBeenCalledWith(
         "brow-beauty-lab",
@@ -632,7 +632,7 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
       expect(await screen.findByRole("button", { name: /Taylor Guest booked/i })).toBeInTheDocument();
       expect(screen.queryByText("Unable to load booked appointments.")).not.toBeInTheDocument();
     } finally {
@@ -673,7 +673,7 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: "Day" }));
 
@@ -752,7 +752,7 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Wed, May 27 - Tue, Jun 2")).toBeInTheDocument();
+      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: "Day" }));
       fireEvent.click(await screen.findByLabelText("Jordan Rivera schedule track"));
@@ -813,7 +813,7 @@ describe("CalendarPage", () => {
         />,
       );
 
-      await screen.findByText("Wed, May 27 - Tue, Jun 2");
+      await screen.findByText("Sun, May 24 - Sat, May 30");
 
       expect(screen.queryByRole("dialog", { name: "Appointment details" })).not.toBeInTheDocument();
 
@@ -876,7 +876,7 @@ describe("CalendarPage", () => {
         />,
       );
 
-      await screen.findByText("Wed, May 27 - Tue, Jun 2");
+      await screen.findByText("Sun, May 24 - Sat, May 30");
       fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake not checked/i }));
 
       await screen.findByRole("dialog", { name: "Appointment details" });
@@ -920,7 +920,7 @@ describe("CalendarPage", () => {
         />,
       );
 
-      await screen.findByText("Wed, May 27 - Tue, Jun 2");
+      await screen.findByText("Sun, May 24 - Sat, May 30");
 
       fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake not checked/i }));
 

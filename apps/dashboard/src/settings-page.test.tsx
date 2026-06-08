@@ -148,6 +148,7 @@ describe("SettingsPage", () => {
       expect(spy).toHaveBeenCalledWith("brow-beauty-lab", {
         calendarDisplayStartHour: 8,
         calendarDisplayEndHour: 20,
+        weekStartsOn: 0,
       });
     });
     expect(onTenantUpdated).toHaveBeenCalledWith(updated);

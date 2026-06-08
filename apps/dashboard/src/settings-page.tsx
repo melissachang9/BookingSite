@@ -302,12 +302,14 @@ function CalendarDisplaySection({
 }) {
   const [startHour, setStartHour] = useState<number>(tenant?.settings.calendarDisplayStartHour ?? 9);
   const [endHour, setEndHour] = useState<number>(tenant?.settings.calendarDisplayEndHour ?? 19);
+  const [weekStartsOn, setWeekStartsOn] = useState<number>(tenant?.settings.weekStartsOn ?? 0);
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
   useEffect(() => {
     if (tenant) {
       setStartHour(tenant.settings.calendarDisplayStartHour);
       setEndHour(tenant.settings.calendarDisplayEndHour);
+      setWeekStartsOn(tenant.settings.weekStartsOn ?? 0);
     }
   }, [tenant]);
 
@@ -323,6 +325,7 @@ function CalendarDisplaySection({
       const updated = await platformApi.updateTenantSettings(tenantSlug, {
         calendarDisplayStartHour: startHour,
         calendarDisplayEndHour: endHour,
+        weekStartsOn,
       });
       onTenantUpdated(updated);
       setSaveState({ kind: "success", message: "Calendar display hours saved." });
@@ -370,6 +373,23 @@ function CalendarDisplaySection({
           </select>
         </label>
       </div>
+
+      <label className="settings-field">
+        <span>Week starts on</span>
+        <select
+          value={weekStartsOn}
+          onChange={(event) => setWeekStartsOn(Number(event.target.value))}
+          disabled={!canManageSettings || saveState.kind === "submitting"}
+        >
+          <option value={0}>Sunday</option>
+          <option value={1}>Monday</option>
+          <option value={2}>Tuesday</option>
+          <option value={3}>Wednesday</option>
+          <option value={4}>Thursday</option>
+          <option value={5}>Friday</option>
+          <option value={6}>Saturday</option>
+        </select>
+      </label>
 
       {validationMessage ? <p role="alert" className="settings-error">{validationMessage}</p> : null}
       {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}

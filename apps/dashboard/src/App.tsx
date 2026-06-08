@@ -645,6 +645,7 @@ export function App() {
 
   const calendarDisplayStartHour = tenantSummary?.settings.calendarDisplayStartHour ?? 9;
   const calendarDisplayEndHour = tenantSummary?.settings.calendarDisplayEndHour ?? 19;
+  const weekStartsOn = tenantSummary?.settings.weekStartsOn ?? 0;
 
   return (
     <Routes>
@@ -672,6 +673,7 @@ export function App() {
                 tenantSlug={session.user.tenantSlug}
                 displayStartHour={calendarDisplayStartHour}
                 displayEndHour={calendarDisplayEndHour}
+                weekStartsOn={weekStartsOn}
               />
             }
           />

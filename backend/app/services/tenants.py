@@ -141,6 +141,10 @@ async def update_tenant_settings(
 
     current["calendarDisplayStartHour"] = start_hour
     current["calendarDisplayEndHour"] = end_hour
+
+    if payload.week_starts_on is not None:
+        current["weekStartsOn"] = payload.week_starts_on
+
     tenant.settings_json = current
     await session.commit()
     await session.refresh(tenant)

@@ -67,6 +67,7 @@ export type TenantSettings = {
   autoChargeNoShowFee?: boolean;
   calendarDisplayStartHour: number;
   calendarDisplayEndHour: number;
+  weekStartsOn: number;  // 0=Sunday, 1=Monday, ..., 6=Saturday
   country: string;
   currency: string;
   smsPhone: string | null;
@@ -90,6 +91,7 @@ export type CustomEmailSettings = {
 export type UpdateTenantSettingsRequest = {
   calendarDisplayStartHour?: number;
   calendarDisplayEndHour?: number;
+  weekStartsOn?: number;
 };
 
 export type UpdateTenantBusinessRequest = {

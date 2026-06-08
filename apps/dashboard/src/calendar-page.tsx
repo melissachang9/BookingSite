@@ -174,6 +174,7 @@ type CalendarPageProps = {
   api?: CalendarPageApi;
   displayStartHour?: number;
   displayEndHour?: number;
+  weekStartsOn?: number;
 };
 
 const dateFormatter = new Intl.DateTimeFormat("en-CA", {
@@ -583,6 +584,7 @@ export function CalendarPage({
   api = platformApi,
   displayStartHour,
   displayEndHour,
+  weekStartsOn,
 }: CalendarPageProps) {
   const [calendarState, setCalendarState] = useState<CalendarDataState>({ kind: "loading" });
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
@@ -892,11 +894,11 @@ export function CalendarPage({
       return;
     }
 
-    // Only auto-reset if focusedDate is in the future but not in the loaded window.
-    // Past dates are valid — operators use them to view booking history.
+    // Only auto-reset if focusedDate is strictly in the future and not in the loaded window.
+    // Today and past dates are valid — operators use them to view booking history.
     const today = toIsoDate(new Date());
     const hasFocusedDate = calendarState.days.some((day) => day.date === focusedDate);
-    if (!hasFocusedDate && focusedDate >= today) {
+    if (!hasFocusedDate && focusedDate > today) {
       setFocusedDate(calendarState.days[0]?.date ?? getUpcomingDate(1));
     }
   }, [calendarState, focusedDate]);
@@ -918,35 +920,32 @@ export function CalendarPage({
       return [];
     }
 
-    const focusIndex = calendarState.days.findIndex((day) => day.date === focusedDate);
+    const weekStartDay = weekStartsOn ?? 0;
 
-    if (focusIndex >= 0) {
-      if (viewMode === "day") {
-        return calendarState.days.slice(focusIndex, focusIndex + 1);
-      }
-      const weekStartIndex = Math.floor(focusIndex / 7) * 7;
-      return calendarState.days.slice(weekStartIndex, weekStartIndex + 7);
+    if (viewMode === "day") {
+      // Find or create a single day entry
+      const existing = calendarState.days.find((day) => day.date === focusedDate);
+      if (existing) return [existing];
+      return [{ date: focusedDate, label: getDateLabel(focusedDate), appointments: [], openings: [] }];
     }
 
-    // Past date selected — generate synthetic days for the week containing this date
+    // Week view: compute the week containing focusedDate, anchored on weekStartsOn
     const focusDate = parseIsoDate(focusedDate);
     const dayOfWeek = focusDate.getUTCDay();
+    const offset = (dayOfWeek - weekStartDay + 7) % 7;
     const weekStart = new Date(focusDate);
-    weekStart.setUTCDate(focusDate.getUTCDate() - dayOfWeek);
+    weekStart.setUTCDate(focusDate.getUTCDate() - offset);
 
-    const syntheticDays: CalendarDay[] = [];
+    const result: CalendarDay[] = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date(weekStart);
       d.setUTCDate(weekStart.getUTCDate() + i);
       const dateStr = toIsoDate(d);
-      syntheticDays.push({ date: dateStr, label: getDateLabel(dateStr), appointments: [], openings: [] });
+      const existing = calendarState.days.find((day) => day.date === dateStr);
+      result.push(existing ?? { date: dateStr, label: getDateLabel(dateStr), appointments: [], openings: [] });
     }
-
-    if (viewMode === "day") {
-      return syntheticDays.filter((d) => d.date === focusedDate);
-    }
-    return syntheticDays;
-  }, [calendarState, focusedDate, viewMode]);
+    return result;
+  }, [calendarState, focusedDate, viewMode, weekStartsOn]);
 
   const visibleDateRangeLabel = useMemo(() => {
     if (viewDays.length === 0) {
