@@ -1660,7 +1660,7 @@ function MonthRail({
               key={date}
               type="button"
               role="gridcell"
-              disabled={!dayData}
+              disabled={!isInCurrentMonth}
               aria-pressed={isFocused}
               aria-label={getDateLabel(date)}
               className={[
