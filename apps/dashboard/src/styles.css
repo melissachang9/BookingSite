@@ -4079,3 +4079,178 @@ body {
   color: var(--text-muted, #6b7280);
   font-style: italic;
 }
+
+/* ---------------------------------------------------------------- */
+/* Form response viewer (shared between calendar drawer and profile) */
+/* ---------------------------------------------------------------- */
+
+.form-response-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.75rem 0;
+}
+
+.form-response-viewer__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.form-response-viewer__title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ui-ink);
+  margin-right: 0.5rem;
+}
+
+.form-response-viewer__version {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ui-ink-soft, #475569);
+  letter-spacing: 0.05em;
+}
+
+.form-response-viewer__meta {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--ui-muted, #64748b);
+}
+
+.form-response-viewer__answers {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-response-viewer__dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.form-response-viewer__answer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.form-response-viewer__label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ui-ink-soft, #475569);
+  font-weight: 600;
+}
+
+.form-response-viewer__value {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ui-ink);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.form-response-viewer__section-divider {
+  margin: 0.5rem 0 0.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.form-response-viewer__section-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ui-ink);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.form-response-viewer__static-text {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ui-ink-soft, #475569);
+  font-style: italic;
+}
+
+.form-response-viewer__empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ui-muted, #64748b);
+}
+
+/* ---------------------------------------------------------------- */
+/* Calendar drawer: compact form response rows + "View form" button  */
+/* ---------------------------------------------------------------- */
+
+.form-responses-list__view-btn {
+  align-self: flex-start;
+  margin-top: 0.5rem;
+  padding: 0.32rem 0.8rem;
+  border: 1px solid var(--ui-ink-soft, #475569);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ui-ink-soft, #475569);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.form-responses-list__view-btn:hover,
+.form-responses-list__view-btn:focus-visible {
+  background: var(--ui-ink-soft, #475569);
+  color: #fff;
+  outline: none;
+}
+
+/* Secondary drawer (form response detail), stacked above appointment drawer */
+.form-response-drawer {
+  z-index: 38;
+  right: 0;
+  width: min(100vw, 520px);
+}
+
+/* ---------------------------------------------------------------- */
+/* Customer profile: expandable form response row                    */
+/* ---------------------------------------------------------------- */
+
+.customer-form-response-row {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.customer-form-response-row__toggle {
+  align-self: flex-start;
+  margin-top: 0.4rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ui-ink-soft, #475569);
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.customer-form-response-row__toggle:hover,
+.customer-form-response-row__toggle:focus-visible {
+  background: rgba(15, 23, 42, 0.06);
+  outline: none;
+}
+
+.customer-form-response-row__viewer {
+  margin-top: 0.6rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.7);
+}
+

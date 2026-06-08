@@ -10,6 +10,7 @@ import type {
 } from "@booking/shared-types";
 
 import { platformApi } from "./platform-api";
+import { FormResponseViewer } from "./form-response-viewer";
 
 type RouteDefinitionLike = {
   title: string;
@@ -354,6 +355,19 @@ function CustomerProfilePanel({
   profileState: ProfileState;
   formResponsesState: FormResponsesState;
 }) {
+  const [expandedFormIds, setExpandedFormIds] = useState<Set<string>>(new Set());
+
+  const toggleFormExpand = (id: string) => {
+    setExpandedFormIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
   return (
     <div className="customer-profile">
       <header className="customer-profile-header">
@@ -441,7 +455,12 @@ function CustomerProfilePanel({
           ) : (
             <ul className="customer-booking-list">
               {formResponsesState.items.map((response) => (
-                <CustomerFormResponseRow key={response.id} response={response} />
+                <CustomerFormResponseRow
+                  key={response.id}
+                  response={response}
+                  isExpanded={expandedFormIds.has(response.id)}
+                  onToggleExpand={() => toggleFormExpand(response.id)}
+                />
               ))}
             </ul>
           )
@@ -480,11 +499,19 @@ function CustomerBookingRow({ booking }: { booking: CustomerBookingEntry }) {
   );
 }
 
-function CustomerFormResponseRow({ response }: { response: BookingFormResponseEntry }) {
+function CustomerFormResponseRow({
+  response,
+  isExpanded,
+  onToggleExpand,
+}: {
+  response: BookingFormResponseEntry;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
+}) {
   const timingLabel = response.customerPromptTiming?.replaceAll("_", " ") ?? response.scope;
   const answerCount = Object.keys(response.answers).length;
   return (
-    <li className="customer-booking-row">
+    <li className="customer-booking-row customer-form-response-row">
       <div className="customer-booking-row__main">
         <div className="customer-booking-row__header">
           <strong>{response.formName}</strong>
@@ -495,6 +522,19 @@ function CustomerFormResponseRow({ response }: { response: BookingFormResponseEn
         <p className="customer-booking-row__meta">
           {formatDateTime(response.submittedAt)} · {timingLabel} · {answerCount} field{answerCount !== 1 ? "s" : ""}
         </p>
+        <button
+          type="button"
+          className="customer-form-response-row__toggle"
+          aria-expanded={isExpanded}
+          onClick={onToggleExpand}
+        >
+          {isExpanded ? "Hide answers" : "View answers"}
+        </button>
+        {isExpanded ? (
+          <div className="customer-form-response-row__viewer">
+            <FormResponseViewer response={response} />
+          </div>
+        ) : null}
       </div>
     </li>
   );

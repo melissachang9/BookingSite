@@ -19,7 +19,7 @@ import type {
   SlotAvailability,
 } from "@booking/shared-types";
 
-import { platformApi } from "./platform-api";
+import { FormResponseViewer } from "./form-response-viewer";
 
 type CalendarDataState =
   | { kind: "loading" }
@@ -2701,6 +2701,8 @@ function AppointmentDetailsDrawer({
   onClose,
   onComplete,
 }: AppointmentDetailsDrawerProps): ReactElement | null {
+  const [viewingFormEntry, setViewingFormEntry] = useState<BookingFormResponseEntry | null>(null);
+
   if (!selectedAppointment) {
     return null;
   }
@@ -2808,6 +2810,7 @@ function AppointmentDetailsDrawer({
             selectedAppointment={selectedAppointment}
             state={formResponsesState}
             intakeStatus={intakeStatus}
+            onViewForm={setViewingFormEntry}
           />
         </section>
 
@@ -2830,6 +2833,13 @@ function AppointmentDetailsDrawer({
           </div>
         ) : null}
       </aside>
+      {createPortal(
+        <FormResponseDrawer
+          entry={viewingFormEntry}
+          onClose={() => setViewingFormEntry(null)}
+        />,
+        document.body,
+      )}
     </>
   );
 }
@@ -2838,25 +2848,10 @@ type FormResponsesPanelProps = {
   selectedAppointment: SelectedCalendarAppointment | null;
   state: FormResponsesState;
   intakeStatus: IntakeStatus;
+  onViewForm?: (entry: BookingFormResponseEntry) => void;
 };
 
-function formatFormAnswer(value: unknown): string {
-  if (value === null || value === undefined) {
-    return "—";
-  }
-  if (typeof value === "boolean") {
-    return value ? "Yes" : "No";
-  }
-  if (Array.isArray(value)) {
-    return value.length === 0 ? "—" : value.map((entry) => String(entry)).join(", ");
-  }
-  if (typeof value === "string") {
-    return value.trim().length === 0 ? "—" : value;
-  }
-  return String(value);
-}
-
-function FormResponsesPanel({ selectedAppointment, state, intakeStatus }: FormResponsesPanelProps): ReactElement {
+function FormResponsesPanel({ selectedAppointment, state, intakeStatus, onViewForm }: FormResponsesPanelProps): ReactElement {
   const intakeLabel = getIntakeStatusLabel(intakeStatus);
 
   return (
@@ -2883,33 +2878,62 @@ function FormResponsesPanel({ selectedAppointment, state, intakeStatus }: FormRe
       ) : state.kind === "ready" ? (
         <ul className="form-responses-list" aria-label="Submitted forms">
           {state.items.map((entry) => {
-            const fields = entry.schema?.fields ?? [];
-            const promptable = fields.filter((field) => field.type !== "section" && field.type !== "static_text");
+            const timingLabel = entry.customerPromptTiming?.replaceAll("_", " ") ?? entry.scope;
+            const answerCount = Object.keys(entry.answers).length;
             return (
               <li key={entry.id} className="form-responses-list__item">
                 <header className="form-responses-list__header">
                   <span className="form-responses-list__title">{entry.formName}</span>
                   <span className="form-responses-list__meta">
-                    v{entry.formVersionNumber} · {formatDateTime(entry.submittedAt)}
+                    v{entry.formVersionNumber} &middot; {formatDateTime(entry.submittedAt)} &middot; {timingLabel} &middot; {answerCount} field{answerCount !== 1 ? "s" : ""}
                   </span>
                 </header>
-                {promptable.length === 0 ? (
-                  <p className="form-responses-list__empty">No prompted answers recorded.</p>
-                ) : (
-                  <dl className="form-responses-list__answers">
-                    {promptable.map((field) => (
-                      <div key={field.id} className="form-responses-list__answer">
-                        <dt>{field.label}</dt>
-                        <dd>{formatFormAnswer(entry.answers[field.id])}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                )}
+                <button
+                  type="button"
+                  className="form-responses-list__view-btn"
+                  onClick={() => onViewForm?.(entry)}
+                >
+                  View form
+                </button>
               </li>
             );
           })}
         </ul>
       ) : null}
+    </>
+  );
+}
+
+type FormResponseDrawerProps = {
+  entry: BookingFormResponseEntry | null;
+  onClose: () => void;
+};
+
+function FormResponseDrawer({ entry, onClose }: FormResponseDrawerProps): ReactElement | null {
+  if (!entry) return null;
+
+  return (
+    <>
+      <button
+        type="button"
+        className="appointment-drawer-backdrop"
+        aria-label="Close form response"
+        onClick={onClose}
+      />
+      <aside className="appointment-details-drawer form-response-drawer" role="dialog" aria-label="Form response">
+        <header className="appointment-details-drawer__header">
+          <span className="appointment-status-chip">
+            <span aria-hidden="true" />
+            Form response
+          </span>
+          <div className="slot-action-drawer__header-actions">
+            <button type="button" className="appointment-drawer-outline-action" onClick={onClose}>
+              Close
+            </button>
+          </div>
+        </header>
+        <FormResponseViewer response={entry} />
+      </aside>
     </>
   );
 }

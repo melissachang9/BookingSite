@@ -827,11 +827,76 @@ describe("CalendarPage", () => {
       expect(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake submitted/i })).toBeInTheDocument();
       expect(await screen.findByText("Brow Prep Check-In")).toBeInTheDocument();
       expect(screen.getAllByText("Intake submitted").length).toBeGreaterThan(0);
-      expect(screen.getByText("Recent retinoid use")).toBeInTheDocument();
-      expect(screen.getByText("Yes")).toBeInTheDocument();
-      expect(screen.getByText("Skin sensitivity notes")).toBeInTheDocument();
-      expect(screen.getByText("Mild redness after exfoliation.")).toBeInTheDocument();
+      // Compact row shows form name + a "View form" button; answers are not shown until expanded
+      expect(screen.getByRole("button", { name: "View form" })).toBeInTheDocument();
+      expect(screen.queryByText("Recent retinoid use")).not.toBeInTheDocument();
       expect(screen.queryByRole("dialog", { name: "Time block details" })).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("opens a secondary drawer with form answers when clicking View form", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const formResponse: BookingFormResponseEntry = {
+        id: "form-response-1",
+        formId: "form-1",
+        formVersionId: "form-version-1",
+        formName: "Brow Prep Check-In",
+        formVersionNumber: 1,
+        scope: "customer",
+        customerPromptTiming: "pre_booking",
+        submittedAt: "2026-05-25T18:30:00.000Z",
+        answers: {
+          recentRetinoidUse: true,
+          skinSensitivityNotes: "Mild redness after exfoliation.",
+        },
+        schema: {
+          title: "Brow Prep Check-In",
+          fields: [
+            { id: "recentRetinoidUse", type: "yes_no", label: "Recent retinoid use" },
+            { id: "skinSensitivityNotes", type: "long_text", label: "Skin sensitivity notes" },
+          ],
+        },
+      };
+
+      const api = createApi([baseBooking], { formResponses: [formResponse] });
+
+      render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      await screen.findByText("Wed, May 27 - Tue, Jun 2");
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake not checked/i }));
+
+      await screen.findByRole("dialog", { name: "Appointment details" });
+      const viewButton = await screen.findByRole("button", { name: "View form" });
+
+      expect(screen.queryByRole("dialog", { name: "Form response" })).not.toBeInTheDocument();
+
+      fireEvent.click(viewButton);
+
+      const responseDialog = await screen.findByRole("dialog", { name: "Form response" });
+      expect(within(responseDialog).getByText("Brow Prep Check-In")).toBeInTheDocument();
+      expect(within(responseDialog).getByText("Recent retinoid use")).toBeInTheDocument();
+      expect(within(responseDialog).getByText("Yes")).toBeInTheDocument();
+      expect(within(responseDialog).getByText("Skin sensitivity notes")).toBeInTheDocument();
+      expect(within(responseDialog).getByText("Mild redness after exfoliation.")).toBeInTheDocument();
+
+      fireEvent.click(within(responseDialog).getByRole("button", { name: "Close" }));
+      expect(screen.queryByRole("dialog", { name: "Form response" })).not.toBeInTheDocument();
+      // Appointment drawer remains open
+      expect(screen.getByRole("dialog", { name: "Appointment details" })).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
