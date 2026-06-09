@@ -223,7 +223,7 @@ async def _seed_booking_history(session: AsyncSession, tenant: Tenant) -> None:
             )
         )
 
-    # Create demo customers
+    # Create or look up demo customers
     customer_specs = [
         ("Reese Park", "reese.park@example.com", "555-0142", "Prefers afternoon appointments."),
         ("Morgan Ellis", "morgan.ellis@example.com", "555-0188", "First brow tint client. Tends to run 5 min late."),
@@ -232,15 +232,21 @@ async def _seed_booking_history(session: AsyncSession, tenant: Tenant) -> None:
     ]
     customers: dict[str, Customer] = {}
     for name, email, phone, notes in customer_specs:
-        customer = Customer(
-            tenant_id=tenant.id,
-            name=name,
-            email=email,
-            phone=phone,
-            notes=notes,
+        existing = await session.scalar(
+            select(Customer).where(Customer.tenant_id == tenant.id, Customer.email == email)
         )
-        session.add(customer)
-        customers[name] = customer
+        if existing is not None:
+            customers[name] = existing
+        else:
+            customer = Customer(
+                tenant_id=tenant.id,
+                name=name,
+                email=email,
+                phone=phone,
+                notes=notes,
+            )
+            session.add(customer)
+            customers[name] = customer
     await session.flush()
 
     today_local = datetime.now(timezone.utc).date()
@@ -424,14 +430,11 @@ async def seed_demo_data(session: AsyncSession) -> None:
         )
         if existing_brow_service is not None:
             await _seed_brow_prep_form(session, existing_tenant, existing_brow_service)
-        # Seed booking history if the demo customers haven't been created yet
-        existing_demo_customer = await session.scalar(
-            select(Customer.id).where(
-                Customer.tenant_id == existing_tenant.id,
-                Customer.email == "reese.park@example.com",
-            )
+        # Seed booking history if no bookings exist (E2E reset may have wiped them)
+        existing_booking_count = await session.scalar(
+            select(Booking.id).where(Booking.tenant_id == existing_tenant.id).limit(1)
         )
-        if existing_demo_customer is None:
+        if existing_booking_count is None:
             await _seed_booking_history(session, existing_tenant)
         await session.commit()
         return
