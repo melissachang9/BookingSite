@@ -8,9 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password
 from app.db.models import (
+    Booking,
+    BookingPaymentEvent,
+    Customer,
     FormDefinition,
+    FormResponse,
     FormVersion,
     Location,
+    Payment,
     ServiceFormAttachment,
     Provider,
     ProviderLocation,
@@ -181,6 +186,234 @@ async def _seed_brow_prep_form(session: AsyncSession, tenant: Tenant, brow_servi
         )
 
 
+async def _seed_booking_history(session: AsyncSession, tenant: Tenant) -> None:
+    """Seed past + upcoming bookings, customers, payments, and form responses for the demo tenant."""
+    services_rows = (await session.execute(select(Service).where(Service.tenant_id == tenant.id))).scalars().all()
+    services = {service.name: service for service in services_rows}
+    providers_rows = (await session.execute(select(Provider).where(Provider.tenant_id == tenant.id))).scalars().all()
+    providers = {provider.name: provider for provider in providers_rows}
+    locations_rows = (await session.execute(select(Location).where(Location.tenant_id == tenant.id))).scalars().all()
+    locations = {location.name: location for location in locations_rows}
+
+    if not services or not providers or not locations:
+        return
+
+    brow_service = services.get("Brow Shape and Tint")
+    facial_service = services.get("Signature Facial")
+    consult_service = services.get("New Client Consultation")
+    jordan = providers.get("Jordan Rivera")
+    ava = providers.get("Ava Brooks")
+    downtown = locations.get("Downtown Studio")
+    uptown = locations.get("Uptown Suite")
+
+    if not all([brow_service, facial_service, consult_service, jordan, ava, downtown, uptown]):
+        return
+
+    # Resolve brow prep form for response seeding
+    brow_form = await session.scalar(
+        select(FormDefinition).where(FormDefinition.tenant_id == tenant.id, FormDefinition.name == "Brow Prep Check-In")
+    )
+    brow_form_version = None
+    if brow_form is not None:
+        brow_form_version = await session.scalar(
+            select(FormVersion).where(
+                FormVersion.tenant_id == tenant.id,
+                FormVersion.form_id == brow_form.id,
+                FormVersion.version_number == 1,
+            )
+        )
+
+    # Create demo customers
+    customer_specs = [
+        ("Reese Park", "reese.park@example.com", "555-0142", "Prefers afternoon appointments."),
+        ("Morgan Ellis", "morgan.ellis@example.com", "555-0188", "First brow tint client. Tends to run 5 min late."),
+        ("Sam Patel", "sam.patel@example.com", "555-0231", "Sensitive skin around the brows. Patch-tested."),
+        ("Jules Romero", "jules.romero@example.com", "555-0319", "Quiet appointment preferred."),
+    ]
+    customers: dict[str, Customer] = {}
+    for name, email, phone, notes in customer_specs:
+        customer = Customer(
+            tenant_id=tenant.id,
+            name=name,
+            email=email,
+            phone=phone,
+            notes=notes,
+        )
+        session.add(customer)
+        customers[name] = customer
+    await session.flush()
+
+    today_local = datetime.now(timezone.utc).date()
+
+    def _at(days_offset: int, hour: int, minute: int = 0) -> datetime:
+        target = today_local + timedelta(days=days_offset)
+        return datetime(target.year, target.month, target.day, hour, minute, tzinfo=timezone.utc)
+
+    # Booking specs: (customer, service, provider, location, days_offset, hour, status, deposit_status, payment_resolution, notes)
+    booking_specs = [
+        # Past completed
+        ("Reese Park", brow_service, jordan, downtown, -10, 14, "completed", "paid", "collected", "Tint refresh. Pleased with shape."),
+        ("Morgan Ellis", facial_service, ava, downtown, -8, 11, "completed", "paid", "collected", "First facial. Went well."),
+        ("Sam Patel", brow_service, ava, uptown, -7, 13, "completed", "paid", "collected", None),
+        ("Reese Park", facial_service, ava, downtown, -5, 15, "completed", "paid", "collected", None),
+        ("Jules Romero", consult_service, jordan, downtown, -4, 10, "completed", "not_required", "waived", "Booked brow follow-up for next week."),
+        # Past cancellations
+        ("Morgan Ellis", brow_service, jordan, downtown, -6, 16, "canceled", "refunded", "waived", "Client canceled outside window."),
+        # No-show
+        ("Sam Patel", consult_service, jordan, downtown, -3, 9, "no_show", "not_required", "waived", "Did not arrive. No fee charged."),
+        # Today + upcoming confirmed
+        ("Jules Romero", brow_service, jordan, downtown, 0, 14, "confirmed", "paid", "pending_initial", "First brow visit."),
+        ("Reese Park", brow_service, ava, uptown, 2, 11, "confirmed", "paid", "pending_initial", None),
+        ("Morgan Ellis", facial_service, ava, downtown, 4, 13, "confirmed", "paid", "pending_initial", "Bring serum sample."),
+        ("Sam Patel", brow_service, jordan, downtown, 7, 15, "confirmed", "paid", "pending_initial", None),
+        ("Jules Romero", facial_service, ava, uptown, 11, 12, "confirmed", "paid", "pending_initial", None),
+    ]
+
+    created_bookings: list[tuple[Booking, str]] = []  # (booking, customer name)
+    for customer_name, service, provider, location, days_offset, hour, status, deposit_status, payment_resolution, notes in booking_specs:
+        starts_at = _at(days_offset, hour)
+        ends_at = starts_at + timedelta(minutes=service.duration_minutes)
+        completed_at = ends_at if status == "completed" else None
+        canceled_at = _at(days_offset - 1, 18) if status == "canceled" else None
+        booking = Booking(
+            tenant_id=tenant.id,
+            customer_id=customers[customer_name].id,
+            service_id=service.id,
+            provider_id=provider.id,
+            location_id=location.id,
+            status=status,
+            booking_method="public_online",
+            deposit_status=deposit_status,
+            payment_resolution=payment_resolution,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            completed_at=completed_at,
+            canceled_at=canceled_at,
+            notes=notes,
+        )
+        session.add(booking)
+        created_bookings.append((booking, customer_name))
+    await session.flush()
+
+    # Add payments + payment events for each booking
+    for booking, customer_name in created_bookings:
+        service = next(s for s in services_rows if s.id == booking.service_id)
+        # Deposit payment (if service required a deposit)
+        if service.deposit_cents > 0 and booking.deposit_status in ("paid", "refunded"):
+            deposit_payment_status = "succeeded" if booking.deposit_status == "paid" else "refunded"
+            deposit_payment = Payment(
+                tenant_id=tenant.id,
+                booking_id=booking.id,
+                customer_id=customers[customer_name].id,
+                status=deposit_payment_status,
+                deposit_status="paid",
+                amount_cents=service.deposit_cents,
+                currency="USD",
+                payment_method_type="card",
+                checkout_session_kind="stripe_deposit_checkout",
+                checkout_session_id=f"seed_deposit_{booking.id}",
+            )
+            session.add(deposit_payment)
+            session.add(
+                BookingPaymentEvent(
+                    tenant_id=tenant.id,
+                    booking_id=booking.id,
+                    event_kind="stripe_deposit_checkout",
+                    amount_cents=service.deposit_cents,
+                    payload_json={"status": deposit_payment_status, "session_id": f"seed_deposit_{booking.id}"},
+                )
+            )
+        # Balance payment for completed bookings where the balance was collected
+        if booking.status == "completed" and booking.payment_resolution == "collected":
+            balance_due = max(0, service.price_cents - service.deposit_cents)
+            if balance_due > 0:
+                balance_payment = Payment(
+                    tenant_id=tenant.id,
+                    booking_id=booking.id,
+                    customer_id=customers[customer_name].id,
+                    status="succeeded",
+                    deposit_status="paid",
+                    amount_cents=balance_due,
+                    currency="USD",
+                    payment_method_type="card",
+                    checkout_session_kind="stripe_balance_checkout",
+                    checkout_session_id=f"seed_balance_{booking.id}",
+                )
+                session.add(balance_payment)
+                session.add(
+                    BookingPaymentEvent(
+                        tenant_id=tenant.id,
+                        booking_id=booking.id,
+                        event_kind="stripe_balance_checkout",
+                        amount_cents=balance_due,
+                        payload_json={"status": "succeeded", "session_id": f"seed_balance_{booking.id}"},
+                    )
+                )
+            else:
+                session.add(
+                    BookingPaymentEvent(
+                        tenant_id=tenant.id,
+                        booking_id=booking.id,
+                        event_kind="admin_completion",
+                        amount_cents=0,
+                        payload_json={"reason": "no_balance_due"},
+                    )
+                )
+        elif booking.status == "completed" and booking.payment_resolution == "waived":
+            session.add(
+                BookingPaymentEvent(
+                    tenant_id=tenant.id,
+                    booking_id=booking.id,
+                    event_kind="admin_completion",
+                    amount_cents=0,
+                    payload_json={"reason": "no_balance_due"},
+                )
+            )
+
+    # Add brow prep form responses for past brow bookings
+    if brow_form is not None and brow_form_version is not None:
+        sample_answers = [
+            {
+                "recentRetinoidUse": False,
+                "skinSensitivityNotes": "No new products this week. Patch-tested fine last visit.",
+                "browPhoto": None,
+            },
+            {
+                "recentRetinoidUse": True,
+                "skinSensitivityNotes": "Used retinol cream on Tuesday. Otherwise no changes.",
+                "browPhoto": None,
+            },
+            {
+                "recentRetinoidUse": False,
+                "skinSensitivityNotes": "Slight redness from sun this weekend. Brows feel fine.",
+                "browPhoto": None,
+            },
+        ]
+        brow_index = 0
+        for booking, customer_name in created_bookings:
+            if booking.service_id != brow_service.id:
+                continue
+            if booking.status not in ("completed", "confirmed"):
+                continue
+            answers = sample_answers[brow_index % len(sample_answers)]
+            brow_index += 1
+            session.add(
+                FormResponse(
+                    tenant_id=tenant.id,
+                    form_id=brow_form.id,
+                    form_version_id=brow_form_version.id,
+                    customer_id=customers[customer_name].id,
+                    booking_id=booking.id,
+                    scope="customer",
+                    customer_prompt_timing="pre_booking",
+                    submitted_at=booking.starts_at - timedelta(hours=2),
+                    answers_json=answers,
+                )
+            )
+
+    await session.flush()
+
+
 async def seed_demo_data(session: AsyncSession) -> None:
     existing_tenant = await session.scalar(select(Tenant).where(Tenant.slug == DEMO_TENANT_SLUG))
     if existing_tenant is not None:
@@ -191,6 +424,15 @@ async def seed_demo_data(session: AsyncSession) -> None:
         )
         if existing_brow_service is not None:
             await _seed_brow_prep_form(session, existing_tenant, existing_brow_service)
+        # Seed booking history if the demo customers haven't been created yet
+        existing_demo_customer = await session.scalar(
+            select(Customer.id).where(
+                Customer.tenant_id == existing_tenant.id,
+                Customer.email == "reese.park@example.com",
+            )
+        )
+        if existing_demo_customer is None:
+            await _seed_booking_history(session, existing_tenant)
         await session.commit()
         return
 
@@ -329,6 +571,8 @@ async def seed_demo_data(session: AsyncSession) -> None:
                 end_time=time(hour=17, minute=0),
             )
         )
+
+    await _seed_booking_history(session, tenant)
 
     await session.commit()
 

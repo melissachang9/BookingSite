@@ -125,7 +125,8 @@ def test_reset_e2e_data_clears_booking_drafts_holds_and_customers(client) -> Non
     assert reset_payload["tenantSlug"] == "brow-beauty-lab"
     assert reset_payload["slotHoldsDeleted"] == 1
     assert reset_payload["bookingDraftsDeleted"] == 1
-    assert reset_payload["customersDeleted"] == 1
+    # Includes the customer from the booking draft above plus 4 seeded demo customers.
+    assert reset_payload["customersDeleted"] == 5
 
     stale_draft_response = client.get(f"/api/v1/tenants/brow-beauty-lab/booking-drafts/{booking_draft_id}")
     assert stale_draft_response.status_code == 404
@@ -171,7 +172,8 @@ def test_reset_e2e_data_clears_submitted_form_requirements_and_responses(client)
     assert reset_payload["tenantSlug"] == "brow-beauty-lab"
     assert reset_payload["slotHoldsDeleted"] == 1
     assert reset_payload["bookingDraftsDeleted"] == 1
-    assert reset_payload["customersDeleted"] == 1
+    # Includes the customer from the booking draft above plus 4 seeded demo customers.
+    assert reset_payload["customersDeleted"] == 5
 
     retry_response = _create_booking_draft(client, service, slot)
 
