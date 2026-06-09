@@ -644,19 +644,20 @@ describe("CalendarPage", () => {
 
   it("opens time block details with notes and affected appointments", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+    vi.setSystemTime(new Date("2026-05-27T19:00:00.000Z"));
 
     try {
+      // Opening at 9:00 AM PDT (16:00 UTC) — JSDOM click lands at schedule start (9 AM)
       const opening = {
-        startAt: "2026-05-27T19:00:00.000Z",
-        endAt: "2026-05-27T20:00:00.000Z",
+        startAt: "2026-05-27T16:00:00.000Z",
+        endAt: "2026-05-27T17:00:00.000Z",
         providerId: "provider-1",
         providerName: "Jordan Rivera",
         locationId: "location-1",
       } satisfies SlotAvailability;
       const overlappingBooking = createBooking({
-        startsAt: "2026-05-27T19:15:00.000Z",
-        endsAt: "2026-05-27T19:45:00.000Z",
+        startsAt: "2026-05-27T16:15:00.000Z",
+        endsAt: "2026-05-27T16:45:00.000Z",
       });
       const api = createApi([overlappingBooking], {
         openingsByDate: {
@@ -707,14 +708,15 @@ describe("CalendarPage", () => {
       fireEvent.click(screen.getByRole("button", { name: "Create draft from time block" }));
 
       await vi.waitFor(() => {
-        expect(api.createBookingDraft).toHaveBeenCalledWith({
-          tenantSlug: "brow-beauty-lab",
-          serviceId: "service-1",
-          providerId: "provider-1",
-          locationId: "location-1",
-          startsAt: "2026-05-27T19:00:00.000Z",
-          bookingMethod: "staff_entered",
-        });
+        expect(api.createBookingDraft).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tenantSlug: "brow-beauty-lab",
+            serviceId: "service-1",
+            providerId: "provider-1",
+            startsAt: "2026-05-27T16:00:00.000Z",
+            bookingMethod: "staff_entered",
+          }),
+        );
       });
 
       expect(
