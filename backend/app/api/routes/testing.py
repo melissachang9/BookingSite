@@ -11,6 +11,7 @@ from app.core.http import api_exception
 from app.db.session import get_db_session
 from app.schemas.testing import MoveBookingStartRequest, MoveBookingStartResponse, ResetE2EDataRequest, ResetE2EDataResponse
 from app.services.testing import move_e2e_booking_start, reset_e2e_data
+from app.services.reminders import send_due_intake_reminders
 
 
 router = APIRouter(prefix="/testing", tags=["testing"], include_in_schema=False)
@@ -59,3 +60,14 @@ async def move_booking_start_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> MoveBookingStartResponse:
     return await move_e2e_booking_start(session, payload.tenant_slug, booking_id, payload.starts_at)
+
+
+@router.post(
+    "/cron/send-intake-reminders",
+    summary="Send due intake reminder emails for bookings with scheduled reminders",
+)
+async def send_intake_reminders_route(
+    _: None = Depends(require_e2e_reset_access),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict[str, int]:
+    return await send_due_intake_reminders(session)
