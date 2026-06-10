@@ -7,4 +7,5 @@ export * from "./health";
 export * from "./payments";
 export * from "./permissions";
 export * from "./resources";
+export * from "./reporting";
 export * from "./settings";

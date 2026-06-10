@@ -7,6 +7,7 @@ import type {
   ApiRootResponse,
   CreateTenantRequest,
   CreateTenantResponse,
+  DashboardReport,
   HealthResponse,
   SessionResponse,
   TenantSummary,
@@ -722,6 +723,34 @@ export function App() {
 }
 
 function DashboardHomePage({ tenantSlug }: { tenantSlug: string }) {
+  const [report, setReport] = useState<DashboardReport | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    platformApi.getDashboardReport(tenantSlug)
+      .then((data) => { if (!cancelled) setReport(data); })
+      .catch((err) => { if (!cancelled) setReportError(err instanceof Error ? err.message : "Unable to load report."); });
+    return () => { cancelled = true; };
+  }, [tenantSlug]);
+
+  const currencyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+  const formatMoney = (cents: number) => currencyFormatter.format(cents / 100);
+
+  const topPriorities = [
+    { label: "Upcoming", value: report ? String(report.upcomingBookings) : "—", detail: "Confirmed bookings on the calendar." },
+    { label: "Completed this month", value: report ? String(report.completedThisMonth) : "—", detail: "Visits finished this month." },
+    { label: "Revenue this month", value: report ? formatMoney(report.revenueThisMonthCents) : "—", detail: "Succeeded payments this month." },
+    { label: "No-shows this month", value: report ? String(report.noShowsThisMonth) : "—", detail: "Missed appointments this month." },
+  ];
+
+  const operatorQueues = [
+    { title: "Balance follow-up", count: report ? String(report.balanceFollowUpCount) : "—", detail: "Completed bookings with follow-up payment outcomes." },
+    { title: "Confirmed", count: report ? String(report.confirmedBookings) : "—", detail: "Active confirmed bookings." },
+    { title: "Completed", count: report ? String(report.completedBookings) : "—", detail: "Total completed bookings." },
+    { title: "Canceled", count: report ? String(report.canceledBookings) : "—", detail: "Total canceled bookings." },
+  ];
+
   return (
     <main className="ops-page-stack">
       <section className="ops-hero">

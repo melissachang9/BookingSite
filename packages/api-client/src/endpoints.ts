@@ -21,6 +21,7 @@ import type {
   CreateResourceRequest,
   CustomerListResponse,
   CustomerProfileResponse,
+  DashboardReport,
   DepositPaymentFollowUpListResponse,
   FormListResponse,
   FormSummaryResponse,
@@ -96,6 +97,7 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.post<SessionResponse, typeof body>("auth/refresh", body),
   createTenant: (body: CreateTenantRequest) => client.post<CreateTenantResponse, CreateTenantRequest>("tenants", body),
   getTenantBySlug: (tenantSlug: string) => client.get<TenantSummary>(`tenants/${tenantSlug}`),
+  getDashboardReport: (tenantSlug: string) => client.get<DashboardReport>(`tenants/${tenantSlug}/report`),
   updateTenantSettings: (tenantSlug: string, body: UpdateTenantSettingsRequest) =>
     client.patch<TenantSummary, UpdateTenantSettingsRequest>(`tenants/${tenantSlug}/settings`, body),
   updateTenantBusiness: (tenantSlug: string, body: UpdateTenantBusinessRequest) =>

@@ -37,7 +37,9 @@ from app.schemas.catalog import (
     UpdateTenantUserRequest,
     UpdateTenantWalletMembershipRequest,
 )
+from app.schemas.reporting import DashboardReportResponse
 from app.services.availability import list_availability
+from app.services.reporting import get_dashboard_report
 from app.services.tenants import (
     create_tenant_account,
     create_tenant_location,
@@ -86,6 +88,19 @@ async def get_tenant(
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantSummaryResponse:
     return await get_tenant_summary(session, tenant_slug)
+
+
+@router.get(
+    "/{tenant_slug}/report",
+    response_model=DashboardReportResponse,
+    summary="Get dashboard report metrics for a tenant",
+)
+async def get_tenant_report(
+    tenant_slug: str,
+    _: object = Depends(require_tenant_permission("dashboard.view")),
+    session: AsyncSession = Depends(get_db_session),
+) -> DashboardReportResponse:
+    return await get_dashboard_report(session, tenant_slug)
 
 
 @router.patch(
