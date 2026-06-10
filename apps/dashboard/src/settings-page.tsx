@@ -73,6 +73,13 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
     status: "available",
   },
   {
+    id: "automated-messages",
+    title: "Automated Messages",
+    eyebrow: "Notifications",
+    description: "Configure automated email reminders for intake forms and upcoming appointments.",
+    status: "available",
+  },
+  {
     id: "payroll",
     title: "Payroll",
     eyebrow: "Payments & checkout",
@@ -201,6 +208,13 @@ export function SettingsPage({
                   onTenantUpdated={onTenantUpdated}
                   tenantSlug={currentUser.tenantSlug}
                 />
+              ) : section.id === "automated-messages" ? (
+                <AutomatedMessagesSection
+                  canManageSettings={canManageSettings}
+                  tenant={tenant}
+                  onTenantUpdated={onTenantUpdated}
+                  tenantSlug={currentUser.tenantSlug}
+                />
               ) : section.id === "business-details" ? (
                 <BusinessDetailsSection
                   canManageSettings={canManageSettings}
@@ -303,7 +317,6 @@ function CalendarDisplaySection({
   const [startHour, setStartHour] = useState<number>(tenant?.settings.calendarDisplayStartHour ?? 9);
   const [endHour, setEndHour] = useState<number>(tenant?.settings.calendarDisplayEndHour ?? 19);
   const [weekStartsOn, setWeekStartsOn] = useState<number>(tenant?.settings.weekStartsOn ?? 0);
-  const [reminderHoursBefore, setReminderHoursBefore] = useState<number>(tenant?.settings.reminderHoursBefore ?? 24);
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
   useEffect(() => {
@@ -311,7 +324,6 @@ function CalendarDisplaySection({
       setStartHour(tenant.settings.calendarDisplayStartHour);
       setEndHour(tenant.settings.calendarDisplayEndHour);
       setWeekStartsOn(tenant.settings.weekStartsOn ?? 0);
-      setReminderHoursBefore(tenant.settings.reminderHoursBefore ?? 24);
     }
   }, [tenant]);
 
@@ -328,7 +340,6 @@ function CalendarDisplaySection({
         calendarDisplayStartHour: startHour,
         calendarDisplayEndHour: endHour,
         weekStartsOn,
-        reminderHoursBefore,
       });
       onTenantUpdated(updated);
       setSaveState({ kind: "success", message: "Calendar display hours saved." });
@@ -394,6 +405,74 @@ function CalendarDisplaySection({
         </select>
       </label>
 
+      {validationMessage ? <p role="alert" className="settings-error">{validationMessage}</p> : null}
+      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+
+      <div className="settings-actions">
+        <button
+          type="submit"
+          className="primary-action"
+          disabled={!canManageSettings || validationMessage !== null || saveState.kind === "submitting"}
+        >
+          {saveState.kind === "submitting" ? "Saving…" : "Save calendar hours"}
+        </button>
+        {!canManageSettings ? (
+          <p className="settings-permission-note">You do not have permission to edit tenant settings.</p>
+        ) : null}
+      </div>
+    </form>
+  );
+}
+
+function AutomatedMessagesSection({
+  canManageSettings,
+  tenant,
+  onTenantUpdated,
+  tenantSlug,
+}: {
+  canManageSettings: boolean;
+  tenant: TenantSummary | null;
+  onTenantUpdated: (tenant: TenantSummary) => void;
+  tenantSlug: string;
+}) {
+  const [reminderHoursBefore, setReminderHoursBefore] = useState<number>(tenant?.settings.reminderHoursBefore ?? 24);
+  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
+
+  useEffect(() => {
+    if (tenant) {
+      setReminderHoursBefore(tenant.settings.reminderHoursBefore ?? 24);
+    }
+  }, [tenant]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canManageSettings) {
+      return;
+    }
+    setSaveState({ kind: "submitting" });
+    try {
+      const updated = await platformApi.updateTenantSettings(tenantSlug, {
+        reminderHoursBefore,
+      });
+      onTenantUpdated(updated);
+      setSaveState({ kind: "success", message: "Automated message settings saved." });
+    } catch (error) {
+      setSaveState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to save settings.",
+      });
+    }
+  };
+
+  if (tenant === null) {
+    return <p>Loading current settings…</p>;
+  }
+
+  return (
+    <form className="settings-form" onSubmit={handleSubmit}>
+      <p className="rail-section-kicker">Form reminders</p>
+
       <label className="settings-field">
         <span>Intake reminder (hours before appointment)</span>
         <select
@@ -410,9 +489,9 @@ function CalendarDisplaySection({
           <option value={48}>48 hours</option>
           <option value={72}>72 hours</option>
         </select>
+        <small>How far in advance to send a reminder email when a customer chooses to complete intake forms later.</small>
       </label>
 
-      {validationMessage ? <p role="alert" className="settings-error">{validationMessage}</p> : null}
       {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
       {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
 
@@ -420,9 +499,9 @@ function CalendarDisplaySection({
         <button
           type="submit"
           className="primary-action"
-          disabled={!canManageSettings || validationMessage !== null || saveState.kind === "submitting"}
+          disabled={!canManageSettings || saveState.kind === "submitting"}
         >
-          {saveState.kind === "submitting" ? "Saving…" : "Save calendar hours"}
+          {saveState.kind === "submitting" ? "Saving…" : "Save message settings"}
         </button>
         {!canManageSettings ? (
           <p className="settings-permission-note">You do not have permission to edit tenant settings.</p>
