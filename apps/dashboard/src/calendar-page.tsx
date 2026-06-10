@@ -606,7 +606,7 @@ export function CalendarPage({
   const [timeBlocks, setTimeBlocks] = useState<CalendarTimeBlock[]>([]);
   const [selectedTimeBlockId, setSelectedTimeBlockId] = useState<string | null>(null);
   const [draftCreationState, setDraftCreationState] = useState<DraftCreationState>({ kind: "idle" });
-  const [completionState, setCompletionState] = useState<{ kind: "idle" } | { kind: "submitting" } | { kind: "error"; message: string }>({ kind: "idle" });
+  const [completionState, setCompletionState] = useState<CompletionState>({ kind: "idle" });
   const [reloadKey, setReloadKey] = useState(0);
   const [formResponsesState, setFormResponsesState] = useState<FormResponsesState>({ kind: "idle" });
   const [intakeStatusByBookingId, setIntakeStatusByBookingId] = useState<Record<string, IntakeStatus>>({});
@@ -1473,12 +1473,12 @@ export function CalendarPage({
       ? `${storefrontBaseUrl}/${tenantSlug}/book/${draftCreationState.draftId}`
       : null;
 
-  const handleCompleteAppointment = async (appointment: SelectedCalendarAppointment) => {
+  const handleFinalizeAppointment = async (appointment: SelectedCalendarAppointment, status: "completed" | "no_show", resolution: "collected" | "follow_up" | "waived") => {
     setCompletionState({ kind: "submitting" });
     try {
       await api.updateBookingStatus(tenantSlug, appointment.id, {
-        status: "completed",
-        paymentResolution: "collected",
+        status,
+        paymentResolution: resolution,
       });
       setSelectedAppointmentId(null);
       setCompletionState({ kind: "idle" });
@@ -1486,7 +1486,7 @@ export function CalendarPage({
     } catch (error) {
       setCompletionState({
         kind: "error",
-        message: error instanceof Error ? error.message : "Unable to complete booking.",
+        message: error instanceof Error ? error.message : `Unable to mark booking as ${status}.`,
       });
     }
   };
@@ -1637,7 +1637,7 @@ export function CalendarPage({
         formResponsesState={formResponsesState}
         intakeStatus={selectedAppointment ? (intakeStatusByBookingId[selectedAppointment.id] ?? "unknown") : "unknown"}
         onClose={handleCloseAppointmentDrawer}
-        onComplete={handleCompleteAppointment}
+        onFinalize={handleFinalizeAppointment}
         completionState={completionState}
       />
       <TimeBlockDetailsDrawer
@@ -2742,8 +2742,8 @@ type AppointmentDetailsDrawerProps = {
   formResponsesState: FormResponsesState;
   intakeStatus: IntakeStatus;
   onClose: () => void;
-  onComplete?: (appointment: SelectedCalendarAppointment) => void;
-  completionState?: { kind: "idle" } | { kind: "submitting" } | { kind: "error"; message: string };
+  onFinalize?: (appointment: SelectedCalendarAppointment, status: "completed" | "no_show", resolution: "collected" | "follow_up" | "waived") => void;
+  completionState?: CompletionState;
 };
 
 function AppointmentDetailsDrawer({
@@ -2751,10 +2751,11 @@ function AppointmentDetailsDrawer({
   formResponsesState,
   intakeStatus,
   onClose,
-  onComplete,
+  onFinalize,
   completionState,
 }: AppointmentDetailsDrawerProps): ReactElement | null {
   const [viewingFormEntry, setViewingFormEntry] = useState<BookingFormResponseEntry | null>(null);
+  const [selectedResolution, setSelectedResolution] = useState<"collected" | "follow_up" | "waived">("collected");
 
   if (!selectedAppointment) {
     return null;
@@ -2874,15 +2875,37 @@ function AppointmentDetailsDrawer({
               <span className="text-action-separator">·</span>
               <button type="button" className="text-action">Reschedule</button>
             </div>
-            {onComplete ? (
-              <button
-                type="button"
-                className="primary-action"
-                onClick={() => onComplete(selectedAppointment)}
-                disabled={completionState?.kind === "submitting"}
-              >
-                {completionState?.kind === "submitting" ? "Completing..." : "Complete"}
-              </button>
+            {onFinalize ? (
+              <div className="appointment-drawer-footer__finalize">
+                <label className="appointment-drawer-footer__resolution">
+                  <span>Balance</span>
+                  <select
+                    value={selectedResolution}
+                    onChange={(e) => setSelectedResolution(e.target.value as "collected" | "follow_up" | "waived")}
+                    disabled={completionState?.kind === "submitting"}
+                  >
+                    <option value="collected">Collected</option>
+                    <option value="follow_up">Follow-up</option>
+                    <option value="waived">Waived</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="secondary-action"
+                  onClick={() => onFinalize(selectedAppointment, "no_show", selectedResolution)}
+                  disabled={completionState?.kind === "submitting"}
+                >
+                  {completionState?.kind === "submitting" ? "Saving..." : "No-show"}
+                </button>
+                <button
+                  type="button"
+                  className="primary-action"
+                  onClick={() => onFinalize(selectedAppointment, "completed", selectedResolution)}
+                  disabled={completionState?.kind === "submitting"}
+                >
+                  {completionState?.kind === "submitting" ? "Completing..." : "Complete"}
+                </button>
+              </div>
             ) : null}
           </div>
         ) : null}
