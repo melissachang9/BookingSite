@@ -2772,8 +2772,8 @@ function AppointmentDetailsDrawer({
   const [editDate, setEditDate] = useState("");
   const [editTime, setEditTime] = useState("");
   const [editNotes, setEditNotes] = useState("");
-  const [editSaveState, setEditSaveState] = useState<"idle" | "submitting" | "saved">("idle");
-  const [sendConfirmation, setSendConfirmation] = useState(false);
+  const [editSaveState, setEditSaveState] = useState<"idle" | "submitting">("idle");
+  const [notificationChoice, setNotificationChoice] = useState<"notify" | "silent">("notify");
 
   if (!selectedAppointment) {
     return null;
@@ -2829,18 +2829,30 @@ function AppointmentDetailsDrawer({
                 disabled={editSaveState === "submitting"}
               />
             </label>
+            <label className="appointment-drawer-when__field">
+              <span>Notification</span>
+              <select
+                value={notificationChoice}
+                onChange={(e) => setNotificationChoice(e.target.value as "notify" | "silent")}
+                disabled={editSaveState === "submitting"}
+              >
+                <option value="notify">Notify customer</option>
+                <option value="silent">Save without notifying</option>
+              </select>
+            </label>
             <div className="appointment-drawer-when__actions">
               <button
                 type="button"
                 className="text-action"
                 onClick={() => setIsEditing(false)}
+                disabled={editSaveState === "submitting"}
               >
                 Cancel
               </button>
               <button
                 type="button"
                 className="primary-action"
-                disabled={editSaveState === "submitting" || editSaveState === "saved"}
+                disabled={editSaveState === "submitting"}
                 onClick={async () => {
                   if (!onUpdate) return;
                   setEditSaveState("submitting");
@@ -2849,27 +2861,18 @@ function AppointmentDetailsDrawer({
                     await onUpdate(selectedAppointment, {
                       startsAt: newStartsAt,
                       notes: editNotes || undefined,
-                      sendConfirmation,
+                      sendConfirmation: notificationChoice === "notify",
                     });
-                    setEditSaveState("saved");
+                    setIsEditing(false);
                   } catch {
-                    setEditSaveState("idle");
+                    // keep editing mode on error
                   }
+                  setEditSaveState("idle");
                 }}
               >
-                {editSaveState === "submitting" ? "Saving..." : editSaveState === "saved" ? "Saved" : "Save"}
+                {editSaveState === "submitting" ? "Saving..." : "Save"}
               </button>
             </div>
-            {editSaveState === "saved" ? (
-              <label className="appointment-drawer-when__confirm">
-                <input
-                  type="checkbox"
-                  checked={sendConfirmation}
-                  onChange={(e) => setSendConfirmation(e.target.checked)}
-                />
-                {" "}Send confirmation email to customer
-              </label>
-            ) : null}
           </div>
         ) : (
           <div className="appointment-drawer-when" aria-label="Appointment timing">
@@ -2991,7 +2994,7 @@ function AppointmentDetailsDrawer({
                   setEditDate(d.toISOString().slice(0, 10));
                   setEditTime(d.toTimeString().slice(0, 5));
                   setEditNotes(selectedAppointment.notes ?? "");
-                  setSendConfirmation(false);
+                  setNotificationChoice("notify");
                   setEditSaveState("idle");
                   setIsEditing(true);
                 }}
