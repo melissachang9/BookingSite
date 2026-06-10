@@ -172,6 +172,7 @@ function createApi(
       },
     })),
     listBookingFormResponses: vi.fn().mockResolvedValue({ items: options.formResponses ?? [] }),
+    updateBookingStatus: vi.fn().mockResolvedValue(baseBooking),
   };
 }
 

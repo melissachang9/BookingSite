@@ -17,6 +17,7 @@ import type {
   ServiceListResponse,
   ServiceSummary,
   SlotAvailability,
+  UpdateBookingStatusRequest,
 } from "@booking/shared-types";
 
 import { FormResponseViewer } from "./form-response-viewer";
@@ -166,6 +167,7 @@ export type CalendarPageApi = {
   getAvailability: (request: AvailabilityRequest) => Promise<AvailabilityResponse>;
   createBookingDraft: (body: CreateBookingDraftRequest) => Promise<BookingDraftSummary>;
   listBookingFormResponses: (tenantSlug: string, bookingId: string) => Promise<BookingFormResponseList>;
+  updateBookingStatus: (tenantSlug: string, bookingId: string, body: UpdateBookingStatusRequest) => Promise<BookingSummary>;
 };
 
 type CalendarPageProps = {
@@ -604,6 +606,8 @@ export function CalendarPage({
   const [timeBlocks, setTimeBlocks] = useState<CalendarTimeBlock[]>([]);
   const [selectedTimeBlockId, setSelectedTimeBlockId] = useState<string | null>(null);
   const [draftCreationState, setDraftCreationState] = useState<DraftCreationState>({ kind: "idle" });
+  const [completionState, setCompletionState] = useState<{ kind: "idle" } | { kind: "submitting" } | { kind: "error"; message: string }>({ kind: "idle" });
+  const [reloadKey, setReloadKey] = useState(0);
   const [formResponsesState, setFormResponsesState] = useState<FormResponsesState>({ kind: "idle" });
   const [intakeStatusByBookingId, setIntakeStatusByBookingId] = useState<Record<string, IntakeStatus>>({});
 
@@ -772,7 +776,7 @@ export function CalendarPage({
     return () => {
       isCancelled = true;
     };
-  }, [api, tenantSlug]);
+  }, [api, tenantSlug, reloadKey]);
 
   const selectedService = useMemo(() => {
     if (calendarState.kind !== "ready" || selectedServiceId === null) {
@@ -1468,6 +1472,24 @@ export function CalendarPage({
     draftCreationState.kind === "success"
       ? `${storefrontBaseUrl}/${tenantSlug}/book/${draftCreationState.draftId}`
       : null;
+
+  const handleCompleteAppointment = async (appointment: SelectedCalendarAppointment) => {
+    setCompletionState({ kind: "submitting" });
+    try {
+      await api.updateBookingStatus(tenantSlug, appointment.id, {
+        status: "completed",
+        paymentResolution: "collected",
+      });
+      setSelectedAppointmentId(null);
+      setCompletionState({ kind: "idle" });
+      setReloadKey((k) => k + 1);
+    } catch (error) {
+      setCompletionState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to complete booking.",
+      });
+    }
+  };
   const monthRail = (
     <MonthRail
       monthCursorDate={monthCursorDate}
@@ -1615,6 +1637,8 @@ export function CalendarPage({
         formResponsesState={formResponsesState}
         intakeStatus={selectedAppointment ? (intakeStatusByBookingId[selectedAppointment.id] ?? "unknown") : "unknown"}
         onClose={handleCloseAppointmentDrawer}
+        onComplete={handleCompleteAppointment}
+        completionState={completionState}
       />
       <TimeBlockDetailsDrawer
         selectedTimeBlock={selectedTimeBlock}
@@ -2719,6 +2743,7 @@ type AppointmentDetailsDrawerProps = {
   intakeStatus: IntakeStatus;
   onClose: () => void;
   onComplete?: (appointment: SelectedCalendarAppointment) => void;
+  completionState?: { kind: "idle" } | { kind: "submitting" } | { kind: "error"; message: string };
 };
 
 function AppointmentDetailsDrawer({
@@ -2727,6 +2752,7 @@ function AppointmentDetailsDrawer({
   intakeStatus,
   onClose,
   onComplete,
+  completionState,
 }: AppointmentDetailsDrawerProps): ReactElement | null {
   const [viewingFormEntry, setViewingFormEntry] = useState<BookingFormResponseEntry | null>(null);
 
@@ -2853,10 +2879,16 @@ function AppointmentDetailsDrawer({
                 type="button"
                 className="primary-action"
                 onClick={() => onComplete(selectedAppointment)}
+                disabled={completionState?.kind === "submitting"}
               >
-                Complete
+                {completionState?.kind === "submitting" ? "Completing..." : "Complete"}
               </button>
             ) : null}
+          </div>
+        ) : null}
+        {completionState?.kind === "error" ? (
+          <div className="message-banner message-banner--error" role="alert">
+            {completionState.message}
           </div>
         ) : null}
       </aside>
