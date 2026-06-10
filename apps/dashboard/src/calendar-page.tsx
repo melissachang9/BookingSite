@@ -2809,14 +2809,97 @@ function AppointmentDetailsDrawer({
           </div>
         </header>
 
-        <div className="appointment-drawer-when" aria-label="Appointment timing">
-          <div>
-            On <strong>{selectedAppointment.dayLabel}</strong>
+        {isEditing ? (
+          <div className="appointment-drawer-when" aria-label="Edit appointment timing">
+            <label className="appointment-drawer-when__field">
+              <span>On</span>
+              <input
+                type="date"
+                value={editDate}
+                onChange={(e) => setEditDate(e.target.value)}
+                disabled={editSaveState === "submitting"}
+              />
+            </label>
+            <label className="appointment-drawer-when__field">
+              <span>At</span>
+              <input
+                type="time"
+                value={editTime}
+                onChange={(e) => setEditTime(e.target.value)}
+                disabled={editSaveState === "submitting"}
+              />
+            </label>
+            <div className="appointment-drawer-when__actions">
+              <button
+                type="button"
+                className="text-action"
+                onClick={() => setIsEditing(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary-action"
+                disabled={editSaveState === "submitting" || editSaveState === "saved"}
+                onClick={async () => {
+                  if (!onUpdate) return;
+                  setEditSaveState("submitting");
+                  try {
+                    const newStartsAt = new Date(`${editDate}T${editTime}:00`).toISOString();
+                    await onUpdate(selectedAppointment, {
+                      startsAt: newStartsAt,
+                      notes: editNotes || undefined,
+                      sendConfirmation,
+                    });
+                    setEditSaveState("saved");
+                  } catch {
+                    setEditSaveState("idle");
+                  }
+                }}
+              >
+                {editSaveState === "submitting" ? "Saving..." : editSaveState === "saved" ? "Saved" : "Save"}
+              </button>
+            </div>
+            {editSaveState === "saved" ? (
+              <label className="appointment-drawer-when__confirm">
+                <input
+                  type="checkbox"
+                  checked={sendConfirmation}
+                  onChange={(e) => setSendConfirmation(e.target.checked)}
+                />
+                {" "}Send confirmation email to customer
+              </label>
+            ) : null}
           </div>
-          <div>
-            At <strong>{selectedAppointmentClockLabel}</strong>
+        ) : (
+          <div className="appointment-drawer-when" aria-label="Appointment timing">
+            <div>
+              On <strong>{selectedAppointment.dayLabel}</strong>
+            </div>
+            <div>
+              At <strong>{selectedAppointmentClockLabel}</strong>
+            </div>
+            {isConfirmed ? (
+              <div className="appointment-drawer-when__actions">
+                <button
+                  type="button"
+                  className="text-action"
+                  onClick={() => {
+                    const d = new Date(selectedAppointment.startAt);
+                    setEditDate(d.toISOString().slice(0, 10));
+                    setEditTime(d.toTimeString().slice(0, 5));
+                    setEditNotes(selectedAppointment.notes ?? "");
+                    setSendConfirmation(false);
+                    setEditSaveState("idle");
+                    setIsEditing(true);
+                  }}
+                >
+                  Reschedule
+                </button>
+              </div>
+            ) : null}
           </div>
-        </div>
+        )}
 
         <section className="booking-rail-section booking-rail-section--customer" aria-label="Customer details">
           <p className="rail-section-kicker">Customer</p>
@@ -2904,86 +2987,19 @@ function AppointmentDetailsDrawer({
                 type="button"
                 className="text-action"
                 onClick={() => {
-                  if (!isEditing) {
-                    const d = new Date(selectedAppointment.startAt);
-                    setEditDate(d.toISOString().slice(0, 10));
-                    setEditTime(d.toTimeString().slice(0, 5));
-                    setEditNotes(selectedAppointment.notes ?? "");
-                    setSendConfirmation(false);
-                    setEditSaveState("idle");
-                  }
-                  setIsEditing(!isEditing);
+                  const d = new Date(selectedAppointment.startAt);
+                  setEditDate(d.toISOString().slice(0, 10));
+                  setEditTime(d.toTimeString().slice(0, 5));
+                  setEditNotes(selectedAppointment.notes ?? "");
+                  setSendConfirmation(false);
+                  setEditSaveState("idle");
+                  setIsEditing(true);
                 }}
               >
-                {isEditing ? "Cancel" : "Reschedule"}
+                Reschedule
               </button>
             </div>
-            {isEditing ? (
-              <div className="appointment-drawer-footer__edit">
-                <label className="settings-field">
-                  <span>New date</span>
-                  <input
-                    type="date"
-                    value={editDate}
-                    onChange={(e) => setEditDate(e.target.value)}
-                    disabled={editSaveState === "submitting"}
-                  />
-                </label>
-                <label className="settings-field">
-                  <span>New time</span>
-                  <input
-                    type="time"
-                    value={editTime}
-                    onChange={(e) => setEditTime(e.target.value)}
-                    disabled={editSaveState === "submitting"}
-                  />
-                </label>
-                <label className="settings-field">
-                  <span>Notes</span>
-                  <input
-                    type="text"
-                    value={editNotes}
-                    onChange={(e) => setEditNotes(e.target.value)}
-                    disabled={editSaveState === "submitting"}
-                    placeholder="Reason for reschedule"
-                  />
-                </label>
-                {editSaveState === "saved" ? (
-                  <label className="settings-field">
-                    <span>
-                      <input
-                        type="checkbox"
-                        checked={sendConfirmation}
-                        onChange={(e) => setSendConfirmation(e.target.checked)}
-                      />
-                      {" "}Send confirmation email to customer
-                    </span>
-                  </label>
-                ) : null}
-                <button
-                  type="button"
-                  className="primary-action"
-                  disabled={editSaveState === "submitting" || editSaveState === "saved"}
-                  onClick={async () => {
-                    if (!onUpdate) return;
-                    setEditSaveState("submitting");
-                    try {
-                      const newStartsAt = new Date(`${editDate}T${editTime}:00`).toISOString();
-                      await onUpdate(selectedAppointment, {
-                        startsAt: newStartsAt,
-                        notes: editNotes || undefined,
-                        sendConfirmation,
-                      });
-                      setEditSaveState("saved");
-                    } catch {
-                      setEditSaveState("idle");
-                    }
-                  }}
-                >
-                  {editSaveState === "submitting" ? "Saving..." : editSaveState === "saved" ? "Saved" : "Save changes"}
-                </button>
-              </div>
-            ) : onFinalize ? (
+            {onFinalize ? (
               <div className="appointment-drawer-footer__finalize">
                 <label className="appointment-drawer-footer__resolution">
                   <span>Balance</span>
