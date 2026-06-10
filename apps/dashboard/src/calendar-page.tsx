@@ -17,6 +17,7 @@ import type {
   ServiceListResponse,
   ServiceSummary,
   SlotAvailability,
+  UpdateBookingRequest,
   UpdateBookingStatusRequest,
 } from "@booking/shared-types";
 
@@ -169,6 +170,7 @@ export type CalendarPageApi = {
   createBookingDraft: (body: CreateBookingDraftRequest) => Promise<BookingDraftSummary>;
   listBookingFormResponses: (tenantSlug: string, bookingId: string) => Promise<BookingFormResponseList>;
   updateBookingStatus: (tenantSlug: string, bookingId: string, body: UpdateBookingStatusRequest) => Promise<BookingSummary>;
+  updateBooking: (tenantSlug: string, bookingId: string, body: UpdateBookingRequest) => Promise<BookingSummary>;
 };
 
 type CalendarPageProps = {
@@ -1492,6 +1494,11 @@ export function CalendarPage({
       });
     }
   };
+
+  const handleUpdateAppointment = async (appointment: SelectedCalendarAppointment, body: UpdateBookingRequest) => {
+    await api.updateBooking(tenantSlug, appointment.id, body);
+    setReloadKey((k) => k + 1);
+  };
   const monthRail = (
     <MonthRail
       monthCursorDate={monthCursorDate}
@@ -1640,6 +1647,7 @@ export function CalendarPage({
         intakeStatus={selectedAppointment ? (intakeStatusByBookingId[selectedAppointment.id] ?? "unknown") : "unknown"}
         onClose={handleCloseAppointmentDrawer}
         onFinalize={handleFinalizeAppointment}
+        onUpdate={handleUpdateAppointment}
         completionState={completionState}
       />
       <TimeBlockDetailsDrawer
@@ -2745,6 +2753,7 @@ type AppointmentDetailsDrawerProps = {
   intakeStatus: IntakeStatus;
   onClose: () => void;
   onFinalize?: (appointment: SelectedCalendarAppointment, status: "completed" | "no_show", resolution: "collected" | "follow_up" | "waived") => void;
+  onUpdate?: (appointment: SelectedCalendarAppointment, body: UpdateBookingRequest) => Promise<void>;
   completionState?: CompletionState;
 };
 
@@ -2754,10 +2763,17 @@ function AppointmentDetailsDrawer({
   intakeStatus,
   onClose,
   onFinalize,
+  onUpdate,
   completionState,
 }: AppointmentDetailsDrawerProps): ReactElement | null {
   const [viewingFormEntry, setViewingFormEntry] = useState<BookingFormResponseEntry | null>(null);
   const [selectedResolution, setSelectedResolution] = useState<"collected" | "follow_up" | "waived">("collected");
+  const [isEditing, setIsEditing] = useState(false);
+  const [editDate, setEditDate] = useState("");
+  const [editTime, setEditTime] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editSaveState, setEditSaveState] = useState<"idle" | "submitting" | "saved">("idle");
+  const [sendConfirmation, setSendConfirmation] = useState(false);
 
   if (!selectedAppointment) {
     return null;
@@ -2884,16 +2900,90 @@ function AppointmentDetailsDrawer({
                 <button type="button" className="text-action" disabled>Message</button>
               )}
               <span className="text-action-separator">·</span>
-              <a
-                href={`${storefrontBaseUrl}/cancel/${selectedAppointment.customerManageToken}`}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
                 className="text-action"
+                onClick={() => {
+                  if (!isEditing) {
+                    const d = new Date(selectedAppointment.startAt);
+                    setEditDate(d.toISOString().slice(0, 10));
+                    setEditTime(d.toTimeString().slice(0, 5));
+                    setEditNotes(selectedAppointment.notes ?? "");
+                    setSendConfirmation(false);
+                    setEditSaveState("idle");
+                  }
+                  setIsEditing(!isEditing);
+                }}
               >
-                Reschedule
-              </a>
+                {isEditing ? "Cancel" : "Reschedule"}
+              </button>
             </div>
-            {onFinalize ? (
+            {isEditing ? (
+              <div className="appointment-drawer-footer__edit">
+                <label className="settings-field">
+                  <span>New date</span>
+                  <input
+                    type="date"
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    disabled={editSaveState === "submitting"}
+                  />
+                </label>
+                <label className="settings-field">
+                  <span>New time</span>
+                  <input
+                    type="time"
+                    value={editTime}
+                    onChange={(e) => setEditTime(e.target.value)}
+                    disabled={editSaveState === "submitting"}
+                  />
+                </label>
+                <label className="settings-field">
+                  <span>Notes</span>
+                  <input
+                    type="text"
+                    value={editNotes}
+                    onChange={(e) => setEditNotes(e.target.value)}
+                    disabled={editSaveState === "submitting"}
+                    placeholder="Reason for reschedule"
+                  />
+                </label>
+                {editSaveState === "saved" ? (
+                  <label className="settings-field">
+                    <span>
+                      <input
+                        type="checkbox"
+                        checked={sendConfirmation}
+                        onChange={(e) => setSendConfirmation(e.target.checked)}
+                      />
+                      {" "}Send confirmation email to customer
+                    </span>
+                  </label>
+                ) : null}
+                <button
+                  type="button"
+                  className="primary-action"
+                  disabled={editSaveState === "submitting" || editSaveState === "saved"}
+                  onClick={async () => {
+                    if (!onUpdate) return;
+                    setEditSaveState("submitting");
+                    try {
+                      const newStartsAt = new Date(`${editDate}T${editTime}:00`).toISOString();
+                      await onUpdate(selectedAppointment, {
+                        startsAt: newStartsAt,
+                        notes: editNotes || undefined,
+                        sendConfirmation,
+                      });
+                      setEditSaveState("saved");
+                    } catch {
+                      setEditSaveState("idle");
+                    }
+                  }}
+                >
+                  {editSaveState === "submitting" ? "Saving..." : editSaveState === "saved" ? "Saved" : "Save changes"}
+                </button>
+              </div>
+            ) : onFinalize ? (
               <div className="appointment-drawer-footer__finalize">
                 <label className="appointment-drawer-footer__resolution">
                   <span>Balance</span>

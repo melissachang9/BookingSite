@@ -65,3 +65,11 @@ class UpdateBookingStatusRequest(CamelModel):
     status: Literal["completed", "no_show"]
     notes: str | None = Field(default=None, max_length=500)
     payment_resolution: Literal["collected", "follow_up", "waived"] | None = None
+
+
+class UpdateBookingRequest(CamelModel):
+    starts_at: datetime | None = None
+    provider_id: str | None = None
+    service_id: str | None = None
+    notes: str | None = Field(default=None, max_length=500)
+    send_confirmation: bool = False

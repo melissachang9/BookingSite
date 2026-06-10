@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
 from app.db.models import Booking, BookingDraft, BookingPaymentEvent, Payment, PaymentEvent, Provider, Service, Tenant, User
-from app.schemas.bookings import BookingListResponse, BookingSummaryResponse, PaginationMetaResponse, UpdateBookingStatusRequest
+from app.schemas.bookings import BookingListResponse, BookingSummaryResponse, PaginationMetaResponse, UpdateBookingRequest, UpdateBookingStatusRequest
 from app.schemas.payments import RecordManualPaymentRequest
 from app.services.booking_drafts import _load_booking
 from app.services.presenters import booking_balance_due_cents, booking_to_summary
@@ -328,4 +328,60 @@ async def update_booking_status(
     await session.commit()
     session.expire_all()
     updated_booking = await _load_booking(session, reload_booking_id, tenant_id)
+    return booking_to_summary(updated_booking)
+
+async def update_booking(
+    session: AsyncSession,
+    tenant_slug: str,
+    booking_id: str,
+    payload: UpdateBookingRequest,
+    actor: User,
+) -> BookingSummaryResponse:
+    tenant = await _load_tenant(session, tenant_slug)
+    booking = await _load_booking(session, booking_id, tenant.id)
+
+    if booking.status != "confirmed":
+        raise api_exception(409, "conflict", "Only confirmed bookings can be updated.")
+
+    changed = False
+    old_starts_at = booking.starts_at
+
+    if payload.starts_at is not None:
+        duration = booking.ends_at - booking.starts_at
+        booking.starts_at = payload.starts_at
+        booking.ends_at = payload.starts_at + duration
+        changed = True
+
+    if payload.provider_id is not None:
+        booking.provider_id = payload.provider_id
+        changed = True
+
+    if payload.service_id is not None:
+        booking.service_id = payload.service_id
+        changed = True
+
+    if payload.notes is not None:
+        booking.notes = _clean_notes(payload.notes)
+        changed = True
+
+    if not changed:
+        return booking_to_summary(booking)
+
+    _append_booking_event(
+        session,
+        booking,
+        event_kind="booking_updated",
+        actor=actor,
+        amount_cents=0,
+        notes=payload.notes,
+        extra_payload={
+            "previousStartsAt": old_starts_at.isoformat() if payload.starts_at is not None else None,
+            "sendConfirmation": payload.send_confirmation,
+        },
+    )
+
+    reload_booking_id = booking.id
+    await session.commit()
+    session.expire_all()
+    updated_booking = await _load_booking(session, reload_booking_id, tenant.id)
     return booking_to_summary(updated_booking)

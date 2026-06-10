@@ -69,6 +69,7 @@ import type {
   SubmitFormRequirementRequest,
   SubmitFormResponseRequest,
   TenantSummary,
+  UpdateBookingRequest,
   UpdateBookingStatusRequest,
   UpdateBookingDraftRequest,
   UpdateLocationRequest,
@@ -367,6 +368,8 @@ export const createPlatformApi = (client: ApiClient) => ({
     ),
   updateBookingStatus: (tenantSlug: string, bookingId: string, body: UpdateBookingStatusRequest) =>
     client.post<BookingSummary, UpdateBookingStatusRequest>(`tenants/${tenantSlug}/bookings/${bookingId}/status`, body),
+  updateBooking: (tenantSlug: string, bookingId: string, body: UpdateBookingRequest) =>
+    client.patch<BookingSummary, UpdateBookingRequest>(`tenants/${tenantSlug}/bookings/${bookingId}`, body),
   listBookingFormResponses: (tenantSlug: string, bookingId: string) =>
     client.get<BookingFormResponseList>(`tenants/${tenantSlug}/bookings/${bookingId}/form-responses`),
   listCustomers: (tenantSlug: string, search?: string) =>

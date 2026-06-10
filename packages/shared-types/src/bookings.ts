@@ -177,3 +177,11 @@ export type UpdateBookingStatusRequest = {
   notes?: string;
   paymentResolution?: Extract<PaymentResolution, "collected" | "follow_up" | "waived">;
 };
+
+export type UpdateBookingRequest = {
+  startsAt?: string;
+  providerId?: string;
+  serviceId?: string;
+  notes?: string;
+  sendConfirmation?: boolean;
+};

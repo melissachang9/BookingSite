@@ -13,6 +13,7 @@ from app.schemas.bookings import (
     BookingSummaryResponse,
     CancelManageBookingRequest,
     CustomerManageBookingResponse,
+    UpdateBookingRequest,
     UpdateBookingStatusRequest,
 )
 from app.schemas.forms import (
@@ -29,7 +30,7 @@ from app.services.booking_forms import (
     send_booking_form_reminder,
     submit_booking_form_requirement_by_token,
 )
-from app.services.bookings import list_bookings, record_manual_payment, update_booking_status
+from app.services.bookings import list_bookings, record_manual_payment, update_booking, update_booking_status
 
 
 router = APIRouter(tags=["bookings"])
@@ -134,6 +135,21 @@ async def update_booking_status_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingSummaryResponse:
     return await update_booking_status(session, tenant_slug, booking_id, payload, current_user)
+
+
+@router.patch(
+    "/tenants/{tenant_slug}/bookings/{booking_id}",
+    response_model=BookingSummaryResponse,
+    summary="Update a confirmed booking (reschedule, change provider/service, update notes)",
+)
+async def update_booking_route(
+    tenant_slug: str,
+    booking_id: str,
+    payload: UpdateBookingRequest,
+    current_user: User = Depends(require_tenant_permission("bookings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> BookingSummaryResponse:
+    return await update_booking(session, tenant_slug, booking_id, payload, current_user)
 
 
 @router.get(
