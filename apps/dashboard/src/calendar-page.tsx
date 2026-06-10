@@ -65,6 +65,7 @@ type CalendarAppointment = {
   customerName: string;
   customerEmail?: string | null;
   customerPhone?: string | null;
+  customerManageToken: string;
   serviceId: string;
   serviceName: string;
   serviceDescription?: string | null;
@@ -421,6 +422,7 @@ function createCalendarAppointment(booking: BookingSummary): CalendarAppointment
     customerName: booking.customer.name,
     customerEmail: booking.customer.email ?? null,
     customerPhone: booking.customer.phone ?? null,
+    customerManageToken: booking.customerManageToken,
     serviceId: booking.serviceId,
     serviceName: booking.service.name,
     serviceDescription: booking.service.description ?? null,
@@ -2871,9 +2873,25 @@ function AppointmentDetailsDrawer({
         {isConfirmed ? (
           <div className="appointment-drawer-footer">
             <div className="appointment-drawer-footer__actions">
-              <button type="button" className="text-action">Message</button>
+              {selectedAppointment.customerEmail ? (
+                <a
+                  href={`mailto:${encodeURIComponent(selectedAppointment.customerEmail)}`}
+                  className="text-action"
+                >
+                  Message
+                </a>
+              ) : (
+                <button type="button" className="text-action" disabled>Message</button>
+              )}
               <span className="text-action-separator">·</span>
-              <button type="button" className="text-action">Reschedule</button>
+              <a
+                href={`${storefrontBaseUrl}/cancel/${selectedAppointment.customerManageToken}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-action"
+              >
+                Reschedule
+              </a>
             </div>
             {onFinalize ? (
               <div className="appointment-drawer-footer__finalize">
