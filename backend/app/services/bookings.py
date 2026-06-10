@@ -382,6 +382,5 @@ async def update_booking(
 
     reload_booking_id = booking.id
     await session.commit()
-    session.expire_all()
     updated_booking = await _load_booking(session, reload_booking_id, tenant.id)
     return booking_to_summary(updated_booking)
