@@ -8,10 +8,6 @@ import {
   resetE2EData,
 } from "./helpers/platform-api";
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 async function signInAsDemoOwner(page: Page) {
   await page.goto(`${e2eDashboardBaseURL}/login`);
   await expect(page.getByRole("heading", { name: "Sign in to Studio OS" })).toBeVisible();
@@ -27,39 +23,31 @@ test.beforeEach(async ({ request }) => {
   }
 });
 
-test("staff selects a real opening from the calendar before manual booking", async ({ page }) => {
+test("staff navigates calendar and opens slot actions from schedule track", async ({ page }) => {
   await signInAsDemoOwner(page);
 
   await page
-    .getByRole("navigation", { name: "Primary dashboard sections" })
+    .getByRole("navigation", { name: "Dashboard sections" })
     .getByRole("link", { name: "Calendar" })
     .click();
 
-  await expect(page.getByRole("heading", { name: "Choose a real opening before creating a booking." })).toBeVisible();
+  // Calendar loads with week view showing the current week
+  await expect(page.locator(".schedule-board")).toBeVisible({ timeout: 15000 });
 
-  const selectedOpeningInput = page.getByLabel("Selected opening");
-  const providerInput = page.getByLabel("Provider");
-  const customerInput = page.getByLabel("Customer");
+  // Switch to day view
+  await page.getByRole("button", { name: "Day" }).click();
+  await expect(page.getByRole("button", { name: "Day" })).toHaveAttribute("aria-pressed", "true");
 
-  await expect(selectedOpeningInput).toHaveValue("Choose a slot");
-  await expect(providerInput).toHaveValue("Choose a slot");
-  await expect(customerInput).toHaveValue("Choose a slot first");
+  // Wait for schedule tracks to render
+  await expect(page.locator(".schedule-day-track--interactive").first()).toBeVisible({ timeout: 10000 });
 
-  const firstSlot = page.locator(".calendar-slot-card").first();
-  await expect(firstSlot).toBeVisible();
+  // Click the first interactive schedule track to open slot actions
+  await page.locator(".schedule-day-track--interactive").first().click();
 
-  const slotTime = (await firstSlot.locator("strong").textContent())?.trim();
-  const providerName = (await firstSlot.locator("span").textContent())?.trim();
+  // Slot actions drawer opens
+  await expect(page.getByRole("dialog", { name: "Calendar slot actions" })).toBeVisible();
 
-  expect(slotTime).toBeTruthy();
-  expect(providerName).toBeTruthy();
-
-  await firstSlot.click();
-
-  await expect(firstSlot).toHaveAttribute("aria-pressed", "true");
-  await expect(customerInput).toHaveValue("Search existing customer");
-  await expect(providerInput).toHaveValue(providerName ?? "");
-  await expect(selectedOpeningInput).toHaveValue(new RegExp(escapeRegExp(slotTime ?? "")));
-  await expect(page.getByText(new RegExp(`Selected .* with ${escapeRegExp(providerName ?? "")}`))).toBeVisible();
-  await expect(page.getByRole("button", { name: "Create from selected slot" })).toBeDisabled();
+  // Default mode is appointment — toggle button offers switching to time block
+  await expect(page.getByRole("button", { name: "Create time block" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Close", exact: true })).toBeVisible();
 });
