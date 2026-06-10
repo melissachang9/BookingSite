@@ -145,6 +145,9 @@ async def update_tenant_settings(
     if payload.week_starts_on is not None:
         current["weekStartsOn"] = payload.week_starts_on
 
+    if payload.reminder_hours_before is not None:
+        current["reminderHoursBefore"] = payload.reminder_hours_before
+
     tenant.settings_json = current
     await session.commit()
     await session.refresh(tenant)

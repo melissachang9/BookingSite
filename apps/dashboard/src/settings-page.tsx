@@ -303,6 +303,7 @@ function CalendarDisplaySection({
   const [startHour, setStartHour] = useState<number>(tenant?.settings.calendarDisplayStartHour ?? 9);
   const [endHour, setEndHour] = useState<number>(tenant?.settings.calendarDisplayEndHour ?? 19);
   const [weekStartsOn, setWeekStartsOn] = useState<number>(tenant?.settings.weekStartsOn ?? 0);
+  const [reminderHoursBefore, setReminderHoursBefore] = useState<number>(tenant?.settings.reminderHoursBefore ?? 24);
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
   useEffect(() => {
@@ -310,6 +311,7 @@ function CalendarDisplaySection({
       setStartHour(tenant.settings.calendarDisplayStartHour);
       setEndHour(tenant.settings.calendarDisplayEndHour);
       setWeekStartsOn(tenant.settings.weekStartsOn ?? 0);
+      setReminderHoursBefore(tenant.settings.reminderHoursBefore ?? 24);
     }
   }, [tenant]);
 
@@ -326,6 +328,7 @@ function CalendarDisplaySection({
         calendarDisplayStartHour: startHour,
         calendarDisplayEndHour: endHour,
         weekStartsOn,
+        reminderHoursBefore,
       });
       onTenantUpdated(updated);
       setSaveState({ kind: "success", message: "Calendar display hours saved." });
@@ -388,6 +391,24 @@ function CalendarDisplaySection({
           <option value={4}>Thursday</option>
           <option value={5}>Friday</option>
           <option value={6}>Saturday</option>
+        </select>
+      </label>
+
+      <label className="settings-field">
+        <span>Intake reminder (hours before appointment)</span>
+        <select
+          value={reminderHoursBefore}
+          onChange={(event) => setReminderHoursBefore(Number(event.target.value))}
+          disabled={!canManageSettings || saveState.kind === "submitting"}
+        >
+          <option value={1}>1 hour</option>
+          <option value={2}>2 hours</option>
+          <option value={4}>4 hours</option>
+          <option value={8}>8 hours</option>
+          <option value={12}>12 hours</option>
+          <option value={24}>24 hours</option>
+          <option value={48}>48 hours</option>
+          <option value={72}>72 hours</option>
         </select>
       </label>
 

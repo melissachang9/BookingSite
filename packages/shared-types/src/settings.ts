@@ -92,6 +92,7 @@ export type UpdateTenantSettingsRequest = {
   calendarDisplayStartHour?: number;
   calendarDisplayEndHour?: number;
   weekStartsOn?: number;
+  reminderHoursBefore?: number;
 };
 
 export type UpdateTenantBusinessRequest = {

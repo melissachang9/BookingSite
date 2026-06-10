@@ -149,6 +149,7 @@ describe("SettingsPage", () => {
         calendarDisplayStartHour: 8,
         calendarDisplayEndHour: 20,
         weekStartsOn: 0,
+        reminderHoursBefore: 24,
       });
     });
     expect(onTenantUpdated).toHaveBeenCalledWith(updated);

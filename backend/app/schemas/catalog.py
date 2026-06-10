@@ -196,6 +196,7 @@ class UpdateTenantSettingsRequest(CamelModel):
     calendar_display_start_hour: int | None = Field(default=None, ge=0, le=23)
     calendar_display_end_hour: int | None = Field(default=None, ge=1, le=24)
     week_starts_on: int | None = Field(default=None, ge=0, le=6)
+    reminder_hours_before: int | None = Field(default=None, ge=1, le=168)
 
 
 SUPPORTED_CURRENCIES = ("USD", "CAD", "EUR", "GBP", "AUD", "MXN")
