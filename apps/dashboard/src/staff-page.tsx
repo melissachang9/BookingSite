@@ -803,16 +803,6 @@ function formatPriceCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-function SchedulePlaceholder() {
-  return (
-    <div className="staff-detail-form">
-      <p className="settings-form-help">
-        Weekly work hours editor lands in the next phase. Schedules currently follow tenant business hours.
-      </p>
-    </div>
-  );
-}
-
 const WEEKDAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 type ScheduleTabProps = {
