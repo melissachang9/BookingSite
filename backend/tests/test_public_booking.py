@@ -1504,3 +1504,27 @@ def test_staff_cancel_booking_isolates_tenants(client, demo_credentials) -> None
         headers=headers,
     )
     assert response.status_code in (403, 404)
+
+
+def test_cancel_refund_ordering_stripe_before_state_mutation() -> None:
+    """Verify create_stripe_refund is called BEFORE any state mutation.
+
+    This is a static code check — the actual ordering is verified by
+    source inspection. Monkeypatch tests cannot reach through FastAPI's
+    dependency injection in the test client.
+    """
+    import inspect
+
+    from app.services.bookings import cancel_booking
+    from app.services.booking_drafts import cancel_manage_booking
+
+    for fn, name in [(cancel_booking, "cancel_booking"), (cancel_manage_booking, "cancel_manage_booking")]:
+        src = inspect.getsource(fn)
+        stripe_idx = src.find("create_stripe_refund")
+        cancel_idx = src.find('booking.status = "canceled"')
+        assert stripe_idx >= 0, f"{name} must call create_stripe_refund"
+        assert cancel_idx >= 0, f"{name} must set booking.status = 'canceled'"
+        assert stripe_idx < cancel_idx, (
+            f"{name}: create_stripe_refund (char {stripe_idx}) must be called "
+            f"BEFORE booking.status = 'canceled' (char {cancel_idx})"
+        )

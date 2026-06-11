@@ -588,22 +588,35 @@ async def cancel_manage_booking(
     forfeited_amount_cents = 0
     external_refund_ids: list[str] = []
 
-    booking.status = "canceled"
-    booking.canceled_at = datetime.now(timezone.utc)
-
+    # Call Stripe FIRST before mutating any state, so a Stripe failure
+    # leaves the booking and payments unchanged.
+    stripe_refund_results: list[tuple[Payment, str | None, str | None]] = []
     if refundable:
         for payment in deposit_payments:
-            refund_note = "Customer canceled the booking from the private manage link."
             stripe_payment_intent_id = None
+            refund_id = None
             if is_stripe_checkout_session_id(payment.checkout_session_id):
                 refund = await create_stripe_refund(
                     payment.checkout_session_id or "",
                     amount_cents=payment.amount_cents,
                     idempotency_key=f"customer-cancel-{booking.id}-{payment.id}",
                 )
-                external_refund_ids.append(refund.refund_id)
+                refund_id = refund.refund_id
                 stripe_payment_intent_id = refund.payment_intent_id
-                refund_note = f"Stripe refund {refund.refund_id} created when customer canceled from the private manage link."
+                external_refund_ids.append(refund_id)
+            stripe_refund_results.append((payment, refund_id, stripe_payment_intent_id))
+
+    # Only now mutate state — Stripe succeeded.
+    booking.status = "canceled"
+    booking.canceled_at = datetime.now(timezone.utc)
+
+    if refundable:
+        for payment, refund_id, stripe_payment_intent_id in stripe_refund_results:
+            refund_note = (
+                f"Stripe refund {refund_id} created when customer canceled from the private manage link."
+                if refund_id
+                else "Customer canceled the booking from the private manage link."
+            )
             refunded_amount_cents += payment.amount_cents
             payment.status = "refunded"
             payment.deposit_status = "refunded"
