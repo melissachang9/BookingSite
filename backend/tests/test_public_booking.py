@@ -1377,3 +1377,130 @@ def test_list_booking_form_responses_isolates_tenants(client, demo_credentials) 
         headers=headers,
     )
     assert response.status_code in (403, 404)
+
+
+# ---------------------------------------------------------------------------
+# Staff-side cancellation tests
+# ---------------------------------------------------------------------------
+
+
+def test_staff_cancel_booking_refunds_deposit_outside_window(client, demo_credentials) -> None:
+    confirmed = _confirm_paid_deposit_booking(client)
+    booking = confirmed["booking"]
+    service = confirmed["service"]
+    date_text = confirmed["dateText"]
+    first_slot = confirmed["firstSlot"]
+
+    headers = _auth_headers(client, demo_credentials)
+    cancel_response = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking['id']}/cancel",
+        json={"reason": "Customer requested cancellation."},
+        headers=headers,
+    )
+
+    assert cancel_response.status_code == 200
+    payload = cancel_response.json()
+    assert payload["status"] == "canceled"
+    assert payload["depositStatus"] == "refunded"
+    assert payload["paymentResolution"] == "waived"
+
+    snapshot = _booking_payment_snapshot(booking["id"])
+    assert snapshot["bookingStatus"] == "canceled"
+    assert snapshot["depositStatus"] == "refunded"
+    assert snapshot["paymentResolution"] == "waived"
+    assert snapshot["paymentStatuses"] == ["refunded"]
+    assert snapshot["paymentDepositStatuses"] == ["refunded"]
+    assert "refund_recorded" in snapshot["paymentEventKinds"]
+    assert "staff_canceled" in snapshot["bookingEventKinds"]
+    assert any(event.get("reason") == "Customer requested cancellation." for event in snapshot["bookingEventPayloads"])
+    assert any(event.get("refundedAmountCents") == service["depositCents"] for event in snapshot["bookingEventPayloads"])
+
+    # Availability should reopen after cancellation
+    availability_after_response = client.get(
+        "/api/v1/tenants/brow-beauty-lab/availability",
+        params={"serviceId": service["id"], "date": date_text},
+    )
+    assert availability_after_response.status_code == 200
+    assert any(
+        slot["startAt"] == first_slot["startAt"]
+        and slot["providerId"] == first_slot["providerId"]
+        and slot["locationId"] == first_slot["locationId"]
+        for slot in availability_after_response.json()["slots"]
+    )
+
+
+def test_staff_cancel_booking_forfeits_deposit_inside_window(client, demo_credentials) -> None:
+    confirmed = _confirm_paid_deposit_booking(client)
+    booking = confirmed["booking"]
+    inside_window_start = datetime.now(timezone.utc) + timedelta(hours=4)
+    _move_booking_start(booking["id"], inside_window_start)
+
+    headers = _auth_headers(client, demo_credentials)
+    cancel_response = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking['id']}/cancel",
+        json={"reason": "No-show risk."},
+        headers=headers,
+    )
+
+    assert cancel_response.status_code == 200
+    payload = cancel_response.json()
+    assert payload["status"] == "canceled"
+    assert payload["depositStatus"] == "forfeited"
+    assert payload["paymentResolution"] == "collected"
+
+    snapshot = _booking_payment_snapshot(booking["id"])
+    assert snapshot["bookingStatus"] == "canceled"
+    assert snapshot["depositStatus"] == "forfeited"
+    assert snapshot["paymentResolution"] == "collected"
+    assert snapshot["paymentStatuses"] == ["succeeded"]
+    assert snapshot["paymentDepositStatuses"] == ["forfeited"]
+    assert "deposit_forfeited" in snapshot["paymentEventKinds"]
+    assert "staff_canceled" in snapshot["bookingEventKinds"]
+    assert any(event.get("forfeitedAmountCents") == confirmed["service"]["depositCents"] for event in snapshot["bookingEventPayloads"])
+
+
+def test_staff_cancel_booking_requires_permission(client, demo_credentials) -> None:
+    confirmed = _confirm_paid_deposit_booking(client)
+    booking = confirmed["booking"]
+
+    # No auth headers = unauthenticated
+    response = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking['id']}/cancel",
+        json={},
+    )
+    assert response.status_code in (401, 403)
+
+
+def test_staff_cancel_booking_rejects_non_confirmed(client, demo_credentials) -> None:
+    confirmed = _confirm_paid_deposit_booking(client)
+    booking = confirmed["booking"]
+
+    headers = _auth_headers(client, demo_credentials)
+    # Cancel once
+    client.post(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking['id']}/cancel",
+        json={},
+        headers=headers,
+    )
+
+    # Cancel again — should return the already-canceled booking without error
+    second_response = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking['id']}/cancel",
+        json={},
+        headers=headers,
+    )
+    assert second_response.status_code == 200
+    assert second_response.json()["status"] == "canceled"
+
+
+def test_staff_cancel_booking_isolates_tenants(client, demo_credentials) -> None:
+    confirmed = _confirm_paid_deposit_booking(client)
+    booking = confirmed["booking"]
+
+    headers = _auth_headers(client, demo_credentials)
+    response = client.post(
+        f"/api/v1/tenants/not-a-tenant/bookings/{booking['id']}/cancel",
+        json={},
+        headers=headers,
+    )
+    assert response.status_code in (403, 404)

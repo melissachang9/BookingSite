@@ -126,6 +126,10 @@ export type CancelManageBookingRequest = {
   reason?: string;
 };
 
+export type CancelBookingRequest = {
+  reason?: string;
+};
+
 export type BookingListQuery = {
   status?: BookingState[];
   startsAtGte?: ISODateString;

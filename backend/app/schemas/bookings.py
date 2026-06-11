@@ -61,6 +61,10 @@ class CancelManageBookingRequest(CamelModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class CancelBookingRequest(CamelModel):
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class UpdateBookingStatusRequest(CamelModel):
     status: Literal["completed", "no_show"]
     notes: str | None = Field(default=None, max_length=500)

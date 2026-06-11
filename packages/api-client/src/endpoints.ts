@@ -7,6 +7,7 @@ import type {
   BookingListQuery,
   BookingListResponse,
   BookingSummary,
+  CancelBookingRequest,
   CancelManageBookingRequest,
   CustomerManageBooking,
   CreateServiceCategoryRequest,
@@ -370,6 +371,8 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.post<BookingSummary, UpdateBookingStatusRequest>(`tenants/${tenantSlug}/bookings/${bookingId}/status`, body),
   updateBooking: (tenantSlug: string, bookingId: string, body: UpdateBookingRequest) =>
     client.patch<BookingSummary, UpdateBookingRequest>(`tenants/${tenantSlug}/bookings/${bookingId}`, body),
+  cancelBooking: (tenantSlug: string, bookingId: string, body: CancelBookingRequest) =>
+    client.post<BookingSummary, CancelBookingRequest>(`tenants/${tenantSlug}/bookings/${bookingId}/cancel`, body),
   listBookingFormResponses: (tenantSlug: string, bookingId: string) =>
     client.get<BookingFormResponseList>(`tenants/${tenantSlug}/bookings/${bookingId}/form-responses`),
   listCustomers: (tenantSlug: string, search?: string) =>

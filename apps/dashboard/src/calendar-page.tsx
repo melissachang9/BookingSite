@@ -176,6 +176,7 @@ export type CalendarPageApi = {
   listBookingFormResponses: (tenantSlug: string, bookingId: string) => Promise<BookingFormResponseList>;
   updateBookingStatus: (tenantSlug: string, bookingId: string, body: UpdateBookingStatusRequest) => Promise<BookingSummary>;
   updateBooking: (tenantSlug: string, bookingId: string, body: UpdateBookingRequest) => Promise<BookingSummary>;
+  cancelBooking: (tenantSlug: string, bookingId: string, body: { reason?: string }) => Promise<BookingSummary>;
 };
 
 type CalendarPageProps = {
@@ -1504,6 +1505,21 @@ export function CalendarPage({
     await api.updateBooking(tenantSlug, appointment.id, body);
     setReloadKey((k) => k + 1);
   };
+
+  const handleCancelAppointment = async (appointment: SelectedCalendarAppointment) => {
+    setCompletionState({ kind: "submitting" });
+    try {
+      await api.cancelBooking(tenantSlug, appointment.id, {});
+      setSelectedAppointmentId(null);
+      setCompletionState({ kind: "idle" });
+      setReloadKey((k) => k + 1);
+    } catch (error) {
+      setCompletionState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to cancel booking.",
+      });
+    }
+  };
   const monthRail = (
     <MonthRail
       monthCursorDate={monthCursorDate}
@@ -1653,6 +1669,7 @@ export function CalendarPage({
         onClose={handleCloseAppointmentDrawer}
         onFinalize={handleFinalizeAppointment}
         onUpdate={handleUpdateAppointment}
+        onCancel={handleCancelAppointment}
         completionState={completionState}
       />
       <TimeBlockDetailsDrawer
@@ -2759,6 +2776,7 @@ type AppointmentDetailsDrawerProps = {
   onClose: () => void;
   onFinalize?: (appointment: SelectedCalendarAppointment, status: "completed" | "no_show", resolution: "collected" | "follow_up" | "waived") => void;
   onUpdate?: (appointment: SelectedCalendarAppointment, body: UpdateBookingRequest) => Promise<void>;
+  onCancel?: (appointment: SelectedCalendarAppointment) => Promise<void>;
   completionState?: CompletionState;
 };
 
@@ -2769,6 +2787,7 @@ function AppointmentDetailsDrawer({
   onClose,
   onFinalize,
   onUpdate,
+  onCancel,
   completionState,
 }: AppointmentDetailsDrawerProps): ReactElement | null {
   const [viewingFormEntry, setViewingFormEntry] = useState<BookingFormResponseEntry | null>(null);
@@ -3012,6 +3031,23 @@ function AppointmentDetailsDrawer({
               >
                 Reschedule
               </button>
+              {onCancel ? (
+                <>
+                  <span className="text-action-separator">·</span>
+                  <button
+                    type="button"
+                    className="text-action text-action--danger"
+                    onClick={() => {
+                      if (window.confirm("Cancel this booking? The cancellation policy will be applied.")) {
+                        void onCancel(selectedAppointment);
+                      }
+                    }}
+                    disabled={completionState?.kind === "submitting"}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : null}
             </div>
             {onFinalize ? (
               <div className="appointment-drawer-footer__finalize">

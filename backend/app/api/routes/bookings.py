@@ -11,6 +11,7 @@ from app.db.session import get_db_session
 from app.schemas.bookings import (
     BookingListResponse,
     BookingSummaryResponse,
+    CancelBookingRequest,
     CancelManageBookingRequest,
     CustomerManageBookingResponse,
     UpdateBookingRequest,
@@ -30,7 +31,7 @@ from app.services.booking_forms import (
     send_booking_form_reminder,
     submit_booking_form_requirement_by_token,
 )
-from app.services.bookings import list_bookings, record_manual_payment, update_booking, update_booking_status
+from app.services.bookings import cancel_booking, list_bookings, record_manual_payment, update_booking, update_booking_status
 
 
 router = APIRouter(tags=["bookings"])
@@ -150,6 +151,21 @@ async def update_booking_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingSummaryResponse:
     return await update_booking(session, tenant_slug, booking_id, payload, current_user)
+
+
+@router.post(
+    "/tenants/{tenant_slug}/bookings/{booking_id}/cancel",
+    response_model=BookingSummaryResponse,
+    summary="Cancel a confirmed booking (staff-side, applies policy refunds)",
+)
+async def cancel_booking_route(
+    tenant_slug: str,
+    booking_id: str,
+    payload: CancelBookingRequest,
+    current_user: User = Depends(require_tenant_permission("bookings.cancel")),
+    session: AsyncSession = Depends(get_db_session),
+) -> BookingSummaryResponse:
+    return await cancel_booking(session, tenant_slug, booking_id, payload, current_user)
 
 
 @router.get(

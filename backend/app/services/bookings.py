@@ -8,9 +8,10 @@ from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
 from app.db.models import Booking, BookingDraft, BookingPaymentEvent, Payment, PaymentEvent, Provider, Service, Tenant, User
-from app.schemas.bookings import BookingListResponse, BookingSummaryResponse, PaginationMetaResponse, UpdateBookingRequest, UpdateBookingStatusRequest
+from app.schemas.bookings import BookingListResponse, BookingSummaryResponse, CancelBookingRequest, PaginationMetaResponse, UpdateBookingRequest, UpdateBookingStatusRequest
 from app.schemas.payments import RecordManualPaymentRequest
-from app.services.booking_drafts import _load_booking
+from app.services.booking_drafts import _cancellation_policy_for_booking, _load_booking
+from app.services.payment_processor import create_stripe_refund, is_stripe_checkout_session_id
 from app.services.presenters import booking_balance_due_cents, booking_to_summary
 
 
@@ -377,6 +378,103 @@ async def update_booking(
         extra_payload={
             "previousStartsAt": old_starts_at.isoformat() if payload.starts_at is not None else None,
             "sendConfirmation": payload.send_confirmation,
+        },
+    )
+
+    reload_booking_id = booking.id
+    await session.commit()
+    updated_booking = await _load_booking(session, reload_booking_id, tenant.id)
+    return booking_to_summary(updated_booking)
+
+
+async def cancel_booking(
+    session: AsyncSession,
+    tenant_slug: str,
+    booking_id: str,
+    payload: CancelBookingRequest,
+    actor: User,
+) -> BookingSummaryResponse:
+    tenant = await _load_tenant(session, tenant_slug)
+    booking = await _load_booking(session, booking_id, tenant.id)
+    reason = payload.reason.strip() if isinstance(payload.reason, str) and payload.reason.strip() else None
+
+    if booking.status == "canceled":
+        return booking_to_summary(booking)
+    if booking.status != "confirmed":
+        raise api_exception(409, "conflict", "Only confirmed bookings can be canceled.")
+
+    _, refund_inside_window, _, is_inside_cancellation_window = _cancellation_policy_for_booking(tenant, booking)
+    deposit_payments = [payment for payment in booking.payments if payment.amount_cents > 0 and payment.status == "succeeded"]
+    requires_payment_record = booking.deposit_status in {"paid", "paid_in_full"}
+    if requires_payment_record and not deposit_payments:
+        raise api_exception(409, "conflict", "This booking no longer has the payment record required for cancellation.")
+
+    refundable = requires_payment_record and (not is_inside_cancellation_window or refund_inside_window)
+    forfeited = requires_payment_record and not refundable
+    refunded_amount_cents = 0
+    forfeited_amount_cents = 0
+    external_refund_ids: list[str] = []
+
+    booking.status = "canceled"
+    booking.canceled_at = datetime.now(timezone.utc)
+
+    if refundable:
+        for payment in deposit_payments:
+            refund_note = f"Staff canceled the booking. Operator: {actor.name}."
+            stripe_payment_intent_id = None
+            if is_stripe_checkout_session_id(payment.checkout_session_id):
+                refund = await create_stripe_refund(
+                    payment.checkout_session_id or "",
+                    amount_cents=payment.amount_cents,
+                    idempotency_key=f"staff-cancel-{booking.id}-{payment.id}",
+                )
+                external_refund_ids.append(refund.refund_id)
+                stripe_payment_intent_id = refund.payment_intent_id
+                refund_note = f"Stripe refund {refund.refund_id} created when staff canceled. Operator: {actor.name}."
+            refunded_amount_cents += payment.amount_cents
+            payment.status = "refunded"
+            payment.deposit_status = "refunded"
+            _append_payment_event(
+                session,
+                payment,
+                kind="refund_recorded",
+                actor=actor,
+                amount_cents=payment.amount_cents,
+                notes=refund_note,
+            )
+        booking.deposit_status = "refunded"
+        booking.payment_resolution = "waived"
+    elif forfeited:
+        for payment in deposit_payments:
+            forfeited_amount_cents += payment.amount_cents
+            payment.deposit_status = "forfeited"
+            _append_payment_event(
+                session,
+                payment,
+                kind="deposit_forfeited",
+                actor=actor,
+                amount_cents=payment.amount_cents,
+                notes=f"Staff canceled the booking inside the cancellation window; deposit was retained. Operator: {actor.name}.",
+            )
+        booking.deposit_status = "forfeited"
+        booking.payment_resolution = "collected"
+    elif booking.deposit_status in {"unpaid", "follow_up"}:
+        booking.payment_resolution = "waived"
+
+    _append_booking_event(
+        session,
+        booking,
+        event_kind="staff_canceled",
+        actor=actor,
+        amount_cents=refunded_amount_cents,
+        notes=reason,
+        extra_payload={
+            "refundedAmountCents": refunded_amount_cents,
+            "forfeitedAmountCents": forfeited_amount_cents,
+            "isInsideCancellationWindow": is_inside_cancellation_window,
+            "refundInsideWindow": refund_inside_window,
+            "externalRefundIds": external_refund_ids,
+            "reason": reason,
         },
     )
 
