@@ -137,6 +137,11 @@ type DraftCreationState =
   | { kind: "success"; draftId: string }
   | { kind: "error"; message: string };
 
+type CompletionState =
+  | { kind: "idle" }
+  | { kind: "submitting" }
+  | { kind: "error"; message: string };
+
 type FormResponsesState =
   | { kind: "idle" }
   | { kind: "loading"; bookingId: string }
@@ -2898,7 +2903,7 @@ function AppointmentDetailsDrawer({
                     setEditDate(d.toISOString().slice(0, 10));
                     setEditTime(d.toTimeString().slice(0, 5));
                     setEditNotes(selectedAppointment.notes ?? "");
-                    setSendConfirmation(false);
+                    setNotificationChoice("notify");
                     setEditSaveState("idle");
                     setIsEditing(true);
                   }}
