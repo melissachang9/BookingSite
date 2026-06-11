@@ -93,6 +93,14 @@ export type UpdateTenantSettingsRequest = {
   calendarDisplayEndHour?: number;
   weekStartsOn?: number;
   reminderHoursBefore?: number;
+  cancellationWindowHours?: number;
+  refundInsideWindow?: boolean;
+  minLeadTimeMinutes?: number;
+  maxAdvanceBookingDays?: number;
+  defaultDepositCents?: number;
+  noShowFeeCents?: number;
+  taxRatePercent?: number;
+  autoChargeNoShowFee?: boolean;
 };
 
 export type UpdateTenantBusinessRequest = {

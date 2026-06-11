@@ -73,6 +73,13 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
     status: "available",
   },
   {
+    id: "business-policies",
+    title: "Business Policies",
+    eyebrow: "Calendar & appointments",
+    description: "Cancellation window, deposit defaults, booking lead time, and no-show fees.",
+    status: "available",
+  },
+  {
     id: "automated-messages",
     title: "Automated Messages",
     eyebrow: "Notifications",
@@ -203,6 +210,13 @@ export function SettingsPage({
             <SettingsSection key={section.id} section={section}>
               {section.id === "calendar" ? (
                 <CalendarDisplaySection
+                  canManageSettings={canManageSettings}
+                  tenant={tenant}
+                  onTenantUpdated={onTenantUpdated}
+                  tenantSlug={currentUser.tenantSlug}
+                />
+              ) : section.id === "business-policies" ? (
+                <BusinessPoliciesSection
                   canManageSettings={canManageSettings}
                   tenant={tenant}
                   onTenantUpdated={onTenantUpdated}
@@ -416,6 +430,209 @@ function CalendarDisplaySection({
           disabled={!canManageSettings || validationMessage !== null || saveState.kind === "submitting"}
         >
           {saveState.kind === "submitting" ? "Saving…" : "Save calendar hours"}
+        </button>
+        {!canManageSettings ? (
+          <p className="settings-permission-note">You do not have permission to edit tenant settings.</p>
+        ) : null}
+      </div>
+    </form>
+  );
+}
+
+function BusinessPoliciesSection({
+  canManageSettings,
+  tenant,
+  onTenantUpdated,
+  tenantSlug,
+}: {
+  canManageSettings: boolean;
+  tenant: TenantSummary | null;
+  onTenantUpdated: (tenant: TenantSummary) => void;
+  tenantSlug: string;
+}) {
+  const [cancellationWindowHours, setCancellationWindowHours] = useState<number>(tenant?.settings.cancellationWindowHours ?? 24);
+  const [refundInsideWindow, setRefundInsideWindow] = useState<boolean>(tenant?.settings.refundInsideWindow ?? false);
+  const [minLeadTimeMinutes, setMinLeadTimeMinutes] = useState<number>(tenant?.settings.minLeadTimeMinutes ?? 60);
+  const [maxAdvanceBookingDays, setMaxAdvanceBookingDays] = useState<number>(tenant?.settings.maxAdvanceBookingDays ?? 45);
+  const [defaultDepositCents, setDefaultDepositCents] = useState<number>(tenant?.settings.defaultDepositCents ?? 0);
+  const [noShowFeeCents, setNoShowFeeCents] = useState<number>(tenant?.settings.noShowFeeCents ?? 0);
+  const [taxRatePercent, setTaxRatePercent] = useState<number>(tenant?.settings.taxRatePercent ?? 0);
+  const [autoChargeNoShowFee, setAutoChargeNoShowFee] = useState<boolean>(tenant?.settings.autoChargeNoShowFee ?? false);
+  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
+
+  useEffect(() => {
+    if (tenant) {
+      setCancellationWindowHours(tenant.settings.cancellationWindowHours);
+      setRefundInsideWindow(tenant.settings.refundInsideWindow);
+      setMinLeadTimeMinutes(tenant.settings.minLeadTimeMinutes);
+      setMaxAdvanceBookingDays(tenant.settings.maxAdvanceBookingDays);
+      setDefaultDepositCents(tenant.settings.defaultDepositCents);
+      setNoShowFeeCents(tenant.settings.noShowFeeCents);
+      setTaxRatePercent(tenant.settings.taxRatePercent);
+      setAutoChargeNoShowFee(tenant.settings.autoChargeNoShowFee ?? false);
+    }
+  }, [tenant]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canManageSettings) {
+      return;
+    }
+    setSaveState({ kind: "submitting" });
+    try {
+      const updated = await platformApi.updateTenantSettings(tenantSlug, {
+        cancellationWindowHours,
+        refundInsideWindow,
+        minLeadTimeMinutes,
+        maxAdvanceBookingDays,
+        defaultDepositCents,
+        noShowFeeCents,
+        taxRatePercent,
+        autoChargeNoShowFee,
+      });
+      onTenantUpdated(updated);
+      setSaveState({ kind: "success", message: "Business policies saved." });
+    } catch (error) {
+      setSaveState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to save settings.",
+      });
+    }
+  };
+
+  if (tenant === null) {
+    return <p>Loading current settings…</p>;
+  }
+
+  return (
+    <form className="settings-form" onSubmit={handleSubmit}>
+      <p className="rail-section-kicker">Cancellation & refunds</p>
+
+      <div className="settings-form-row">
+        <label className="settings-field">
+          <span>Cancellation window (hours)</span>
+          <input
+            type="number"
+            min={0}
+            max={168}
+            value={cancellationWindowHours}
+            onChange={(event) => setCancellationWindowHours(Number(event.target.value))}
+            disabled={!canManageSettings || saveState.kind === "submitting"}
+          />
+          <small>Hours before the appointment when the cancellation policy applies. 0 means no window.</small>
+        </label>
+        <label className="settings-field settings-field--checkbox">
+          <span>Refund inside window</span>
+          <label className="settings-checkbox-label">
+            <input
+              type="checkbox"
+              checked={refundInsideWindow}
+              onChange={(event) => setRefundInsideWindow(event.target.checked)}
+              disabled={!canManageSettings || saveState.kind === "submitting"}
+            />
+            Refund deposit even when canceling inside the window
+          </label>
+        </label>
+      </div>
+
+      <p className="rail-section-kicker">Booking rules</p>
+
+      <div className="settings-form-row">
+        <label className="settings-field">
+          <span>Minimum lead time (minutes)</span>
+          <input
+            type="number"
+            min={0}
+            max={1440}
+            value={minLeadTimeMinutes}
+            onChange={(event) => setMinLeadTimeMinutes(Number(event.target.value))}
+            disabled={!canManageSettings || saveState.kind === "submitting"}
+          />
+          <small>How far in advance a customer must book. 0 means no minimum.</small>
+        </label>
+        <label className="settings-field">
+          <span>Maximum advance booking (days)</span>
+          <input
+            type="number"
+            min={1}
+            max={365}
+            value={maxAdvanceBookingDays}
+            onChange={(event) => setMaxAdvanceBookingDays(Number(event.target.value))}
+            disabled={!canManageSettings || saveState.kind === "submitting"}
+          />
+          <small>How far into the future customers can book.</small>
+        </label>
+      </div>
+
+      <p className="rail-section-kicker">Deposits & fees</p>
+
+      <div className="settings-form-row">
+        <label className="settings-field">
+          <span>Default deposit ($)</span>
+          <input
+            type="number"
+            min={0}
+            max={1000}
+            step={0.01}
+            value={(defaultDepositCents / 100).toFixed(2)}
+            onChange={(event) => setDefaultDepositCents(Math.round(parseFloat(event.target.value || "0") * 100))}
+            disabled={!canManageSettings || saveState.kind === "submitting"}
+          />
+          <small>Default deposit amount for new services. 0 means no deposit required.</small>
+        </label>
+        <label className="settings-field">
+          <span>No-show fee ($)</span>
+          <input
+            type="number"
+            min={0}
+            max={1000}
+            step={0.01}
+            value={(noShowFeeCents / 100).toFixed(2)}
+            onChange={(event) => setNoShowFeeCents(Math.round(parseFloat(event.target.value || "0") * 100))}
+            disabled={!canManageSettings || saveState.kind === "submitting"}
+          />
+          <small>Fee charged when a customer does not show up.</small>
+        </label>
+      </div>
+
+      <div className="settings-form-row">
+        <label className="settings-field">
+          <span>Tax rate (%)</span>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step={0.01}
+            value={taxRatePercent}
+            onChange={(event) => setTaxRatePercent(parseFloat(event.target.value || "0"))}
+            disabled={!canManageSettings || saveState.kind === "submitting"}
+          />
+          <small>Sales tax percentage applied to service subtotal.</small>
+        </label>
+        <label className="settings-field settings-field--checkbox">
+          <span>Auto-charge no-show fee</span>
+          <label className="settings-checkbox-label">
+            <input
+              type="checkbox"
+              checked={autoChargeNoShowFee}
+              onChange={(event) => setAutoChargeNoShowFee(event.target.checked)}
+              disabled={!canManageSettings || saveState.kind === "submitting"}
+            />
+            Automatically charge the no-show fee when marking a booking as no-show
+          </label>
+        </label>
+      </div>
+
+      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+
+      <div className="settings-actions">
+        <button
+          type="submit"
+          className="primary-action"
+          disabled={!canManageSettings || saveState.kind === "submitting"}
+        >
+          {saveState.kind === "submitting" ? "Saving…" : "Save policies"}
         </button>
         {!canManageSettings ? (
           <p className="settings-permission-note">You do not have permission to edit tenant settings.</p>

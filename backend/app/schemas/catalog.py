@@ -197,6 +197,14 @@ class UpdateTenantSettingsRequest(CamelModel):
     calendar_display_end_hour: int | None = Field(default=None, ge=1, le=24)
     week_starts_on: int | None = Field(default=None, ge=0, le=6)
     reminder_hours_before: int | None = Field(default=None, ge=1, le=168)
+    cancellation_window_hours: int | None = Field(default=None, ge=0, le=168)
+    refund_inside_window: bool | None = None
+    min_lead_time_minutes: int | None = Field(default=None, ge=0, le=1440)
+    max_advance_booking_days: int | None = Field(default=None, ge=1, le=365)
+    default_deposit_cents: int | None = Field(default=None, ge=0, le=100000)
+    no_show_fee_cents: int | None = Field(default=None, ge=0, le=100000)
+    tax_rate_percent: float | None = Field(default=None, ge=0, le=100)
+    auto_charge_no_show_fee: bool | None = None
 
 
 SUPPORTED_CURRENCIES = ("USD", "CAD", "EUR", "GBP", "AUD", "MXN")

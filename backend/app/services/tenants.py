@@ -148,6 +148,30 @@ async def update_tenant_settings(
     if payload.reminder_hours_before is not None:
         current["reminderHoursBefore"] = payload.reminder_hours_before
 
+    if payload.cancellation_window_hours is not None:
+        current["cancellationWindowHours"] = payload.cancellation_window_hours
+
+    if payload.refund_inside_window is not None:
+        current["refundInsideWindow"] = payload.refund_inside_window
+
+    if payload.min_lead_time_minutes is not None:
+        current["minLeadTimeMinutes"] = payload.min_lead_time_minutes
+
+    if payload.max_advance_booking_days is not None:
+        current["maxAdvanceBookingDays"] = payload.max_advance_booking_days
+
+    if payload.default_deposit_cents is not None:
+        current["defaultDepositCents"] = payload.default_deposit_cents
+
+    if payload.no_show_fee_cents is not None:
+        current["noShowFeeCents"] = payload.no_show_fee_cents
+
+    if payload.tax_rate_percent is not None:
+        current["taxRatePercent"] = payload.tax_rate_percent
+
+    if payload.auto_charge_no_show_fee is not None:
+        current["autoChargeNoShowFee"] = payload.auto_charge_no_show_fee
+
     tenant.settings_json = current
     await session.commit()
     await session.refresh(tenant)
