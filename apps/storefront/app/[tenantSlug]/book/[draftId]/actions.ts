@@ -54,7 +54,7 @@ const readFieldAnswer = async (formData: FormData, field: FormField, tenantId: s
     return formData.get(field.id) === "on";
   }
 
-  if (field.type === "file_upload") {
+  if (field.type === "file_upload" || field.type === "signature") {
     const entries = formData.getAll(field.id).filter(
       (entry): entry is File => typeof entry === "object" && entry !== null && "size" in entry && (entry as File).size > 0,
     );

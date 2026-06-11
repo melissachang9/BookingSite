@@ -131,7 +131,7 @@ function renderRequirementField(field: FormField) {
     );
   }
 
-  if (field.type === "file_upload") {
+  if (field.type === "file_upload" || field.type === "signature") {
     return (
       <label key={field.id} className="requirement-form-field">
         <span>
@@ -139,7 +139,7 @@ function renderRequirementField(field: FormField) {
           {field.required ? " *" : ""}
         </span>
         {field.helpText ? <small>{field.helpText}</small> : null}
-        <input name={field.id} type="file" required={field.required} />
+        <input name={field.id} type="file" accept="image/*" required={field.required} />
       </label>
     );
   }
