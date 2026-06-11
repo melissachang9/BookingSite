@@ -2772,7 +2772,8 @@ function AppointmentDetailsDrawer({
   const [editDate, setEditDate] = useState("");
   const [editTime, setEditTime] = useState("");
   const [editNotes, setEditNotes] = useState("");
-  const [editSaveState, setEditSaveState] = useState<"idle" | "submitting">("idle");
+  const [editSaveState, setEditSaveState] = useState<"idle" | "submitting" | "error">("idle");
+  const [editErrorMessage, setEditErrorMessage] = useState("");
   const [notificationChoice, setNotificationChoice] = useState<"notify" | "silent">("notify");
 
   if (!selectedAppointment) {
@@ -2856,6 +2857,7 @@ function AppointmentDetailsDrawer({
                 onClick={async () => {
                   if (!onUpdate) return;
                   setEditSaveState("submitting");
+                  setEditErrorMessage("");
                   try {
                     const newStartsAt = new Date(`${editDate}T${editTime}:00`).toISOString();
                     await onUpdate(selectedAppointment, {
@@ -2864,15 +2866,19 @@ function AppointmentDetailsDrawer({
                       sendConfirmation: notificationChoice === "notify",
                     });
                     setIsEditing(false);
-                  } catch {
-                    // keep editing mode on error
+                    setEditSaveState("idle");
+                  } catch (err) {
+                    setEditSaveState("error");
+                    setEditErrorMessage(err instanceof Error ? err.message : "Unable to save changes.");
                   }
-                  setEditSaveState("idle");
                 }}
               >
                 {editSaveState === "submitting" ? "Saving..." : "Save"}
               </button>
             </div>
+            {editSaveState === "error" ? (
+              <p role="alert" className="settings-error">{editErrorMessage}</p>
+            ) : null}
           </div>
         ) : (
           <div className="appointment-drawer-when" aria-label="Appointment timing">
