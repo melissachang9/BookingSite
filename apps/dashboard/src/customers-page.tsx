@@ -382,6 +382,14 @@ function CustomerProfilePanel({
   const [notesDraft, setNotesDraft] = useState(customer.notes ?? "");
   const [notesSaveState, setNotesSaveState] = useState<"idle" | "submitting" | "error">("idle");
   const [notesError, setNotesError] = useState("");
+  const [isEditingContact, setIsEditingContact] = useState(false);
+  const [contactDraft, setContactDraft] = useState({
+    name: customer.name,
+    email: customer.email ?? "",
+    phone: customer.phone ?? "",
+  });
+  const [contactSaveState, setContactSaveState] = useState<"idle" | "submitting" | "error">("idle");
+  const [contactError, setContactError] = useState("");
 
   const toggleFormExpand = (id: string) => {
     setExpandedFormIds((prev) => {
@@ -411,6 +419,32 @@ function CustomerProfilePanel({
       setNotesError(err instanceof Error ? err.message : "Unable to save notes.");
     }
   };
+
+  const handleSaveContact = async () => {
+    if (!contactDraft.name.trim()) {
+      setContactSaveState("error");
+      setContactError("Name is required.");
+      return;
+    }
+    setContactSaveState("submitting");
+    setContactError("");
+    try {
+      const body: UpdateCustomerRequest = {
+        name: contactDraft.name.trim(),
+        email: contactDraft.email.trim(),
+        phone: contactDraft.phone.trim(),
+      };
+      await platformApi.updateCustomer(customer.tenantId, customer.id, body);
+      setIsEditingContact(false);
+      setContactSaveState("idle");
+      if (onCustomerUpdated) {
+        await onCustomerUpdated();
+      }
+    } catch (err) {
+      setContactSaveState("error");
+      setContactError(err instanceof Error ? err.message : "Unable to save contact.");
+    }
+  };
   return (
     <div className="customer-profile">
       <header className="customer-profile-header">
@@ -431,27 +465,107 @@ function CustomerProfilePanel({
 
       <section className="customer-profile-section">
         <p className="rail-section-kicker">Contact</p>
-        <div className="appointment-customer-fields">
-          {customer.email ? (
-            <div className="appointment-customer-field">
-              <span className="appointment-customer-field__label">Email</span>
-              <span className="appointment-customer-field__value">
-                {customer.email}
-              </span>
+        {isEditingContact ? (
+          <div className="customer-notes-editor">
+            <label style={{ display: "block", marginBottom: "0.5rem" }}>
+              <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Name</span>
+              <input
+                type="text"
+                value={contactDraft.name}
+                onChange={(e) => setContactDraft((d) => ({ ...d, name: e.target.value }))}
+                disabled={contactSaveState === "submitting"}
+                style={{ width: "100%" }}
+              />
+            </label>
+            <label style={{ display: "block", marginBottom: "0.5rem" }}>
+              <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Email</span>
+              <input
+                type="email"
+                value={contactDraft.email}
+                onChange={(e) => setContactDraft((d) => ({ ...d, email: e.target.value }))}
+                disabled={contactSaveState === "submitting"}
+                style={{ width: "100%" }}
+              />
+            </label>
+            <label style={{ display: "block", marginBottom: "0.5rem" }}>
+              <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Phone</span>
+              <input
+                type="tel"
+                value={contactDraft.phone}
+                onChange={(e) => setContactDraft((d) => ({ ...d, phone: e.target.value }))}
+                disabled={contactSaveState === "submitting"}
+                style={{ width: "100%" }}
+              />
+            </label>
+            <div className="customer-notes-editor__actions">
+              <button
+                type="button"
+                className="text-action"
+                onClick={() => {
+                  setIsEditingContact(false);
+                  setContactDraft({
+                    name: customer.name,
+                    email: customer.email ?? "",
+                    phone: customer.phone ?? "",
+                  });
+                  setContactError("");
+                }}
+                disabled={contactSaveState === "submitting"}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary-action"
+                onClick={handleSaveContact}
+                disabled={contactSaveState === "submitting"}
+              >
+                {contactSaveState === "submitting" ? "Saving…" : "Save"}
+              </button>
             </div>
-          ) : null}
-          {customer.phone ? (
-            <div className="appointment-customer-field">
-              <span className="appointment-customer-field__label">Phone</span>
-              <span className="appointment-customer-field__value">
-                {customer.phone}
-              </span>
+            {contactSaveState === "error" ? (
+              <p role="alert" className="settings-error">{contactError}</p>
+            ) : null}
+          </div>
+        ) : (
+          <div className="customer-notes-display">
+            <div className="appointment-customer-fields">
+              {customer.email ? (
+                <div className="appointment-customer-field">
+                  <span className="appointment-customer-field__label">Email</span>
+                  <span className="appointment-customer-field__value">
+                    {customer.email}
+                  </span>
+                </div>
+              ) : null}
+              {customer.phone ? (
+                <div className="appointment-customer-field">
+                  <span className="appointment-customer-field__label">Phone</span>
+                  <span className="appointment-customer-field__value">
+                    {customer.phone}
+                  </span>
+                </div>
+              ) : null}
+              {!customer.email && !customer.phone ? (
+                <p className="staff-list-empty">No contact information on file.</p>
+              ) : null}
             </div>
-          ) : null}
-          {!customer.email && !customer.phone ? (
-            <p className="staff-list-empty">No contact information on file.</p>
-          ) : null}
-        </div>
+            <button
+              type="button"
+              className="text-action"
+              onClick={() => {
+                setContactDraft({
+                  name: customer.name,
+                  email: customer.email ?? "",
+                  phone: customer.phone ?? "",
+                });
+                setIsEditingContact(true);
+              }}
+            >
+              Edit
+            </button>
+          </div>
+        )}
       </section>
 
       <section className="customer-profile-section">

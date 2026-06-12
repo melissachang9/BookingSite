@@ -179,7 +179,11 @@ export type CalendarPageApi = {
   updateBookingStatus: (tenantSlug: string, bookingId: string, body: UpdateBookingStatusRequest) => Promise<BookingSummary>;
   updateBooking: (tenantSlug: string, bookingId: string, body: UpdateBookingRequest) => Promise<BookingSummary>;
   cancelBooking: (tenantSlug: string, bookingId: string, body: { reason?: string }) => Promise<BookingSummary>;
-  updateCustomer: (tenantSlug: string, customerId: string, body: { notes?: string }) => Promise<unknown>;
+  updateCustomer: (
+    tenantSlug: string,
+    customerId: string,
+    body: { notes?: string; name?: string; email?: string; phone?: string },
+  ) => Promise<unknown>;
 };
 
 type CalendarPageProps = {
@@ -1543,6 +1547,32 @@ export function CalendarPage({
       };
     });
   };
+
+  const handleUpdateCustomerContact = async (
+    appointment: SelectedCalendarAppointment,
+    contact: { name: string; email: string; phone: string },
+  ) => {
+    await api.updateCustomer(tenantSlug, appointment.customerId, contact);
+    setCalendarState((current) => {
+      if (current.kind !== "ready") return current;
+      return {
+        ...current,
+        days: current.days.map((day) => ({
+          ...day,
+          appointments: day.appointments.map((a) =>
+            a.customerId === appointment.customerId
+              ? {
+                  ...a,
+                  customerName: contact.name,
+                  customerEmail: contact.email,
+                  customerPhone: contact.phone,
+                }
+              : a,
+          ),
+        })),
+      };
+    });
+  };
   const monthRail = (
     <MonthRail
       monthCursorDate={monthCursorDate}
@@ -1694,6 +1724,7 @@ export function CalendarPage({
         onUpdate={handleUpdateAppointment}
         onCancel={handleCancelAppointment}
         onUpdateCustomerNotes={handleUpdateCustomerNotes}
+        onUpdateCustomerContact={handleUpdateCustomerContact}
         completionState={completionState}
       />
       <TimeBlockDetailsDrawer
@@ -2802,6 +2833,10 @@ type AppointmentDetailsDrawerProps = {
   onUpdate?: (appointment: SelectedCalendarAppointment, body: UpdateBookingRequest) => Promise<void>;
   onCancel?: (appointment: SelectedCalendarAppointment) => Promise<void>;
   onUpdateCustomerNotes?: (appointment: SelectedCalendarAppointment, notes: string) => Promise<void>;
+  onUpdateCustomerContact?: (
+    appointment: SelectedCalendarAppointment,
+    contact: { name: string; email: string; phone: string },
+  ) => Promise<void>;
   completionState?: CompletionState;
 };
 
@@ -2814,6 +2849,7 @@ function AppointmentDetailsDrawer({
   onUpdate,
   onCancel,
   onUpdateCustomerNotes,
+  onUpdateCustomerContact,
   completionState,
 }: AppointmentDetailsDrawerProps): ReactElement | null {
   const [viewingFormEntry, setViewingFormEntry] = useState<BookingFormResponseEntry | null>(null);
@@ -2829,6 +2865,10 @@ function AppointmentDetailsDrawer({
   const [customerNotesDraft, setCustomerNotesDraft] = useState("");
   const [customerNotesSaveState, setCustomerNotesSaveState] = useState<"idle" | "submitting" | "error">("idle");
   const [customerNotesError, setCustomerNotesError] = useState("");
+  const [isEditingCustomerContact, setIsEditingCustomerContact] = useState(false);
+  const [customerContactDraft, setCustomerContactDraft] = useState({ name: "", email: "", phone: "" });
+  const [customerContactSaveState, setCustomerContactSaveState] = useState<"idle" | "submitting" | "error">("idle");
+  const [customerContactError, setCustomerContactError] = useState("");
 
   if (!selectedAppointment) {
     return null;
@@ -2966,27 +3006,125 @@ function AppointmentDetailsDrawer({
 
         <section className="booking-rail-section booking-rail-section--customer" aria-label="Customer details">
           <p className="rail-section-kicker">Customer</p>
-          <div className="appointment-customer-card">
-            <span className="appointment-customer-avatar" aria-hidden="true">{getInitials(selectedAppointment.customerName)}</span>
-            <div>
-              <strong>{selectedAppointment.customerName}</strong>
-              <span>Client profile</span>
+          {isEditingCustomerContact ? (
+            <div className="customer-notes-editor">
+              <label style={{ display: "block", marginBottom: "0.5rem" }}>
+                <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Name</span>
+                <input
+                  type="text"
+                  value={customerContactDraft.name}
+                  onChange={(e) => setCustomerContactDraft((d) => ({ ...d, name: e.target.value }))}
+                  disabled={customerContactSaveState === "submitting"}
+                  style={{ width: "100%" }}
+                />
+              </label>
+              <label style={{ display: "block", marginBottom: "0.5rem" }}>
+                <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Email</span>
+                <input
+                  type="email"
+                  value={customerContactDraft.email}
+                  onChange={(e) => setCustomerContactDraft((d) => ({ ...d, email: e.target.value }))}
+                  disabled={customerContactSaveState === "submitting"}
+                  style={{ width: "100%" }}
+                />
+              </label>
+              <label style={{ display: "block", marginBottom: "0.5rem" }}>
+                <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Phone</span>
+                <input
+                  type="tel"
+                  value={customerContactDraft.phone}
+                  onChange={(e) => setCustomerContactDraft((d) => ({ ...d, phone: e.target.value }))}
+                  disabled={customerContactSaveState === "submitting"}
+                  style={{ width: "100%" }}
+                />
+              </label>
+              <div className="customer-notes-editor__actions">
+                <button
+                  type="button"
+                  className="text-action"
+                  onClick={() => {
+                    setIsEditingCustomerContact(false);
+                    setCustomerContactError("");
+                  }}
+                  disabled={customerContactSaveState === "submitting"}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-action"
+                  onClick={async () => {
+                    if (!onUpdateCustomerContact) return;
+                    if (!customerContactDraft.name.trim()) {
+                      setCustomerContactSaveState("error");
+                      setCustomerContactError("Name is required.");
+                      return;
+                    }
+                    setCustomerContactSaveState("submitting");
+                    setCustomerContactError("");
+                    try {
+                      await onUpdateCustomerContact(selectedAppointment, {
+                        name: customerContactDraft.name.trim(),
+                        email: customerContactDraft.email.trim(),
+                        phone: customerContactDraft.phone.trim(),
+                      });
+                      setIsEditingCustomerContact(false);
+                      setCustomerContactSaveState("idle");
+                    } catch (err) {
+                      setCustomerContactSaveState("error");
+                      setCustomerContactError(err instanceof Error ? err.message : "Unable to save contact.");
+                    }
+                  }}
+                  disabled={customerContactSaveState === "submitting"}
+                >
+                  {customerContactSaveState === "submitting" ? "Saving…" : "Save"}
+                </button>
+              </div>
+              {customerContactSaveState === "error" ? (
+                <p role="alert" className="settings-error">{customerContactError}</p>
+              ) : null}
             </div>
-          </div>
-          <div className="appointment-customer-fields">
-            {selectedAppointment.customerPhone ? (
-              <div className="appointment-customer-field">
-                <span className="appointment-customer-field__label">Phone</span>
-                <span className="appointment-customer-field__value">{selectedAppointment.customerPhone}</span>
+          ) : (
+            <div className="customer-notes-display">
+              <div className="appointment-customer-card">
+                <span className="appointment-customer-avatar" aria-hidden="true">{getInitials(selectedAppointment.customerName)}</span>
+                <div>
+                  <strong>{selectedAppointment.customerName}</strong>
+                  <span>Client profile</span>
+                </div>
               </div>
-            ) : null}
-            {selectedAppointment.customerEmail ? (
-              <div className="appointment-customer-field">
-                <span className="appointment-customer-field__label">Email</span>
-                <span className="appointment-customer-field__value">{selectedAppointment.customerEmail}</span>
+              <div className="appointment-customer-fields">
+                {selectedAppointment.customerPhone ? (
+                  <div className="appointment-customer-field">
+                    <span className="appointment-customer-field__label">Phone</span>
+                    <span className="appointment-customer-field__value">{selectedAppointment.customerPhone}</span>
+                  </div>
+                ) : null}
+                {selectedAppointment.customerEmail ? (
+                  <div className="appointment-customer-field">
+                    <span className="appointment-customer-field__label">Email</span>
+                    <span className="appointment-customer-field__value">{selectedAppointment.customerEmail}</span>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
+              {onUpdateCustomerContact ? (
+                <button
+                  type="button"
+                  className="text-action"
+                  onClick={() => {
+                    setCustomerContactDraft({
+                      name: selectedAppointment.customerName,
+                      email: selectedAppointment.customerEmail ?? "",
+                      phone: selectedAppointment.customerPhone ?? "",
+                    });
+                    setIsEditingCustomerContact(true);
+                  }}
+                >
+                  Edit contact
+                </button>
+              ) : null}
+            </div>
+          )}
           <div className="appointment-customer-notes">
             {isEditingCustomerNotes ? (
               <div className="customer-notes-editor">
