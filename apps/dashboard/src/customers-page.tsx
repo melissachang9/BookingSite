@@ -334,6 +334,23 @@ export function CustomersPage({
                 customer={selectedCustomer}
                 profileState={profileState}
                 formResponsesState={formResponsesState}
+                tenantSlug={tenantSlug}
+                onCustomerUpdated={async () => {
+                  await loadCustomers();
+                  // Re-fetch the profile to get updated notes
+                  if (selectedCustomerId) {
+                    setProfileState({ kind: "loading" });
+                    try {
+                      const profile = await platformApi.getCustomerProfile(tenantSlug, selectedCustomerId);
+                      setProfileState({ kind: "ready", profile });
+                    } catch (error) {
+                      setProfileState({
+                        kind: "error",
+                        message: readErrorMessage(error, "Unable to reload profile."),
+                      });
+                    }
+                  }
+                }}
               />
             ) : (
               <div className="staff-detail-empty">
@@ -351,10 +368,14 @@ function CustomerProfilePanel({
   customer,
   profileState,
   formResponsesState,
+  tenantSlug,
+  onCustomerUpdated,
 }: {
   customer: CustomerSummary;
   profileState: ProfileState;
   formResponsesState: FormResponsesState;
+  tenantSlug: string;
+  onCustomerUpdated?: () => Promise<void>;
 }) {
   const [expandedFormIds, setExpandedFormIds] = useState<Set<string>>(new Set());
   const [isEditingNotes, setIsEditingNotes] = useState(false);
@@ -382,6 +403,9 @@ function CustomerProfilePanel({
       await platformApi.updateCustomer(customer.tenantId, customer.id, body);
       setIsEditingNotes(false);
       setNotesSaveState("idle");
+      if (onCustomerUpdated) {
+        await onCustomerUpdated();
+      }
     } catch (err) {
       setNotesSaveState("error");
       setNotesError(err instanceof Error ? err.message : "Unable to save notes.");

@@ -63,9 +63,11 @@ type CalendarAppointment = {
   endAt: string;
   providerId: string;
   providerName: string;
+  customerId: string;
   customerName: string;
   customerEmail?: string | null;
   customerPhone?: string | null;
+  customerNotes?: string | null;
   customerManageToken: string;
   serviceId: string;
   serviceName: string;
@@ -177,6 +179,7 @@ export type CalendarPageApi = {
   updateBookingStatus: (tenantSlug: string, bookingId: string, body: UpdateBookingStatusRequest) => Promise<BookingSummary>;
   updateBooking: (tenantSlug: string, bookingId: string, body: UpdateBookingRequest) => Promise<BookingSummary>;
   cancelBooking: (tenantSlug: string, bookingId: string, body: { reason?: string }) => Promise<BookingSummary>;
+  updateCustomer: (tenantSlug: string, customerId: string, body: { notes?: string }) => Promise<unknown>;
 };
 
 type CalendarPageProps = {
@@ -427,9 +430,11 @@ function createCalendarAppointment(booking: BookingSummary): CalendarAppointment
     endAt: booking.endsAt,
     providerId: booking.providerId,
     providerName: booking.provider.name,
+    customerId: booking.customer.id,
     customerName: booking.customer.name,
     customerEmail: booking.customer.email ?? null,
     customerPhone: booking.customer.phone ?? null,
+    customerNotes: booking.customer.notes ?? null,
     customerManageToken: booking.customerManageToken,
     serviceId: booking.serviceId,
     serviceName: booking.service.name,
@@ -1520,6 +1525,11 @@ export function CalendarPage({
       });
     }
   };
+
+  const handleUpdateCustomerNotes = async (appointment: SelectedCalendarAppointment, notes: string) => {
+    await api.updateCustomer(tenantSlug, appointment.customerId, { notes });
+    setReloadKey((k) => k + 1);
+  };
   const monthRail = (
     <MonthRail
       monthCursorDate={monthCursorDate}
@@ -1670,6 +1680,7 @@ export function CalendarPage({
         onFinalize={handleFinalizeAppointment}
         onUpdate={handleUpdateAppointment}
         onCancel={handleCancelAppointment}
+        onUpdateCustomerNotes={handleUpdateCustomerNotes}
         completionState={completionState}
       />
       <TimeBlockDetailsDrawer
@@ -2777,6 +2788,7 @@ type AppointmentDetailsDrawerProps = {
   onFinalize?: (appointment: SelectedCalendarAppointment, status: "completed" | "no_show", resolution: "collected" | "follow_up" | "waived") => void;
   onUpdate?: (appointment: SelectedCalendarAppointment, body: UpdateBookingRequest) => Promise<void>;
   onCancel?: (appointment: SelectedCalendarAppointment) => Promise<void>;
+  onUpdateCustomerNotes?: (appointment: SelectedCalendarAppointment, notes: string) => Promise<void>;
   completionState?: CompletionState;
 };
 
@@ -2788,6 +2800,7 @@ function AppointmentDetailsDrawer({
   onFinalize,
   onUpdate,
   onCancel,
+  onUpdateCustomerNotes,
   completionState,
 }: AppointmentDetailsDrawerProps): ReactElement | null {
   const [viewingFormEntry, setViewingFormEntry] = useState<BookingFormResponseEntry | null>(null);
@@ -2799,6 +2812,10 @@ function AppointmentDetailsDrawer({
   const [editSaveState, setEditSaveState] = useState<"idle" | "submitting" | "error">("idle");
   const [editErrorMessage, setEditErrorMessage] = useState("");
   const [notificationChoice, setNotificationChoice] = useState<"notify" | "silent">("notify");
+  const [isEditingCustomerNotes, setIsEditingCustomerNotes] = useState(false);
+  const [customerNotesDraft, setCustomerNotesDraft] = useState("");
+  const [customerNotesSaveState, setCustomerNotesSaveState] = useState<"idle" | "submitting" | "error">("idle");
+  const [customerNotesError, setCustomerNotesError] = useState("");
 
   if (!selectedAppointment) {
     return null;
@@ -2956,6 +2973,73 @@ function AppointmentDetailsDrawer({
                 <span className="appointment-customer-field__value">{selectedAppointment.customerEmail}</span>
               </div>
             ) : null}
+          </div>
+          <div className="appointment-customer-notes">
+            {isEditingCustomerNotes ? (
+              <div className="customer-notes-editor">
+                <textarea
+                  value={customerNotesDraft}
+                  onChange={(e) => setCustomerNotesDraft(e.target.value)}
+                  rows={3}
+                  placeholder="Add notes about this client..."
+                  disabled={customerNotesSaveState === "submitting"}
+                />
+                <div className="customer-notes-editor__actions">
+                  <button
+                    type="button"
+                    className="text-action"
+                    onClick={() => {
+                      setIsEditingCustomerNotes(false);
+                      setCustomerNotesError("");
+                    }}
+                    disabled={customerNotesSaveState === "submitting"}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-action"
+                    onClick={async () => {
+                      if (!onUpdateCustomerNotes) return;
+                      setCustomerNotesSaveState("submitting");
+                      setCustomerNotesError("");
+                      try {
+                        await onUpdateCustomerNotes(selectedAppointment, customerNotesDraft);
+                        setIsEditingCustomerNotes(false);
+                        setCustomerNotesSaveState("idle");
+                      } catch (err) {
+                        setCustomerNotesSaveState("error");
+                        setCustomerNotesError(err instanceof Error ? err.message : "Unable to save notes.");
+                      }
+                    }}
+                    disabled={customerNotesSaveState === "submitting"}
+                  >
+                    {customerNotesSaveState === "submitting" ? "Saving…" : "Save"}
+                  </button>
+                </div>
+                {customerNotesSaveState === "error" ? (
+                  <p role="alert" className="settings-error">{customerNotesError}</p>
+                ) : null}
+              </div>
+            ) : (
+              <div className="customer-notes-display">
+                {selectedAppointment.customerNotes ? (
+                  <p className="customer-profile-notes">{selectedAppointment.customerNotes}</p>
+                ) : (
+                  <p className="staff-list-empty">No client notes.</p>
+                )}
+                <button
+                  type="button"
+                  className="text-action"
+                  onClick={() => {
+                    setCustomerNotesDraft(selectedAppointment.customerNotes ?? "");
+                    setIsEditingCustomerNotes(true);
+                  }}
+                >
+                  {selectedAppointment.customerNotes ? "Edit" : "Add note"}
+                </button>
+              </div>
+            )}
           </div>
         </section>
 
