@@ -7,11 +7,11 @@ from app.api.dependencies.auth import get_current_user, require_tenant_permissio
 from app.core.http import api_exception
 from app.db.models import User
 from app.db.session import get_db_session
-from app.schemas.customers import CustomerListResponse, CustomerLookupResponse, CustomerProfileResponse
+from app.schemas.customers import CustomerListResponse, CustomerLookupResponse, CustomerProfileResponse, UpdateCustomerRequest
 from app.schemas.forms import BookingFormResponseListResponse
 from app.services.auth import ROLE_PERMISSION_ALLOWLIST
 from app.services.booking_forms import list_customer_form_responses
-from app.services.customers import get_customer_profile, list_tenant_customers, lookup_tenant_customers
+from app.services.customers import get_customer_profile, list_tenant_customers, lookup_tenant_customers, update_customer
 
 
 router = APIRouter(tags=["customers"])
@@ -69,6 +69,21 @@ async def get_customer(
     session: AsyncSession = Depends(get_db_session),
 ) -> CustomerProfileResponse:
     return await get_customer_profile(session, tenant_slug, customer_id)
+
+
+@router.patch(
+    "/tenants/{tenant_slug}/customers/{customer_id}",
+    response_model=CustomerProfileResponse,
+    summary="Update a customer's details, notes, or owner assignment",
+)
+async def update_customer_route(
+    tenant_slug: str,
+    customer_id: str,
+    payload: UpdateCustomerRequest,
+    _: object = Depends(require_tenant_permission("customers.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> CustomerProfileResponse:
+    return await update_customer(session, tenant_slug, customer_id, payload)
 
 
 @router.get(

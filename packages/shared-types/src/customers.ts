@@ -43,6 +43,14 @@ export type CustomerProfileResponse = {
   bookings: CustomerBookingEntry[];
 };
 
+export type UpdateCustomerRequest = {
+  name?: string;
+  email?: string;
+  phone?: string;
+  notes?: string;
+  ownerUserId?: UUID | null;
+};
+
 export type UpsertCustomerRequest = {
   name: string;
   email?: string;

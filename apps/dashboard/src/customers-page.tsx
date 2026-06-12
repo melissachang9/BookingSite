@@ -7,6 +7,7 @@ import type {
   CustomerListResponse,
   CustomerProfileResponse,
   CustomerSummary,
+  UpdateCustomerRequest,
 } from "@booking/shared-types";
 
 import { platformApi } from "./platform-api";
@@ -356,6 +357,10 @@ function CustomerProfilePanel({
   formResponsesState: FormResponsesState;
 }) {
   const [expandedFormIds, setExpandedFormIds] = useState<Set<string>>(new Set());
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [notesDraft, setNotesDraft] = useState(customer.notes ?? "");
+  const [notesSaveState, setNotesSaveState] = useState<"idle" | "submitting" | "error">("idle");
+  const [notesError, setNotesError] = useState("");
 
   const toggleFormExpand = (id: string) => {
     setExpandedFormIds((prev) => {
@@ -367,6 +372,20 @@ function CustomerProfilePanel({
       }
       return next;
     });
+  };
+
+  const handleSaveNotes = async () => {
+    setNotesSaveState("submitting");
+    setNotesError("");
+    try {
+      const body: UpdateCustomerRequest = { notes: notesDraft };
+      await platformApi.updateCustomer(customer.tenantId, customer.id, body);
+      setIsEditingNotes(false);
+      setNotesSaveState("idle");
+    } catch (err) {
+      setNotesSaveState("error");
+      setNotesError(err instanceof Error ? err.message : "Unable to save notes.");
+    }
   };
   return (
     <div className="customer-profile">
@@ -411,12 +430,63 @@ function CustomerProfilePanel({
         </div>
       </section>
 
-      {customer.notes ? (
-        <section className="customer-profile-section">
-          <p className="rail-section-kicker">Notes</p>
-          <p className="customer-profile-notes">{customer.notes}</p>
-        </section>
-      ) : null}
+      <section className="customer-profile-section">
+        <p className="rail-section-kicker">Notes</p>
+        {isEditingNotes ? (
+          <div className="customer-notes-editor">
+            <textarea
+              value={notesDraft}
+              onChange={(e) => setNotesDraft(e.target.value)}
+              rows={4}
+              placeholder="Add notes about this client..."
+              disabled={notesSaveState === "submitting"}
+            />
+            <div className="customer-notes-editor__actions">
+              <button
+                type="button"
+                className="text-action"
+                onClick={() => {
+                  setIsEditingNotes(false);
+                  setNotesDraft(customer.notes ?? "");
+                  setNotesError("");
+                }}
+                disabled={notesSaveState === "submitting"}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary-action"
+                onClick={handleSaveNotes}
+                disabled={notesSaveState === "submitting"}
+              >
+                {notesSaveState === "submitting" ? "Saving…" : "Save"}
+              </button>
+            </div>
+            {notesSaveState === "error" ? (
+              <p role="alert" className="settings-error">{notesError}</p>
+            ) : null}
+          </div>
+        ) : (
+          <div className="customer-notes-display">
+            {customer.notes ? (
+              <p className="customer-profile-notes">{customer.notes}</p>
+            ) : (
+              <p className="staff-list-empty">No notes yet.</p>
+            )}
+            <button
+              type="button"
+              className="text-action"
+              onClick={() => {
+                setNotesDraft(customer.notes ?? "");
+                setIsEditingNotes(true);
+              }}
+            >
+              {customer.notes ? "Edit" : "Add note"}
+            </button>
+          </div>
+        )}
+      </section>
 
       <section className="customer-profile-section">
         <p className="rail-section-kicker">Booking history</p>

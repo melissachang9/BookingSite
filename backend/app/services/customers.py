@@ -5,10 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
-from app.db.models import Booking, Customer, Tenant
-from app.schemas.customers import CustomerBookingEntry, CustomerListResponse, CustomerLookupResponse, CustomerProfileResponse
+from app.db.models import Booking, Customer, Payment, Tenant
+from app.schemas.customers import CustomerBookingEntry, CustomerListResponse, CustomerLookupResponse, CustomerProfileResponse, UpdateCustomerRequest
 from app.schemas.bookings import PaginationMetaResponse
-from app.services.presenters import customer_to_summary
+from app.services.presenters import booking_amount_paid_cents, booking_balance_due_cents, customer_to_summary
 from app.services.tenants import get_tenant_by_slug
 
 
@@ -107,7 +107,7 @@ async def get_customer_profile(
     bookings = (
         await session.scalars(
             select(Booking)
-            .options(selectinload(Booking.service), selectinload(Booking.provider))
+            .options(selectinload(Booking.service), selectinload(Booking.provider), selectinload(Booking.payments))
             .where(Booking.tenant_id == tenant.id, Booking.customer_id == customer_id)
             .order_by(Booking.starts_at.desc())
             .limit(50)
@@ -123,8 +123,66 @@ async def get_customer_profile(
             ends_at=booking.ends_at,
             price_cents=booking.service.price_cents,
             deposit_cents=booking.service.deposit_cents,
-            amount_paid_cents=booking.amount_paid_cents,
-            balance_due_cents=booking.balance_due_cents,
+            amount_paid_cents=booking_amount_paid_cents(booking),
+            balance_due_cents=booking_balance_due_cents(booking),
+        )
+        for booking in bookings
+    ]
+    return CustomerProfileResponse(
+        customer=customer_to_summary(customer),
+        bookings=booking_entries,
+    )
+
+
+async def update_customer(
+    session: AsyncSession,
+    tenant_slug: str,
+    customer_id: str,
+    payload: UpdateCustomerRequest,
+) -> CustomerProfileResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    customer = await session.scalar(
+        select(Customer).where(Customer.tenant_id == tenant.id, Customer.id == customer_id)
+    )
+    if customer is None:
+        raise api_exception(404, "not_found", "Customer was not found for this tenant.")
+
+    if payload.name is not None:
+        customer.name = payload.name.strip()
+    if payload.email is not None:
+        customer.email = payload.email.strip() or None
+    if payload.phone is not None:
+        customer.phone = payload.phone.strip() or None
+    if payload.notes is not None:
+        customer.notes = payload.notes.strip() or None
+    if payload.owner_user_id is not None:
+        customer.owner_user_id = payload.owner_user_id if payload.owner_user_id.strip() else None
+
+    await session.commit()
+    await session.refresh(customer)
+
+    # Return the full profile (same shape as get_customer_profile)
+    bookings = (
+        await session.scalars(
+            select(Booking)
+            .options(selectinload(Booking.service), selectinload(Booking.provider), selectinload(Booking.payments))
+            .where(Booking.tenant_id == tenant.id, Booking.customer_id == customer_id)
+            .order_by(Booking.starts_at.desc())
+            .limit(50)
+        )
+    ).all()
+    booking_entries = [
+        CustomerBookingEntry(
+            id=booking.id,
+            service_name=booking.service.name,
+            provider_name=booking.provider.name,
+            status=booking.status,
+            starts_at=booking.starts_at,
+            ends_at=booking.ends_at,
+            price_cents=booking.service.price_cents,
+            deposit_cents=booking.service.deposit_cents,
+            amount_paid_cents=booking_amount_paid_cents(booking),
+            balance_due_cents=booking_balance_due_cents(booking),
         )
         for booking in bookings
     ]

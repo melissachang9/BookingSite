@@ -84,6 +84,7 @@ import type {
   UpdateTenantCustomEmailRequest,
   UpdateTenantSettingsRequest,
   UpdateTenantWalletMembershipRequest,
+  UpdateCustomerRequest,
   UpsertCustomerRequest,
   BookingFormRequirementSummary,
   SendFormReminderResponse,
@@ -381,6 +382,8 @@ export const createPlatformApi = (client: ApiClient) => ({
     }),
   getCustomerProfile: (tenantSlug: string, customerId: string) =>
     client.get<CustomerProfileResponse>(`tenants/${tenantSlug}/customers/${customerId}`),
+  updateCustomer: (tenantSlug: string, customerId: string, body: UpdateCustomerRequest) =>
+    client.patch<CustomerProfileResponse, UpdateCustomerRequest>(`tenants/${tenantSlug}/customers/${customerId}`, body),
   listCustomerFormResponses: (tenantSlug: string, customerId: string) =>
     client.get<BookingFormResponseList>(`tenants/${tenantSlug}/customers/${customerId}/form-responses`),
   listForms: (tenantSlug: string) =>

@@ -33,3 +33,11 @@ class CustomerBookingEntry(CamelModel):
 class CustomerProfileResponse(CamelModel):
     customer: CustomerSummaryResponse
     bookings: list[CustomerBookingEntry]
+
+
+class UpdateCustomerRequest(CamelModel):
+    name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    notes: str | None = None
+    owner_user_id: str | None = None
