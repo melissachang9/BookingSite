@@ -149,3 +149,39 @@ def _form_to_summary(
         schema=schema,
         service_ids=[att.service_id for att in form.service_attachments] if form.service_attachments else [],
     )
+
+
+async def delete_tenant_form(
+    session: AsyncSession,
+    tenant_slug: str,
+    form_id: str,
+) -> None:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    form = await session.scalar(
+        select(FormDefinition).where(
+            FormDefinition.tenant_id == tenant.id,
+            FormDefinition.id == form_id,
+        )
+    )
+    if form is None:
+        raise api_exception(404, "not_found", "Form was not found for this tenant.")
+
+    # Delete service attachments first (FK constraint)
+    attachments = await session.scalars(
+        select(ServiceFormAttachment).where(
+            ServiceFormAttachment.tenant_id == tenant.id,
+            ServiceFormAttachment.form_id == form_id,
+        )
+    )
+    for att in attachments:
+        await session.delete(att)
+
+    # Delete all versions
+    versions = await session.scalars(
+        select(FormVersion).where(FormVersion.form_id == form_id)
+    )
+    for version in versions:
+        await session.delete(version)
+
+    await session.delete(form)
+    await session.commit()

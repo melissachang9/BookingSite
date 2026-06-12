@@ -11,7 +11,7 @@ from app.schemas.forms import (
     FormSummaryResponse,
     UpdateFormRequest,
 )
-from app.services.forms import create_tenant_form, list_tenant_forms, update_tenant_form
+from app.services.forms import create_tenant_form, delete_tenant_form, list_tenant_forms, update_tenant_form
 
 
 router = APIRouter(tags=["forms"])
@@ -58,3 +58,17 @@ async def update_form(
     session: AsyncSession = Depends(get_db_session),
 ) -> FormSummaryResponse:
     return await update_tenant_form(session, tenant_slug, form_id, payload)
+
+
+@router.delete(
+    "/tenants/{tenant_slug}/forms/{form_id}",
+    status_code=204,
+    summary="Delete a tenant form",
+)
+async def delete_form(
+    tenant_slug: str,
+    form_id: str,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> None:
+    await delete_tenant_form(session, tenant_slug, form_id)

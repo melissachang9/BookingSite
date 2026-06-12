@@ -389,6 +389,8 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.post<FormSummaryResponse, CreateFormRequest>(`tenants/${tenantSlug}/forms`, body),
   updateForm: (tenantSlug: string, formId: string, body: UpdateFormRequest) =>
     client.patch<FormSummaryResponse, UpdateFormRequest>(`tenants/${tenantSlug}/forms/${formId}`, body),
+  deleteForm: (tenantSlug: string, formId: string) =>
+    client.delete<void>(`tenants/${tenantSlug}/forms/${formId}`),
   listResources: (tenantSlug: string) =>
     client.get<ResourceListResponse>(`tenants/${tenantSlug}/resources`),
   createResource: (tenantSlug: string, body: CreateResourceRequest) =>

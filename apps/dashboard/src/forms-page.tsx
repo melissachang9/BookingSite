@@ -189,6 +189,17 @@ export function FormsPage({
                       <button type="button" className="ghost-action" onClick={() => handleToggleActive(selectedForm)}>
                         {selectedForm.isActive ? "Deactivate" : "Activate"}
                       </button>
+                      <button
+                        type="button"
+                        className="ghost-action ghost-action--danger"
+                        onClick={() => {
+                          if (window.confirm(`Delete "${selectedForm.name}"? This cannot be undone.`)) {
+                            handleDeleteForm(selectedForm);
+                          }
+                        }}
+                      >
+                        Delete
+                      </button>
                     </div>
                   ) : null}
                 </header>
@@ -259,6 +270,20 @@ export function FormsPage({
       setStatus(readErrorMessage(error, "Unable to update form."));
     }
   }
+
+  async function handleDeleteForm(form: FormSummaryResponse) {
+    if (!canManage) return;
+    try {
+      await platformApi.deleteForm(tenantSlug, form.id);
+      setStatus(`"${form.name}" deleted.`);
+      if (selectedFormId === form.id) {
+        setSelectedFormId(null);
+      }
+      await loadForms();
+    } catch (error) {
+      setStatus(readErrorMessage(error, "Unable to delete form."));
+    }
+  }
 }
 
 // ===========================================================================
@@ -292,6 +317,7 @@ function FormBuilderModal({
   const [services, setServices] = useState<ServiceSummary[]>([]);
   const [servicesLoaded, setServicesLoaded] = useState(false);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(existingForm?.serviceIds ?? []);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   useEffect(() => {
     platformApi.listServices(tenantSlug).then((resp) => {
@@ -331,11 +357,38 @@ function FormBuilderModal({
     });
   };
 
+  const handleDragStart = (index: number) => {
+    setDragIndex(index);
+  };
+
+  const handleDragOver = (event: React.DragEvent, index: number) => {
+    event.preventDefault();
+    if (dragIndex === null || dragIndex === index) return;
+    setFields((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(dragIndex, 1);
+      next.splice(index, 0, moved);
+      return next;
+    });
+    setDragIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    setDragIndex(null);
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     const trimmedName = name.trim();
     if (!trimmedName) { setError("Form name is required."); return; }
+
+    // Validate every field has a label
+    const emptyLabel = fields.find((f) => !f.label.trim() && f.type !== "section" && f.type !== "static_text");
+    if (emptyLabel) {
+      setError(`The "${FIELD_TYPE_LABELS[emptyLabel.type]}" field is missing a label.`);
+      return;
+    }
 
     const schema: FormSchema = {
       title: trimmedName,
@@ -466,9 +519,13 @@ function FormBuilderModal({
                     field={field}
                     index={index}
                     total={fields.length}
+                    isDragging={dragIndex === index}
                     onUpdate={(patch) => handleUpdateField(index, patch)}
                     onRemove={() => handleRemoveField(index)}
                     onMove={(dir) => handleMoveField(index, dir)}
+                    onDragStart={() => handleDragStart(index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDragEnd={handleDragEnd}
                   />
                 ))}
               </ul>
@@ -495,23 +552,38 @@ function FieldEditor({
   field,
   index,
   total,
+  isDragging,
   onUpdate,
   onRemove,
   onMove,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
 }: {
   field: FormField;
   index: number;
   total: number;
+  isDragging?: boolean;
   onUpdate: (patch: Partial<FormField>) => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
+  onDragStart?: () => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragEnd?: () => void;
 }) {
   const isLayout = field.type === "section" || field.type === "static_text";
   const hasOptions = field.type === "select" || field.type === "multi_select";
 
   return (
-    <li className="form-builder-field">
+    <li
+      className={`form-builder-field${isDragging ? " form-builder-field--dragging" : ""}`}
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
+    >
       <div className="form-builder-field__header">
+        <span className="form-builder-field__drag-handle" aria-hidden="true">⠿</span>
         <span className="form-builder-field__type">{FIELD_TYPE_LABELS[field.type]}</span>
         <div className="form-builder-field__controls">
           <button type="button" className="ghost-action" disabled={index === 0} onClick={() => onMove(-1)}>↑</button>
