@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.auth import require_tenant_permission
@@ -62,7 +62,6 @@ async def update_form(
 
 @router.delete(
     "/tenants/{tenant_slug}/forms/{form_id}",
-    status_code=204,
     summary="Delete a tenant form",
 )
 async def delete_form(
@@ -70,5 +69,6 @@ async def delete_form(
     form_id: str,
     _: object = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
-) -> None:
+) -> Response:
     await delete_tenant_form(session, tenant_slug, form_id)
+    return Response(status_code=204)
