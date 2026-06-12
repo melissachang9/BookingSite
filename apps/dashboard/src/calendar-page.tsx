@@ -1528,7 +1528,20 @@ export function CalendarPage({
 
   const handleUpdateCustomerNotes = async (appointment: SelectedCalendarAppointment, notes: string) => {
     await api.updateCustomer(tenantSlug, appointment.customerId, { notes });
-    setReloadKey((k) => k + 1);
+    // Update the appointment in local calendar state so the drawer
+    // shows the new notes without closing.
+    setCalendarState((current) => {
+      if (current.kind !== "ready") return current;
+      return {
+        ...current,
+        days: current.days.map((day) => ({
+          ...day,
+          appointments: day.appointments.map((a) =>
+            a.id === appointment.id ? { ...a, customerNotes: notes } : a,
+          ),
+        })),
+      };
+    });
   };
   const monthRail = (
     <MonthRail
