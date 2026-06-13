@@ -2167,6 +2167,9 @@ body {
 
 .month-day {
   min-height: 2.15rem;
+  display: grid;
+  align-content: center;
+  justify-items: center;
   border-color: rgba(106, 87, 69, 0.24);
   border-radius: 0.7rem;
   background: var(--ui-ivory);
