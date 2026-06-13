@@ -2050,12 +2050,13 @@ body {
 }
 
 .schedule-time-axis__cell {
-  justify-content: flex-start;
+  justify-content: center;
   padding-top: 0.25rem;
   color: var(--ui-muted);
   font-size: 0.64rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+  text-align: center;
 }
 
 .schedule-day-track {
