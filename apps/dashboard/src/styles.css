@@ -2050,6 +2050,8 @@ body {
 }
 
 .schedule-time-axis__cell {
+  display: flex;
+  align-items: center;
   justify-content: center;
   padding-top: 0.25rem;
   color: var(--ui-muted);
