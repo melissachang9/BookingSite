@@ -69,8 +69,8 @@ select:disabled {
   border-radius: 50%;
   color: var(--ui-ivory);
   background: linear-gradient(135deg, var(--ui-wine), var(--ui-rose) 58%, var(--ui-gold));
-  font-family: var(--ui-font-serif);
-  font-weight: 700;
+  font-family: var(--ui-font-sans);
+  font-weight: 500;
   box-shadow: 0 12px 26px rgba(111, 51, 45, 0.22);
 }
 
@@ -91,9 +91,9 @@ select:disabled {
 .login-panel h2 {
   margin: 0;
   color: var(--ui-ink);
-  font-family: var(--ui-font-serif);
-  font-weight: 700;
-  letter-spacing: 0;
+  font-family: var(--ui-font-sans);
+  font-weight: 500;
+  letter-spacing: 0.04em;
 }
 
 .ops-brand-card h1 {
@@ -131,8 +131,9 @@ select:disabled {
 }
 
 .ops-nav-link span {
-  font-size: 0.92rem;
-  font-weight: 800;
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
 }
 
 .ops-nav-link small {
@@ -339,6 +340,8 @@ select:disabled {
 .calendar-command-bar h3 {
   font-size: clamp(2rem, 4vw, 4.25rem);
   line-height: 0.98;
+  font-weight: 300;
+  letter-spacing: 0.08em;
 }
 
 .ops-hero-panel {
@@ -354,7 +357,9 @@ select:disabled {
 .ops-hero-panel strong {
   color: var(--ui-ink);
   font-size: 1.5rem;
-  font-family: var(--ui-font-serif);
+  font-family: var(--ui-font-sans);
+  font-weight: 400;
+  letter-spacing: 0.04em;
 }
 
 .ops-hero-panel span {
@@ -388,7 +393,9 @@ select:disabled {
 .metric-card strong {
   color: var(--ui-wine);
   font-size: clamp(1.5rem, 2.5vw, 2.4rem);
-  font-family: var(--ui-font-serif);
+  font-family: var(--ui-font-sans);
+  font-weight: 400;
+  letter-spacing: 0.04em;
 }
 
 .ops-dashboard-grid {
@@ -418,15 +425,22 @@ select:disabled {
 .queue-panel h4,
 .ops-panel h4 {
   margin-top: 0.2rem;
-  font-size: 1.45rem;
+  font-size: 1.25rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
 }
 
 .text-action,
 .primary-action {
-  padding: 0.6rem 0.85rem;
+  padding: 0.6rem 1rem;
+  border-radius: 999px;
   color: var(--ui-ivory);
   background: var(--ui-ink);
   border-color: var(--ui-ink);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .module-grid {
@@ -1145,8 +1159,11 @@ select:disabled {
 .month-rail h5 {
   margin: 0;
   color: var(--ui-ink);
-  font-family: var(--ui-font-serif);
-  font-size: 1.18rem;
+  font-family: var(--ui-font-sans);
+  font-size: 0.86rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .month-rail__header {
@@ -1332,8 +1349,10 @@ select:disabled {
 .service-catalog-card h5 {
   margin: 0.25rem 0 0;
   color: var(--ui-ink);
-  font-family: var(--ui-font-serif);
-  font-size: 1.15rem;
+  font-family: var(--ui-font-sans);
+  font-size: 1.05rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
 }
 
 .service-catalog-card p {

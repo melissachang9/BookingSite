@@ -110,11 +110,11 @@ button:disabled {
   justify-self: center;
   color: var(--ui-ink);
   font-size: clamp(1rem, 2.2vw, 1.5rem);
-  font-weight: 900;
+  font-weight: 400;
   line-height: 1;
   text-align: center;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.28em;
 }
 
 .tenant-nav--minimal {
@@ -169,8 +169,8 @@ button:disabled {
   margin: 0;
   color: var(--ui-ink);
   font-family: var(--ui-font-sans);
-  font-weight: 800;
-  letter-spacing: -0.05em;
+  font-weight: 400;
+  letter-spacing: 0.04em;
 }
 
 .tenant-brand h1 {
@@ -199,10 +199,10 @@ button:disabled {
   min-height: 2.45rem;
   border-radius: 999px;
   border: 1px solid var(--ui-border);
-  padding: 0.65rem 1rem;
-  font-size: 0.76rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  padding: 0.65rem 1.2rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease;
 }
@@ -282,6 +282,8 @@ button:disabled {
   max-width: 8.4ch;
   font-size: clamp(3.8rem, 8.5vw, 7.6rem);
   line-height: 0.88;
+  font-weight: 300;
+  letter-spacing: 0.12em;
 }
 
 .studio-hero p,
@@ -437,7 +439,8 @@ button:disabled {
   font-family: var(--ui-font-sans);
   font-size: clamp(2.8rem, 5.4vw, 5.8rem);
   line-height: 0.9;
-  letter-spacing: -0.06em;
+  font-weight: 300;
+  letter-spacing: 0.08em;
 }
 
 .section-header--plain {
@@ -482,8 +485,9 @@ button:disabled {
 
 .screening-option-card strong,
 .location-option-card strong {
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   line-height: 1.15;
+  font-weight: 500;
 }
 
 .screening-option-card small,

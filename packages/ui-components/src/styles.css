@@ -1,7 +1,7 @@
 :root {
   color-scheme: light;
   --ui-font-sans: "Avenir Next", "Avenir", "Nunito Sans", "Helvetica Neue", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --ui-font-serif: Fraunces, "Cormorant Garamond", Georgia, serif;
+  --ui-font-serif: "Avenir Next", "Avenir", "Nunito Sans", "Helvetica Neue", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 
   /* Warm cinematic palette — see docs/ui-design-system.md */
   --ui-ink: #2a1d18;            /* espresso */
@@ -44,9 +44,9 @@
   --ui-shadow-md: 0 14px 34px rgba(26, 17, 14, 0.42);
   --ui-shadow-lg: 0 30px 80px rgba(26, 17, 14, 0.60);
 
-  --ui-radius-xs: 8px;
-  --ui-radius-sm: 12px;
-  --ui-radius-md: 18px;
+  --ui-radius-xs: 10px;
+  --ui-radius-sm: 18px;
+  --ui-radius-md: 22px;
   --ui-radius-lg: 28px;
 
   --ui-space-1: 0.25rem;
