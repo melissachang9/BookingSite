@@ -1997,6 +1997,7 @@ body {
 }
 
 .schedule-board__header {
+  display: grid;
   padding-bottom: 0.75rem;
   border-bottom: 1px solid rgba(106, 87, 69, 0.3);
 }
@@ -2040,6 +2041,8 @@ body {
 }
 
 .schedule-board__body {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
   padding-top: 0.5rem;
   background: var(--ui-ivory);
 }
@@ -2050,6 +2053,7 @@ body {
 }
 
 .schedule-time-axis__cell {
+  height: var(--schedule-hour-height);
   display: flex;
   align-items: center;
   justify-content: center;
