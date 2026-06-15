@@ -2200,6 +2200,8 @@ body {
   color: var(--ui-ink);
   background: var(--ui-ivory);
   box-shadow: -30px 0 80px rgba(26, 17, 14, 0.38);
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .appointment-details-drawer__header {
@@ -2257,10 +2259,39 @@ body {
 
 .appointment-drawer-when {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 1.1rem;
   color: var(--ui-ink-soft);
   font-size: 0.82rem;
+}
+
+.appointment-drawer-when__field {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.appointment-drawer-when__field span {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ui-muted);
+}
+
+.appointment-drawer-when__field input,
+.appointment-drawer-when__field select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.appointment-drawer-when__actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  width: 100%;
 }
 
 .appointment-drawer-when strong {
@@ -3281,6 +3312,29 @@ body {
   font-size: 0.88rem;
   font-style: italic;
   line-height: 1.5;
+}
+
+.customer-notes-editor {
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.customer-notes-editor textarea,
+.customer-notes-editor input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.customer-notes-editor__actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.customer-notes-display {
+  min-width: 0;
 }
 .customer-booking-list {
   list-style: none;

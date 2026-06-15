@@ -405,6 +405,7 @@ function FormBuilderModal({
           customerPromptTiming: timing || null,
           reviewRequired,
           schema,
+          serviceIds: selectedServiceIds,
         };
         await platformApi.updateForm(tenantSlug, existingForm.id, body);
         await onSaved(`"${trimmedName}" updated.`);
@@ -415,6 +416,7 @@ function FormBuilderModal({
           customerPromptTiming: timing || undefined,
           reviewRequired,
           schema,
+          serviceIds: selectedServiceIds,
         };
         await platformApi.createForm(tenantSlug, body);
         await onSaved(`"${trimmedName}" created.`);

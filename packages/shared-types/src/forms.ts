@@ -128,6 +128,7 @@ export type CreateFormRequest = {
   customerPromptTiming?: CustomerPromptTiming | null;
   reviewRequired?: boolean;
   schema?: FormSchema;
+  serviceIds?: UUID[];
 };
 
 export type UpdateFormRequest = {
@@ -137,6 +138,7 @@ export type UpdateFormRequest = {
   reviewRequired?: boolean;
   isActive?: boolean;
   schema?: FormSchema;
+  serviceIds?: UUID[];
 };
 
 export type FormResponseSummary = AuditFields &

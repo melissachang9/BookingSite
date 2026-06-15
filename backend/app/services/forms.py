@@ -62,8 +62,12 @@ async def create_tenant_form(
         schema_json=payload.schema.model_dump() if payload.schema else {},
     )
     session.add(version)
-    await session.commit()
 
+    # Attach to services
+    if payload.service_ids:
+        await _sync_service_attachments(session, tenant.id, form.id, version.id, payload.service_ids)
+
+    await session.commit()
     return _form_to_summary(form, version)
 
 
@@ -104,8 +108,12 @@ async def update_tenant_form(
             schema_json=payload.schema.model_dump(),
         )
         session.add(new_version)
-        await session.commit()
-        return _form_to_summary(form, new_version)
+        await session.flush()
+        latest_version = new_version
+
+    # Sync service attachments
+    if payload.service_ids is not None and latest_version is not None:
+        await _sync_service_attachments(session, tenant.id, form.id, latest_version.id, payload.service_ids)
 
     await session.commit()
     return _form_to_summary(form, latest_version)
@@ -149,6 +157,38 @@ def _form_to_summary(
         schema=schema,
         service_ids=[att.service_id for att in form.service_attachments] if form.service_attachments else [],
     )
+
+
+async def _sync_service_attachments(
+    session: AsyncSession,
+    tenant_id: str,
+    form_id: str,
+    version_id: str,
+    service_ids: list[str],
+) -> None:
+    """Replace all service attachments for a form with the given service IDs."""
+    # Delete existing attachments
+    existing = (
+        await session.scalars(
+            select(ServiceFormAttachment).where(
+                ServiceFormAttachment.tenant_id == tenant_id,
+                ServiceFormAttachment.form_id == form_id,
+            )
+        )
+    ).all()
+    for att in existing:
+        await session.delete(att)
+
+    # Create new attachments
+    for service_id in service_ids:
+        att = ServiceFormAttachment(
+            tenant_id=tenant_id,
+            service_id=service_id,
+            form_id=form_id,
+            form_version_id=version_id,
+            customer_prompt_timing="pre_booking",  # default; can be refined later
+        )
+        session.add(att)
 
 
 async def delete_tenant_form(

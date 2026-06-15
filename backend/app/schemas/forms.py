@@ -57,6 +57,7 @@ class CreateFormRequest(CamelModel):
     customer_prompt_timing: str | None = None
     review_required: bool = False
     schema: FormSchemaPayload = Field(default_factory=FormSchemaPayload)
+    service_ids: list[str] = Field(default_factory=list)
 
 
 class UpdateFormRequest(CamelModel):
@@ -66,6 +67,7 @@ class UpdateFormRequest(CamelModel):
     review_required: bool | None = None
     is_active: bool | None = None
     schema: FormSchemaPayload | None = None
+    service_ids: list[str] | None = None
 
 
 class FormRequirementResponse(CamelModel):
