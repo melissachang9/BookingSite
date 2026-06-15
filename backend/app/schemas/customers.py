@@ -35,6 +35,7 @@ class CustomerProfileResponse(CamelModel):
     bookings: list[CustomerBookingEntry]
     lifetime_spend_cents: int = 0
     outstanding_balance_cents: int = 0
+    wallet_balance_cents: int = 0
 
 
 class UpdateCustomerRequest(CamelModel):

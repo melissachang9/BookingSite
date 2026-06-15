@@ -24,7 +24,7 @@ from app.schemas.forms import (
     SendFormReminderResponse,
     SubmitFormRequirementRequest,
 )
-from app.schemas.payments import RecordManualPaymentRequest
+from app.schemas.payments import ApplyWalletCreditRequest, RecordManualPaymentRequest
 from app.services.booking_drafts import cancel_manage_booking, get_booking, get_manage_booking
 from app.services.booking_forms import (
     list_booking_form_requirements,
@@ -33,7 +33,7 @@ from app.services.booking_forms import (
     send_booking_form_reminder,
     submit_booking_form_requirement_by_token,
 )
-from app.services.bookings import cancel_booking, list_bookings, record_manual_payment, update_booking, update_booking_status
+from app.services.bookings import apply_wallet_credit, cancel_booking, list_bookings, record_manual_payment, update_booking, update_booking_status
 
 
 router = APIRouter(tags=["bookings"])
@@ -123,6 +123,21 @@ async def record_manual_payment_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingSummaryResponse:
     return await record_manual_payment(session, tenant_slug, booking_id, payload, current_user)
+
+
+@router.post(
+    "/tenants/{tenant_slug}/bookings/{booking_id}/payments/wallet-credit",
+    response_model=BookingSummaryResponse,
+    summary="Apply customer wallet credit to a booking balance",
+)
+async def apply_wallet_credit_route(
+    tenant_slug: str,
+    booking_id: str,
+    payload: ApplyWalletCreditRequest,
+    current_user: User = Depends(require_tenant_permission("bookings.collect_payment")),
+    session: AsyncSession = Depends(get_db_session),
+) -> BookingSummaryResponse:
+    return await apply_wallet_credit(session, tenant_slug, booking_id, payload, current_user)
 
 
 @router.post(

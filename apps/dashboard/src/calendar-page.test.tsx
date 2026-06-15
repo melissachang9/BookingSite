@@ -186,6 +186,7 @@ function createApi(
     updateBooking: vi.fn().mockResolvedValue(baseBooking),
     cancelBooking: vi.fn().mockResolvedValue(baseBooking),
     recordManualPayment: vi.fn().mockResolvedValue(baseBooking),
+    applyWalletCredit: vi.fn().mockResolvedValue(baseBooking),
     createCheckoutSession: vi.fn().mockResolvedValue({
       checkoutUrl: "http://127.0.0.1:3001/cancel/manage-token-1/payment/session-1",
       sessionId: "session-1",

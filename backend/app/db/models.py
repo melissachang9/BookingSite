@@ -68,6 +68,7 @@ class Customer(Base, IdMixin, TimestampMixin):
     phone: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     owner_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True, index=True)
+    wallet_balance_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     tenant: Mapped[Tenant] = relationship(back_populates="customers")
     bookings: Mapped[list[Booking]] = relationship(back_populates="customer")

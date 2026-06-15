@@ -106,6 +106,7 @@ export type BookingSummary = AuditFields &
     notes?: string | null;
     amountPaidCents: number;
     balanceDueCents: number;
+    walletBalanceCents?: number;
     customerManageToken: string;
     service: ServiceSummary;
     provider: ProviderSummary;

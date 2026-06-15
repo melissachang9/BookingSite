@@ -85,6 +85,7 @@ type CalendarAppointment = {
   depositCents: number;
   amountPaidCents: number;
   balanceDueCents: number;
+  walletBalanceCents: number;
   durationMinutes: number;
   notes?: string | null;
 };
@@ -200,6 +201,7 @@ export type CalendarPageApi = {
   updateBooking: (tenantSlug: string, bookingId: string, body: UpdateBookingRequest) => Promise<BookingSummary>;
   cancelBooking: (tenantSlug: string, bookingId: string, body: { reason?: string }) => Promise<BookingSummary>;
   recordManualPayment: (tenantSlug: string, bookingId: string, body: RecordManualPaymentRequest) => Promise<BookingSummary>;
+  applyWalletCredit: (tenantSlug: string, bookingId: string, body: { amountCents: number }) => Promise<BookingSummary>;
   createCheckoutSession: (body: CreateCheckoutSessionRequest) => Promise<CreateCheckoutSessionResponse>;
   updateCustomer: (
     tenantSlug: string,
@@ -475,6 +477,7 @@ function createCalendarAppointment(booking: BookingSummary): CalendarAppointment
     depositCents: booking.service.depositCents,
     amountPaidCents: booking.amountPaidCents,
     balanceDueCents: booking.balanceDueCents,
+    walletBalanceCents: booking.walletBalanceCents ?? 0,
     durationMinutes: booking.service.durationMinutes,
     notes: booking.notes ?? null,
   };
@@ -3611,12 +3614,13 @@ function CheckoutPanel({
   const [amountCents, setAmountCents] = useState(appointment.balanceDueCents);
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
-  const [state, setState] = useState<"idle" | "submitting" | "error">("idle");
+  const [state, setState] = useState<"idle" | "submitting" | "error" | "success">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [showAddMethod, setShowAddMethod] = useState(false);
   const [newMethodLabel, setNewMethodLabel] = useState("");
   const [recordedPayments, setRecordedPayments] = useState<Array<{ method: string; amount: number }>>([]);
   const [localCustomMethods, setLocalCustomMethods] = useState<CustomPaymentMethod[]>(customPaymentMethods);
+  const [lastPayment, setLastPayment] = useState<{ method: string; amount: number } | null>(null);
 
   const builtinMethods = [
     { id: "cash", label: "Cash" },
@@ -3646,18 +3650,16 @@ function CheckoutPanel({
         paymentMethodType: methodId,
         notes: notes.trim() || undefined,
       });
+      const methodLabel = allMethods.find((m) => m.id === methodId)?.label ?? methodId;
       setRecordedPayments((prev) => [...prev, { method: methodId, amount: amountCents }]);
+      setLastPayment({ method: methodLabel, amount: amountCents });
       onPaymentRecorded();
       const newBalance = remainingBalance - amountCents;
       setRemainingBalance(newBalance);
       setAmountCents(newBalance > 0 ? newBalance : 0);
       setSelectedMethod(null);
       setNotes("");
-      setState("idle");
-      if (newBalance <= 0) {
-        // Booking is auto-completed by the backend when fully paid; return to details.
-        onBack();
-      }
+      setState(newBalance <= 0 ? "success" : "idle");
     } catch (error) {
       setState("error");
       setErrorMessage(error instanceof Error ? error.message : "Payment recording failed.");
@@ -3719,11 +3721,42 @@ function CheckoutPanel({
           </div>
         </section>
 
+        {appointment.walletBalanceCents > 0 && remainingBalance > 0 ? (
+          <section className="checkout-panel__wallet">
+            <span>Wallet credit available</span>
+            <strong>{formatMoney(appointment.walletBalanceCents)}</strong>
+            <button
+              type="button"
+              className="checkout-panel__wallet-apply"
+              onClick={async () => {
+                setState("submitting");
+                try {
+                  const applyAmount = Math.min(appointment.walletBalanceCents, remainingBalance);
+                  await api.applyWalletCredit(tenantSlug, appointment.id, { amountCents: applyAmount });
+                  setRecordedPayments((prev) => [...prev, { method: "wallet", amount: applyAmount }]);
+                  setLastPayment({ method: "Wallet credit", amount: applyAmount });
+                  onPaymentRecorded();
+                  const newBalance = remainingBalance - applyAmount;
+                  setRemainingBalance(newBalance);
+                  setAmountCents(newBalance > 0 ? newBalance : 0);
+                  setState(newBalance <= 0 ? "success" : "idle");
+                } catch (error) {
+                  setState("error");
+                  setErrorMessage(error instanceof Error ? error.message : "Failed to apply wallet credit.");
+                }
+              }}
+              disabled={state === "submitting"}
+            >
+              Apply credit
+            </button>
+          </section>
+        ) : null}
+
         {initialPaid > 0 || recordedPayments.length > 0 ? (
           <section className="checkout-panel__paid">
             {initialPaid > 0 ? (
               <div className="checkout-panel__paid-row">
-                <span>Previously paid</span>
+                <span>Deposit</span>
                 <span>{formatMoney(initialPaid)}</span>
               </div>
             ) : null}
@@ -3736,12 +3769,28 @@ function CheckoutPanel({
           </section>
         ) : null}
 
-        <section className="checkout-panel__balance">
-          <span>Remaining Balance</span>
-          <strong>{formatMoney(remainingBalance)}</strong>
-        </section>
-
         {remainingBalance > 0 ? (
+          <section className="checkout-panel__balance">
+            <span>Remaining Balance</span>
+            <strong>{formatMoney(remainingBalance)}</strong>
+          </section>
+        ) : null}
+
+        {state === "success" ? (
+          <section className="checkout-panel__success">
+            <p>
+              <strong>Payment recorded.</strong> {lastPayment ? `${lastPayment.method} — ${formatMoney(lastPayment.amount)}` : ""}
+            </p>
+            <p>Total collected: <strong>{formatMoney(totalPaid)}</strong></p>
+            <button
+              type="button"
+              className="primary-action"
+              onClick={onBack}
+            >
+              Back to appointment
+            </button>
+          </section>
+        ) : remainingBalance > 0 ? (
           <>
             <section className="checkout-panel__amount-section">
               <label className="checkout-panel__amount-row">
@@ -3846,6 +3895,13 @@ function CheckoutPanel({
             <p>
               This booking is fully paid. Total collected: <strong>{formatMoney(totalPaid)}</strong>.
             </p>
+            <button
+              type="button"
+              className="primary-action"
+              onClick={onBack}
+            >
+              Back to appointment
+            </button>
           </section>
         )}
 

@@ -648,10 +648,10 @@ def test_cancel_manage_booking_refunds_paid_deposit_and_reopens_availability(cli
     assert snapshot["paymentResolution"] == "waived"
     assert snapshot["paymentStatuses"] == ["refunded"]
     assert snapshot["paymentDepositStatuses"] == ["refunded"]
-    assert "refund_recorded" in snapshot["paymentEventKinds"]
+    assert "wallet_credited" in snapshot["paymentEventKinds"]
     assert "customer_canceled" in snapshot["bookingEventKinds"]
     assert any(event.get("reason") == "Need to reschedule." for event in snapshot["bookingEventPayloads"])
-    assert any(event.get("refundedAmountCents") == service["depositCents"] for event in snapshot["bookingEventPayloads"])
+    assert any(event.get("walletCreditedCents") == service["depositCents"] for event in snapshot["bookingEventPayloads"])
 
     availability_after_response = client.get(
         "/api/v1/tenants/brow-beauty-lab/availability",
@@ -1410,10 +1410,10 @@ def test_staff_cancel_booking_refunds_deposit_outside_window(client, demo_creden
     assert snapshot["paymentResolution"] == "waived"
     assert snapshot["paymentStatuses"] == ["refunded"]
     assert snapshot["paymentDepositStatuses"] == ["refunded"]
-    assert "refund_recorded" in snapshot["paymentEventKinds"]
+    assert "wallet_credited" in snapshot["paymentEventKinds"]
     assert "staff_canceled" in snapshot["bookingEventKinds"]
     assert any(event.get("reason") == "Customer requested cancellation." for event in snapshot["bookingEventPayloads"])
-    assert any(event.get("refundedAmountCents") == service["depositCents"] for event in snapshot["bookingEventPayloads"])
+    assert any(event.get("walletCreditedCents") == service["depositCents"] for event in snapshot["bookingEventPayloads"])
 
     # Availability should reopen after cancellation
     availability_after_response = client.get(

@@ -42,6 +42,7 @@ def _build_customer_profile(customer: Customer, bookings: list[Booking]) -> Cust
         bookings=booking_entries,
         lifetime_spend_cents=lifetime_spend,
         outstanding_balance_cents=outstanding,
+        wallet_balance_cents=customer.wallet_balance_cents,
     )
 
 

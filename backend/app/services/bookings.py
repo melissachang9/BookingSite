@@ -9,9 +9,8 @@ from sqlalchemy.orm import selectinload
 from app.core.http import api_exception
 from app.db.models import Booking, BookingDraft, BookingPaymentEvent, Payment, PaymentEvent, Provider, Service, Tenant, User
 from app.schemas.bookings import BookingListResponse, BookingSummaryResponse, CancelBookingRequest, PaginationMetaResponse, UpdateBookingRequest, UpdateBookingStatusRequest
-from app.schemas.payments import RecordManualPaymentRequest
+from app.schemas.payments import ApplyWalletCreditRequest, RecordManualPaymentRequest
 from app.services.booking_drafts import _cancellation_policy_for_booking, _load_booking
-from app.services.payment_processor import create_stripe_refund, is_stripe_checkout_session_id
 from app.services.presenters import booking_balance_due_cents, booking_to_summary
 
 
@@ -244,6 +243,83 @@ async def record_manual_payment(
     return booking_to_summary(updated_booking)
 
 
+async def apply_wallet_credit(
+    session: AsyncSession,
+    tenant_slug: str,
+    booking_id: str,
+    payload: ApplyWalletCreditRequest,
+    actor: User,
+) -> BookingSummaryResponse:
+    tenant = await _load_tenant(session, tenant_slug)
+    booking = await _load_booking(session, booking_id, tenant.id)
+
+    if booking.status not in {"confirmed", "completed"}:
+        raise api_exception(409, "conflict", "Wallet credit can only be applied to confirmed or completed bookings.")
+
+    wallet_balance = booking.customer.wallet_balance_cents
+    if wallet_balance <= 0:
+        raise api_exception(409, "conflict", "This customer has no wallet balance to apply.")
+
+    remaining_balance = booking_balance_due_cents(booking)
+    if remaining_balance <= 0:
+        raise api_exception(409, "conflict", "This booking no longer has a balance due.")
+
+    apply_amount = min(payload.amount_cents, wallet_balance, remaining_balance)
+
+    # Deduct from wallet
+    booking.customer.wallet_balance_cents -= apply_amount
+
+    # Record as a payment
+    payment = Payment(
+        tenant_id=booking.tenant_id,
+        booking=booking,
+        customer_id=booking.customer_id,
+        status="succeeded",
+        deposit_status="paid_in_full",
+        amount_cents=apply_amount,
+        currency="USD",
+        payment_method_type="wallet",
+        checkout_session_kind=None,
+    )
+    session.add(payment)
+    await session.flush()
+
+    _append_payment_event(
+        session,
+        payment,
+        kind="wallet_applied",
+        actor=actor,
+        amount_cents=apply_amount,
+        notes=f"Applied ${apply_amount / 100:.2f} from customer wallet. Operator: {actor.name}.",
+    )
+
+    new_balance = remaining_balance - apply_amount
+    fully_paid = new_balance <= 0
+
+    _append_booking_event(
+        session,
+        booking,
+        event_kind="admin_completion",
+        actor=actor,
+        amount_cents=apply_amount,
+        extra_payload={
+            "paymentMethodType": "wallet",
+            "bookingStatus": booking.status,
+            "paymentResolutionAfter": "collected" if fully_paid else "pending",
+            "remainingBalanceCents": max(new_balance, 0),
+        },
+    )
+
+    if fully_paid:
+        _apply_payment_resolution(booking, "collected")
+
+    reload_booking_id = booking.id
+    await session.commit()
+    session.expire_all()
+    updated_booking = await _load_booking(session, reload_booking_id, tenant.id)
+    return booking_to_summary(updated_booking)
+
+
 async def update_booking_status(
     session: AsyncSession,
     tenant_slug: str,
@@ -433,48 +509,27 @@ async def cancel_booking(
     forfeited = requires_payment_record and not refundable
     refunded_amount_cents = 0
     forfeited_amount_cents = 0
-    external_refund_ids: list[str] = []
+    wallet_credited_cents = 0
 
-    # Call Stripe FIRST before mutating any state, so a Stripe failure
-    # leaves the booking and payments unchanged.
-    stripe_refund_results: list[tuple[Payment, str | None, str | None]] = []
-    if refundable:
-        for payment in deposit_payments:
-            stripe_payment_intent_id = None
-            refund_id = None
-            if is_stripe_checkout_session_id(payment.checkout_session_id):
-                refund = await create_stripe_refund(
-                    payment.checkout_session_id or "",
-                    amount_cents=payment.amount_cents,
-                    idempotency_key=f"staff-cancel-{booking.id}-{payment.id}",
-                )
-                refund_id = refund.refund_id
-                stripe_payment_intent_id = refund.payment_intent_id
-                external_refund_ids.append(refund_id)
-            stripe_refund_results.append((payment, refund_id, stripe_payment_intent_id))
-
-    # Only now mutate state — Stripe succeeded.
+    # Credit the customer's wallet instead of refunding to Stripe.
+    # The deposit stays with the customer and can be applied to future bookings.
     booking.status = "canceled"
     booking.canceled_at = datetime.now(timezone.utc)
 
     if refundable:
-        for payment, refund_id, stripe_payment_intent_id in stripe_refund_results:
-            refund_note = (
-                f"Stripe refund {refund_id} created when staff canceled. Operator: {actor.name}."
-                if refund_id
-                else f"Staff canceled the booking. Operator: {actor.name}."
-            )
-            refunded_amount_cents += payment.amount_cents
+        for payment in deposit_payments:
+            wallet_credited_cents += payment.amount_cents
             payment.status = "refunded"
             payment.deposit_status = "refunded"
             _append_payment_event(
                 session,
                 payment,
-                kind="refund_recorded",
+                kind="wallet_credited",
                 actor=actor,
                 amount_cents=payment.amount_cents,
-                notes=refund_note,
+                notes=f"Deposit credited to customer wallet when staff canceled. Operator: {actor.name}.",
             )
+        booking.customer.wallet_balance_cents += wallet_credited_cents
         booking.deposit_status = "refunded"
         booking.payment_resolution = "waived"
     elif forfeited:
@@ -502,11 +557,10 @@ async def cancel_booking(
         amount_cents=refunded_amount_cents,
         notes=reason,
         extra_payload={
-            "refundedAmountCents": refunded_amount_cents,
+            "walletCreditedCents": wallet_credited_cents,
             "forfeitedAmountCents": forfeited_amount_cents,
             "isInsideCancellationWindow": is_inside_cancellation_window,
             "refundInsideWindow": refund_inside_window,
-            "externalRefundIds": external_refund_ids,
             "reason": reason,
         },
     )

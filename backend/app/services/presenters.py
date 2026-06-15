@@ -324,6 +324,7 @@ def booking_to_summary(booking: Booking) -> BookingSummaryResponse:
         notes=booking.notes,
         amount_paid_cents=amount_paid_cents,
         balance_due_cents=balance_due_cents,
+        wallet_balance_cents=booking.customer.wallet_balance_cents,
         customer_manage_token=customer_manage_token,
         service=service_to_summary(booking.service, tenant),
         provider=provider_to_summary(booking.provider, tenant),

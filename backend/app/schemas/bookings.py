@@ -30,6 +30,7 @@ class BookingSummaryResponse(CamelModel):
     notes: str | None = None
     amount_paid_cents: int
     balance_due_cents: int
+    wallet_balance_cents: int = 0
     customer_manage_token: str
     service: ServiceSummaryResponse
     provider: ProviderSummaryResponse

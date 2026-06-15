@@ -291,6 +291,20 @@ async def _ensure_postgres_schema_compatibility() -> None:
                 )
             )
 
+        # Wallet balance on customers
+        wallet_balance_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'wallet_balance_cents'
+                """
+            )
+        )
+        if not wallet_balance_exists:
+            await connection.execute(
+                text("ALTER TABLE customers ADD COLUMN wallet_balance_cents INTEGER NOT NULL DEFAULT 0")
+            )
+
 
 async def initialize_database() -> None:
     async with get_engine().begin() as connection:
