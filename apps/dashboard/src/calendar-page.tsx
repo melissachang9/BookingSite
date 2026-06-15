@@ -3025,7 +3025,10 @@ function AppointmentDetailsDrawer({
           api={api}
           tenantSlug={tenantSlug}
           customPaymentMethods={customPaymentMethods}
-          onBack={() => setDrawerView("details")}
+          onBack={() => {
+            onPaymentRecorded?.();
+            setDrawerView("details");
+          }}
           onClose={onClose}
           onPaymentRecorded={onPaymentRecorded ?? (() => {})}
           onComplete={onComplete}
@@ -3653,7 +3656,6 @@ function CheckoutPanel({
       const methodLabel = allMethods.find((m) => m.id === methodId)?.label ?? methodId;
       setRecordedPayments((prev) => [...prev, { method: methodId, amount: amountCents }]);
       setLastPayment({ method: methodLabel, amount: amountCents });
-      onPaymentRecorded();
       const newBalance = remainingBalance - amountCents;
       setRemainingBalance(newBalance);
       setAmountCents(newBalance > 0 ? newBalance : 0);
@@ -3735,7 +3737,6 @@ function CheckoutPanel({
                   await api.applyWalletCredit(tenantSlug, appointment.id, { amountCents: applyAmount });
                   setRecordedPayments((prev) => [...prev, { method: "wallet", amount: applyAmount }]);
                   setLastPayment({ method: "Wallet credit", amount: applyAmount });
-                  onPaymentRecorded();
                   const newBalance = remainingBalance - applyAmount;
                   setRemainingBalance(newBalance);
                   setAmountCents(newBalance > 0 ? newBalance : 0);
