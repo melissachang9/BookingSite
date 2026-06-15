@@ -80,6 +80,12 @@ export type TenantSettings = {
   walletEnabled: boolean;
   walletExpirationMonths: number | null;
   membershipEnabled: boolean;
+  customPaymentMethods: CustomPaymentMethod[];
+};
+
+export type CustomPaymentMethod = {
+  id: string;
+  label: string;
 };
 
 export type CustomEmailSettings = {
@@ -101,6 +107,7 @@ export type UpdateTenantSettingsRequest = {
   noShowFeeCents?: number;
   taxRatePercent?: number;
   autoChargeNoShowFee?: boolean;
+  customPaymentMethods?: CustomPaymentMethod[];
 };
 
 export type UpdateTenantBusinessRequest = {

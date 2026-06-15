@@ -48,6 +48,8 @@ const customerList: CustomerListResponse = {
 const profileResponse: CustomerProfileResponse = {
   customer: customerList.items[0],
   bookings: [],
+  lifetimeSpendCents: 0,
+  outstandingBalanceCents: 0,
 };
 
 const formResponses: BookingFormResponseList = {

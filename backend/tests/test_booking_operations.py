@@ -235,6 +235,96 @@ def test_record_manual_payment_collects_exact_remaining_balance(client) -> None:
     assert "admin_completion" in snapshot["bookingEventKinds"]
 
 
+def test_record_manual_payment_partial_leaves_remaining_balance(client) -> None:
+    created = _confirm_paid_deposit_booking(client)
+    headers = _auth_headers(client)
+    booking = created["booking"]
+    partial_amount = booking["balanceDueCents"] // 2
+
+    response = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking['id']}/payments/manual",
+        headers=headers,
+        json={
+            "amountCents": partial_amount,
+            "paymentMethodType": "cash",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "confirmed"
+    assert payload["paymentResolution"] == "pending"
+    assert payload["balanceDueCents"] == booking["balanceDueCents"] - partial_amount
+
+    snapshot = _booking_payment_snapshot(booking["id"])
+    assert snapshot["paymentResolution"] == "pending"
+    assert "payment_recorded" in snapshot["paymentEventKinds"]
+
+
+def test_record_manual_payment_multiple_until_fully_paid(client) -> None:
+    created = _confirm_paid_deposit_booking(client)
+    headers = _auth_headers(client)
+    booking = created["booking"]
+    half = booking["balanceDueCents"] // 2
+    remainder = booking["balanceDueCents"] - half
+
+    # First partial payment
+    resp1 = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking['id']}/payments/manual",
+        headers=headers,
+        json={"amountCents": half, "paymentMethodType": "cash"},
+    )
+    assert resp1.status_code == 200
+    assert resp1.json()["paymentResolution"] == "pending"
+    assert resp1.json()["balanceDueCents"] == remainder
+
+    # Second payment covers remainder
+    resp2 = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking['id']}/payments/manual",
+        headers=headers,
+        json={"amountCents": remainder, "paymentMethodType": "external_pos"},
+    )
+    assert resp2.status_code == 200
+    assert resp2.json()["paymentResolution"] == "collected"
+    assert resp2.json()["balanceDueCents"] == 0
+
+
+def test_record_manual_payment_rejects_amount_exceeding_balance(client) -> None:
+    created = _confirm_paid_deposit_booking(client)
+    headers = _auth_headers(client)
+    booking = created["booking"]
+
+    response = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking['id']}/payments/manual",
+        headers=headers,
+        json={
+            "amountCents": booking["balanceDueCents"] + 1,
+            "paymentMethodType": "cash",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "conflict"
+
+
+def test_record_manual_payment_rejects_unknown_payment_method(client) -> None:
+    created = _confirm_paid_deposit_booking(client)
+    headers = _auth_headers(client)
+    booking = created["booking"]
+
+    response = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking['id']}/payments/manual",
+        headers=headers,
+        json={
+            "amountCents": booking["balanceDueCents"],
+            "paymentMethodType": "venmo",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
 def test_record_manual_payment_rejects_invalid_amount_payload(client) -> None:
     created = _confirm_paid_deposit_booking(client)
     headers = _auth_headers(client)

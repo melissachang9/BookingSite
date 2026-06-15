@@ -12,10 +12,14 @@ import type {
   BookingListResponse,
   BookingSummary,
   CreateBookingDraftRequest,
+  CreateCheckoutSessionRequest,
+  CreateCheckoutSessionResponse,
   CustomerLookupQuery,
   CustomerLookupResponse,
   CustomerSummary,
+  CustomPaymentMethod,
   ProviderListResponse,
+  RecordManualPaymentRequest,
   SendFormReminderResponse,
   ServiceListResponse,
   ServiceSummary,
@@ -195,6 +199,8 @@ export type CalendarPageApi = {
   updateBookingStatus: (tenantSlug: string, bookingId: string, body: UpdateBookingStatusRequest) => Promise<BookingSummary>;
   updateBooking: (tenantSlug: string, bookingId: string, body: UpdateBookingRequest) => Promise<BookingSummary>;
   cancelBooking: (tenantSlug: string, bookingId: string, body: { reason?: string }) => Promise<BookingSummary>;
+  recordManualPayment: (tenantSlug: string, bookingId: string, body: RecordManualPaymentRequest) => Promise<BookingSummary>;
+  createCheckoutSession: (body: CreateCheckoutSessionRequest) => Promise<CreateCheckoutSessionResponse>;
   updateCustomer: (
     tenantSlug: string,
     customerId: string,
@@ -209,6 +215,8 @@ type CalendarPageProps = {
   displayStartHour?: number;
   displayEndHour?: number;
   weekStartsOn?: number;
+  storefrontBaseUrl?: string;
+  customPaymentMethods?: CustomPaymentMethod[];
 };
 
 const dateFormatter = new Intl.DateTimeFormat("en-CA", {
@@ -624,6 +632,8 @@ export function CalendarPage({
   displayStartHour,
   displayEndHour,
   weekStartsOn,
+  storefrontBaseUrl = "http://127.0.0.1:3001",
+  customPaymentMethods = [],
 }: CalendarPageProps) {
   const [calendarState, setCalendarState] = useState<CalendarDataState>({ kind: "loading" });
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
@@ -1532,11 +1542,11 @@ export function CalendarPage({
       ? `${storefrontBaseUrl}/${tenantSlug}/book/${draftCreationState.draftId}`
       : null;
 
-  const handleFinalizeAppointment = async (appointment: SelectedCalendarAppointment, status: "completed" | "no_show", resolution: "collected" | "follow_up" | "waived") => {
+  const handleCompleteAppointment = async (appointment: SelectedCalendarAppointment, resolution: "collected" | "follow_up" | "waived" = "collected") => {
     setCompletionState({ kind: "submitting" });
     try {
       await api.updateBookingStatus(tenantSlug, appointment.id, {
-        status,
+        status: "completed",
         paymentResolution: resolution,
       });
       setSelectedAppointmentId(null);
@@ -1545,7 +1555,25 @@ export function CalendarPage({
     } catch (error) {
       setCompletionState({
         kind: "error",
-        message: error instanceof Error ? error.message : `Unable to mark booking as ${status}.`,
+        message: error instanceof Error ? error.message : "Unable to mark booking as completed.",
+      });
+    }
+  };
+
+  const handleNoShowAppointment = async (appointment: SelectedCalendarAppointment) => {
+    setCompletionState({ kind: "submitting" });
+    try {
+      await api.updateBookingStatus(tenantSlug, appointment.id, {
+        status: "no_show",
+        paymentResolution: "collected",
+      });
+      setSelectedAppointmentId(null);
+      setCompletionState({ kind: "idle" });
+      setReloadKey((k) => k + 1);
+    } catch (error) {
+      setCompletionState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to mark booking as no-show.",
       });
     }
   };
@@ -1785,12 +1813,18 @@ export function CalendarPage({
         services={calendarState.kind === "ready" ? calendarState.services : []}
         providers={calendarState.kind === "ready" ? calendarState.providers : []}
         onClose={handleCloseAppointmentDrawer}
-        onFinalize={handleFinalizeAppointment}
+        onComplete={handleCompleteAppointment}
+        onNoShow={handleNoShowAppointment}
         onUpdate={handleUpdateAppointment}
         onCancel={handleCancelAppointment}
         onUpdateCustomerNotes={handleUpdateCustomerNotes}
         onUpdateCustomerContact={handleUpdateCustomerContact}
         completionState={completionState}
+        api={api}
+        tenantSlug={tenantSlug}
+        storefrontBaseUrl={storefrontBaseUrl}
+        customPaymentMethods={customPaymentMethods}
+        onPaymentRecorded={() => setReloadKey((k) => k + 1)}
       />
       <TimeBlockDetailsDrawer
         selectedTimeBlock={selectedTimeBlock}
@@ -2898,7 +2932,8 @@ type AppointmentDetailsDrawerProps = {
   services: ServiceSummary[];
   providers: CalendarProviderOption[];
   onClose: () => void;
-  onFinalize?: (appointment: SelectedCalendarAppointment, status: "completed" | "no_show", resolution: "collected" | "follow_up" | "waived") => void;
+  onComplete: (appointment: SelectedCalendarAppointment, resolution?: "collected" | "follow_up" | "waived") => Promise<void>;
+  onNoShow: (appointment: SelectedCalendarAppointment) => Promise<void>;
   onUpdate?: (appointment: SelectedCalendarAppointment, body: UpdateBookingRequest) => Promise<void>;
   onCancel?: (appointment: SelectedCalendarAppointment) => Promise<void>;
   onUpdateCustomerNotes?: (appointment: SelectedCalendarAppointment, notes: string) => Promise<void>;
@@ -2907,6 +2942,11 @@ type AppointmentDetailsDrawerProps = {
     contact: { name: string; email: string; phone: string },
   ) => Promise<void>;
   completionState?: CompletionState;
+  api?: CalendarPageApi;
+  tenantSlug: string;
+  storefrontBaseUrl: string;
+  customPaymentMethods: CustomPaymentMethod[];
+  onPaymentRecorded?: () => void;
 };
 
 function AppointmentDetailsDrawer({
@@ -2918,15 +2958,28 @@ function AppointmentDetailsDrawer({
   services,
   providers,
   onClose,
-  onFinalize,
+  onComplete,
+  onNoShow,
   onUpdate,
   onCancel,
   onUpdateCustomerNotes,
   onUpdateCustomerContact,
   completionState,
+  api,
+  tenantSlug,
+  storefrontBaseUrl,
+  customPaymentMethods,
+  onPaymentRecorded,
 }: AppointmentDetailsDrawerProps): ReactElement | null {
   const [viewingFormEntry, setViewingFormEntry] = useState<BookingFormResponseEntry | null>(null);
-  const [selectedResolution, setSelectedResolution] = useState<"collected" | "follow_up" | "waived">("collected");
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [checkoutAmountCents, setCheckoutAmountCents] = useState(0);
+  const [checkoutMethod, setCheckoutMethod] = useState("");
+  const [checkoutNotes, setCheckoutNotes] = useState("");
+  const [checkoutState, setCheckoutState] = useState<"idle" | "submitting" | "error">("idle");
+  const [checkoutError, setCheckoutError] = useState("");
+  const [showAddMethod, setShowAddMethod] = useState(false);
+  const [newMethodLabel, setNewMethodLabel] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [editDate, setEditDate] = useState("");
   const [editTime, setEditTime] = useState("");
@@ -3461,38 +3514,61 @@ function AppointmentDetailsDrawer({
                 </>
               ) : null}
             </div>
-            {onFinalize ? (
-              <div className="appointment-drawer-footer__finalize">
-                <label className="appointment-drawer-footer__resolution">
-                  <span>Balance</span>
-                  <select
-                    value={selectedResolution}
-                    onChange={(e) => setSelectedResolution(e.target.value as "collected" | "follow_up" | "waived")}
+            <div className="appointment-drawer-footer__finalize">
+              {selectedAppointment.balanceDueCents > 0 ? (
+                <>
+                  <button
+                    type="button"
+                    className="primary-action"
+                    onClick={() => setShowCheckoutModal(true)}
                     disabled={completionState?.kind === "submitting"}
                   >
-                    <option value="collected">Collected</option>
-                    <option value="follow_up">Follow-up</option>
-                    <option value="waived">Waived</option>
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  className="secondary-action"
-                  onClick={() => onFinalize(selectedAppointment, "no_show", selectedResolution)}
-                  disabled={completionState?.kind === "submitting"}
-                >
-                  {completionState?.kind === "submitting" ? "Saving..." : "No-show"}
-                </button>
+                    Checkout
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    onClick={() => {
+                      if (window.confirm("Mark this booking completed and flag the remaining balance for follow-up?")) {
+                        void onComplete(selectedAppointment, "follow_up");
+                      }
+                    }}
+                    disabled={completionState?.kind === "submitting"}
+                  >
+                    {completionState?.kind === "submitting" ? "Saving..." : "Mark owing"}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    onClick={() => {
+                      if (window.confirm("Waive the remaining balance and complete this booking?")) {
+                        void onComplete(selectedAppointment, "waived");
+                      }
+                    }}
+                    disabled={completionState?.kind === "submitting"}
+                  >
+                    {completionState?.kind === "submitting" ? "Saving..." : "Waive & complete"}
+                  </button>
+                </>
+              ) : (
                 <button
                   type="button"
                   className="primary-action"
-                  onClick={() => onFinalize(selectedAppointment, "completed", selectedResolution)}
+                  onClick={() => void onComplete(selectedAppointment)}
                   disabled={completionState?.kind === "submitting"}
                 >
                   {completionState?.kind === "submitting" ? "Completing..." : "Complete"}
                 </button>
-              </div>
-            ) : null}
+              )}
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={() => void onNoShow(selectedAppointment)}
+                disabled={completionState?.kind === "submitting"}
+              >
+                {completionState?.kind === "submitting" ? "Saving..." : "No-show"}
+              </button>
+            </div>
           </div>
         ) : null}
         {completionState?.kind === "error" ? (
@@ -3508,6 +3584,260 @@ function AppointmentDetailsDrawer({
         />,
         document.body,
       )}
+      {showCheckoutModal && selectedAppointment && api ? createPortal(
+        <CheckoutModal
+          appointment={selectedAppointment}
+          api={api}
+          tenantSlug={tenantSlug}
+          storefrontBaseUrl={storefrontBaseUrl}
+          customPaymentMethods={customPaymentMethods}
+          onClose={() => {
+            setShowCheckoutModal(false);
+            setCheckoutState("idle");
+            setCheckoutError("");
+            setShowAddMethod(false);
+          }}
+          onPaymentRecorded={onPaymentRecorded ?? (() => {})}
+        />,
+        document.body,
+      ) : null}
+    </>
+  );
+}
+
+type CheckoutModalProps = {
+  appointment: SelectedCalendarAppointment;
+  api: CalendarPageApi;
+  tenantSlug: string;
+  storefrontBaseUrl: string;
+  customPaymentMethods: CustomPaymentMethod[];
+  onClose: () => void;
+  onPaymentRecorded: () => void;
+};
+
+function CheckoutModal({
+  appointment,
+  api,
+  tenantSlug,
+  storefrontBaseUrl,
+  customPaymentMethods,
+  onClose,
+  onPaymentRecorded,
+}: CheckoutModalProps): ReactElement {
+  const [remainingBalance, setRemainingBalance] = useState(appointment.balanceDueCents);
+  const [amountCents, setAmountCents] = useState(appointment.balanceDueCents);
+  const [method, setMethod] = useState("");
+  const [notes, setNotes] = useState("");
+  const [state, setState] = useState<"idle" | "submitting" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [showAddMethod, setShowAddMethod] = useState(false);
+  const [newMethodLabel, setNewMethodLabel] = useState("");
+  const [recordedPayments, setRecordedPayments] = useState<Array<{ method: string; amount: number }>>([]);
+  const [localCustomMethods, setLocalCustomMethods] = useState<CustomPaymentMethod[]>(customPaymentMethods);
+
+  const builtinMethods = [
+    { id: "cash", label: "Cash" },
+    { id: "external_pos", label: "External POS" },
+    { id: "manual", label: "Manual / Card" },
+  ];
+  const allMethods = [...builtinMethods, ...localCustomMethods];
+
+  const handleSubmit = async () => {
+    if (amountCents <= 0 || amountCents > remainingBalance) {
+      setErrorMessage("Amount must be between 1 cent and the remaining balance.");
+      setState("error");
+      return;
+    }
+    if (!method) {
+      setErrorMessage("Please select a payment method.");
+      setState("error");
+      return;
+    }
+
+    setState("submitting");
+    setErrorMessage("");
+    try {
+      await api.recordManualPayment(tenantSlug, appointment.id, {
+        amountCents,
+        paymentMethodType: method,
+        notes: notes.trim() || undefined,
+      });
+      setRecordedPayments((prev) => [...prev, { method, amount: amountCents }]);
+      onPaymentRecorded();
+      const newBalance = remainingBalance - amountCents;
+      setRemainingBalance(newBalance);
+      setAmountCents(newBalance > 0 ? newBalance : 0);
+      setMethod("");
+      setNotes("");
+      setState("idle");
+      if (newBalance <= 0) {
+        onClose();
+      }
+    } catch (error) {
+      setState("error");
+      setErrorMessage(error instanceof Error ? error.message : "Payment recording failed.");
+    }
+  };
+
+  const handleCreateHostedCheckout = async () => {
+    setState("submitting");
+    setErrorMessage("");
+    try {
+      const session = await api.createCheckoutSession({
+        tenantSlug,
+        bookingId: appointment.id,
+        kind: "booking_balance",
+        successUrl: `${storefrontBaseUrl}/cancel/${appointment.customerManageToken}?sessionId={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${storefrontBaseUrl}/cancel/${appointment.customerManageToken}`,
+      });
+      window.open(session.checkoutUrl, "_blank", "noopener,noreferrer");
+      setState("idle");
+    } catch (error) {
+      setState("error");
+      setErrorMessage(error instanceof Error ? error.message : "Failed to create hosted checkout.");
+    }
+  };
+
+  const handleAddCustomMethod = () => {
+    const label = newMethodLabel.trim();
+    if (!label) return;
+    const id = label.toLowerCase().replace(/\s+/g, "_");
+    setLocalCustomMethods((prev) => [...prev, { id, label }]);
+    setMethod(id);
+    setNewMethodLabel("");
+    setShowAddMethod(false);
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        className="appointment-drawer-backdrop"
+        aria-label="Close checkout"
+        onClick={onClose}
+      />
+      <aside className="checkout-modal" role="dialog" aria-label="Checkout">
+        <header className="checkout-modal__header">
+          <h3>Checkout</h3>
+          <button type="button" className="appointment-drawer-outline-action" onClick={onClose}>
+            Close
+          </button>
+        </header>
+        <div className="checkout-modal__body">
+          <div className="checkout-modal__customer">
+            <strong>{appointment.customerName}</strong>
+            <span>{appointment.serviceName}</span>
+          </div>
+          <div className="checkout-modal__balance">
+            <span>Balance due</span>
+            <strong>{formatMoney(remainingBalance)}</strong>
+          </div>
+          {recordedPayments.length > 0 ? (
+            <div className="checkout-modal__recorded">
+              <h4>Recorded payments</h4>
+              <ul>
+                {recordedPayments.map((p, i) => (
+                  <li key={i}>
+                    {formatMoney(p.amount)} via {allMethods.find((m) => m.id === p.method)?.label ?? p.method}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <label className="checkout-modal__field">
+            <span>Amount</span>
+            <input
+              type="number"
+              min={1}
+              max={remainingBalance}
+              value={amountCents}
+              onChange={(e) => setAmountCents(Number(e.target.value))}
+              disabled={state === "submitting"}
+            />
+          </label>
+          <label className="checkout-modal__field">
+            <span>Payment method</span>
+            <select
+              value={method}
+              onChange={(e) => setMethod(e.target.value)}
+              disabled={state === "submitting"}
+            >
+              <option value="">Select method...</option>
+              {allMethods.map((m) => (
+                <option key={m.id} value={m.id}>{m.label}</option>
+              ))}
+            </select>
+          </label>
+          {showAddMethod ? (
+            <div className="checkout-modal__add-method">
+              <input
+                type="text"
+                placeholder="Method label (e.g. Venmo)"
+                value={newMethodLabel}
+                onChange={(e) => setNewMethodLabel(e.target.value)}
+                disabled={state === "submitting"}
+              />
+              <button
+                type="button"
+                className="text-action"
+                onClick={handleAddCustomMethod}
+                disabled={!newMethodLabel.trim() || state === "submitting"}
+              >
+                Add
+              </button>
+              <button
+                type="button"
+                className="text-action"
+                onClick={() => setShowAddMethod(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="text-action"
+              onClick={() => setShowAddMethod(true)}
+              disabled={state === "submitting"}
+            >
+              + Add payment method
+            </button>
+          )}
+          <label className="checkout-modal__field">
+            <span>Notes (optional)</span>
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              disabled={state === "submitting"}
+              placeholder="e.g. Paid at front desk"
+            />
+          </label>
+        </div>
+        <div className="checkout-modal__footer">
+          <button
+            type="button"
+            className="primary-action"
+            onClick={() => void handleSubmit()}
+            disabled={state === "submitting" || !method || amountCents <= 0}
+          >
+            {state === "submitting" ? "Recording..." : `Record ${formatMoney(amountCents)}`}
+          </button>
+          <button
+            type="button"
+            className="secondary-action"
+            onClick={() => void handleCreateHostedCheckout()}
+            disabled={state === "submitting"}
+          >
+            {state === "submitting" ? "Opening..." : "Open hosted checkout"}
+          </button>
+        </div>
+        {state === "error" ? (
+          <div className="message-banner message-banner--error" role="alert">
+            {errorMessage}
+          </div>
+        ) : null}
+      </aside>
     </>
   );
 }

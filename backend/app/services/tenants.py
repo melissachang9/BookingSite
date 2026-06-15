@@ -172,6 +172,11 @@ async def update_tenant_settings(
     if payload.auto_charge_no_show_fee is not None:
         current["autoChargeNoShowFee"] = payload.auto_charge_no_show_fee
 
+    if payload.custom_payment_methods is not None:
+        current["customPaymentMethods"] = [
+            {"id": m.id, "label": m.label} for m in payload.custom_payment_methods
+        ]
+
     tenant.settings_json = current
     await session.commit()
     await session.refresh(tenant)

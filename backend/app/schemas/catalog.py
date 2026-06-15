@@ -111,6 +111,17 @@ class TenantSettingsResponse(CamelModel):
     wallet_enabled: bool = False
     wallet_expiration_months: int | None = None
     membership_enabled: bool = False
+    custom_payment_methods: list["CustomPaymentMethodResponse"] = Field(default_factory=list)
+
+
+class CustomPaymentMethodResponse(CamelModel):
+    id: str
+    label: str
+
+
+class CustomPaymentMethodRequest(CamelModel):
+    id: str = Field(min_length=1, max_length=64)
+    label: str = Field(min_length=1, max_length=128)
 
 
 _HHMM_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
@@ -205,6 +216,7 @@ class UpdateTenantSettingsRequest(CamelModel):
     no_show_fee_cents: int | None = Field(default=None, ge=0, le=100000)
     tax_rate_percent: float | None = Field(default=None, ge=0, le=100)
     auto_charge_no_show_fee: bool | None = None
+    custom_payment_methods: list[CustomPaymentMethodRequest] | None = None
 
 
 SUPPORTED_CURRENCIES = ("USD", "CAD", "EUR", "GBP", "AUD", "MXN")

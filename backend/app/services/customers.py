@@ -15,6 +15,36 @@ from app.services.tenants import get_tenant_by_slug
 _OWNERSHIP_BYPASS_ROLES = frozenset({"owner", "manager"})
 
 
+def _build_customer_profile(customer: Customer, bookings: list[Booking]) -> CustomerProfileResponse:
+    booking_entries = [
+        CustomerBookingEntry(
+            id=booking.id,
+            service_name=booking.service.name,
+            provider_name=booking.provider.name,
+            status=booking.status,
+            starts_at=booking.starts_at,
+            ends_at=booking.ends_at,
+            price_cents=booking.service.price_cents,
+            deposit_cents=booking.service.deposit_cents,
+            amount_paid_cents=booking_amount_paid_cents(booking),
+            balance_due_cents=booking_balance_due_cents(booking),
+        )
+        for booking in bookings
+    ]
+    lifetime_spend = sum(
+        booking_amount_paid_cents(b) for b in bookings if b.status == "completed"
+    )
+    outstanding = sum(
+        booking_balance_due_cents(b) for b in bookings if b.status in {"confirmed", "completed"}
+    )
+    return CustomerProfileResponse(
+        customer=customer_to_summary(customer),
+        bookings=booking_entries,
+        lifetime_spend_cents=lifetime_spend,
+        outstanding_balance_cents=outstanding,
+    )
+
+
 async def lookup_tenant_customers(
     session: AsyncSession,
     tenant_id: str,
@@ -113,25 +143,7 @@ async def get_customer_profile(
             .limit(50)
         )
     ).all()
-    booking_entries = [
-        CustomerBookingEntry(
-            id=booking.id,
-            service_name=booking.service.name,
-            provider_name=booking.provider.name,
-            status=booking.status,
-            starts_at=booking.starts_at,
-            ends_at=booking.ends_at,
-            price_cents=booking.service.price_cents,
-            deposit_cents=booking.service.deposit_cents,
-            amount_paid_cents=booking_amount_paid_cents(booking),
-            balance_due_cents=booking_balance_due_cents(booking),
-        )
-        for booking in bookings
-    ]
-    return CustomerProfileResponse(
-        customer=customer_to_summary(customer),
-        bookings=booking_entries,
-    )
+    return _build_customer_profile(customer, list(bookings))
 
 
 async def update_customer(
@@ -171,22 +183,4 @@ async def update_customer(
             .limit(50)
         )
     ).all()
-    booking_entries = [
-        CustomerBookingEntry(
-            id=booking.id,
-            service_name=booking.service.name,
-            provider_name=booking.provider.name,
-            status=booking.status,
-            starts_at=booking.starts_at,
-            ends_at=booking.ends_at,
-            price_cents=booking.service.price_cents,
-            deposit_cents=booking.service.deposit_cents,
-            amount_paid_cents=booking_amount_paid_cents(booking),
-            balance_due_cents=booking_balance_due_cents(booking),
-        )
-        for booking in bookings
-    ]
-    return CustomerProfileResponse(
-        customer=customer_to_summary(customer),
-        bookings=booking_entries,
-    )
+    return _build_customer_profile(customer, list(bookings))

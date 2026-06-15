@@ -55,5 +55,5 @@ class SendPaymentReminderResponse(CamelModel):
 
 class RecordManualPaymentRequest(CamelModel):
     amount_cents: int = Field(gt=0)
-    payment_method_type: Literal["cash", "external_pos", "manual"]
+    payment_method_type: str
     notes: str | None = Field(default=None, max_length=500)

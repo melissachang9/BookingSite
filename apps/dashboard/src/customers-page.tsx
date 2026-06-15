@@ -463,6 +463,26 @@ function CustomerProfilePanel({
         </div>
       </header>
 
+      <section className="customer-profile-section customer-profile-money">
+        <p className="rail-section-kicker">Money</p>
+        {profileState.kind === "ready" ? (
+          <div className="customer-money-summary">
+            <div className="customer-money-row">
+              <span>Lifetime spend</span>
+              <strong>{formatMoney(profileState.profile.lifetimeSpendCents)}</strong>
+            </div>
+            {profileState.profile.outstandingBalanceCents > 0 ? (
+              <div className="customer-money-row customer-money-row--outstanding">
+                <span>Outstanding</span>
+                <strong>{formatMoney(profileState.profile.outstandingBalanceCents)}</strong>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <p className="staff-list-empty">Loading…</p>
+        )}
+      </section>
+
       <section className="customer-profile-section">
         <p className="rail-section-kicker">Contact</p>
         {isEditingContact ? (

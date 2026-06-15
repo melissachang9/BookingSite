@@ -41,6 +41,8 @@ export type CustomerBookingEntry = {
 export type CustomerProfileResponse = {
   customer: CustomerSummary;
   bookings: CustomerBookingEntry[];
+  lifetimeSpendCents: number;
+  outstandingBalanceCents: number;
 };
 
 export type UpdateCustomerRequest = {

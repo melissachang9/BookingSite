@@ -96,6 +96,18 @@ def _booking_query_options():
     )
 
 
+_BUILTIN_PAYMENT_METHODS = frozenset({"cash", "external_pos", "manual", "card"})
+
+
+def _validate_payment_method(tenant: Tenant, method: str) -> None:
+    if method in _BUILTIN_PAYMENT_METHODS:
+        return
+    custom_methods = tenant.settings_json.get("customPaymentMethods", [])
+    valid_ids = {m["id"] for m in custom_methods if isinstance(m, dict) and "id" in m}
+    if method not in valid_ids:
+        raise api_exception(422, "validation_error", f"Unknown payment method: {method}")
+
+
 def _apply_payment_resolution(booking: Booking, payment_resolution: str) -> None:
     booking.payment_resolution = payment_resolution
 
@@ -171,12 +183,14 @@ async def record_manual_payment(
     if booking.status not in {"confirmed", "completed"}:
         raise api_exception(409, "conflict", "Manual balance collection is only available for confirmed or completed bookings.")
 
+    _validate_payment_method(tenant, payload.payment_method_type)
+
     remaining_balance_cents = booking_balance_due_cents(booking)
     if remaining_balance_cents <= 0:
         raise api_exception(409, "conflict", "This booking no longer has a balance due.")
 
-    if payload.amount_cents != remaining_balance_cents:
-        raise api_exception(409, "conflict", "Manual payment must match the remaining balance due.")
+    if payload.amount_cents <= 0 or payload.amount_cents > remaining_balance_cents:
+        raise api_exception(409, "conflict", "Manual payment amount must be between 1 cent and the remaining balance due.")
 
     notes = _clean_notes(payload.notes)
     payment = Payment(
@@ -201,6 +215,10 @@ async def record_manual_payment(
         amount_cents=payload.amount_cents,
         notes=notes,
     )
+
+    new_balance_cents = remaining_balance_cents - payload.amount_cents
+    fully_paid = new_balance_cents <= 0
+
     _append_booking_event(
         session,
         booking,
@@ -211,11 +229,13 @@ async def record_manual_payment(
         extra_payload={
             "paymentMethodType": payload.payment_method_type,
             "bookingStatus": booking.status,
-            "paymentResolutionAfter": "collected",
+            "paymentResolutionAfter": "collected" if fully_paid else "pending",
+            "remainingBalanceCents": max(new_balance_cents, 0),
         },
     )
 
-    _apply_payment_resolution(booking, "collected")
+    if fully_paid:
+        _apply_payment_resolution(booking, "collected")
 
     reload_booking_id = booking.id
     await session.commit()

@@ -114,6 +114,13 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
     description: "Enable wallet credit and membership program toggles.",
     status: "available",
   },
+  {
+    id: "payment-methods",
+    title: "Payment Methods",
+    eyebrow: "Payments & checkout",
+    description: "Manage custom payment methods for checkout.",
+    status: "available",
+  },
 ];
 
 const HOUR_OPTIONS = Array.from({ length: 25 }, (_, hour) => {
@@ -274,6 +281,13 @@ export function SettingsPage({
                 />
               ) : section.id === "wallet-membership" ? (
                 <WalletMembershipSection
+                  canManageSettings={canManageSettings}
+                  tenant={tenant}
+                  onTenantUpdated={onTenantUpdated}
+                  tenantSlug={currentUser.tenantSlug}
+                />
+              ) : section.id === "payment-methods" ? (
+                <PaymentMethodsSection
                   canManageSettings={canManageSettings}
                   tenant={tenant}
                   onTenantUpdated={onTenantUpdated}
@@ -2025,6 +2039,123 @@ function WalletMembershipSection({
         </button>
         {!canManageSettings ? (
           <p className="settings-permission-note">You do not have permission to edit wallet & membership.</p>
+        ) : null}
+      </div>
+    </form>
+  );
+}
+
+function PaymentMethodsSection({
+  canManageSettings,
+  tenant,
+  onTenantUpdated,
+  tenantSlug,
+}: {
+  canManageSettings: boolean;
+  tenant: TenantSummary | null;
+  onTenantUpdated: (tenant: TenantSummary) => void;
+  tenantSlug: string;
+}) {
+  const [methods, setMethods] = useState<Array<{ id: string; label: string }>>([]);
+  const [newLabel, setNewLabel] = useState("");
+  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
+
+  useEffect(() => {
+    if (tenant) {
+      setMethods([...tenant.settings.customPaymentMethods]);
+    }
+  }, [tenant]);
+
+  const handleAdd = () => {
+    const label = newLabel.trim();
+    if (!label) return;
+    const id = label.toLowerCase().replace(/\s+/g, "_");
+    setMethods((prev) => [...prev, { id, label }]);
+    setNewLabel("");
+  };
+
+  const handleRemove = (id: string) => {
+    setMethods((prev) => prev.filter((m) => m.id !== id));
+  };
+
+  const handleSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canManageSettings) return;
+    setSaveState({ kind: "submitting" });
+    try {
+      const updated = await platformApi.updateTenantSettings(tenantSlug, {
+        customPaymentMethods: methods,
+      });
+      onTenantUpdated(updated);
+      setSaveState({ kind: "success", message: "Payment methods saved." });
+    } catch (error) {
+      setSaveState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to save payment methods.",
+      });
+    }
+  };
+
+  if (tenant === null) {
+    return <p>Loading current settings…</p>;
+  }
+
+  const disabled = !canManageSettings || saveState.kind === "submitting";
+
+  return (
+    <form className="settings-form payment-methods-section" onSubmit={handleSave}>
+      <p className="settings-form-help">
+        Define custom payment methods that appear in the checkout modal alongside built-in
+        options (Cash, External POS, Manual/Card). These are saved per business and reusable.
+      </p>
+      <div className="payment-methods-list">
+        {methods.length === 0 ? (
+          <p className="staff-list-empty">No custom payment methods defined.</p>
+        ) : (
+          <ul>
+            {methods.map((m) => (
+              <li key={m.id} className="payment-method-row">
+                <span>{m.label}</span>
+                <button
+                  type="button"
+                  className="text-action text-action--danger"
+                  onClick={() => handleRemove(m.id)}
+                  disabled={disabled}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div className="payment-methods-add">
+        <input
+          type="text"
+          placeholder="Method label (e.g. Venmo, Zelle)"
+          value={newLabel}
+          onChange={(e) => setNewLabel(e.target.value)}
+          disabled={disabled}
+        />
+        <button
+          type="button"
+          className="secondary-action"
+          onClick={handleAdd}
+          disabled={disabled || !newLabel.trim()}
+        >
+          Add
+        </button>
+      </div>
+
+      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+
+      <div className="settings-actions">
+        <button type="submit" className="primary-action" disabled={disabled}>
+          {saveState.kind === "submitting" ? "Saving…" : "Save payment methods"}
+        </button>
+        {!canManageSettings ? (
+          <p className="settings-permission-note">You do not have permission to edit payment methods.</p>
         ) : null}
       </div>
     </form>

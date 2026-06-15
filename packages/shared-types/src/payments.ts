@@ -95,6 +95,6 @@ export type SendPaymentReminderResponse = {
 
 export type RecordManualPaymentRequest = {
   amountCents: number;
-  paymentMethodType: Extract<PaymentMethodType, "cash" | "external_pos" | "manual">;
+  paymentMethodType: string;
   notes?: string;
 };

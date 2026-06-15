@@ -82,6 +82,7 @@ const tenant: TenantSummary = {
     walletEnabled: false,
     walletExpirationMonths: null,
     membershipEnabled: false,
+    customPaymentMethods: [],
   },
 };
 
