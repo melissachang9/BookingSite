@@ -1719,6 +1719,8 @@ export function CalendarPage({
         selectedAppointment={selectedAppointment}
         formResponsesState={formResponsesState}
         intakeStatus={selectedAppointment ? (intakeStatusByBookingId[selectedAppointment.id] ?? "unknown") : "unknown"}
+        services={calendarState.kind === "ready" ? calendarState.services : []}
+        providers={calendarState.kind === "ready" ? calendarState.providers : []}
         onClose={handleCloseAppointmentDrawer}
         onFinalize={handleFinalizeAppointment}
         onUpdate={handleUpdateAppointment}
@@ -2828,6 +2830,8 @@ type AppointmentDetailsDrawerProps = {
   selectedAppointment: SelectedCalendarAppointment | null;
   formResponsesState: FormResponsesState;
   intakeStatus: IntakeStatus;
+  services: ServiceSummary[];
+  providers: CalendarProviderOption[];
   onClose: () => void;
   onFinalize?: (appointment: SelectedCalendarAppointment, status: "completed" | "no_show", resolution: "collected" | "follow_up" | "waived") => void;
   onUpdate?: (appointment: SelectedCalendarAppointment, body: UpdateBookingRequest) => Promise<void>;
@@ -2844,6 +2848,8 @@ function AppointmentDetailsDrawer({
   selectedAppointment,
   formResponsesState,
   intakeStatus,
+  services,
+  providers,
   onClose,
   onFinalize,
   onUpdate,
@@ -2857,10 +2863,16 @@ function AppointmentDetailsDrawer({
   const [isEditing, setIsEditing] = useState(false);
   const [editDate, setEditDate] = useState("");
   const [editTime, setEditTime] = useState("");
+  const [editServiceId, setEditServiceId] = useState("");
+  const [editProviderId, setEditProviderId] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editSaveState, setEditSaveState] = useState<"idle" | "submitting" | "error">("idle");
   const [editErrorMessage, setEditErrorMessage] = useState("");
   const [notificationChoice, setNotificationChoice] = useState<"notify" | "silent">("notify");
+  const [isEditingAppointmentNotes, setIsEditingAppointmentNotes] = useState(false);
+  const [appointmentNotesDraft, setAppointmentNotesDraft] = useState("");
+  const [appointmentNotesSaveState, setAppointmentNotesSaveState] = useState<"idle" | "submitting" | "error">("idle");
+  const [appointmentNotesError, setAppointmentNotesError] = useState("");
   const [isEditingCustomerNotes, setIsEditingCustomerNotes] = useState(false);
   const [customerNotesDraft, setCustomerNotesDraft] = useState("");
   const [customerNotesSaveState, setCustomerNotesSaveState] = useState<"idle" | "submitting" | "error">("idle");
@@ -2905,7 +2917,7 @@ function AppointmentDetailsDrawer({
         </header>
 
         {isEditing ? (
-          <div className="appointment-drawer-when" aria-label="Edit appointment timing">
+          <div className="appointment-drawer-when" aria-label="Edit appointment">
             <label className="appointment-drawer-when__field">
               <span>On</span>
               <input
@@ -2923,6 +2935,32 @@ function AppointmentDetailsDrawer({
                 onChange={(e) => setEditTime(e.target.value)}
                 disabled={editSaveState === "submitting"}
               />
+            </label>
+            <label className="appointment-drawer-when__field">
+              <span>Service</span>
+              <select
+                value={editServiceId}
+                onChange={(e) => setEditServiceId(e.target.value)}
+                disabled={editSaveState === "submitting"}
+              >
+                {services.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.durationMinutes} min · {formatMoney(s.priceCents)})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="appointment-drawer-when__field">
+              <span>Provider</span>
+              <select
+                value={editProviderId}
+                onChange={(e) => setEditProviderId(e.target.value)}
+                disabled={editSaveState === "submitting"}
+              >
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
             </label>
             <label className="appointment-drawer-when__field">
               <span>Notification</span>
@@ -2956,6 +2994,8 @@ function AppointmentDetailsDrawer({
                     const newStartsAt = new Date(`${editDate}T${editTime}:00`).toISOString();
                     await onUpdate(selectedAppointment, {
                       startsAt: newStartsAt,
+                      serviceId: editServiceId !== selectedAppointment.serviceId ? editServiceId : undefined,
+                      providerId: editProviderId !== selectedAppointment.providerId ? editProviderId : undefined,
                       notes: editNotes || undefined,
                       sendConfirmation: notificationChoice === "notify",
                     });
@@ -2991,6 +3031,8 @@ function AppointmentDetailsDrawer({
                     const d = new Date(selectedAppointment.startAt);
                     setEditDate(d.toISOString().slice(0, 10));
                     setEditTime(d.toTimeString().slice(0, 5));
+                    setEditServiceId(selectedAppointment.serviceId);
+                    setEditProviderId(selectedAppointment.providerId);
                     setEditNotes(selectedAppointment.notes ?? "");
                     setNotificationChoice("notify");
                     setEditSaveState("idle");
@@ -3204,9 +3246,73 @@ function AppointmentDetailsDrawer({
             <p className="appointment-summary-card__meta">
               {selectedAppointment.durationMinutes} min · {selectedAppointment.providerName}
             </p>
-            {selectedAppointment.notes ? (
-              <p className="appointment-summary-card__notes">{selectedAppointment.notes}</p>
-            ) : null}
+            {isEditingAppointmentNotes ? (
+              <div className="customer-notes-editor">
+                <textarea
+                  value={appointmentNotesDraft}
+                  onChange={(e) => setAppointmentNotesDraft(e.target.value)}
+                  rows={3}
+                  placeholder="Add appointment notes..."
+                  disabled={appointmentNotesSaveState === "submitting"}
+                />
+                <div className="customer-notes-editor__actions">
+                  <button
+                    type="button"
+                    className="text-action"
+                    onClick={() => {
+                      setIsEditingAppointmentNotes(false);
+                      setAppointmentNotesError("");
+                    }}
+                    disabled={appointmentNotesSaveState === "submitting"}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-action"
+                    onClick={async () => {
+                      if (!onUpdate) return;
+                      setAppointmentNotesSaveState("submitting");
+                      setAppointmentNotesError("");
+                      try {
+                        await onUpdate(selectedAppointment, {
+                          notes: appointmentNotesDraft || undefined,
+                        });
+                        setIsEditingAppointmentNotes(false);
+                        setAppointmentNotesSaveState("idle");
+                      } catch (err) {
+                        setAppointmentNotesSaveState("error");
+                        setAppointmentNotesError(err instanceof Error ? err.message : "Unable to save notes.");
+                      }
+                    }}
+                    disabled={appointmentNotesSaveState === "submitting"}
+                  >
+                    {appointmentNotesSaveState === "submitting" ? "Saving…" : "Save"}
+                  </button>
+                </div>
+                {appointmentNotesSaveState === "error" ? (
+                  <p role="alert" className="settings-error">{appointmentNotesError}</p>
+                ) : null}
+              </div>
+            ) : (
+              <div className="customer-notes-display">
+                {selectedAppointment.notes ? (
+                  <p className="customer-profile-notes">{selectedAppointment.notes}</p>
+                ) : (
+                  <p className="staff-list-empty">No appointment notes.</p>
+                )}
+                <button
+                  type="button"
+                  className="text-action"
+                  onClick={() => {
+                    setAppointmentNotesDraft(selectedAppointment.notes ?? "");
+                    setIsEditingAppointmentNotes(true);
+                  }}
+                >
+                  {selectedAppointment.notes ? "Edit" : "Add note"}
+                </button>
+              </div>
+            )}
           </div>
           <div className="appointment-payment-summary">
             {selectedAppointment.depositCents > 0 ? (
@@ -3258,6 +3364,8 @@ function AppointmentDetailsDrawer({
                   const d = new Date(selectedAppointment.startAt);
                   setEditDate(d.toISOString().slice(0, 10));
                   setEditTime(d.toTimeString().slice(0, 5));
+                  setEditServiceId(selectedAppointment.serviceId);
+                  setEditProviderId(selectedAppointment.providerId);
                   setEditNotes(selectedAppointment.notes ?? "");
                   setNotificationChoice("notify");
                   setEditSaveState("idle");
