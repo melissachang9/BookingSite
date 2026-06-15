@@ -201,6 +201,23 @@ export type BookingFormRequirementSummary = {
   schema?: FormSchema | null;
 };
 
+export type BookingFormRequirementEntry = {
+  id: UUID;
+  formId: UUID;
+  formVersionId: UUID;
+  formName: string;
+  formDescription?: string | null;
+  scope: FormScope;
+  customerPromptTiming?: CustomerPromptTiming | null;
+  status: FormRequirementStatus;
+  satisfiedByResponseId?: UUID | null;
+  schema?: FormSchema | null;
+};
+
+export type BookingFormRequirementList = {
+  items: BookingFormRequirementEntry[];
+};
+
 export type SendFormReminderResponse = {
   bookingId: UUID;
   pendingRequirementCount: number;

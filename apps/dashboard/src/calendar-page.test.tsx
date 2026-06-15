@@ -172,8 +172,20 @@ function createApi(
       },
     })),
     listBookingFormResponses: vi.fn().mockResolvedValue({ items: options.formResponses ?? [] }),
+    listBookingFormRequirements: vi.fn().mockResolvedValue({ items: [] }),
+    sendBookingFormReminder: vi.fn().mockResolvedValue({
+      bookingId: "booking-1",
+      pendingRequirementCount: 0,
+      recipientEmail: baseBooking.customer.email ?? "customer@example.com",
+      provider: "test",
+      providerMessageId: "test",
+      sentAt: new Date().toISOString(),
+      manageUrl: "https://example.com/forms/test",
+    }),
     updateBookingStatus: vi.fn().mockResolvedValue(baseBooking),
     updateBooking: vi.fn().mockResolvedValue(baseBooking),
+    cancelBooking: vi.fn().mockResolvedValue(baseBooking),
+    updateCustomer: vi.fn().mockResolvedValue(baseBooking.customer),
   };
 }
 
@@ -830,11 +842,11 @@ describe("CalendarPage", () => {
         expect(api.listBookingFormResponses).toHaveBeenCalledWith("brow-beauty-lab", "booking-1");
       });
 
-      expect(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake submitted/i })).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake complete/i })).toBeInTheDocument();
       expect(await screen.findByText("Brow Prep Check-In")).toBeInTheDocument();
-      expect(screen.getAllByText("Intake submitted").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Intake complete").length).toBeGreaterThan(0);
       // Compact row shows form name + a "View form" button; answers are not shown until expanded
-      expect(screen.getByRole("button", { name: "View form" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "View" })).toBeInTheDocument();
       expect(screen.queryByText("Recent retinoid use")).not.toBeInTheDocument();
       expect(screen.queryByRole("dialog", { name: "Time block details" })).not.toBeInTheDocument();
     } finally {
@@ -886,7 +898,7 @@ describe("CalendarPage", () => {
       fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake not checked/i }));
 
       await screen.findByRole("dialog", { name: "Appointment details" });
-      const viewButton = await screen.findByRole("button", { name: "View form" });
+      const viewButton = await screen.findByRole("button", { name: "View" });
 
       expect(screen.queryByRole("dialog", { name: "Form response" })).not.toBeInTheDocument();
 
@@ -930,11 +942,11 @@ describe("CalendarPage", () => {
 
       fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake not checked/i }));
 
-      expect(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake missing/i })).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake pending/i })).toBeInTheDocument();
       expect(
-        await screen.findByText("Intake missing for this booking."),
+        await screen.findByText("No intake forms are attached to this booking."),
       ).toBeInTheDocument();
-      expect(screen.getAllByText("Intake missing").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Intake pending").length).toBeGreaterThan(0);
     } finally {
       vi.useRealTimers();
     }

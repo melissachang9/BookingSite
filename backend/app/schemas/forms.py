@@ -125,6 +125,23 @@ class BookingFormResponseListResponse(CamelModel):
     items: list[BookingFormResponseEntry] = Field(default_factory=list)
 
 
+class BookingFormRequirementEntry(CamelModel):
+    id: str
+    form_id: str
+    form_version_id: str
+    form_name: str
+    form_description: str | None = None
+    scope: str
+    customer_prompt_timing: str | None = None
+    status: str
+    satisfied_by_response_id: str | None = None
+    schema: dict[str, Any] | None = None
+
+
+class BookingFormRequirementListResponse(CamelModel):
+    items: list[BookingFormRequirementEntry] = Field(default_factory=list)
+
+
 class SendFormReminderResponse(CamelModel):
     booking_id: str
     pending_requirement_count: int

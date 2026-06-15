@@ -4429,3 +4429,112 @@ body {
   background: rgba(248, 250, 252, 0.7);
 }
 
+/* Form requirements list (pending + satisfied) — appointment drawer */
+.form-requirements-list {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-requirements-list__item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid rgba(106, 87, 69, 0.18);
+}
+
+.form-requirements-list__item:last-child {
+  border-bottom: 0;
+}
+
+.form-requirements-list__status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.form-requirements-list__status--completed {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.form-requirements-list__status--pending {
+  background: transparent;
+  border: 1.5px solid rgba(106, 87, 69, 0.45);
+  color: transparent;
+}
+
+.form-requirements-list__body {
+  min-width: 0;
+}
+
+.form-requirements-list__title {
+  font-weight: 600;
+  color: var(--ui-ink);
+  font-size: 0.92rem;
+  line-height: 1.25;
+}
+
+.form-requirements-list__meta {
+  margin-top: 0.15rem;
+  font-size: 0.78rem;
+  color: var(--ui-muted);
+}
+
+.form-requirements-list__item--pending .form-requirements-list__meta {
+  color: #92400e;
+}
+
+.form-requirements-list__action {
+  border: 1px solid rgba(106, 87, 69, 0.32);
+  background: transparent;
+  border-radius: 6px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ui-ink);
+  cursor: pointer;
+}
+
+.form-requirements-list__action:hover {
+  background: rgba(106, 87, 69, 0.08);
+}
+
+.form-requirements-reminder {
+  margin-top: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.form-requirements-reminder__status {
+  font-size: 0.8rem;
+  color: var(--ui-muted);
+}
+
+.form-requirements-reminder__status--error {
+  color: #b91c1c;
+}
+
+.form-responses-empty {
+  margin: 0.4rem 0 0;
+  color: var(--ui-muted);
+  font-size: 0.88rem;
+}
+
+.intake-status-badge--partial {
+  background: rgba(217, 119, 6, 0.12);
+  color: #92400e;
+}
+

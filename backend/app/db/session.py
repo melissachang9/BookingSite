@@ -92,6 +92,20 @@ async def _ensure_postgres_schema_compatibility() -> None:
         if not user_phone_exists:
             await connection.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(40)"))
 
+        booking_last_reminder_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'bookings'
+                  AND column_name = 'last_form_reminder_sent_at'
+                """
+            )
+        )
+        if not booking_last_reminder_exists:
+            await connection.execute(
+                text("ALTER TABLE bookings ADD COLUMN last_form_reminder_sent_at TIMESTAMP WITH TIME ZONE")
+            )
+
         user_avatar_exists = await connection.scalar(
             text(
                 """

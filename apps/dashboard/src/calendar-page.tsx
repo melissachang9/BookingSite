@@ -4,6 +4,8 @@ import type {
   AvailabilityRequest,
   AvailabilityResponse,
   BookingDraftSummary,
+  BookingFormRequirementEntry,
+  BookingFormRequirementList,
   BookingFormResponseEntry,
   BookingFormResponseList,
   BookingListQuery,
@@ -14,6 +16,7 @@ import type {
   CustomerLookupResponse,
   CustomerSummary,
   ProviderListResponse,
+  SendFormReminderResponse,
   ServiceListResponse,
   ServiceSummary,
   SlotAvailability,
@@ -147,10 +150,21 @@ type CompletionState =
 type FormResponsesState =
   | { kind: "idle" }
   | { kind: "loading"; bookingId: string }
-  | { kind: "ready"; bookingId: string; items: BookingFormResponseEntry[] }
+  | {
+      kind: "ready";
+      bookingId: string;
+      items: BookingFormResponseEntry[];
+      requirements: BookingFormRequirementEntry[];
+    }
   | { kind: "error"; bookingId: string; message: string };
 
-type IntakeStatus = "unknown" | "loading" | "submitted" | "missing" | "error";
+type IntakeStatus = "unknown" | "loading" | "submitted" | "missing" | "partial" | "error";
+
+type FormReminderState =
+  | { kind: "idle" }
+  | { kind: "sending"; bookingId: string }
+  | { kind: "success"; bookingId: string; message: string }
+  | { kind: "error"; bookingId: string; message: string };
 
 type CustomerLookupState =
   | { kind: "idle" }
@@ -176,6 +190,8 @@ export type CalendarPageApi = {
   getAvailability: (request: AvailabilityRequest) => Promise<AvailabilityResponse>;
   createBookingDraft: (body: CreateBookingDraftRequest) => Promise<BookingDraftSummary>;
   listBookingFormResponses: (tenantSlug: string, bookingId: string) => Promise<BookingFormResponseList>;
+  listBookingFormRequirements: (tenantSlug: string, bookingId: string) => Promise<BookingFormRequirementList>;
+  sendBookingFormReminder: (tenantSlug: string, bookingId: string) => Promise<SendFormReminderResponse>;
   updateBookingStatus: (tenantSlug: string, bookingId: string, body: UpdateBookingStatusRequest) => Promise<BookingSummary>;
   updateBooking: (tenantSlug: string, bookingId: string, body: UpdateBookingRequest) => Promise<BookingSummary>;
   cancelBooking: (tenantSlug: string, bookingId: string, body: { reason?: string }) => Promise<BookingSummary>;
@@ -416,9 +432,11 @@ function getIntakeStatusLabel(status: IntakeStatus): string {
     case "loading":
       return "Checking intake";
     case "submitted":
-      return "Intake submitted";
+      return "Intake complete";
+    case "partial":
+      return "Intake partial";
     case "missing":
-      return "Intake missing";
+      return "Intake pending";
     case "error":
       return "Intake check failed";
     case "unknown":
@@ -629,6 +647,7 @@ export function CalendarPage({
   const [reloadKey, setReloadKey] = useState(0);
   const [formResponsesState, setFormResponsesState] = useState<FormResponsesState>({ kind: "idle" });
   const [intakeStatusByBookingId, setIntakeStatusByBookingId] = useState<Record<string, IntakeStatus>>({});
+  const [formReminderState, setFormReminderState] = useState<FormReminderState>({ kind: "idle" });
 
   const selectedAppointment = useMemo<SelectedCalendarAppointment | null>(() => {
     if (calendarState.kind !== "ready" || selectedAppointmentId === null) {
@@ -658,17 +677,38 @@ export function CalendarPage({
     let isCancelled = false;
     setFormResponsesState({ kind: "loading", bookingId });
     setIntakeStatusByBookingId((current) => ({ ...current, [bookingId]: "loading" }));
+    setFormReminderState({ kind: "idle" });
 
-    api
-      .listBookingFormResponses(tenantSlug, bookingId)
-      .then((response) => {
+    Promise.all([
+      api.listBookingFormResponses(tenantSlug, bookingId),
+      api.listBookingFormRequirements(tenantSlug, bookingId),
+    ])
+      .then(([responses, requirementsResp]) => {
         if (isCancelled) {
           return;
         }
-        setFormResponsesState({ kind: "ready", bookingId, items: response.items });
+        const requirements = requirementsResp.items;
+        setFormResponsesState({
+          kind: "ready",
+          bookingId,
+          items: responses.items,
+          requirements,
+        });
+        const pendingCount = requirements.filter((req) => req.status === "pending").length;
+        const satisfiedCount = requirements.filter((req) => req.status === "satisfied").length;
+        const intakeStatus: IntakeStatus =
+          requirements.length === 0
+            ? responses.items.length > 0
+              ? "submitted"
+              : "missing"
+            : pendingCount === 0
+              ? "submitted"
+              : satisfiedCount === 0
+                ? "missing"
+                : "partial";
         setIntakeStatusByBookingId((current) => ({
           ...current,
-          [bookingId]: response.items.length > 0 ? "submitted" : "missing",
+          [bookingId]: intakeStatus,
         }));
       })
       .catch((error: unknown) => {
@@ -679,7 +719,7 @@ export function CalendarPage({
         setFormResponsesState({
           kind: "error",
           bookingId,
-          message: error instanceof Error ? error.message : "Unable to load submitted forms for this booking.",
+          message: error instanceof Error ? error.message : "Unable to load intake forms for this booking.",
         });
       });
 
@@ -1573,6 +1613,27 @@ export function CalendarPage({
       };
     });
   };
+
+  const handleSendFormReminder = (appointment: SelectedCalendarAppointment) => {
+    const bookingId = appointment.id;
+    setFormReminderState({ kind: "sending", bookingId });
+    api
+      .sendBookingFormReminder(tenantSlug, bookingId)
+      .then((result) => {
+        setFormReminderState({
+          kind: "success",
+          bookingId,
+          message: `Reminder sent to ${result.recipientEmail} (${result.pendingRequirementCount} pending).`,
+        });
+      })
+      .catch((error: unknown) => {
+        setFormReminderState({
+          kind: "error",
+          bookingId,
+          message: error instanceof Error ? error.message : "Unable to send reminder.",
+        });
+      });
+  };
   const monthRail = (
     <MonthRail
       monthCursorDate={monthCursorDate}
@@ -1719,6 +1780,8 @@ export function CalendarPage({
         selectedAppointment={selectedAppointment}
         formResponsesState={formResponsesState}
         intakeStatus={selectedAppointment ? (intakeStatusByBookingId[selectedAppointment.id] ?? "unknown") : "unknown"}
+        formReminderState={formReminderState}
+        onSendFormReminder={handleSendFormReminder}
         services={calendarState.kind === "ready" ? calendarState.services : []}
         providers={calendarState.kind === "ready" ? calendarState.providers : []}
         onClose={handleCloseAppointmentDrawer}
@@ -2830,6 +2893,8 @@ type AppointmentDetailsDrawerProps = {
   selectedAppointment: SelectedCalendarAppointment | null;
   formResponsesState: FormResponsesState;
   intakeStatus: IntakeStatus;
+  formReminderState: FormReminderState;
+  onSendFormReminder?: (appointment: SelectedCalendarAppointment) => void;
   services: ServiceSummary[];
   providers: CalendarProviderOption[];
   onClose: () => void;
@@ -2848,6 +2913,8 @@ function AppointmentDetailsDrawer({
   selectedAppointment,
   formResponsesState,
   intakeStatus,
+  formReminderState,
+  onSendFormReminder,
   services,
   providers,
   onClose,
@@ -3334,11 +3401,13 @@ function AppointmentDetailsDrawer({
           </div>
         </section>
 
-        <section className="booking-rail-section booking-rail-section--forms" aria-label="Submitted forms">
+        <section className="booking-rail-section booking-rail-section--forms" aria-label="Intake forms">
           <FormResponsesPanel
             selectedAppointment={selectedAppointment}
             state={formResponsesState}
             intakeStatus={intakeStatus}
+            reminderState={formReminderState}
+            onSendReminder={onSendFormReminder ? () => onSendFormReminder(selectedAppointment) : undefined}
             onViewForm={setViewingFormEntry}
           />
         </section>
@@ -3447,58 +3516,159 @@ type FormResponsesPanelProps = {
   selectedAppointment: SelectedCalendarAppointment | null;
   state: FormResponsesState;
   intakeStatus: IntakeStatus;
+  reminderState: FormReminderState;
+  onSendReminder?: () => void;
   onViewForm?: (entry: BookingFormResponseEntry) => void;
 };
 
-function FormResponsesPanel({ selectedAppointment, state, intakeStatus, onViewForm }: FormResponsesPanelProps): ReactElement {
+function FormResponsesPanel({
+  selectedAppointment,
+  state,
+  intakeStatus,
+  reminderState,
+  onSendReminder,
+  onViewForm,
+}: FormResponsesPanelProps): ReactElement {
   const intakeLabel = getIntakeStatusLabel(intakeStatus);
+  const bookingId = selectedAppointment?.id ?? null;
+
+  const requirements = state.kind === "ready" ? state.requirements : [];
+  const responses = state.kind === "ready" ? state.items : [];
+  const responseByRequirementId = new Map<string, BookingFormResponseEntry>();
+  for (const req of requirements) {
+    if (req.satisfiedByResponseId) {
+      const match = responses.find((r) => r.id === req.satisfiedByResponseId);
+      if (match) {
+        responseByRequirementId.set(req.id, match);
+      }
+    }
+  }
+
+  const hasPending = requirements.some((req) => req.status === "pending");
+  const reminderForThisBooking =
+    reminderState.kind !== "idle" && bookingId !== null && "bookingId" in reminderState && reminderState.bookingId === bookingId
+      ? reminderState
+      : null;
+  const reminderSending = reminderForThisBooking?.kind === "sending";
 
   return (
     <>
       <div className="rail-section-heading">
         <div>
-          <p className="eyebrow">Submitted forms</p>
+          <p className="eyebrow">Forms</p>
           <h4>Customer intake</h4>
         </div>
         <span className={`intake-status-badge intake-status-badge--${intakeStatus}`}>{intakeLabel}</span>
       </div>
       {!selectedAppointment ? (
-        <p>Select an appointment to review any intake forms the customer submitted before the visit.</p>
+        <p>Select an appointment to review any intake forms attached to it.</p>
       ) : state.kind === "loading" ? (
         <p>Checking intake status...</p>
       ) : state.kind === "error" ? (
         <div className="message-banner message-banner--error" role="alert">
           {state.message}
         </div>
-      ) : state.kind === "ready" && state.items.length === 0 ? (
-        <div className="message-banner message-banner--warning" role="status">
-          Intake missing for this booking.
-        </div>
-      ) : state.kind === "ready" ? (
-        <ul className="form-responses-list" aria-label="Submitted forms">
-          {state.items.map((entry) => {
-            const timingLabel = entry.customerPromptTiming?.replaceAll("_", " ") ?? entry.scope;
-            const answerCount = Object.keys(entry.answers).length;
-            return (
-              <li key={entry.id} className="form-responses-list__item">
-                <header className="form-responses-list__header">
-                  <span className="form-responses-list__title">{entry.formName}</span>
-                  <span className="form-responses-list__meta">
-                    v{entry.formVersionNumber} &middot; {formatDateTime(entry.submittedAt)} &middot; {timingLabel} &middot; {answerCount} field{answerCount !== 1 ? "s" : ""}
-                  </span>
-                </header>
-                <button
-                  type="button"
-                  className="form-responses-list__view-btn"
-                  onClick={() => onViewForm?.(entry)}
-                >
-                  View form
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
+      ) : requirements.length === 0 && responses.length === 0 ? (
+        <p className="form-responses-empty">No intake forms are attached to this booking.</p>
+      ) : (
+        <>
+          <ul className="form-requirements-list" aria-label="Intake forms">
+            {requirements.length > 0
+              ? requirements.map((req) => {
+                  const matchedResponse = responseByRequirementId.get(req.id);
+                  const isCompleted = req.status === "satisfied";
+                  const submittedAt = matchedResponse ? formatDateTime(matchedResponse.submittedAt) : null;
+                  const timingLabel = req.customerPromptTiming?.replaceAll("_", " ") ?? req.scope;
+                  return (
+                    <li
+                      key={req.id}
+                      className={`form-requirements-list__item form-requirements-list__item--${isCompleted ? "completed" : "pending"}`}
+                    >
+                      <span
+                        className={`form-requirements-list__status form-requirements-list__status--${isCompleted ? "completed" : "pending"}`}
+                        aria-hidden="true"
+                      >
+                        {isCompleted ? "✓" : ""}
+                      </span>
+                      <div className="form-requirements-list__body">
+                        <div className="form-requirements-list__title">{req.formName}</div>
+                        <div className="form-requirements-list__meta">
+                          {isCompleted
+                            ? submittedAt
+                              ? `Completed ${submittedAt}`
+                              : "Completed"
+                            : "Form not started"}
+                          {" · "}
+                          {timingLabel}
+                        </div>
+                      </div>
+                      {isCompleted && matchedResponse ? (
+                        <button
+                          type="button"
+                          className="form-requirements-list__action"
+                          onClick={() => onViewForm?.(matchedResponse)}
+                        >
+                          View
+                        </button>
+                      ) : null}
+                    </li>
+                  );
+                })
+              : responses.map((entry) => {
+                  const submittedAt = formatDateTime(entry.submittedAt);
+                  const timingLabel = entry.customerPromptTiming?.replaceAll("_", " ") ?? entry.scope;
+                  return (
+                    <li
+                      key={entry.id}
+                      className="form-requirements-list__item form-requirements-list__item--completed"
+                    >
+                      <span
+                        className="form-requirements-list__status form-requirements-list__status--completed"
+                        aria-hidden="true"
+                      >
+                        ✓
+                      </span>
+                      <div className="form-requirements-list__body">
+                        <div className="form-requirements-list__title">{entry.formName}</div>
+                        <div className="form-requirements-list__meta">
+                          Completed {submittedAt} · {timingLabel}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="form-requirements-list__action"
+                        onClick={() => onViewForm?.(entry)}
+                      >
+                        View
+                      </button>
+                    </li>
+                  );
+                })}
+          </ul>
+          {hasPending && onSendReminder ? (
+            <div className="form-requirements-reminder">
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={onSendReminder}
+                disabled={reminderSending}
+              >
+                {reminderSending ? "Sending reminder..." : "Send reminder"}
+              </button>
+              {reminderForThisBooking?.kind === "success" ? (
+                <span className="form-requirements-reminder__status" role="status">
+                  {reminderForThisBooking.message}
+                </span>
+              ) : null}
+              {reminderForThisBooking?.kind === "error" ? (
+                <span className="form-requirements-reminder__status form-requirements-reminder__status--error" role="alert">
+                  {reminderForThisBooking.message}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      )}
     </>
   );
 }

@@ -11,7 +11,7 @@ from app.core.http import api_exception
 from app.db.session import get_db_session
 from app.schemas.testing import MoveBookingStartRequest, MoveBookingStartResponse, ResetE2EDataRequest, ResetE2EDataResponse
 from app.services.testing import move_e2e_booking_start, reset_e2e_data
-from app.services.reminders import send_due_intake_reminders
+from app.services.reminders import send_due_confirmed_booking_form_reminders, send_due_intake_reminders
 
 
 router = APIRouter(prefix="/testing", tags=["testing"], include_in_schema=False)
@@ -71,3 +71,14 @@ async def send_intake_reminders_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> dict[str, int]:
     return await send_due_intake_reminders(session)
+
+
+@router.post(
+    "/cron/send-form-reminders",
+    summary="Send automated form reminders for confirmed bookings with pending form requirements",
+)
+async def send_form_reminders_route(
+    _: None = Depends(require_e2e_reset_access),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict[str, int]:
+    return await send_due_confirmed_booking_form_reminders(session)

@@ -260,6 +260,9 @@ class Booking(Base, IdMixin, TimestampMixin):
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     canceled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_form_reminder_sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     tenant: Mapped[Tenant] = relationship(back_populates="bookings")
     customer: Mapped[Customer] = relationship(back_populates="bookings")

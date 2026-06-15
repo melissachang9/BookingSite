@@ -22,6 +22,8 @@ from app.db.models import (
     User,
 )
 from app.schemas.forms import (
+    BookingFormRequirementEntry,
+    BookingFormRequirementListResponse,
     BookingFormResponseEntry,
     BookingFormResponseListResponse,
     FormResponseSummaryResponse,
@@ -221,6 +223,69 @@ async def list_booking_form_responses(
         )
 
     return BookingFormResponseListResponse(items=items)
+
+
+async def list_booking_form_requirements(
+    session: AsyncSession,
+    tenant_slug: str,
+    booking_id: str,
+) -> BookingFormRequirementListResponse:
+    """List all form requirements (pending and satisfied) for a confirmed booking. Staff-side."""
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    booking = await _load_booking(session, booking_id, tenant.id)
+
+    draft_ids: list[str] = []
+    if booking.source_draft is not None:
+        draft_ids.append(booking.source_draft.id)
+    else:
+        sibling_drafts = (
+            await session.scalars(
+                select(BookingDraft.id).where(
+                    BookingDraft.tenant_id == tenant.id,
+                    BookingDraft.confirmed_booking_id == booking.id,
+                )
+            )
+        ).all()
+        draft_ids.extend(sibling_drafts)
+
+    if not draft_ids:
+        return BookingFormRequirementListResponse(items=[])
+
+    requirements = (
+        await session.scalars(
+            select(BookingDraftFormRequirement)
+            .options(
+                selectinload(BookingDraftFormRequirement.form_version).selectinload(FormVersion.form),
+            )
+            .where(
+                BookingDraftFormRequirement.tenant_id == tenant.id,
+                BookingDraftFormRequirement.booking_draft_id.in_(draft_ids),
+            )
+            .order_by(BookingDraftFormRequirement.created_at.asc())
+        )
+    ).all()
+
+    items: list[BookingFormRequirementEntry] = []
+    for req in requirements:
+        version = req.form_version
+        form: FormDefinition | None = version.form if version is not None else None
+        schema = version.schema_json if version is not None and isinstance(version.schema_json, dict) else None
+        items.append(
+            BookingFormRequirementEntry(
+                id=req.id,
+                form_id=req.form_id,
+                form_version_id=req.form_version_id,
+                form_name=form.name if form is not None else "Form",
+                form_description=getattr(form, "description", None) if form is not None else None,
+                scope=req.scope,
+                customer_prompt_timing=req.customer_prompt_timing,
+                status=req.status,
+                satisfied_by_response_id=req.satisfied_by_response_id,
+                schema=schema,
+            )
+        )
+
+    return BookingFormRequirementListResponse(items=items)
 
 
 async def list_booking_form_requirements_by_token(

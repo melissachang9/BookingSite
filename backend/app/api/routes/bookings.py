@@ -18,6 +18,7 @@ from app.schemas.bookings import (
     UpdateBookingStatusRequest,
 )
 from app.schemas.forms import (
+    BookingFormRequirementListResponse,
     BookingFormResponseListResponse,
     FormResponseSummaryResponse,
     SendFormReminderResponse,
@@ -26,6 +27,7 @@ from app.schemas.forms import (
 from app.schemas.payments import RecordManualPaymentRequest
 from app.services.booking_drafts import cancel_manage_booking, get_booking, get_manage_booking
 from app.services.booking_forms import (
+    list_booking_form_requirements,
     list_booking_form_responses,
     list_booking_form_requirements_by_token,
     send_booking_form_reminder,
@@ -180,6 +182,20 @@ async def list_booking_form_responses_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingFormResponseListResponse:
     return await list_booking_form_responses(session, tenant_slug, booking_id)
+
+
+@router.get(
+    "/tenants/{tenant_slug}/bookings/{booking_id}/form-requirements",
+    response_model=BookingFormRequirementListResponse,
+    summary="List all form requirements (pending and satisfied) for a confirmed booking",
+)
+async def list_booking_form_requirements_route(
+    tenant_slug: str,
+    booking_id: str,
+    _: object = Depends(require_tenant_permission("bookings.view")),
+    session: AsyncSession = Depends(get_db_session),
+) -> BookingFormRequirementListResponse:
+    return await list_booking_form_requirements(session, tenant_slug, booking_id)
 
 
 @router.post(

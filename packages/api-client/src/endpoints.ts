@@ -86,6 +86,7 @@ import type {
   UpdateTenantWalletMembershipRequest,
   UpdateCustomerRequest,
   UpsertCustomerRequest,
+  BookingFormRequirementList,
   BookingFormRequirementSummary,
   SendFormReminderResponse,
 } from "@booking/shared-types";
@@ -376,6 +377,8 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.post<BookingSummary, CancelBookingRequest>(`tenants/${tenantSlug}/bookings/${bookingId}/cancel`, body),
   listBookingFormResponses: (tenantSlug: string, bookingId: string) =>
     client.get<BookingFormResponseList>(`tenants/${tenantSlug}/bookings/${bookingId}/form-responses`),
+  listBookingFormRequirements: (tenantSlug: string, bookingId: string) =>
+    client.get<BookingFormRequirementList>(`tenants/${tenantSlug}/bookings/${bookingId}/form-requirements`),
   listCustomers: (tenantSlug: string, search?: string) =>
     client.get<CustomerListResponse>(`tenants/${tenantSlug}/customers`, {
       query: search ? { search } : undefined,
