@@ -2204,6 +2204,10 @@ body {
   overflow-y: auto;
 }
 
+.appointment-details-drawer > * {
+  min-width: 0;
+}
+
 .appointment-details-drawer__header {
   align-items: center;
 }
@@ -2472,6 +2476,8 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   padding-top: 1rem;
   border-top: 1px solid rgba(106, 87, 69, 0.35);
   margin-top: auto;
@@ -2481,6 +2487,14 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.appointment-drawer-footer__finalize {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
 }
 
 .text-action {
