@@ -3603,7 +3603,7 @@ function CheckoutPanel({
   onComplete,
 }: CheckoutPanelProps): ReactElement {
   const [remainingBalance, setRemainingBalance] = useState(appointment.balanceDueCents);
-  const [amountCents, setAmountCents] = useState(appointment.balanceDueCents);
+  const [amountText, setAmountText] = useState((appointment.balanceDueCents / 100).toFixed(2));
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [state, setState] = useState<"idle" | "submitting" | "error" | "success">("idle");
@@ -3626,8 +3626,18 @@ function CheckoutPanel({
   const initialPaid = appointment.amountPaidCents ?? 0;
   const totalPaid = initialPaid + recordedPayments.reduce((sum, p) => sum + p.amount, 0);
 
+  const parseAmount = (): number => {
+    const cleaned = amountText.replace(/[^0-9.]/g, "");
+    const dollars = parseFloat(cleaned);
+    if (isNaN(dollars) || dollars <= 0) return 0;
+    return Math.round(dollars * 100);
+  };
+
+  const amountCents = parseAmount();
+
   const handleRecord = async (methodId: string) => {
-    if (amountCents <= 0 || amountCents > remainingBalance) {
+    const cents = parseAmount();
+    if (cents <= 0 || cents > remainingBalance) {
       setErrorMessage("Amount must be between 1 cent and the remaining balance.");
       setState("error");
       return;
@@ -3638,16 +3648,16 @@ function CheckoutPanel({
     setErrorMessage("");
     try {
       await api.recordManualPayment(tenantSlug, appointment.id, {
-        amountCents,
+        amountCents: cents,
         paymentMethodType: methodId,
         notes: notes.trim() || undefined,
       });
       const methodLabel = allMethods.find((m) => m.id === methodId)?.label ?? methodId;
-      setRecordedPayments((prev) => [...prev, { method: methodId, amount: amountCents }]);
-      setLastPayment({ method: methodLabel, amount: amountCents });
-      const newBalance = remainingBalance - amountCents;
+      setRecordedPayments((prev) => [...prev, { method: methodId, amount: cents }]);
+      setLastPayment({ method: methodLabel, amount: cents });
+      const newBalance = remainingBalance - cents;
       setRemainingBalance(newBalance);
-      setAmountCents(newBalance > 0 ? newBalance : 0);
+      setAmountText(newBalance > 0 ? (newBalance / 100).toFixed(2) : "0.00");
       setSelectedMethod(null);
       setNotes("");
       setState(newBalance <= 0 ? "success" : "idle");
@@ -3728,7 +3738,7 @@ function CheckoutPanel({
                   setLastPayment({ method: "Wallet credit", amount: applyAmount });
                   const newBalance = remainingBalance - applyAmount;
                   setRemainingBalance(newBalance);
-                  setAmountCents(newBalance > 0 ? newBalance : 0);
+                  setAmountText(newBalance > 0 ? (newBalance / 100).toFixed(2) : "0.00");
                   setState(newBalance <= 0 ? "success" : "idle");
                 } catch (error) {
                   setState("error");
@@ -3789,17 +3799,8 @@ function CheckoutPanel({
                   type="text"
                   inputMode="decimal"
                   className="checkout-panel__amount-input"
-                  value={(amountCents / 100).toFixed(2)}
-                  onChange={(e) => {
-                    const raw = e.target.value.replace(/[^0-9.]/g, "");
-                    const dollars = parseFloat(raw);
-                    if (!isNaN(dollars) && dollars >= 0) {
-                      const cents = Math.round(dollars * 100);
-                      setAmountCents(Math.min(cents, remainingBalance));
-                    } else if (raw === "" || raw === ".") {
-                      setAmountCents(0);
-                    }
-                  }}
+                  value={amountText}
+                  onChange={(e) => setAmountText(e.target.value)}
                   disabled={state === "submitting"}
                 />
               </label>
@@ -3823,7 +3824,7 @@ function CheckoutPanel({
                     type="button"
                     className={`checkout-panel__method-button${selectedMethod === m.id && state === "submitting" ? " is-submitting" : ""}`}
                     onClick={() => void handleRecord(m.id)}
-                    disabled={state === "submitting" || amountCents <= 0 || amountCents > remainingBalance}
+                    disabled={state === "submitting" || parseAmount() <= 0 || parseAmount() > remainingBalance}
                   >
                     {m.label}
                   </button>
