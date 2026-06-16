@@ -3542,25 +3542,14 @@ function AppointmentDetailsDrawer({
               ) : null}
             </div>
             <div className="appointment-drawer-footer__finalize">
-              {selectedAppointment.balanceDueCents > 0 ? (
-                <button
-                  type="button"
-                  className="primary-action"
-                  onClick={() => setDrawerView("checkout")}
-                  disabled={completionState?.kind === "submitting"}
-                >
-                  Checkout
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="primary-action"
-                  onClick={() => void onComplete(selectedAppointment)}
-                  disabled={completionState?.kind === "submitting"}
-                >
-                  {completionState?.kind === "submitting" ? "Completing..." : "Complete"}
-                </button>
-              )}
+              <button
+                type="button"
+                className="primary-action"
+                onClick={() => setDrawerView("checkout")}
+                disabled={completionState?.kind === "submitting"}
+              >
+                Checkout
+              </button>
               <button
                 type="button"
                 className="secondary-action"
@@ -3899,6 +3888,14 @@ function CheckoutPanel({
             <button
               type="button"
               className="primary-action"
+              onClick={() => void onComplete(appointment)}
+              disabled={state === "submitting"}
+            >
+              Complete booking
+            </button>
+            <button
+              type="button"
+              className="secondary-action"
               onClick={onBack}
             >
               Back to appointment
