@@ -3786,12 +3786,20 @@ function CheckoutPanel({
               <label className="checkout-panel__amount-row">
                 <span>Amount to charge</span>
                 <input
-                  type="number"
-                  min={0.01}
-                  max={remainingBalance / 100}
-                  step={0.01}
+                  type="text"
+                  inputMode="decimal"
+                  className="checkout-panel__amount-input"
                   value={(amountCents / 100).toFixed(2)}
-                  onChange={(e) => setAmountCents(Math.round(Number(e.target.value) * 100))}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/[^0-9.]/g, "");
+                    const dollars = parseFloat(raw);
+                    if (!isNaN(dollars) && dollars >= 0) {
+                      const cents = Math.round(dollars * 100);
+                      setAmountCents(Math.min(cents, remainingBalance));
+                    } else if (raw === "" || raw === ".") {
+                      setAmountCents(0);
+                    }
+                  }}
                   disabled={state === "submitting"}
                 />
               </label>

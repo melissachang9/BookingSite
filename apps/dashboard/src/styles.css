@@ -2630,7 +2630,8 @@ body {
   color: var(--ui-ink);
 }
 
-.checkout-panel__amount-row input {
+.checkout-panel__amount-row input,
+.checkout-panel__amount-input {
   width: 120px;
   padding: 0.5rem 0.75rem;
   border: 1px solid rgba(106, 87, 69, 0.35);
@@ -2640,6 +2641,16 @@ body {
   text-align: right;
   background: var(--ui-surface);
   color: var(--ui-ink);
+}
+
+/* Hide spinner arrows on number inputs */
+.checkout-panel__amount-input::-webkit-inner-spin-button,
+.checkout-panel__amount-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.checkout-panel__amount-input {
+  -moz-appearance: textfield;
 }
 
 .checkout-panel__notes {
