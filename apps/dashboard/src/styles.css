@@ -1937,6 +1937,15 @@ body {
   letter-spacing: 0.06em;
 }
 
+.calendar-panel > .panel-title-row h4.calendar-header-date {
+  font-family: var(--ui-font-sans);
+  font-size: 0.95rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ui-ink);
+}
+
 .calendar-header-actions {
   gap: 0.55rem;
 }

@@ -1727,8 +1727,7 @@ export function CalendarPage({
                 ›
               </button>
               <div style={{ marginLeft: "0.5rem" }}>
-                <p className="eyebrow">Booked appointments</p>
-                <h4>{visibleDateRangeLabel || "Weekly calendar"}</h4>
+                <h4 className="calendar-header-date">{visibleDateRangeLabel || "Weekly calendar"}</h4>
               </div>
             </div>
             <div className="calendar-header-actions">
@@ -1764,27 +1763,21 @@ export function CalendarPage({
                 </button>
               </div>
               {viewMode === "week" && weekProviderOptions.length > 0 ? (
-                <div className="provider-view-toggle" role="group" aria-label="Week provider view">
-                  <button
-                    type="button"
-                    className={`provider-view-toggle__button${selectedWeekProviderId === null ? " provider-view-toggle__button--active" : ""}`}
-                    onClick={() => handleSelectWeekProvider(null)}
-                    aria-pressed={selectedWeekProviderId === null}
+                <label className="calendar-service-filter">
+                  <span>Provider</span>
+                  <select
+                    aria-label="Week provider view"
+                    value={selectedWeekProviderId ?? ""}
+                    onChange={(event) => handleSelectWeekProvider(event.target.value || null)}
                   >
-                    All providers
-                  </button>
-                  {weekProviderOptions.map((provider) => (
-                    <button
-                      key={provider.id}
-                      type="button"
-                      className={`provider-view-toggle__button${selectedWeekProviderId === provider.id ? " provider-view-toggle__button--active" : ""}`}
-                      onClick={() => handleSelectWeekProvider(provider.id)}
-                      aria-pressed={selectedWeekProviderId === provider.id}
-                    >
-                      {provider.name}
-                    </button>
-                  ))}
-                </div>
+                    <option value="">All providers</option>
+                    {weekProviderOptions.map((provider) => (
+                      <option key={provider.id} value={provider.id}>
+                        {provider.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               ) : null}
             </div>
           </div>
