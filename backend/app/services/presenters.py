@@ -4,7 +4,7 @@ from sqlalchemy import inspect as sa_inspect
 
 from app.core.security import create_customer_manage_token
 from app.db.models import Booking, BookingDraft, BookingDraftFormRequirement, BookingDraftIntakePlan, Customer, Location, Provider, Service, Tenant
-from app.schemas.bookings import BookingSummaryResponse
+from app.schemas.bookings import BookingPaymentSummary, BookingSummaryResponse
 from app.schemas.booking_drafts import BookingDraftSummaryResponse, CustomerSummaryResponse, IntakePlanResponse
 from app.schemas.forms import FormRequirementResponse
 from app.schemas.catalog import (
@@ -53,6 +53,24 @@ def booking_amount_paid_cents(booking: Booking) -> int:
 
 def booking_balance_due_cents(booking: Booking) -> int:
     return max(booking_total_cents(booking) - booking_amount_paid_cents(booking), 0)
+
+
+def _extract_refund_reason(payment) -> str | None:
+    """Extract the operator-supplied reason from the latest refund event on a payment."""
+    refund_events = sorted(
+        (e for e in payment.events if e.kind in ("refund_recorded", "wallet_returned")),
+        key=lambda e: e.occurred_at,
+        reverse=True,
+    )
+    if not refund_events:
+        return None
+    notes = refund_events[0].notes or ""
+    # Notes format: "Refunded $X.XX via method. Operator: Name. Reason: ..."
+    marker = "Reason: "
+    idx = notes.find(marker)
+    if idx >= 0:
+        return notes[idx + len(marker):].strip()
+    return None
 
 
 def _service_media_for(service: Service, tenant: Tenant | None) -> tuple[str | None, str | None]:
@@ -304,6 +322,21 @@ def booking_to_summary(booking: Booking) -> BookingSummaryResponse:
         }
     )
 
+    payments_summary = [
+        BookingPaymentSummary(
+            id=payment.id,
+            amount_cents=payment.amount_cents,
+            status=payment.status,
+            deposit_status=payment.deposit_status,
+            payment_method_type=payment.payment_method_type,
+            checkout_session_kind=payment.checkout_session_kind,
+            created_at=payment.created_at,
+            refund_reason=_extract_refund_reason(payment),
+        )
+        for payment in sorted(booking.payments, key=lambda p: p.created_at)
+        if payment.amount_cents > 0
+    ]
+
     return BookingSummaryResponse(
         id=booking.id,
         tenant_id=booking.tenant_id,
@@ -334,4 +367,5 @@ def booking_to_summary(booking: Booking) -> BookingSummaryResponse:
             if source_draft is not None and source_draft.intake_plan is not None
             else None
         ),
+        payments=payments_summary,
     )

@@ -2830,6 +2830,357 @@ body {
   cursor: not-allowed;
 }
 
+/* Tip row + quick-select chips */
+.checkout-panel__tip-row {
+  align-items: center;
+}
+
+.checkout-panel__tip-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.checkout-panel__tip-quick {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.checkout-panel__tip-chip {
+  padding: 0.15rem 0.5rem;
+  background: transparent;
+  border: 1px solid rgba(106, 87, 69, 0.3);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ui-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.checkout-panel__tip-chip:hover:not(:disabled) {
+  background: rgba(106, 87, 69, 0.1);
+  color: var(--ui-ink);
+}
+
+.checkout-panel__tip-chip.is-active {
+  background: var(--ui-accent, #3a2d4f);
+  color: #fff;
+  border-color: var(--ui-accent, #3a2d4f);
+}
+
+.checkout-panel__tip-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.checkout-panel__tip-input {
+  width: 90px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid rgba(106, 87, 69, 0.35);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: right;
+  background: var(--ui-surface);
+  color: var(--ui-ink);
+}
+
+/* Payment list rows: label / amount / ellipsis menu */
+.checkout-panel__paid-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px dashed rgba(106, 87, 69, 0.12);
+  color: var(--ui-ink);
+}
+
+.checkout-panel__paid-row:last-child {
+  border-bottom: none;
+}
+
+.checkout-panel__paid-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.checkout-panel__paid-amount {
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: right;
+  min-width: 80px;
+}
+
+.checkout-panel__payment-menu-wrap {
+  position: relative;
+}
+
+.checkout-panel__payment-menu-trigger {
+  background: none;
+  border: none;
+  padding: 0.25rem 0.4rem;
+  border-radius: 4px;
+  font-size: 1.1rem;
+  color: var(--ui-muted);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.checkout-panel__payment-menu-trigger:hover:not(:disabled) {
+  background: rgba(106, 87, 69, 0.1);
+  color: var(--ui-ink);
+}
+
+.checkout-panel__payment-menu-trigger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Refunded payments section */
+.checkout-panel__refunded {
+  margin: 0.5rem 0;
+}
+
+.checkout-panel__refunded-heading {
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #b3261e;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.checkout-panel__refunded-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px dashed rgba(179, 38, 30, 0.15);
+  color: var(--ui-ink);
+}
+
+.checkout-panel__refunded-row:last-child {
+  border-bottom: none;
+}
+
+.checkout-panel__refunded-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.checkout-panel__refunded-amount {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #b3261e;
+  text-align: right;
+  min-width: 80px;
+}
+
+.checkout-panel__refunded-reason {
+  grid-column: 1 / -1;
+  font-size: 0.75rem;
+  color: rgba(0, 0, 0, 0.5);
+  font-style: italic;
+  margin-top: -0.15rem;
+}
+
+.checkout-panel__payment-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 10;
+  min-width: 180px;
+  margin-top: 0.25rem;
+  background: var(--ui-surface);
+  border: 1px solid rgba(106, 87, 69, 0.2);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.checkout-panel__payment-menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.55rem 0.85rem;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 0.85rem;
+  color: var(--ui-ink);
+  cursor: pointer;
+}
+
+.checkout-panel__payment-menu-item:hover:not(:disabled) {
+  background: rgba(106, 87, 69, 0.08);
+}
+
+.checkout-panel__payment-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Refund form inside payment menu */
+.checkout-panel__refund-form {
+  padding: 0.5rem 0.75rem;
+}
+
+.checkout-panel__refund-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: rgba(0, 0, 0, 0.6);
+  margin-bottom: 0.4rem;
+}
+
+.checkout-panel__refund-input {
+  flex: 1;
+  width: 80px;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid rgba(106, 87, 69, 0.25);
+  border-radius: 4px;
+  font-size: 0.82rem;
+  text-align: right;
+}
+
+.checkout-panel__refund-reason {
+  width: 100%;
+  text-align: left;
+}
+
+.checkout-panel__refund-button {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  background: rgba(179, 38, 30, 0.08);
+  color: #b3261e;
+  border: 1px solid rgba(179, 38, 30, 0.2);
+  border-radius: 4px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.checkout-panel__refund-button:hover:not(:disabled) {
+  background: rgba(179, 38, 30, 0.15);
+}
+
+.checkout-panel__refund-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Settled note when balance hits 0 */
+.checkout-panel__settled-note {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  background: rgba(46, 125, 50, 0.08);
+  border-radius: 8px;
+  color: var(--ui-ink);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* Persistent footer with COMPLETE button */
+.checkout-panel__footer {
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  padding: 0.75rem 1.25rem;
+  background: var(--ui-surface);
+  border-top: 1px solid rgba(106, 87, 69, 0.15);
+}
+
+.checkout-panel__complete-button {
+  width: 100%;
+  padding: 0.95rem 1rem;
+  background: var(--ui-accent, #3a2d4f);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.05s;
+}
+
+.checkout-panel__complete-button:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
+.checkout-panel__complete-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.checkout-panel__complete-button:disabled {
+  background: rgba(106, 87, 69, 0.25);
+  color: rgba(0, 0, 0, 0.5);
+  cursor: not-allowed;
+}
+
+/* Completed-sale banner */
+.checkout-panel__completed-banner {
+  text-align: center;
+  padding: 1.5rem 1rem;
+  background: rgba(46, 125, 50, 0.06);
+  border: 1px solid rgba(46, 125, 50, 0.18);
+  border-radius: 10px;
+  margin: 0.5rem 0;
+}
+
+.checkout-panel__completed-icon {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 0.5rem;
+  background: #2e7d32;
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.checkout-panel__completed-heading {
+  margin: 0 0 0.35rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #2e7d32;
+}
+
+.checkout-panel__completed-total {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+  color: var(--ui-ink);
+}
+
+.checkout-panel__completed-detail {
+  margin: 0 0 0.25rem;
+  font-size: 0.82rem;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.checkout-panel__completed-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.78rem;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+/* Close Sale button variant */
+.checkout-panel__complete-button--done {
+  background: #2e7d32;
+}
+
+.checkout-panel__complete-button--done:hover:not(:disabled) {
+  background: #256b28;
+}
+
 /* Customer profile money summary */
 .customer-profile-money {
   background: rgba(106, 87, 69, 0.04);

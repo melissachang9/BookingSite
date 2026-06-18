@@ -369,6 +369,21 @@ export const createPlatformApi = (client: ApiClient) => ({
       `tenants/${tenantSlug}/bookings/${bookingId}/payments/manual`,
       body,
     ),
+  applyWalletCredit: (tenantSlug: string, bookingId: string, body: { amountCents: number }) =>
+    client.post<BookingSummary, { amountCents: number }>(
+      `tenants/${tenantSlug}/bookings/${bookingId}/payments/wallet-credit`,
+      body,
+    ),
+  refundBookingPayment: (
+    tenantSlug: string,
+    bookingId: string,
+    paymentId: string,
+    body: { amountCents?: number; reason?: string } = {},
+  ) =>
+    client.post<BookingSummary, { amountCents?: number; reason?: string }>(
+      `tenants/${tenantSlug}/bookings/${bookingId}/payments/${paymentId}/refund`,
+      body,
+    ),
   updateBookingStatus: (tenantSlug: string, bookingId: string, body: UpdateBookingStatusRequest) =>
     client.post<BookingSummary, UpdateBookingStatusRequest>(`tenants/${tenantSlug}/bookings/${bookingId}/status`, body),
   updateBooking: (tenantSlug: string, bookingId: string, body: UpdateBookingRequest) =>

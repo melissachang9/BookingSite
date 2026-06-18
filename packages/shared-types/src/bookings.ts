@@ -112,7 +112,19 @@ export type BookingSummary = AuditFields &
     provider: ProviderSummary;
     customer: CustomerProfile | CustomerSummary;
     intakePlan?: BookingDraftIntakePlan | null;
+    payments?: BookingPaymentSummary[];
   };
+
+export type BookingPaymentSummary = {
+  id: UUID;
+  amountCents: number;
+  status: string;
+  depositStatus: string;
+  paymentMethodType: string;
+  checkoutSessionKind?: string | null;
+  createdAt: ISODateString;
+  refundReason?: string | null;
+};
 
 export type CustomerManageBooking = {
   tenant: TenantSummary;

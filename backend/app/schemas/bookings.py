@@ -10,6 +10,17 @@ from app.schemas.booking_drafts import CustomerSummaryResponse, IntakePlanRespon
 from app.schemas.catalog import ProviderSummaryResponse, ServiceSummaryResponse, TenantSummaryResponse
 
 
+class BookingPaymentSummary(CamelModel):
+    id: str
+    amount_cents: int
+    status: str
+    deposit_status: str
+    payment_method_type: str
+    checkout_session_kind: str | None = None
+    created_at: datetime
+    refund_reason: str | None = None
+
+
 class BookingSummaryResponse(CamelModel):
     id: str
     tenant_id: str
@@ -36,6 +47,7 @@ class BookingSummaryResponse(CamelModel):
     provider: ProviderSummaryResponse
     customer: CustomerSummaryResponse
     intake_plan: IntakePlanResponse | None = None
+    payments: list[BookingPaymentSummary] = Field(default_factory=list)
 
 
 class PaginationMetaResponse(CamelModel):

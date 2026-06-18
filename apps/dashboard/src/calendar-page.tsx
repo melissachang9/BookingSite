@@ -10,6 +10,7 @@ import type {
   BookingFormResponseList,
   BookingListQuery,
   BookingListResponse,
+  BookingPaymentSummary,
   BookingSummary,
   CreateBookingDraftRequest,
   CreateCheckoutSessionRequest,
@@ -88,6 +89,7 @@ type CalendarAppointment = {
   walletBalanceCents: number;
   durationMinutes: number;
   notes?: string | null;
+  payments: BookingPaymentSummary[];
 };
 
 type ScheduleColumn = {
@@ -202,6 +204,12 @@ export type CalendarPageApi = {
   cancelBooking: (tenantSlug: string, bookingId: string, body: { reason?: string }) => Promise<BookingSummary>;
   recordManualPayment: (tenantSlug: string, bookingId: string, body: RecordManualPaymentRequest) => Promise<BookingSummary>;
   applyWalletCredit: (tenantSlug: string, bookingId: string, body: { amountCents: number }) => Promise<BookingSummary>;
+  refundBookingPayment: (
+    tenantSlug: string,
+    bookingId: string,
+    paymentId: string,
+    body?: { amountCents?: number; reason?: string },
+  ) => Promise<BookingSummary>;
   createCheckoutSession: (body: CreateCheckoutSessionRequest) => Promise<CreateCheckoutSessionResponse>;
   updateCustomer: (
     tenantSlug: string,
@@ -480,6 +488,7 @@ function createCalendarAppointment(booking: BookingSummary): CalendarAppointment
     walletBalanceCents: booking.walletBalanceCents ?? 0,
     durationMinutes: booking.service.durationMinutes,
     notes: booking.notes ?? null,
+    payments: booking.payments ?? [],
   };
 }
 
@@ -1552,7 +1561,7 @@ export function CalendarPage({
         status: "completed",
         paymentResolution: resolution,
       });
-      setSelectedAppointmentId(null);
+      // Keep drawer open — CheckoutPanel will show completed-sale view
       setCompletionState({ kind: "idle" });
       setReloadKey((k) => k + 1);
     } catch (error) {
@@ -3010,6 +3019,8 @@ function AppointmentDetailsDrawer({
   const selectedAppointmentClockLabel = timeFormatter.format(new Date(selectedAppointment.startAt));
   const statusLabel = getBookingStatusLabel(selectedAppointment.status);
   const isConfirmed = selectedAppointment.status === "confirmed";
+  const isCompleted = selectedAppointment.status === "completed";
+  const showFooter = isConfirmed || isCompleted;
 
   if (drawerView === "checkout" && api) {
     return (
@@ -3492,72 +3503,86 @@ function AppointmentDetailsDrawer({
           />
         </section>
 
-        {isConfirmed ? (
+        {showFooter ? (
           <div className="appointment-drawer-footer">
-            <div className="appointment-drawer-footer__actions">
-              {selectedAppointment.customerEmail ? (
-                <a
-                  href={`mailto:${encodeURIComponent(selectedAppointment.customerEmail)}`}
+            {isConfirmed ? (
+              <div className="appointment-drawer-footer__actions">
+                {selectedAppointment.customerEmail ? (
+                  <a
+                    href={`mailto:${encodeURIComponent(selectedAppointment.customerEmail)}`}
+                    className="text-action"
+                  >
+                    Message
+                  </a>
+                ) : (
+                  <button type="button" className="text-action" disabled>Message</button>
+                )}
+                <span className="text-action-separator">·</span>
+                <button
+                  type="button"
                   className="text-action"
+                  onClick={() => {
+                    const d = new Date(selectedAppointment.startAt);
+                    setEditDate(d.toISOString().slice(0, 10));
+                    setEditTime(d.toTimeString().slice(0, 5));
+                    setEditServiceId(selectedAppointment.serviceId);
+                    setEditProviderId(selectedAppointment.providerId);
+                    setEditNotes(selectedAppointment.notes ?? "");
+                    setNotificationChoice("notify");
+                    setEditSaveState("idle");
+                    setIsEditing(true);
+                  }}
                 >
-                  Message
-                </a>
+                  Reschedule
+                </button>
+                {onCancel ? (
+                  <>
+                    <span className="text-action-separator">·</span>
+                    <button
+                      type="button"
+                      className="text-action text-action--danger"
+                      onClick={() => {
+                        if (window.confirm("Cancel this booking? The cancellation policy will be applied.")) {
+                          void onCancel(selectedAppointment);
+                        }
+                      }}
+                      disabled={completionState?.kind === "submitting"}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="appointment-drawer-footer__finalize">
+              {isCompleted ? (
+                <button
+                  type="button"
+                  className="primary-action"
+                  onClick={() => setDrawerView("checkout")}
+                >
+                  View Sale
+                </button>
               ) : (
-                <button type="button" className="text-action" disabled>Message</button>
-              )}
-              <span className="text-action-separator">·</span>
-              <button
-                type="button"
-                className="text-action"
-                onClick={() => {
-                  const d = new Date(selectedAppointment.startAt);
-                  setEditDate(d.toISOString().slice(0, 10));
-                  setEditTime(d.toTimeString().slice(0, 5));
-                  setEditServiceId(selectedAppointment.serviceId);
-                  setEditProviderId(selectedAppointment.providerId);
-                  setEditNotes(selectedAppointment.notes ?? "");
-                  setNotificationChoice("notify");
-                  setEditSaveState("idle");
-                  setIsEditing(true);
-                }}
-              >
-                Reschedule
-              </button>
-              {onCancel ? (
                 <>
-                  <span className="text-action-separator">·</span>
                   <button
                     type="button"
-                    className="text-action text-action--danger"
-                    onClick={() => {
-                      if (window.confirm("Cancel this booking? The cancellation policy will be applied.")) {
-                        void onCancel(selectedAppointment);
-                      }
-                    }}
+                    className="primary-action"
+                    onClick={() => setDrawerView("checkout")}
                     disabled={completionState?.kind === "submitting"}
                   >
-                    Cancel
+                    Checkout
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    onClick={() => void onNoShow(selectedAppointment)}
+                    disabled={completionState?.kind === "submitting"}
+                  >
+                    {completionState?.kind === "submitting" ? "Saving..." : "No-show"}
                   </button>
                 </>
-              ) : null}
-            </div>
-            <div className="appointment-drawer-footer__finalize">
-              <button
-                type="button"
-                className="primary-action"
-                onClick={() => setDrawerView("checkout")}
-                disabled={completionState?.kind === "submitting"}
-              >
-                Checkout
-              </button>
-              <button
-                type="button"
-                className="secondary-action"
-                onClick={() => void onNoShow(selectedAppointment)}
-                disabled={completionState?.kind === "submitting"}
-              >
-                {completionState?.kind === "submitting" ? "Saving..." : "No-show"}
-              </button>
+              )}
             </div>
           </div>
         ) : null}
@@ -3602,17 +3627,56 @@ function CheckoutPanel({
   onPaymentRecorded,
   onComplete,
 }: CheckoutPanelProps): ReactElement {
-  const [remainingBalance, setRemainingBalance] = useState(appointment.balanceDueCents);
+  // Totals: subtotal is the service price. Tax is 0% for this tenant.
+  // Tip is added by the operator. Total = subtotal + tip.
+  const subtotal = appointment.priceCents;
+
+  // Local state.
+  const [payments, setPayments] = useState<BookingPaymentSummary[]>(
+    () => appointment.payments.filter((p) => p.status === "succeeded" && p.amountCents > 0),
+  );
+  const totalPaid = payments.reduce((sum, p) => sum + p.amountCents, 0);
+
+  const [tipPercent, setTipPercent] = useState<number | null>(null);
+  const [tipText, setTipText] = useState("0.00");
+  const parseTip = (): number => {
+    const cleaned = tipText.replace(/[^0-9.]/g, "");
+    const dollars = parseFloat(cleaned);
+    if (isNaN(dollars) || dollars < 0) return 0;
+    return Math.round(dollars * 100);
+  };
+  const tipCents = parseTip();
+  const total = subtotal + tipCents;
+  const remainingBalance = Math.max(total - totalPaid, 0);
+  const setTipFromPercent = (percent: number) => {
+    setTipPercent(percent);
+    const tip = Math.round((subtotal * percent) / 100);
+    setTipText((tip / 100).toFixed(2));
+  };
+  const handleTipTextChange = (value: string) => {
+    setTipText(value);
+    setTipPercent(null);
+  };
+
   const [amountText, setAmountText] = useState((appointment.balanceDueCents / 100).toFixed(2));
+  // Update amount field whenever the remaining balance changes (e.g. tip changes, payment recorded).
+  useEffect(() => {
+    setAmountText(remainingBalance > 0 ? (remainingBalance / 100).toFixed(2) : "0.00");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remainingBalance]);
+
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [state, setState] = useState<"idle" | "submitting" | "error" | "success">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [showAddMethod, setShowAddMethod] = useState(false);
   const [newMethodLabel, setNewMethodLabel] = useState("");
-  const [recordedPayments, setRecordedPayments] = useState<Array<{ method: string; amount: number }>>([]);
   const [localCustomMethods, setLocalCustomMethods] = useState<CustomPaymentMethod[]>(customPaymentMethods);
-  const [lastPayment, setLastPayment] = useState<{ method: string; amount: number } | null>(null);
+  const [openMenuPaymentId, setOpenMenuPaymentId] = useState<string | null>(null);
+  const [refundingId, setRefundingId] = useState<string | null>(null);
+  const [refundAmountText, setRefundAmountText] = useState("");
+  const [refundReason, setRefundReason] = useState("");
+  const [saleCompleted, setSaleCompleted] = useState(appointment.status === "completed");
 
   const builtinMethods = [
     { id: "cash", label: "Cash" },
@@ -3621,10 +3685,44 @@ function CheckoutPanel({
   ];
   const allMethods = [...builtinMethods, ...localCustomMethods];
 
-  const subtotal = appointment.priceCents;
-  const total = subtotal;
-  const initialPaid = appointment.amountPaidCents ?? 0;
-  const totalPaid = initialPaid + recordedPayments.reduce((sum, p) => sum + p.amount, 0);
+  const labelForPayment = (p: BookingPaymentSummary): string => {
+    if (p.checkoutSessionKind && p.checkoutSessionKind.includes("deposit")) return "Deposit";
+    if (p.paymentMethodType === "wallet") return "Wallet credit";
+    if (p.paymentMethodType === "card") return "Credit card";
+    return allMethods.find((m) => m.id === p.paymentMethodType)?.label ?? p.paymentMethodType;
+  };
+
+  // Derive refunded payments from API data so they persist across panel opens.
+  // Also track refunds just made in this session for immediate display.
+  const [sessionRefunds, setSessionRefunds] = useState<Array<{ id: string; label: string; amountCents: number; reason: string }>>([]);
+  const apiRefundedPayments = useMemo(() => {
+    return appointment.payments
+      .filter((p) => p.status === "refunded" && p.amountCents > 0)
+      .map((p) => ({
+        id: p.id,
+        label: labelForPayment(p),
+        amountCents: p.amountCents,
+        reason: p.refundReason ?? "",
+      }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appointment.payments]);
+  const refundedPayments = [...apiRefundedPayments, ...sessionRefunds];
+
+  // Close the open ellipsis menu when clicking outside.
+  useEffect(() => {
+    if (openMenuPaymentId === null) return;
+    const handler = (e: globalThis.MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && target.closest(".checkout-panel__payment-menu, .checkout-panel__payment-menu-trigger")) {
+        return;
+      }
+      setOpenMenuPaymentId(null);
+      setRefundAmountText("");
+      setRefundReason("");
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [openMenuPaymentId]);
 
   const parseAmount = (): number => {
     const cleaned = amountText.replace(/[^0-9.]/g, "");
@@ -3632,8 +3730,6 @@ function CheckoutPanel({
     if (isNaN(dollars) || dollars <= 0) return 0;
     return Math.round(dollars * 100);
   };
-
-  const amountCents = parseAmount();
 
   const handleRecord = async (methodId: string) => {
     const cents = parseAmount();
@@ -3647,25 +3743,111 @@ function CheckoutPanel({
     setState("submitting");
     setErrorMessage("");
     try {
-      await api.recordManualPayment(tenantSlug, appointment.id, {
+      const tipNote = tipCents > 0 ? `Includes $${(tipCents / 100).toFixed(2)} tip` : null;
+      const combinedNotes = [notes.trim() || null, tipNote].filter(Boolean).join(" — ") || undefined;
+      const updated = await api.recordManualPayment(tenantSlug, appointment.id, {
         amountCents: cents,
         paymentMethodType: methodId,
-        notes: notes.trim() || undefined,
+        notes: combinedNotes,
       });
-      const methodLabel = allMethods.find((m) => m.id === methodId)?.label ?? methodId;
-      setRecordedPayments((prev) => [...prev, { method: methodId, amount: cents }]);
-      setLastPayment({ method: methodLabel, amount: cents });
-      const newBalance = remainingBalance - cents;
-      setRemainingBalance(newBalance);
-      setAmountText(newBalance > 0 ? (newBalance / 100).toFixed(2) : "0.00");
+      const updatedPayments = (updated.payments ?? []).filter(
+        (p) => p.status === "succeeded" && p.amountCents > 0,
+      );
+      setPayments(updatedPayments);
       setSelectedMethod(null);
       setNotes("");
-      setState(newBalance <= 0 ? "success" : "idle");
+      const newRemaining = Math.max(total - updatedPayments.reduce((s, p) => s + p.amountCents, 0), 0);
+      setState(newRemaining <= 0 ? "success" : "idle");
     } catch (error) {
       setState("error");
       setErrorMessage(error instanceof Error ? error.message : "Payment recording failed.");
       setSelectedMethod(null);
     }
+  };
+
+  const handleApplyWallet = async () => {
+    setState("submitting");
+    setErrorMessage("");
+    try {
+      const applyAmount = Math.min(appointment.walletBalanceCents, remainingBalance);
+      const updated = await api.applyWalletCredit(tenantSlug, appointment.id, { amountCents: applyAmount });
+      const updatedPayments = (updated.payments ?? []).filter(
+        (p) => p.status === "succeeded" && p.amountCents > 0,
+      );
+      setPayments(updatedPayments);
+      const newRemaining = Math.max(total - updatedPayments.reduce((s, p) => s + p.amountCents, 0), 0);
+      setState(newRemaining <= 0 ? "success" : "idle");
+    } catch (error) {
+      setState("error");
+      setErrorMessage(error instanceof Error ? error.message : "Failed to apply wallet credit.");
+    }
+  };
+
+  const handleRefund = async (payment: BookingPaymentSummary) => {
+    const label = labelForPayment(payment);
+    const refundCents = parseRefundAmount();
+    const isPartial = refundCents > 0 && refundCents < payment.amountCents;
+    const refundDisplay = formatMoney(refundCents > 0 ? refundCents : payment.amountCents);
+    const newBalance = remainingBalance + (refundCents > 0 ? refundCents : payment.amountCents);
+
+    if (!refundReason.trim()) {
+      setErrorMessage("A reason is required for refunds.");
+      setState("error");
+      return;
+    }
+
+    const confirmMsg = refundCents > 0
+      ? `Refund ${formatMoney(refundCents)} of ${label} payment (${formatMoney(payment.amountCents)})?\n\nReason: ${refundReason.trim()}\nNew balance due: ${formatMoney(newBalance)}\n\nThis action is logged and auditable.`
+      : `Refund ${label} payment of ${formatMoney(payment.amountCents)}?\n\nReason: ${refundReason.trim()}\nNew balance due: ${formatMoney(newBalance)}\n\nThis action is logged and auditable.`;
+
+    if (!window.confirm(confirmMsg)) {
+      return;
+    }
+    setOpenMenuPaymentId(null);
+    setRefundAmountText("");
+    setRefundReason("");
+    setRefundingId(payment.id);
+    setErrorMessage("");
+    try {
+      const body: { amountCents?: number; reason?: string } = { reason: refundReason.trim() };
+      if (refundCents > 0) body.amountCents = refundCents;
+      const updated = await api.refundBookingPayment(tenantSlug, appointment.id, payment.id, body);
+      const updatedPayments = (updated.payments ?? []).filter(
+        (p) => p.status === "succeeded" && p.amountCents > 0,
+      );
+      setPayments(updatedPayments);
+      // Record the refund immediately in session state so it's visible in the panel.
+      const refundedAmount = refundCents > 0 ? refundCents : payment.amountCents;
+      setSessionRefunds((prev) => [
+        ...prev,
+        {
+          id: `${payment.id}-refund-${Date.now()}`,
+          label: labelForPayment(payment),
+          amountCents: refundedAmount,
+          reason: refundReason.trim(),
+        },
+      ]);
+      // Trigger parent refetch so refunds persist when panel is reopened.
+      onPaymentRecorded();
+      // If balance is no longer zero, reset the completed-sale view so operator can collect again.
+      const newTotalPaid = updatedPayments.reduce((s, p) => s + p.amountCents, 0);
+      if (newTotalPaid < total) {
+        setSaleCompleted(false);
+      }
+      setState("idle");
+    } catch (error) {
+      setState("error");
+      setErrorMessage(error instanceof Error ? error.message : "Refund failed.");
+    } finally {
+      setRefundingId(null);
+    }
+  };
+
+  const parseRefundAmount = (): number => {
+    const cleaned = refundAmountText.replace(/[^0-9.]/g, "");
+    const dollars = parseFloat(cleaned);
+    if (isNaN(dollars) || dollars <= 0) return 0;
+    return Math.round(dollars * 100);
   };
 
   const handleAddCustomMethod = () => {
@@ -3688,6 +3870,14 @@ function CheckoutPanel({
       void onComplete(appointment, "waived");
     }
   };
+
+  const handleComplete = () => {
+    void onComplete(appointment).then(() => {
+      setSaleCompleted(true);
+    });
+  };
+
+  const isSettled = remainingBalance <= 0;
 
   return (
     <aside className="appointment-details-drawer checkout-panel" role="dialog" aria-label="Checkout">
@@ -3716,6 +3906,33 @@ function CheckoutPanel({
             <span>Subtotal</span>
             <span>{formatMoney(subtotal)}</span>
           </div>
+          <div className="checkout-panel__totals-row checkout-panel__tip-row">
+            <span className="checkout-panel__tip-label">
+              Tip
+              <span className="checkout-panel__tip-quick">
+                {[18, 20, 22].map((pct) => (
+                  <button
+                    key={pct}
+                    type="button"
+                    className={`checkout-panel__tip-chip${tipPercent === pct ? " is-active" : ""}`}
+                    onClick={() => setTipFromPercent(pct)}
+                    disabled={state === "submitting"}
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </span>
+            </span>
+            <input
+              type="text"
+              inputMode="decimal"
+              className="checkout-panel__tip-input"
+              value={tipText}
+              onChange={(e) => handleTipTextChange(e.target.value)}
+              disabled={state === "submitting"}
+              aria-label="Tip amount"
+            />
+          </div>
           <div className="checkout-panel__totals-row checkout-panel__totals-row--total">
             <span>Total</span>
             <strong>{formatMoney(total)}</strong>
@@ -3729,22 +3946,7 @@ function CheckoutPanel({
             <button
               type="button"
               className="checkout-panel__wallet-apply"
-              onClick={async () => {
-                setState("submitting");
-                try {
-                  const applyAmount = Math.min(appointment.walletBalanceCents, remainingBalance);
-                  await api.applyWalletCredit(tenantSlug, appointment.id, { amountCents: applyAmount });
-                  setRecordedPayments((prev) => [...prev, { method: "wallet", amount: applyAmount }]);
-                  setLastPayment({ method: "Wallet credit", amount: applyAmount });
-                  const newBalance = remainingBalance - applyAmount;
-                  setRemainingBalance(newBalance);
-                  setAmountText(newBalance > 0 ? (newBalance / 100).toFixed(2) : "0.00");
-                  setState(newBalance <= 0 ? "success" : "idle");
-                } catch (error) {
-                  setState("error");
-                  setErrorMessage(error instanceof Error ? error.message : "Failed to apply wallet credit.");
-                }
-              }}
+              onClick={handleApplyWallet}
               disabled={state === "submitting"}
             >
               Apply credit
@@ -3752,45 +3954,87 @@ function CheckoutPanel({
           </section>
         ) : null}
 
-        {initialPaid > 0 || recordedPayments.length > 0 ? (
+        {payments.length > 0 ? (
           <section className="checkout-panel__paid">
-            {initialPaid > 0 ? (
-              <div className="checkout-panel__paid-row">
-                <span>Deposit</span>
-                <span>{formatMoney(initialPaid)}</span>
-              </div>
-            ) : null}
-            {recordedPayments.map((p, i) => (
-              <div key={i} className="checkout-panel__paid-row">
-                <span>{allMethods.find((m) => m.id === p.method)?.label ?? p.method}</span>
-                <span>{formatMoney(p.amount)}</span>
+            {payments.map((p) => (
+              <div key={p.id} className="checkout-panel__paid-row">
+                <span className="checkout-panel__paid-label">{labelForPayment(p)}</span>
+                <span className="checkout-panel__paid-amount">{formatMoney(p.amountCents)}</span>
+                <div className="checkout-panel__payment-menu-wrap">
+                  <button
+                    type="button"
+                    className="checkout-panel__payment-menu-trigger"
+                    aria-label={`Payment actions for ${labelForPayment(p)}`}
+                    aria-haspopup="menu"
+                    aria-expanded={openMenuPaymentId === p.id}
+                    onClick={() => setOpenMenuPaymentId(openMenuPaymentId === p.id ? null : p.id)}
+                    disabled={refundingId === p.id || state === "submitting"}
+                  >
+                    ⋯
+                  </button>
+                  {openMenuPaymentId === p.id ? (
+                    <div className="checkout-panel__payment-menu" role="menu">
+                      <div className="checkout-panel__refund-form">
+                        <label className="checkout-panel__refund-label">
+                          Refund amount
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            className="checkout-panel__refund-input"
+                            placeholder={formatMoney(p.amountCents)}
+                            value={refundAmountText}
+                            onChange={(e) => setRefundAmountText(e.target.value)}
+                            disabled={refundingId === p.id}
+                          />
+                        </label>
+                        <label className="checkout-panel__refund-label">
+                          Reason (required)
+                          <input
+                            type="text"
+                            className="checkout-panel__refund-input checkout-panel__refund-reason"
+                            placeholder="e.g. Client cancelled, service adjustment"
+                            value={refundReason}
+                            onChange={(e) => setRefundReason(e.target.value)}
+                            disabled={refundingId === p.id}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="checkout-panel__payment-menu-item checkout-panel__refund-button"
+                          onClick={() => void handleRefund(p)}
+                          disabled={refundingId === p.id || !refundReason.trim()}
+                        >
+                          {refundingId === p.id ? "Refunding…" : "Refund"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             ))}
           </section>
         ) : null}
 
-        {remainingBalance > 0 ? (
-          <section className="checkout-panel__balance">
-            <span>Remaining Balance</span>
-            <strong>{formatMoney(remainingBalance)}</strong>
+        {refundedPayments.length > 0 ? (
+          <section className="checkout-panel__refunded">
+            <h4 className="checkout-panel__refunded-heading">Refunded</h4>
+            {refundedPayments.map((r) => (
+              <div key={r.id} className="checkout-panel__refunded-row">
+                <span className="checkout-panel__refunded-label">{r.label}</span>
+                <span className="checkout-panel__refunded-amount">−{formatMoney(r.amountCents)}</span>
+                <span className="checkout-panel__refunded-reason">{r.reason}</span>
+              </div>
+            ))}
           </section>
         ) : null}
 
-        {state === "success" ? (
-          <section className="checkout-panel__success">
-            <p>
-              <strong>Payment recorded.</strong> {lastPayment ? `${lastPayment.method} — ${formatMoney(lastPayment.amount)}` : ""}
-            </p>
-            <p>Total collected: <strong>{formatMoney(totalPaid)}</strong></p>
-            <button
-              type="button"
-              className="primary-action"
-              onClick={onBack}
-            >
-              Back to appointment
-            </button>
-          </section>
-        ) : remainingBalance > 0 ? (
+        <section className="checkout-panel__balance">
+          <span>Remaining Balance</span>
+          <strong>{formatMoney(remainingBalance)}</strong>
+        </section>
+
+        {!isSettled ? (
           <>
             <section className="checkout-panel__amount-section">
               <label className="checkout-panel__amount-row">
@@ -3868,11 +4112,10 @@ function CheckoutPanel({
             </section>
 
             <section className="checkout-panel__resolutions">
-              <h4>Complete without full payment</h4>
               <div className="checkout-panel__resolutions-buttons">
                 <button
                   type="button"
-                  className="secondary-action"
+                  className="text-action"
                   onClick={handleMarkOwing}
                   disabled={state === "submitting"}
                 >
@@ -3880,7 +4123,7 @@ function CheckoutPanel({
                 </button>
                 <button
                   type="button"
-                  className="secondary-action"
+                  className="text-action"
                   onClick={handleWaive}
                   disabled={state === "submitting"}
                 >
@@ -3889,27 +4132,27 @@ function CheckoutPanel({
               </div>
             </section>
           </>
-        ) : (
-          <section className="checkout-panel__settled">
-            <p>
-              This booking is fully paid. Total collected: <strong>{formatMoney(totalPaid)}</strong>.
+        ) : saleCompleted ? (
+          <section className="checkout-panel__completed-banner">
+            <div className="checkout-panel__completed-icon">✓</div>
+            <h4 className="checkout-panel__completed-heading">Sale Complete</h4>
+            <p className="checkout-panel__completed-total">
+              Total collected: <strong>{formatMoney(totalPaid)}</strong>
             </p>
-            <button
-              type="button"
-              className="primary-action"
-              onClick={() => void onComplete(appointment)}
-              disabled={state === "submitting"}
-            >
-              Complete booking
-            </button>
-            <button
-              type="button"
-              className="secondary-action"
-              onClick={onBack}
-            >
-              Back to appointment
-            </button>
+            {payments.length > 0 ? (
+              <p className="checkout-panel__completed-detail">
+                {payments.length} payment{payments.length !== 1 ? "s" : ""} recorded
+                {tipCents > 0 ? ` · Includes $${(tipCents / 100).toFixed(2)} tip` : ""}
+              </p>
+            ) : null}
+            <p className="checkout-panel__completed-hint">
+              Use the ⋯ menu on each payment to refund if needed.
+            </p>
           </section>
+        ) : (
+          <p className="checkout-panel__settled-note">
+            All payments collected. Add a tip above if needed before completing.
+          </p>
         )}
 
         {state === "error" ? (
@@ -3918,6 +4161,26 @@ function CheckoutPanel({
           </div>
         ) : null}
       </div>
+      <footer className="checkout-panel__footer">
+        {saleCompleted ? (
+          <button
+            type="button"
+            className="checkout-panel__complete-button checkout-panel__complete-button--done"
+            onClick={onClose}
+          >
+            Close Sale
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="checkout-panel__complete-button"
+            onClick={handleComplete}
+            disabled={!isSettled || state === "submitting"}
+          >
+            {isSettled ? "COMPLETE" : `Collect ${formatMoney(remainingBalance)} to complete`}
+          </button>
+        )}
+      </footer>
     </aside>
   );
 }

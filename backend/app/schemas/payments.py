@@ -61,3 +61,8 @@ class RecordManualPaymentRequest(CamelModel):
 
 class ApplyWalletCreditRequest(CamelModel):
     amount_cents: int = Field(gt=0)
+
+
+class RefundPaymentRequest(CamelModel):
+    amount_cents: int | None = Field(default=None, ge=1, description="Partial refund amount in cents. If omitted, the full payment amount is refunded.")
+    reason: str | None = Field(default=None, max_length=500)

@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.core.http import api_exception
 from app.db.models import Booking, BookingDraft, BookingPaymentEvent, Payment, PaymentEvent, Provider, Service, Tenant, User
 from app.schemas.bookings import BookingListResponse, BookingSummaryResponse, CancelBookingRequest, PaginationMetaResponse, UpdateBookingRequest, UpdateBookingStatusRequest
-from app.schemas.payments import ApplyWalletCreditRequest, RecordManualPaymentRequest
+from app.schemas.payments import ApplyWalletCreditRequest, RecordManualPaymentRequest, RefundPaymentRequest
 from app.services.booking_drafts import _cancellation_policy_for_booking, _load_booking
 from app.services.presenters import booking_balance_due_cents, booking_to_summary
 
@@ -184,12 +184,8 @@ async def record_manual_payment(
 
     _validate_payment_method(tenant, payload.payment_method_type)
 
-    remaining_balance_cents = booking_balance_due_cents(booking)
-    if remaining_balance_cents <= 0:
-        raise api_exception(409, "conflict", "This booking no longer has a balance due.")
-
-    if payload.amount_cents <= 0 or payload.amount_cents > remaining_balance_cents:
-        raise api_exception(409, "conflict", "Manual payment amount must be between 1 cent and the remaining balance due.")
+    if payload.amount_cents <= 0:
+        raise api_exception(409, "conflict", "Manual payment amount must be at least 1 cent.")
 
     notes = _clean_notes(payload.notes)
     payment = Payment(
@@ -215,7 +211,7 @@ async def record_manual_payment(
         notes=notes,
     )
 
-    new_balance_cents = remaining_balance_cents - payload.amount_cents
+    new_balance_cents = booking_balance_due_cents(booking) - payload.amount_cents
     fully_paid = new_balance_cents <= 0
 
     _append_booking_event(
@@ -260,11 +256,7 @@ async def apply_wallet_credit(
     if wallet_balance <= 0:
         raise api_exception(409, "conflict", "This customer has no wallet balance to apply.")
 
-    remaining_balance = booking_balance_due_cents(booking)
-    if remaining_balance <= 0:
-        raise api_exception(409, "conflict", "This booking no longer has a balance due.")
-
-    apply_amount = min(payload.amount_cents, wallet_balance, remaining_balance)
+    apply_amount = min(payload.amount_cents, wallet_balance)
 
     # Deduct from wallet
     booking.customer.wallet_balance_cents -= apply_amount
@@ -293,7 +285,7 @@ async def apply_wallet_credit(
         notes=f"Applied ${apply_amount / 100:.2f} from customer wallet. Operator: {actor.name}.",
     )
 
-    new_balance = remaining_balance - apply_amount
+    new_balance = booking_balance_due_cents(booking) - apply_amount
     fully_paid = new_balance <= 0
 
     _append_booking_event(
@@ -317,6 +309,108 @@ async def apply_wallet_credit(
     await session.commit()
     session.expire_all()
     updated_booking = await _load_booking(session, reload_booking_id, tenant.id)
+    return booking_to_summary(updated_booking)
+
+
+async def refund_payment(
+    session: AsyncSession,
+    tenant_slug: str,
+    booking_id: str,
+    payment_id: str,
+    payload: RefundPaymentRequest,
+    actor: User,
+) -> BookingSummaryResponse:
+    tenant = await _load_tenant(session, tenant_slug)
+    booking = await _load_booking(session, booking_id, tenant.id)
+
+    payment = next(
+        (p for p in booking.payments if p.id == payment_id and p.tenant_id == tenant.id),
+        None,
+    )
+    if payment is None:
+        raise api_exception(404, "not_found", "Payment was not found on this booking.")
+    if payment.status != "succeeded":
+        raise api_exception(409, "conflict", "Only succeeded payments can be refunded.")
+    if payment.amount_cents <= 0:
+        raise api_exception(409, "conflict", "This payment has no amount to refund.")
+
+    reason = _clean_notes(payload.reason)
+    refund_amount_cents = payload.amount_cents if payload.amount_cents is not None else payment.amount_cents
+    if refund_amount_cents <= 0 or refund_amount_cents > payment.amount_cents:
+        raise api_exception(409, "conflict", "Refund amount must be between 1 cent and the payment amount.")
+    is_partial = refund_amount_cents < payment.amount_cents
+    is_wallet_payment = payment.payment_method_type == "wallet"
+
+    if is_partial:
+        # Reduce the payment amount; keep it succeeded unless fully refunded.
+        payment.amount_cents -= refund_amount_cents
+        if payment.amount_cents <= 0:
+            payment.status = "refunded"
+            payment.deposit_status = "refunded"
+    else:
+        payment.status = "refunded"
+        payment.deposit_status = "refunded"
+
+    # If the payment was a wallet credit application, return the funds to the wallet.
+    if is_wallet_payment:
+        booking.customer.wallet_balance_cents += refund_amount_cents
+        event_kind = "wallet_returned"
+        partial_note = " (partial)" if is_partial else ""
+        actor_notes = (
+            f"Wallet credit returned{partial_note} (${refund_amount_cents / 100:.2f}). Operator: {actor.name}."
+            + (f" Reason: {reason}" if reason else "")
+        )
+    else:
+        event_kind = "refund_recorded"
+        partial_note = " (partial)" if is_partial else ""
+        actor_notes = (
+            f"Refunded{partial_note} ${refund_amount_cents / 100:.2f} via {payment.payment_method_type}. Operator: {actor.name}."
+            + (f" Reason: {reason}" if reason else "")
+        )
+
+    _append_payment_event(
+        session,
+        payment,
+        kind=event_kind,
+        actor=actor,
+        amount_cents=refund_amount_cents,
+        notes=actor_notes,
+    )
+
+    # The refund changes the balance picture; reset resolution to pending if booking was previously
+    # marked collected via this payment, so operator workflow resumes.
+    if booking.status == "confirmed":
+        booking.payment_resolution = "pending_initial" if booking.payment_resolution == "collected" else booking.payment_resolution
+        # Recompute deposit status from remaining succeeded payments.
+        remaining_paid = sum(
+            p.amount_cents for p in booking.payments if p.status == "succeeded" and p.id != payment.id
+        )
+        if remaining_paid <= 0:
+            booking.deposit_status = "unpaid"
+        else:
+            booking.deposit_status = "paid"
+
+    _append_booking_event(
+        session,
+        booking,
+        event_kind="payment_refunded",
+        actor=actor,
+        amount_cents=refund_amount_cents,
+        notes=reason,
+        extra_payload={
+            "paymentId": payment.id,
+            "paymentMethodType": payment.payment_method_type,
+            "walletReturnedCents": refund_amount_cents if is_wallet_payment else 0,
+            "refundedAmountCents": refund_amount_cents,
+            "isPartial": is_partial,
+        },
+    )
+
+    reload_booking_id = booking.id
+    tenant_id = tenant.id
+    await session.commit()
+    session.expire_all()
+    updated_booking = await _load_booking(session, reload_booking_id, tenant_id)
     return booking_to_summary(updated_booking)
 
 
