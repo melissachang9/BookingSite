@@ -1693,9 +1693,40 @@ export function CalendarPage({
       <section className="calendar-workspace">
         <article className="ops-panel calendar-panel">
           <div className="panel-title-row">
-            <div>
-              <p className="eyebrow">Booked appointments</p>
-              <h4>{visibleDateRangeLabel || "Weekly calendar"}</h4>
+            <div className="calendar-header-actions">
+              <button
+                type="button"
+                className="filter-chip"
+                onClick={() => {
+                  setFocusedDate(toIsoDate(new Date()));
+                  setViewMode("day");
+                }}
+                disabled={calendarState.kind !== "ready"}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                className="filter-chip"
+                onClick={() => moveFocus(viewMode === "day" ? -1 : -7)}
+                disabled={calendarState.kind !== "ready"}
+                aria-label="Previous"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="filter-chip"
+                onClick={() => moveFocus(viewMode === "day" ? 1 : 7)}
+                disabled={calendarState.kind !== "ready"}
+                aria-label="Next"
+              >
+                ›
+              </button>
+              <div>
+                <p className="eyebrow">Booked appointments</p>
+                <h4>{visibleDateRangeLabel || "Weekly calendar"}</h4>
+              </div>
             </div>
             <div className="calendar-header-actions">
               {calendarState.kind === "ready" && calendarState.services.length > 0 ? (
@@ -1752,33 +1783,6 @@ export function CalendarPage({
                   ))}
                 </div>
               ) : null}
-              <button
-                type="button"
-                className="filter-chip"
-                onClick={() => {
-                  setFocusedDate(toIsoDate(new Date()));
-                  setViewMode("day");
-                }}
-                disabled={calendarState.kind !== "ready"}
-              >
-                Today
-              </button>
-              <button
-                type="button"
-                className="filter-chip"
-                onClick={() => moveFocus(viewMode === "day" ? -1 : -7)}
-                disabled={calendarState.kind !== "ready"}
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                className="filter-chip"
-                onClick={() => moveFocus(viewMode === "day" ? 1 : 7)}
-                disabled={calendarState.kind !== "ready"}
-              >
-                Next
-              </button>
             </div>
           </div>
           <CalendarBoard
