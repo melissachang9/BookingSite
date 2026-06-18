@@ -1693,7 +1693,10 @@ export function CalendarPage({
       <section className="calendar-workspace">
         <article className="ops-panel calendar-panel">
           <div className="panel-title-row">
-            <div className="calendar-header-actions">
+            <div
+              className="calendar-header-actions"
+              style={{ justifyContent: "flex-start", flexWrap: "nowrap", alignItems: "center" }}
+            >
               <button
                 type="button"
                 className="filter-chip"
@@ -1723,7 +1726,7 @@ export function CalendarPage({
               >
                 ›
               </button>
-              <div>
+              <div style={{ marginLeft: "0.5rem" }}>
                 <p className="eyebrow">Booked appointments</p>
                 <h4>{visibleDateRangeLabel || "Weekly calendar"}</h4>
               </div>
