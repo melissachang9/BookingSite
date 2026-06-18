@@ -1755,6 +1755,17 @@ export function CalendarPage({
               <button
                 type="button"
                 className="filter-chip"
+                onClick={() => {
+                  setFocusedDate(toIsoDate(new Date()));
+                  setViewMode("day");
+                }}
+                disabled={calendarState.kind !== "ready"}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                className="filter-chip"
                 onClick={() => moveFocus(viewMode === "day" ? -1 : -7)}
                 disabled={calendarState.kind !== "ready"}
               >
