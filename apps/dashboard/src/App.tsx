@@ -28,7 +28,6 @@ import {
   writeStoredSession,
 } from "./platform-api";
 import { CalendarPage } from "./calendar-page";
-import { BookingsPage } from "./bookings-page";
 import { PaymentsPage } from "./payments-page";
 import { SettingsPage } from "./settings-page";
 import { StaffPage } from "./staff-page";
@@ -118,16 +117,6 @@ const routeDefinitions: RouteDefinition[] = [
     tone: "ready",
     workstreams: ["Provider week view", "Manual booking drawer", "Service and location filters"],
     actions: ["Select a slot", "Start customer search", "Send deposit link"],
-  },
-  {
-    path: "/bookings",
-    title: "Bookings",
-    eyebrow: "Lifecycle management",
-    description: "Confirmed visits, completion controls, cancellation decisions, and auditable booking history.",
-    metric: "Next API slice",
-    tone: "progress",
-    workstreams: ["Booking list", "Status transitions", "Timeline history"],
-    actions: ["Review status", "Complete visit", "Record cancellation"],
   },
   {
     path: "/payments",
@@ -677,10 +666,6 @@ export function App() {
                 weekStartsOn={weekStartsOn}
               />
             }
-          />
-          <Route
-            path="/bookings"
-            element={<BookingsPage definition={pageByPath.get("bookings") ?? routeDefinitions[0]} currentUser={session.user} />}
           />
           <Route
             path="/payments"
