@@ -135,7 +135,6 @@ export function FormsPage({
           onSaved={async (msg) => {
             await loadForms();
             setStatus(msg);
-            setBuilder({ kind: "none" });
           }}
           onStatus={setStatus}
         />
