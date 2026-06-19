@@ -125,9 +125,9 @@ function CropModal({
   const [offsetY, setOffsetY] = useState(0);
   const [scale, setScale] = useState(1);
   const [dragging, setDragging] = useState(false);
-  const dragStart = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
+  const offsetRef = useRef({ x: 0, y: 0 });
+  const dragStartRef = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
   const imageRef = useRef<HTMLImageElement | null>(null);
-  const maskRef = useRef<HTMLDivElement | null>(null);
 
   // Load file as data URL
   useEffect(() => {
@@ -136,6 +136,11 @@ function CropModal({
     reader.readAsDataURL(file);
     return () => { reader.abort(); };
   }, [file]);
+
+  // Keep offset ref in sync so document-level handlers read fresh values
+  useEffect(() => {
+    offsetRef.current = { x: offsetX, y: offsetY };
+  }, [offsetX, offsetY]);
 
   // Reset position/scale when image loads
   const onImageLoad = useCallback(() => {
@@ -148,20 +153,48 @@ function CropModal({
 
   const startDrag = useCallback((clientX: number, clientY: number) => {
     setDragging(true);
-    dragStart.current = { x: clientX, y: clientY, ox: offsetX, oy: offsetY };
-  }, [offsetX, offsetY]);
-
-  const moveDrag = useCallback((clientX: number, clientY: number) => {
-    if (!dragging) return;
-    const dx = clientX - dragStart.current.x;
-    const dy = clientY - dragStart.current.y;
-    setOffsetX(dragStart.current.ox + dx);
-    setOffsetY(dragStart.current.oy + dy);
-  }, [dragging]);
-
-  const endDrag = useCallback(() => {
-    setDragging(false);
+    dragStartRef.current = {
+      x: clientX,
+      y: clientY,
+      ox: offsetRef.current.x,
+      oy: offsetRef.current.y,
+    };
   }, []);
+
+  // Bind move/up to document so drag continues even when the pointer leaves the mask
+  useEffect(() => {
+    if (!dragging) return;
+
+    const onMove = (e: MouseEvent) => {
+      const dx = e.clientX - dragStartRef.current.x;
+      const dy = e.clientY - dragStartRef.current.y;
+      setOffsetX(dragStartRef.current.ox + dx);
+      setOffsetY(dragStartRef.current.oy + dy);
+    };
+    const onUp = () => setDragging(false);
+
+    const onTouchMove = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!t) return;
+      const dx = t.clientX - dragStartRef.current.x;
+      const dy = t.clientY - dragStartRef.current.y;
+      setOffsetX(dragStartRef.current.ox + dx);
+      setOffsetY(dragStartRef.current.oy + dy);
+    };
+    const onTouchEnd = () => setDragging(false);
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
+    document.addEventListener("touchend", onTouchEnd);
+
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [dragging]);
 
   const handleSave = useCallback(() => {
     if (!imageRef.current) return;
@@ -213,21 +246,13 @@ function CropModal({
         </div>
         <div className="crop-modal__body">
           <div
-            ref={maskRef}
             className="crop-modal__mask"
             onMouseDown={(e) => { e.preventDefault(); startDrag(e.clientX, e.clientY); }}
-            onMouseMove={(e) => { e.preventDefault(); moveDrag(e.clientX, e.clientY); }}
-            onMouseUp={endDrag}
-            onMouseLeave={endDrag}
             onTouchStart={(e) => {
+              e.preventDefault();
               const t = e.touches[0];
-              startDrag(t.clientX, t.clientY);
+              if (t) startDrag(t.clientX, t.clientY);
             }}
-            onTouchMove={(e) => {
-              const t = e.touches[0];
-              moveDrag(t.clientX, t.clientY);
-            }}
-            onTouchEnd={endDrag}
             style={{ cursor: dragging ? "grabbing" : "grab" }}
           >
             <img
