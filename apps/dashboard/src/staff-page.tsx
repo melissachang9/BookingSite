@@ -125,6 +125,7 @@ function CropModal({
   const [offsetY, setOffsetY] = useState(0);
   const [scale, setScale] = useState(1);
   const [dragging, setDragging] = useState(false);
+  const suppressClickRef = useRef(false);
   const offsetRef = useRef({ x: 0, y: 0 });
   const dragStartRef = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
   const imageRef = useRef<HTMLImageElement | null>(null);
@@ -166,14 +167,21 @@ function CropModal({
     if (!dragging) return;
 
     const onMove = (e: MouseEvent) => {
+      e.preventDefault();
       const dx = e.clientX - dragStartRef.current.x;
       const dy = e.clientY - dragStartRef.current.y;
       setOffsetX(dragStartRef.current.ox + dx);
       setOffsetY(dragStartRef.current.oy + dy);
     };
-    const onUp = () => setDragging(false);
+    const onUp = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      suppressClickRef.current = true;
+      setDragging(false);
+    };
 
     const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
       const t = e.touches[0];
       if (!t) return;
       const dx = t.clientX - dragStartRef.current.x;
@@ -181,7 +189,11 @@ function CropModal({
       setOffsetX(dragStartRef.current.ox + dx);
       setOffsetY(dragStartRef.current.oy + dy);
     };
-    const onTouchEnd = () => setDragging(false);
+    const onTouchEnd = (e: TouchEvent) => {
+      e.preventDefault();
+      suppressClickRef.current = true;
+      setDragging(false);
+    };
 
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
@@ -195,6 +207,20 @@ function CropModal({
       document.removeEventListener("touchend", onTouchEnd);
     };
   }, [dragging]);
+
+  // Always-on click guard: the browser synthesizes a click after mouseup.
+  // If a drag just ended, suppress that click so it doesn't hit Cancel/Save.
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (suppressClickRef.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        suppressClickRef.current = false;
+      }
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, []);
 
   const handleSave = useCallback(() => {
     if (!imageRef.current) return;
@@ -267,6 +293,7 @@ function CropModal({
                 width: `${maskSize}px`,
                 height: `${maskSize}px`,
                 objectFit: "cover",
+                pointerEvents: "none",
               }}
             />
           </div>

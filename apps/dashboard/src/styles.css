@@ -4032,6 +4032,7 @@ body {
   position: absolute;
   inset: 0;
   display: block;
+  pointer-events: none;
 }
 .crop-modal__controls { width: 100%; max-width: 260px; }
 .crop-modal__zoom-label {
