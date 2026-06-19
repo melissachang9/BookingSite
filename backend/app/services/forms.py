@@ -62,13 +62,16 @@ async def create_tenant_form(
         schema_json=payload.schema.model_dump() if payload.schema else {},
     )
     session.add(version)
+    await session.flush()
 
     # Attach to services
+    service_ids: list[str] = []
     if payload.service_ids:
         await _sync_service_attachments(session, tenant.id, form.id, version.id, payload.service_ids)
+        service_ids = payload.service_ids
 
     await session.commit()
-    return _form_to_summary(form, version)
+    return _form_to_summary(form, version, service_ids)
 
 
 async def update_tenant_form(
@@ -112,11 +115,13 @@ async def update_tenant_form(
         latest_version = new_version
 
     # Sync service attachments
+    service_ids: list[str] | None = None
     if payload.service_ids is not None and latest_version is not None:
         await _sync_service_attachments(session, tenant.id, form.id, latest_version.id, payload.service_ids)
+        service_ids = payload.service_ids
 
     await session.commit()
-    return _form_to_summary(form, latest_version)
+    return _form_to_summary(form, latest_version, service_ids)
 
 
 async def _get_latest_version(
@@ -134,6 +139,7 @@ async def _get_latest_version(
 def _form_to_summary(
     form: FormDefinition,
     version: FormVersion | None,
+    service_ids: list[str] | None = None,
 ) -> FormSummaryResponse:
     schema = None
     if version is not None and version.schema_json:
@@ -155,7 +161,7 @@ def _form_to_summary(
         current_version_id=version.id if version else None,
         current_version_number=version.version_number if version else None,
         schema=schema,
-        service_ids=[att.service_id for att in form.service_attachments] if form.service_attachments else [],
+        service_ids=service_ids if service_ids is not None else [],
     )
 
 
