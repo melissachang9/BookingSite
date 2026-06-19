@@ -22,7 +22,7 @@ import type {
   UserPermissionsResponse,
 } from "@booking/shared-types";
 
-import { platformApi } from "./platform-api";
+import { apiBaseUrl, platformApi } from "./platform-api";
 
 type RouteDefinitionLike = {
   title: string;
@@ -82,6 +82,101 @@ function initialsOf(name: string): string {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
+}
+
+async function uploadAvatarFile(tenantSlug: string, file: File): Promise<string> {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("tenant_id", tenantSlug);
+  const response = await fetch(`${apiBaseUrl}/forms/upload`, {
+    method: "POST",
+    body,
+  });
+  if (!response.ok) {
+    let detail = "Unable to upload photo.";
+    try {
+      const data = (await response.json()) as { detail?: string };
+      if (typeof data.detail === "string" && data.detail.trim()) {
+        detail = data.detail;
+      }
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  const data = (await response.json()) as { url?: string };
+  if (!data.url) {
+    throw new Error("Upload did not return a URL.");
+  }
+  return data.url;
+}
+
+function AvatarUploader({
+  tenantSlug,
+  value,
+  name,
+  onChange,
+  inputId,
+}: {
+  tenantSlug: string;
+  value: string;
+  name: string;
+  onChange: (next: string) => void;
+  inputId: string;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFile = async (file: File | null) => {
+    if (!file) return;
+    setError(null);
+    setUploading(true);
+    try {
+      const url = await uploadAvatarFile(tenantSlug, file);
+      onChange(url);
+    } catch (err) {
+      setError(readErrorMessage(err, "Unable to upload photo."));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="staff-avatar-uploader">
+      <div className="staff-avatar-uploader__preview" aria-hidden="true">
+        {value ? <img src={value} alt="" /> : <span>{initialsOf(name) || "?"}</span>}
+      </div>
+      <div className="staff-avatar-uploader__controls">
+        <input
+          id={inputId}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
+          onChange={(event) => {
+            const file = event.target.files?.[0] ?? null;
+            void handleFile(file);
+            event.target.value = "";
+          }}
+          disabled={uploading}
+        />
+        {value ? (
+          <button
+            type="button"
+            className="ghost-action"
+            onClick={() => onChange("")}
+            disabled={uploading}
+          >
+            Remove
+          </button>
+        ) : null}
+        {uploading ? <small className="settings-form-help">Uploading…</small> : null}
+        {error ? (
+          <small role="alert" className="settings-error">
+            {error}
+          </small>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 export function StaffPage({
@@ -482,15 +577,16 @@ function DetailsTab({
           />
         </label>
         <label className="staff-detail-grid-wide">
-          <span>Avatar URL</span>
-          <input
-            type="text"
+          <span>Profile photo</span>
+          <AvatarUploader
+            tenantSlug={tenantSlug}
             value={form.avatarUrl}
-            onChange={(event) => setForm({ ...form, avatarUrl: event.target.value })}
-            placeholder="https://…"
+            name={form.name}
+            inputId={`user-${user.id}-avatar-upload`}
+            onChange={(next) => setForm({ ...form, avatarUrl: next })}
           />
           <small className="settings-form-help">
-            Paste a hosted image URL. Upload coming later.
+            JPG, PNG, GIF, WEBP, or HEIC up to 10&nbsp;MB.
           </small>
         </label>
         <label className="settings-toggle staff-detail-grid-wide">

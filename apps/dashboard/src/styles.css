@@ -714,6 +714,10 @@ select:disabled {
   display: none;
 }
 
+.schedule-board--day .schedule-day-heading__avatar span {
+  display: inline-flex;
+}
+
 .schedule-board__body {
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr);
@@ -1939,11 +1943,39 @@ body {
 
 .calendar-panel > .panel-title-row h4.calendar-header-date {
   font-family: var(--ui-font-sans);
-  font-size: 0.95rem;
+  font-size: 0.82rem;
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
   color: var(--ui-ink);
+}
+
+.calendar-panel > .panel-title-row .filter-chip {
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  font-size: 0.75rem;
+  background: var(--ui-ivory);
+  box-shadow: none;
+}
+
+.calendar-panel > .panel-title-row .view-mode-toggle,
+.calendar-panel > .panel-title-row .provider-view-toggle {
+  box-shadow: none;
+}
+
+.calendar-panel > .panel-title-row .view-mode-toggle__button,
+.calendar-panel > .panel-title-row .provider-view-toggle__button {
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  font-size: 0.78rem;
+  box-shadow: none;
+}
+
+.calendar-panel > .panel-title-row .view-mode-toggle__button--active,
+.calendar-panel > .panel-title-row .provider-view-toggle__button--active {
+  box-shadow: none;
 }
 
 .calendar-header-actions {
@@ -2040,14 +2072,40 @@ body {
 }
 
 .schedule-board--day .schedule-day-heading strong::before {
-  content: "";
-  width: 2.2rem;
-  height: 2.2rem;
-  display: block;
-  margin-bottom: 0.38rem;
+  content: none;
+}
+
+.schedule-day-heading__avatar {
+  width: 2.6rem;
+  height: 2.6rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.4rem;
   border-radius: 999px;
+  overflow: hidden;
   background: linear-gradient(135deg, var(--ui-amber), var(--ui-cocoa));
-  box-shadow: var(--ui-shadow-sm);
+  color: var(--ui-ivory);
+  font-family: var(--ui-font-sans);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.schedule-day-heading__avatar span {
+  color: var(--ui-ivory);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-align: center;
+  line-height: 1;
+}
+
+.schedule-day-heading__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .schedule-board__body {
@@ -3998,6 +4056,12 @@ body {
 .staff-detail-grid input[type="email"],
 .staff-detail-grid select { font: inherit; padding: 0.5rem 0.65rem; border: 1px solid var(--color-border, rgba(0,0,0,0.18)); border-radius: 6px; background: #fff; }
 .staff-detail-grid input[disabled] { background: rgba(0,0,0,0.04); color: var(--color-muted, #6b7280); }
+
+.staff-avatar-uploader { display: flex; align-items: center; gap: 0.85rem; }
+.staff-avatar-uploader__preview { width: 3.4rem; height: 3.4rem; border-radius: 999px; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--ui-amber), var(--ui-cocoa)); color: var(--ui-ivory); font-weight: 500; font-size: 0.95rem; flex-shrink: 0; }
+.staff-avatar-uploader__preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.staff-avatar-uploader__controls { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+.staff-avatar-uploader__controls input[type="file"] { font: inherit; }
 .staff-fieldset { border: 1px solid var(--color-border, rgba(0,0,0,0.1)); border-radius: 8px; padding: 0.75rem 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
 .staff-fieldset legend { font-weight: 700; padding: 0 0.35rem; font-size: 0.9rem; }
 .staff-checkbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.4rem; }

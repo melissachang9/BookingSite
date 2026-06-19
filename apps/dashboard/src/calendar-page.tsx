@@ -103,6 +103,7 @@ type ScheduleColumn = {
   emptyLabel: string;
   providerId?: string;
   providerName?: string;
+  providerImageUrl?: string | null;
 };
 
 type SelectedCalendarAppointment = CalendarAppointment & {
@@ -182,6 +183,7 @@ type CustomerLookupState =
 type CalendarProviderOption = {
   id: string;
   name: string;
+  imageUrl?: string | null;
 };
 
 export type CalendarPageDefinition = {
@@ -522,21 +524,28 @@ function getProviderOptions(days: CalendarDay[]): CalendarProviderOption[] {
 }
 
 function mergeProviderOptions(...providerGroups: CalendarProviderOption[][]): CalendarProviderOption[] {
-  const providers = new Map<string, string>();
+  const providers = new Map<string, CalendarProviderOption>();
 
   for (const group of providerGroups) {
     for (const provider of group) {
-      providers.set(provider.id, provider.name);
+      const existing = providers.get(provider.id);
+      providers.set(provider.id, {
+        id: provider.id,
+        name: provider.name,
+        imageUrl: provider.imageUrl ?? existing?.imageUrl ?? null,
+      });
     }
   }
 
-  return Array.from(providers, ([id, name]) => ({ id, name })).sort((left, right) => left.name.localeCompare(right.name));
+  return Array.from(providers.values()).sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function getProviderOptionsFromProviderResponses(responses: PromiseSettledResult<ProviderListResponse>[]): CalendarProviderOption[] {
   const providers = responses.flatMap((response) =>
     response.status === "fulfilled"
-      ? response.value.providers.filter((provider) => provider.isActive).map((provider) => ({ id: provider.id, name: provider.name }))
+      ? response.value.providers
+          .filter((provider) => provider.isActive)
+          .map((provider) => ({ id: provider.id, name: provider.name, imageUrl: provider.imageUrl ?? null }))
       : [],
   );
 
@@ -1764,9 +1773,8 @@ export function CalendarPage({
               </div>
               {viewMode === "week" && weekProviderOptions.length > 0 ? (
                 <label className="calendar-service-filter">
-                  <span>Provider</span>
+                  <span>Show provider</span>
                   <select
-                    aria-label="Week provider view"
                     value={selectedWeekProviderId ?? ""}
                     onChange={(event) => handleSelectWeekProvider(event.target.value || null)}
                   >
@@ -2039,6 +2047,7 @@ function CalendarBoard({
               heading: string;
               providerId: string;
               providerName: string;
+              providerImageUrl?: string | null;
               appointments: CalendarAppointment[];
               openings: CalendarOpening[];
             }
@@ -2050,6 +2059,7 @@ function CalendarBoard({
               heading: provider.name,
               providerId: provider.id,
               providerName: provider.name,
+              providerImageUrl: provider.imageUrl ?? null,
               appointments: [],
               openings: [],
             });
@@ -2097,6 +2107,7 @@ function CalendarBoard({
               heading: column.heading,
               providerId: column.providerId,
               providerName: column.providerName,
+              providerImageUrl: column.providerImageUrl ?? null,
               appointments: column.appointments,
               openings: column.openings,
               availableSegments: mergeMinuteSegments(column.openings),
@@ -2159,6 +2170,15 @@ function CalendarBoard({
             className="schedule-day-heading"
             aria-label={column.subheading ? `${column.heading} ${column.subheading} column` : `${column.heading} column`}
           >
+            {column.providerId ? (
+              <div className="schedule-day-heading__avatar" aria-hidden="true">
+                {column.providerImageUrl ? (
+                  <img src={column.providerImageUrl} alt="" />
+                ) : (
+                  <span>{getInitials(column.providerName ?? column.heading)}</span>
+                )}
+              </div>
+            ) : null}
             <strong>{column.heading}</strong>
             {column.subheading ? <span>{column.subheading}</span> : null}
           </div>

@@ -370,13 +370,13 @@ describe("CalendarPage", () => {
       expect(await screen.findByRole("button", { name: /Taylor Guest booked/i })).toBeInTheDocument();
       expect(await screen.findByRole("button", { name: /Morgan Ellis booked/i })).toBeInTheDocument();
 
-      fireEvent.change(screen.getByLabelText("Week provider view"), { target: { value: "provider-2" } });
+      fireEvent.change(screen.getByLabelText("Show provider"), { target: { value: "provider-2" } });
 
       expect(screen.queryByRole("button", { name: /Taylor Guest booked/i })).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Morgan Ellis booked/i })).toBeInTheDocument();
       expect(container.querySelector(".schedule-day-track__empty")).toBeNull();
 
-      fireEvent.change(screen.getByLabelText("Week provider view"), { target: { value: "" } });
+      fireEvent.change(screen.getByLabelText("Show provider"), { target: { value: "" } });
 
       expect(screen.getByRole("button", { name: /Taylor Guest booked/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Morgan Ellis booked/i })).toBeInTheDocument();
@@ -404,7 +404,7 @@ describe("CalendarPage", () => {
       );
 
       expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
-      const providerSelect = await screen.findByLabelText("Week provider view");
+      const providerSelect = await screen.findByLabelText("Show provider");
       expect(providerSelect).toHaveValue("");
       expect(screen.getByRole("option", { name: "All providers" })).toBeInTheDocument();
       expect(screen.getByRole("option", { name: "Jordan Rivera" })).toBeInTheDocument();

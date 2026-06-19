@@ -634,7 +634,7 @@ async def list_service_providers(
     providers = (
         await session.scalars(
             select(Provider)
-            .options(selectinload(Provider.location_links), selectinload(Provider.service_links))
+            .options(selectinload(Provider.location_links), selectinload(Provider.service_links), selectinload(Provider.user))
             .where(Provider.tenant_id == tenant.id, Provider.id.in_(provider_ids), Provider.is_active.is_(True))
             .order_by(Provider.created_at.asc())
         )
@@ -792,7 +792,7 @@ async def reset_tenant_user_password(
 async def _load_provider_with_links(session: AsyncSession, provider_id: str, tenant_id: str) -> Provider:
     provider = await session.scalar(
         select(Provider)
-        .options(selectinload(Provider.service_links), selectinload(Provider.location_links))
+        .options(selectinload(Provider.service_links), selectinload(Provider.location_links), selectinload(Provider.user))
         .where(Provider.id == provider_id, Provider.tenant_id == tenant_id)
         .execution_options(populate_existing=True)
     )
@@ -843,6 +843,7 @@ async def list_tenant_providers_admin(
             .options(
                 selectinload(Provider.service_links),
                 selectinload(Provider.location_links),
+                selectinload(Provider.user),
             )
             .where(Provider.tenant_id == tenant.id)
             .order_by(Provider.created_at.asc())

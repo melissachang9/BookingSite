@@ -199,6 +199,17 @@ def service_to_summary(service: Service, tenant: Tenant | None = None) -> Servic
 
 def provider_to_summary(provider: Provider, tenant: Tenant | None = None) -> ProviderSummaryResponse:
     profile = _provider_profile_for(provider, tenant)
+    image_url = profile["image_url"]
+    if not image_url:
+        # Fall back to the linked staff user's avatar so a photo uploaded on
+        # the staff profile surfaces wherever the provider summary is rendered
+        # (e.g. the calendar provider columns).
+        try:
+            linked_user = provider.user
+        except Exception:  # pragma: no cover - relationship not eager-loaded
+            linked_user = None
+        if linked_user is not None and getattr(linked_user, "avatar_url", None):
+            image_url = linked_user.avatar_url
     return ProviderSummaryResponse(
         id=provider.id,
         tenant_id=provider.tenant_id,
@@ -208,7 +219,7 @@ def provider_to_summary(provider: Provider, tenant: Tenant | None = None) -> Pro
         name=provider.name,
         email=provider.email,
         description=profile["description"],
-        image_url=profile["image_url"],
+        image_url=image_url,
         image_alt_text=profile["image_alt_text"],
         availability_label=profile["availability_label"],
         is_active=provider.is_active,

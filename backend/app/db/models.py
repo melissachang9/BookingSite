@@ -174,6 +174,7 @@ class Provider(Base, IdMixin, TimestampMixin):
     is_bookable_online: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="1")
 
     tenant: Mapped[Tenant] = relationship(back_populates="providers")
+    user: Mapped[Optional[User]] = relationship(foreign_keys=[user_id], lazy="raise_on_sql")
     service_links: Mapped[list[ProviderService]] = relationship(back_populates="provider", cascade="all, delete-orphan")
     location_links: Mapped[list[ProviderLocation]] = relationship(back_populates="provider", cascade="all, delete-orphan")
     schedules: Mapped[list[ProviderSchedule]] = relationship(back_populates="provider", cascade="all, delete-orphan")
