@@ -318,6 +318,9 @@ function FormBuilderEditor({
   const [description, setDescription] = useState(existingForm?.schema?.description ?? "");
   const [fields, setFields] = useState<FormField[]>(existingForm?.schema?.fields ?? []);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(existingForm?.serviceIds ?? []);
+  const [serviceMode, setServiceMode] = useState<"all" | "specific">(
+    existingForm?.serviceIds && existingForm.serviceIds.length > 0 ? "specific" : "all",
+  );
   const [services, setServices] = useState<ServiceSummary[]>([]);
   const [servicesLoaded, setServicesLoaded] = useState(false);
 
@@ -415,6 +418,7 @@ function FormBuilderEditor({
             reviewRequired={reviewRequired} setReviewRequired={setReviewRequired}
             services={services} servicesLoaded={servicesLoaded}
             selectedServiceIds={selectedServiceIds} setSelectedServiceIds={setSelectedServiceIds}
+            serviceMode={serviceMode} setServiceMode={setServiceMode}
             saving={saving} error={error}
             onSave={() => saveForm(formId ? `"${name.trim()}" updated.` : `"${name.trim()}" created.`)}
           />
@@ -457,6 +461,7 @@ function DetailsStep({
   reviewRequired, setReviewRequired,
   services, servicesLoaded,
   selectedServiceIds, setSelectedServiceIds,
+  serviceMode, setServiceMode,
   saving, error,
   onSave,
 }: {
@@ -467,6 +472,7 @@ function DetailsStep({
   reviewRequired: boolean; setReviewRequired: (v: boolean) => void;
   services: ServiceSummary[]; servicesLoaded: boolean;
   selectedServiceIds: string[]; setSelectedServiceIds: (v: string[]) => void;
+  serviceMode: "all" | "specific"; setServiceMode: (v: "all" | "specific") => void;
   saving: boolean; error: string | null;
   onSave: () => void;
 }) {
@@ -546,24 +552,28 @@ function DetailsStep({
           <h4>Which appointments is it for?</h4>
           <div className="form-editor__radio-group">
             <label className="settings-toggle">
-              <input type="radio" name="services" checked={selectedServiceIds.length === 0} onChange={() => setSelectedServiceIds([])} />
+              <input type="radio" name="services" checked={serviceMode === "all"} onChange={() => { setServiceMode("all"); setSelectedServiceIds([]); }} />
               <span>For all appointments</span>
             </label>
             <label className="settings-toggle">
-              <input type="radio" name="services" checked={selectedServiceIds.length > 0} onChange={() => {}} />
+              <input type="radio" name="services" checked={serviceMode === "specific"} onChange={() => setServiceMode("specific")} />
               <span>Only for appointments with specific services</span>
             </label>
           </div>
-          {selectedServiceIds.length > 0 ? (
+          {serviceMode === "specific" ? (
             <div className="form-editor__service-list">
-              {services.filter((s) => selectedServiceIds.includes(s.id)).map((svc) => (
-                <div key={svc.id} className="form-editor__service-row">
-                  <span>{svc.name}</span>
-                  <button type="button" className="ghost-action" onClick={() => setSelectedServiceIds((prev) => prev.filter((id) => id !== svc.id))}>
-                    ✕
-                  </button>
-                </div>
-              ))}
+              {selectedServiceIds.length > 0 ? (
+                services.filter((s) => selectedServiceIds.includes(s.id)).map((svc) => (
+                  <div key={svc.id} className="form-editor__service-row">
+                    <span>{svc.name}</span>
+                    <button type="button" className="ghost-action" onClick={() => setSelectedServiceIds((prev) => prev.filter((id) => id !== svc.id))}>
+                      ✕
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <p className="settings-form-help">No services selected yet. Add one below.</p>
+              )}
               {services.filter((s) => !selectedServiceIds.includes(s.id)).length > 0 ? (
                 <label>
                   <span>Add a service</span>
