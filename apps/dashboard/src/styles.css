@@ -4300,6 +4300,50 @@ body {
   color: var(--ui-ink, #111827);
 }
 
+/* Form preview (realistic field rendering) */
+.form-preview {
+  border: 1px solid var(--color-border, rgba(0,0,0,0.1));
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-top: 0.75rem;
+  background: #fff;
+}
+.form-preview__title { margin: 0 0 0.25rem; font-size: 1.05rem; }
+.form-preview__desc { color: var(--text-muted, #6b7280); font-size: 0.85rem; margin-bottom: 1.25rem; }
+.form-preview__fields { display: flex; flex-direction: column; gap: 1rem; }
+.form-preview__field { }
+.form-preview__label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem; }
+.form-preview__required { color: #b3261e; }
+.form-preview__help { display: block; font-size: 0.78rem; color: var(--text-muted, #6b7280); margin-bottom: 0.3rem; }
+.form-preview__input-label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; }
+.form-preview__input-label input[type="text"],
+.form-preview__input-label input[type="date"],
+.form-preview__input-label input[type="number"],
+.form-preview__input-label input[type="file"],
+.form-preview__input-label textarea,
+.form-preview__input-label select {
+  font: inherit; font-size: 0.85rem; padding: 0.45rem 0.6rem;
+  border: 1px solid var(--color-border, rgba(0,0,0,0.18));
+  border-radius: 6px; background: #fff;
+}
+.form-preview__input-label textarea { resize: vertical; }
+.form-preview__check-group { display: flex; flex-direction: column; gap: 0.35rem; }
+.form-preview__check-group legend { font-size: 0.85rem; font-weight: 600; margin-bottom: 0.15rem; }
+.form-preview__radio-group { display: flex; flex-direction: column; gap: 0.35rem; }
+.form-preview__radio-group legend { font-size: 0.85rem; font-weight: 600; margin-bottom: 0.15rem; }
+.form-preview__section { padding: 0.5rem 0; border-bottom: 1px solid var(--color-border, rgba(0,0,0,0.08)); }
+.form-preview__section h5 { margin: 0 0 0.25rem; font-size: 0.9rem; }
+.form-preview__section p { font-size: 0.82rem; color: var(--text-muted, #6b7280); margin: 0; }
+.form-preview__static { padding: 0.5rem 0; }
+.form-preview__static h5 { margin: 0 0 0.25rem; font-size: 0.9rem; }
+.form-preview__static p { font-size: 0.85rem; margin: 0; }
+.form-preview__signature-pad {
+  border: 1px dashed var(--color-border, rgba(0,0,0,0.2));
+  border-radius: 6px; padding: 1.5rem; text-align: center;
+  color: var(--text-muted, #6b7280); font-size: 0.82rem;
+  background: rgba(0,0,0,0.02); margin-top: 0.3rem;
+}
+
 /* Form builder */
 .form-builder-toolbar {
   display: flex;

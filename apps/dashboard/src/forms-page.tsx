@@ -964,24 +964,173 @@ function PreviewStep({
         <h4>Preview</h4>
         <p className="settings-form-help">This is how the form will appear to the person filling it out.</p>
 
-        <div style={{ border: "1px solid var(--color-border, rgba(0,0,0,0.1))", borderRadius: "8px", padding: "1.25rem", marginTop: "0.75rem" }}>
-          <h4 style={{ margin: "0 0 0.25rem" }}>{name || "Untitled form"}</h4>
-          {description ? <p className="settings-form-help" style={{ marginBottom: "1rem" }}>{description}</p> : null}
+        <div className="form-preview">
+          <h4 className="form-preview__title">{name || "Untitled form"}</h4>
+          {description ? <p className="form-preview__desc">{description}</p> : null}
 
           {fields.length === 0 ? (
             <p className="settings-form-help">No fields defined yet.</p>
           ) : (
-            <ul className="form-field-preview-list">
+            <div className="form-preview__fields">
               {fields.map((field) => (
-                <li key={field.id} className="form-field-preview-item">
-                  <span className="form-field-preview-type">{field.type.replace(/_/g, " ")}</span>
-                  <span className="form-field-preview-label">{field.label || FIELD_TYPE_LABELS[field.type]}{field.required ? " *" : ""}</span>
-                </li>
+                <div key={field.id} className="form-preview__field">
+                  <FieldPreview field={field} />
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </div>
       </div>
     </div>
   );
+}
+
+function FieldPreview({ field }: { field: FormField }) {
+  const label = (
+    <span className="form-preview__label">
+      {field.label || FIELD_TYPE_LABELS[field.type]}
+      {field.required ? <span className="form-preview__required"> *</span> : null}
+    </span>
+  );
+
+  const help = field.helpText ? (
+    <span className="form-preview__help">{field.helpText}</span>
+  ) : null;
+
+  switch (field.type) {
+    case "section":
+      return (
+        <div className="form-preview__section">
+          <h5>{field.label || "Section"}</h5>
+          {field.content ? <p>{field.content}</p> : null}
+        </div>
+      );
+
+    case "static_text":
+      return (
+        <div className="form-preview__static">
+          {field.label ? <h5>{field.label}</h5> : null}
+          <p>{field.content || "Static text content"}</p>
+        </div>
+      );
+
+    case "short_text":
+      return (
+        <label className="form-preview__input-label">
+          {label}
+          {help}
+          <input type="text" disabled placeholder={field.placeholder || "Short answer"} />
+        </label>
+      );
+
+    case "long_text":
+      return (
+        <label className="form-preview__input-label">
+          {label}
+          {help}
+          <textarea disabled rows={3} placeholder={field.placeholder || "Long answer"} />
+        </label>
+      );
+
+    case "select":
+      return (
+        <label className="form-preview__input-label">
+          {label}
+          {help}
+          <select disabled>
+            <option value="">{field.placeholder || "Select…"}</option>
+            {(field.options ?? []).map((opt, i) => (
+              <option key={i} value={opt.value}>{opt.label || `Option ${i + 1}`}</option>
+            ))}
+          </select>
+        </label>
+      );
+
+    case "multi_select":
+      return (
+        <fieldset className="form-preview__check-group">
+          <legend>{field.label || "Multi select"}{field.required ? " *" : ""}</legend>
+          {help}
+          {(field.options ?? []).length === 0 ? (
+            <p className="settings-form-help">No options defined.</p>
+          ) : (
+            (field.options ?? []).map((opt, i) => (
+              <label key={i} className="settings-toggle" style={{ fontWeight: 400 }}>
+                <input type="checkbox" disabled />
+                <span>{opt.label || `Option ${i + 1}`}</span>
+              </label>
+            ))
+          )}
+        </fieldset>
+      );
+
+    case "checkbox":
+      return (
+        <label className="settings-toggle" style={{ fontWeight: 400 }}>
+          <input type="checkbox" disabled />
+          <span>{field.label || "Checkbox"}{field.required ? " *" : ""}</span>
+        </label>
+      );
+
+    case "yes_no":
+      return (
+        <fieldset className="form-preview__radio-group">
+          <legend>{field.label || "Yes / No"}{field.required ? " *" : ""}</legend>
+          {help}
+          <label className="settings-toggle" style={{ fontWeight: 400 }}>
+            <input type="radio" name={field.id} disabled />
+            <span>Yes</span>
+          </label>
+          <label className="settings-toggle" style={{ fontWeight: 400 }}>
+            <input type="radio" name={field.id} disabled />
+            <span>No</span>
+          </label>
+        </fieldset>
+      );
+
+    case "date":
+      return (
+        <label className="form-preview__input-label">
+          {label}
+          {help}
+          <input type="date" disabled />
+        </label>
+      );
+
+    case "number":
+      return (
+        <label className="form-preview__input-label">
+          {label}
+          {help}
+          <input type="number" disabled placeholder={field.placeholder || "0"} />
+        </label>
+      );
+
+    case "file_upload":
+      return (
+        <label className="form-preview__input-label">
+          {label}
+          {help}
+          <input type="file" disabled />
+        </label>
+      );
+
+    case "signature":
+      return (
+        <div className="form-preview__signature">
+          {label}
+          {help}
+          <div className="form-preview__signature-pad">Signature pad</div>
+        </div>
+      );
+
+    default:
+      return (
+        <label className="form-preview__input-label">
+          {label}
+          {help}
+          <input type="text" disabled placeholder={field.placeholder || ""} />
+        </label>
+      );
+  }
 }
