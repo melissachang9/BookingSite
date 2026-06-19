@@ -122,9 +122,10 @@ function CropModal({
 }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
+  const [fitScale, setFitScale] = useState(1);
+  const [zoom, setZoom] = useState(1); // multiplier on top of fitScale; 1 = full photo visible
   const [offsetX, setOffsetX] = useState(0);
   const [offsetY, setOffsetY] = useState(0);
-  const [scale, setScale] = useState(1);
   const [dragging, setDragging] = useState(false);
   const suppressClickRef = useRef(false);
   const offsetRef = useRef({ x: 0, y: 0 });
@@ -152,13 +153,17 @@ function CropModal({
     const nh = img.naturalHeight;
     if (!nw || !nh) return;
     setNaturalSize({ w: nw, h: nh });
-    const fitScale = maskSize / Math.min(nw, nh);
-    setScale(fitScale);
+    const fs = maskSize / Math.min(nw, nh);
+    setFitScale(fs);
+    setZoom(1);
     setOffsetX(0);
     setOffsetY(0);
   }, []);
 
   const maskSize = 260; // px — the crop circle diameter
+
+  // Effective scale = fitScale × zoom multiplier
+  const scale = fitScale * zoom;
 
   // Derived image display size at current scale
   const imgW = naturalSize ? naturalSize.w * scale : maskSize;
@@ -317,8 +322,8 @@ function CropModal({
                 min={0.5}
                 max={3}
                 step={0.01}
-                value={scale}
-                onChange={(e) => setScale(parseFloat(e.target.value))}
+                value={zoom}
+                onChange={(e) => setZoom(parseFloat(e.target.value))}
               />
             </label>
           </div>
