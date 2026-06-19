@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type {
   AuthenticatedUser,
   CreateFormRequest,
@@ -9,6 +9,7 @@ import type {
   FormSchema,
   FormScope,
   FormSummaryResponse,
+  ServiceCategorySummary,
   ServiceSummary,
   UpdateFormRequest,
 } from "@booking/shared-types";
@@ -322,15 +323,21 @@ function FormBuilderEditor({
     existingForm?.serviceIds && existingForm.serviceIds.length > 0 ? "specific" : "all",
   );
   const [services, setServices] = useState<ServiceSummary[]>([]);
+  const [categories, setCategories] = useState<ServiceCategorySummary[]>([]);
   const [servicesLoaded, setServicesLoaded] = useState(false);
+  const [selectKey, setSelectKey] = useState(0); // force re-mount after selection
 
   const [step, setStep] = useState<EditorStep>("details");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    platformApi.listServices(tenantSlug).then((resp) => {
-      setServices(resp.services.filter((s) => s.isActive));
+    Promise.all([
+      platformApi.listServices(tenantSlug),
+      platformApi.listServiceCategories(tenantSlug).catch(() => ({ categories: [] })),
+    ]).then(([serviceResp, catResp]) => {
+      setServices(serviceResp.services.filter((s) => s.isActive));
+      setCategories(catResp.categories);
       setServicesLoaded(true);
     }).catch(() => setServicesLoaded(true));
   }, [tenantSlug]);
@@ -416,9 +423,10 @@ function FormBuilderEditor({
             scope={scope} setScope={setScope}
             timing={timing} setTiming={setTiming}
             reviewRequired={reviewRequired} setReviewRequired={setReviewRequired}
-            services={services} servicesLoaded={servicesLoaded}
+            services={services} categories={categories} servicesLoaded={servicesLoaded}
             selectedServiceIds={selectedServiceIds} setSelectedServiceIds={setSelectedServiceIds}
             serviceMode={serviceMode} setServiceMode={setServiceMode}
+            selectKey={selectKey} setSelectKey={setSelectKey}
             saving={saving} error={error}
             onSave={() => saveForm(formId ? `"${name.trim()}" updated.` : `"${name.trim()}" created.`)}
           />
@@ -459,9 +467,10 @@ function DetailsStep({
   scope, setScope,
   timing, setTiming,
   reviewRequired, setReviewRequired,
-  services, servicesLoaded,
+  services, categories, servicesLoaded,
   selectedServiceIds, setSelectedServiceIds,
   serviceMode, setServiceMode,
+  selectKey, setSelectKey,
   saving, error,
   onSave,
 }: {
@@ -470,12 +479,34 @@ function DetailsStep({
   scope: FormScope; setScope: (v: FormScope) => void;
   timing: CustomerPromptTiming | ""; setTiming: (v: CustomerPromptTiming | "") => void;
   reviewRequired: boolean; setReviewRequired: (v: boolean) => void;
-  services: ServiceSummary[]; servicesLoaded: boolean;
+  services: ServiceSummary[]; categories: ServiceCategorySummary[]; servicesLoaded: boolean;
   selectedServiceIds: string[]; setSelectedServiceIds: (v: string[]) => void;
   serviceMode: "all" | "specific"; setServiceMode: (v: "all" | "specific") => void;
+  selectKey: number; setSelectKey: (v: number) => void;
   saving: boolean; error: string | null;
   onSave: () => void;
 }) {
+  // Group services by category
+  const categoryMap = new Map<string | null, ServiceSummary[]>();
+  for (const svc of services) {
+    const key = svc.categoryId ?? null;
+    const list = categoryMap.get(key) ?? [];
+    list.push(svc);
+    categoryMap.set(key, list);
+  }
+  const uncategorized = categoryMap.get(null) ?? [];
+  categoryMap.delete(null);
+
+  const handleAddService = (id: string) => {
+    setSelectedServiceIds((prev) => [...prev, id]);
+    setSelectKey((k) => k + 1); // force re-mount the select
+  };
+
+  const handleAddAllInCategory = (catId: string) => {
+    const ids = (categoryMap.get(catId) ?? []).map((s) => s.id);
+    setSelectedServiceIds((prev) => [...new Set([...prev, ...ids])]);
+    setSelectKey((k) => k + 1);
+  };
   return (
     <div className="form-editor__cards">
       {error ? <div className="message-banner message-banner--error">{error}</div> : null}
@@ -562,34 +593,60 @@ function DetailsStep({
           </div>
           {serviceMode === "specific" ? (
             <div className="form-editor__service-list">
+              {/* Selected services */}
               {selectedServiceIds.length > 0 ? (
-                services.filter((s) => selectedServiceIds.includes(s.id)).map((svc) => (
-                  <div key={svc.id} className="form-editor__service-row">
-                    <span>{svc.name}</span>
-                    <button type="button" className="ghost-action" onClick={() => setSelectedServiceIds((prev) => prev.filter((id) => id !== svc.id))}>
-                      ✕
-                    </button>
-                  </div>
-                ))
+                <div className="form-editor__service-selected">
+                  {services.filter((s) => selectedServiceIds.includes(s.id)).map((svc) => (
+                    <div key={svc.id} className="form-editor__service-row">
+                      <span>{svc.name}</span>
+                      <button type="button" className="ghost-action" onClick={() => setSelectedServiceIds((prev) => prev.filter((id) => id !== svc.id))}>
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
               ) : (
                 <p className="settings-form-help">No services selected yet. Add one below.</p>
               )}
+
+              {/* Add a service dropdown */}
               {services.filter((s) => !selectedServiceIds.includes(s.id)).length > 0 ? (
                 <label>
                   <span>Add a service</span>
                   <select
-                    value=""
+                    key={selectKey}
+                    defaultValue=""
                     onChange={(e) => {
-                      if (e.target.value) setSelectedServiceIds((prev) => [...prev, e.target.value]);
-                      e.target.value = "";
+                      if (e.target.value) handleAddService(e.target.value);
                     }}
                   >
-                    <option value="">Select…</option>
+                    <option value="" disabled>Select…</option>
                     {services.filter((s) => !selectedServiceIds.includes(s.id)).map((svc) => (
                       <option key={svc.id} value={svc.id}>{svc.name}</option>
                     ))}
                   </select>
                 </label>
+              ) : null}
+
+              {/* Category quick-add */}
+              {categories.length > 0 ? (
+                <div className="form-editor__category-actions">
+                  <span className="form-editor__category-label">Add all services in a category</span>
+                  {categories.map((cat) => {
+                    const catServices = (categoryMap.get(cat.id) ?? []).filter((s) => !selectedServiceIds.includes(s.id));
+                    if (catServices.length === 0) return null;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        className="ghost-action"
+                        onClick={() => handleAddAllInCategory(cat.id)}
+                      >
+                        + All in {cat.name} ({catServices.length})
+                      </button>
+                    );
+                  })}
+                </div>
               ) : null}
             </div>
           ) : null}

@@ -4511,6 +4511,25 @@ body {
   border-radius: 6px;
   font-size: 0.85rem;
 }
+.form-editor__service-selected {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.5rem;
+}
+.form-editor__category-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border, rgba(0,0,0,0.06));
+}
+.form-editor__category-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+}
 
 /* Field cards (collapsed/expanded) */
 .form-editor__field-list {
