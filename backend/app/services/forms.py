@@ -33,7 +33,8 @@ async def list_tenant_forms(
     items: list[FormSummaryResponse] = []
     for form in forms:
         latest_version = await _get_latest_version(session, form.id)
-        items.append(_form_to_summary(form, latest_version))
+        svc_ids = [att.service_id for att in form.service_attachments]
+        items.append(_form_to_summary(form, latest_version, svc_ids))
 
     return FormListResponse(items=items)
 
