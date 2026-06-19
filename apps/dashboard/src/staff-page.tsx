@@ -121,6 +121,7 @@ function CropModal({
   onCancel: () => void;
 }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const [offsetX, setOffsetX] = useState(0);
   const [offsetY, setOffsetY] = useState(0);
   const [scale, setScale] = useState(1);
@@ -143,14 +144,25 @@ function CropModal({
     offsetRef.current = { x: offsetX, y: offsetY };
   }, [offsetX, offsetY]);
 
-  // Reset position/scale when image loads
+  // When image loads, compute the fit scale so the shorter side fills the circle
   const onImageLoad = useCallback(() => {
+    const img = imageRef.current;
+    if (!img) return;
+    const nw = img.naturalWidth;
+    const nh = img.naturalHeight;
+    if (!nw || !nh) return;
+    setNaturalSize({ w: nw, h: nh });
+    const fitScale = maskSize / Math.min(nw, nh);
+    setScale(fitScale);
     setOffsetX(0);
     setOffsetY(0);
-    setScale(1);
   }, []);
 
   const maskSize = 260; // px — the crop circle diameter
+
+  // Derived image display size at current scale
+  const imgW = naturalSize ? naturalSize.w * scale : maskSize;
+  const imgH = naturalSize ? naturalSize.h * scale : maskSize;
 
   const startDrag = useCallback((clientX: number, clientY: number) => {
     setDragging(true);
@@ -236,16 +248,15 @@ function CropModal({
     ctx.arc(maskSize / 2, maskSize / 2, maskSize / 2, 0, Math.PI * 2);
     ctx.clip();
 
-    // Draw image with current offset + scale
-    const drawSize = maskSize * scale;
-    const drawX = (maskSize - drawSize) / 2 + offsetX;
-    const drawY = (maskSize - drawSize) / 2 + offsetY;
-    ctx.drawImage(img, drawX, drawY, drawSize, drawSize);
+    // Draw image at its natural-aspect display size, centered + offset
+    const drawX = (maskSize - imgW) / 2 + offsetX;
+    const drawY = (maskSize - imgH) / 2 + offsetY;
+    ctx.drawImage(img, drawX, drawY, imgW, imgH);
 
     canvas.toBlob((blob) => {
       if (blob) onSave(blob);
     }, "image/png");
-  }, [offsetX, offsetY, scale, onSave]);
+  }, [offsetX, offsetY, imgW, imgH, onSave]);
 
   if (!dataUrl) {
     return (
@@ -288,11 +299,12 @@ function CropModal({
               onLoad={onImageLoad}
               draggable={false}
               style={{
-                transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})`,
-                transformOrigin: "center center",
-                width: `${maskSize}px`,
-                height: `${maskSize}px`,
-                objectFit: "cover",
+                position: "absolute",
+                left: "50%",
+                top: "50%",
+                width: `${imgW}px`,
+                height: `${imgH}px`,
+                transform: `translate(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px))`,
                 pointerEvents: "none",
               }}
             />

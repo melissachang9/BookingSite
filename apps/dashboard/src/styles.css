@@ -4029,8 +4029,6 @@ body {
   -webkit-user-select: none;
 }
 .crop-modal__mask img {
-  position: absolute;
-  inset: 0;
   display: block;
   pointer-events: none;
 }
