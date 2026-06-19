@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AuthenticatedUser,
   CreateProviderRequest,
@@ -111,6 +111,163 @@ async function uploadAvatarFile(tenantSlug: string, file: File): Promise<string>
   return data.url;
 }
 
+function CropModal({
+  file,
+  onSave,
+  onCancel,
+}: {
+  file: File;
+  onSave: (blob: Blob) => void;
+  onCancel: () => void;
+}) {
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [offsetX, setOffsetX] = useState(0);
+  const [offsetY, setOffsetY] = useState(0);
+  const [scale, setScale] = useState(1);
+  const [dragging, setDragging] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
+  const imageRef = useRef<HTMLImageElement | null>(null);
+  const maskRef = useRef<HTMLDivElement | null>(null);
+
+  // Load file as data URL
+  useEffect(() => {
+    const reader = new FileReader();
+    reader.onload = () => setDataUrl(reader.result as string);
+    reader.readAsDataURL(file);
+    return () => { reader.abort(); };
+  }, [file]);
+
+  // Reset position/scale when image loads
+  const onImageLoad = useCallback(() => {
+    setOffsetX(0);
+    setOffsetY(0);
+    setScale(1);
+  }, []);
+
+  const maskSize = 260; // px — the crop circle diameter
+
+  const startDrag = useCallback((clientX: number, clientY: number) => {
+    setDragging(true);
+    dragStart.current = { x: clientX, y: clientY, ox: offsetX, oy: offsetY };
+  }, [offsetX, offsetY]);
+
+  const moveDrag = useCallback((clientX: number, clientY: number) => {
+    if (!dragging) return;
+    const dx = clientX - dragStart.current.x;
+    const dy = clientY - dragStart.current.y;
+    setOffsetX(dragStart.current.ox + dx);
+    setOffsetY(dragStart.current.oy + dy);
+  }, [dragging]);
+
+  const endDrag = useCallback(() => {
+    setDragging(false);
+  }, []);
+
+  const handleSave = useCallback(() => {
+    if (!imageRef.current) return;
+    const img = imageRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = maskSize;
+    canvas.height = maskSize;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Clip to circle
+    ctx.beginPath();
+    ctx.arc(maskSize / 2, maskSize / 2, maskSize / 2, 0, Math.PI * 2);
+    ctx.clip();
+
+    // Draw image with current offset + scale
+    const drawSize = maskSize * scale;
+    const drawX = (maskSize - drawSize) / 2 + offsetX;
+    const drawY = (maskSize - drawSize) / 2 + offsetY;
+    ctx.drawImage(img, drawX, drawY, drawSize, drawSize);
+
+    canvas.toBlob((blob) => {
+      if (blob) onSave(blob);
+    }, "image/png");
+  }, [offsetX, offsetY, scale, onSave]);
+
+  if (!dataUrl) {
+    return (
+      <div className="modal-backdrop" role="dialog" aria-label="Crop photo">
+        <div className="modal-panel crop-modal">
+          <div className="modal-header">
+            <h4>Crop photo</h4>
+            <button type="button" className="ghost-action" onClick={onCancel}>Cancel</button>
+          </div>
+          <div className="modal-form" style={{ alignItems: "center", padding: "2rem" }}>
+            <p className="settings-form-help">Loading image…</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-label="Crop photo">
+      <div className="modal-panel crop-modal">
+        <div className="modal-header">
+          <h4>Crop photo</h4>
+          <button type="button" className="ghost-action" onClick={onCancel}>Cancel</button>
+        </div>
+        <div className="crop-modal__body">
+          <div
+            ref={maskRef}
+            className="crop-modal__mask"
+            onMouseDown={(e) => { e.preventDefault(); startDrag(e.clientX, e.clientY); }}
+            onMouseMove={(e) => { e.preventDefault(); moveDrag(e.clientX, e.clientY); }}
+            onMouseUp={endDrag}
+            onMouseLeave={endDrag}
+            onTouchStart={(e) => {
+              const t = e.touches[0];
+              startDrag(t.clientX, t.clientY);
+            }}
+            onTouchMove={(e) => {
+              const t = e.touches[0];
+              moveDrag(t.clientX, t.clientY);
+            }}
+            onTouchEnd={endDrag}
+            style={{ cursor: dragging ? "grabbing" : "grab" }}
+          >
+            <img
+              ref={imageRef}
+              src={dataUrl}
+              alt=""
+              onLoad={onImageLoad}
+              draggable={false}
+              style={{
+                transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})`,
+                transformOrigin: "center center",
+                width: `${maskSize}px`,
+                height: `${maskSize}px`,
+                objectFit: "cover",
+              }}
+            />
+          </div>
+          <div className="crop-modal__controls">
+            <label className="crop-modal__zoom-label">
+              <span>Zoom</span>
+              <input
+                type="range"
+                min={0.5}
+                max={3}
+                step={0.01}
+                value={scale}
+                onChange={(e) => setScale(parseFloat(e.target.value))}
+              />
+            </label>
+          </div>
+        </div>
+        <div className="modal-actions" style={{ padding: "0 1.25rem 1.25rem" }}>
+          <button type="button" className="ghost-action" onClick={onCancel}>Cancel</button>
+          <button type="button" className="primary-action" onClick={handleSave}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AvatarUploader({
   tenantSlug,
   value,
@@ -126,13 +283,20 @@ function AvatarUploader({
 }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
 
   const handleFile = async (file: File | null) => {
     if (!file) return;
     setError(null);
+    setCropFile(file);
+  };
+
+  const handleCropSave = async (blob: Blob) => {
+    setCropFile(null);
     setUploading(true);
     try {
-      const url = await uploadAvatarFile(tenantSlug, file);
+      const croppedFile = new File([blob], "avatar.png", { type: "image/png" });
+      const url = await uploadAvatarFile(tenantSlug, croppedFile);
       onChange(url);
     } catch (err) {
       setError(readErrorMessage(err, "Unable to upload photo."));
@@ -141,41 +305,50 @@ function AvatarUploader({
     }
   };
 
+  const handleCropCancel = () => {
+    setCropFile(null);
+  };
+
   return (
-    <div className="staff-avatar-uploader">
-      <div className="staff-avatar-uploader__preview" aria-hidden="true">
-        {value ? <img src={value} alt="" /> : <span>{initialsOf(name) || "?"}</span>}
-      </div>
-      <div className="staff-avatar-uploader__controls">
-        <input
-          id={inputId}
-          type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
-          onChange={(event) => {
-            const file = event.target.files?.[0] ?? null;
-            void handleFile(file);
-            event.target.value = "";
-          }}
-          disabled={uploading}
-        />
-        {value ? (
-          <button
-            type="button"
-            className="ghost-action"
-            onClick={() => onChange("")}
+    <>
+      {cropFile ? (
+        <CropModal file={cropFile} onSave={handleCropSave} onCancel={handleCropCancel} />
+      ) : null}
+      <div className="staff-avatar-uploader">
+        <div className="staff-avatar-uploader__preview" aria-hidden="true">
+          {value ? <img src={value} alt="" /> : <span>{initialsOf(name) || "?"}</span>}
+        </div>
+        <div className="staff-avatar-uploader__controls">
+          <input
+            id={inputId}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
+            onChange={(event) => {
+              const file = event.target.files?.[0] ?? null;
+              void handleFile(file);
+              event.target.value = "";
+            }}
             disabled={uploading}
-          >
-            Remove
-          </button>
-        ) : null}
-        {uploading ? <small className="settings-form-help">Uploading…</small> : null}
-        {error ? (
-          <small role="alert" className="settings-error">
-            {error}
-          </small>
-        ) : null}
+          />
+          {value ? (
+            <button
+              type="button"
+              className="ghost-action"
+              onClick={() => onChange("")}
+              disabled={uploading}
+            >
+              Remove
+            </button>
+          ) : null}
+          {uploading ? <small className="settings-form-help">Uploading…</small> : null}
+          {error ? (
+            <small role="alert" className="settings-error">
+              {error}
+            </small>
+          ) : null}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
