@@ -126,124 +126,6 @@ export function FormsPage({
         </div>
       ) : null}
 
-      <h3>{definition.title}</h3>
-
-      <section className="staff-master-detail">
-        <div className="staff-grid">
-          <aside className="staff-list-rail" aria-label="Form list">
-            <div className="staff-list-rail-header">
-              <h4>Forms</h4>
-              {canManage ? (
-                <button type="button" className="ghost-action" onClick={() => setBuilder({ kind: "add" })}>
-                  + Build form
-                </button>
-              ) : null}
-            </div>
-            {forms.length === 0 ? (
-              <p className="staff-list-empty">No forms yet. Click "Build form" to create one.</p>
-            ) : (
-              <ul className="staff-list">
-                {forms.map((form) => (
-                  <li key={form.id}>
-                    <button
-                      type="button"
-                      className={`staff-list-item${selectedFormId === form.id ? " is-active" : ""}`}
-                      onClick={() => setSelectedFormId(form.id)}
-                    >
-                      <div>
-                        <strong>{form.name}</strong>
-                        <span>
-                          {SCOPE_LABELS[form.scope] ?? form.scope}
-                          {form.customerPromptTiming ? ` · ${TIMING_LABELS[form.customerPromptTiming] ?? form.customerPromptTiming}` : ""}
-                          {form.reviewRequired ? " · Review req." : ""}
-                          {" · "}{form.isActive ? "Active" : "Inactive"}
-                          {form.currentVersionNumber ? ` · v${form.currentVersionNumber}` : ""}
-                        </span>
-                      </div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </aside>
-
-          <section className="staff-detail-panel" aria-label="Form details">
-            {selectedForm ? (
-              <div className="customer-profile">
-                <header className="customer-profile-header">
-                  <div>
-                    <h4>{selectedForm.name}</h4>
-                    <p className="customer-profile-since">
-                      {SCOPE_LABELS[selectedForm.scope] ?? selectedForm.scope}
-                      {selectedForm.customerPromptTiming ? ` · ${TIMING_LABELS[selectedForm.customerPromptTiming] ?? selectedForm.customerPromptTiming}` : ""}
-                      {selectedForm.reviewRequired ? " · Review required" : ""}
-                      {" · "}{selectedForm.isActive ? "Active" : "Inactive"}
-                      {selectedForm.currentVersionNumber ? ` · v${selectedForm.currentVersionNumber}` : ""}
-                    </p>
-                  </div>
-                  {canManage ? (
-                    <div className="staff-detail-actions">
-                      <button type="button" className="ghost-action" onClick={() => setBuilder({ kind: "edit", form: selectedForm })}>
-                        Edit
-                      </button>
-                      <button type="button" className="ghost-action" onClick={() => handleToggleActive(selectedForm)}>
-                        {selectedForm.isActive ? "Deactivate" : "Activate"}
-                      </button>
-                      <button
-                        type="button"
-                        className="ghost-action ghost-action--danger"
-                        onClick={() => {
-                          if (window.confirm(`Delete "${selectedForm.name}"? This cannot be undone.`)) {
-                            handleDeleteForm(selectedForm);
-                          }
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  ) : null}
-                </header>
-
-                {selectedForm.schema ? (
-                  <section className="customer-profile-section">
-                    <p className="rail-section-kicker">Schema · {selectedForm.schema.fields.length} fields</p>
-                    {selectedForm.schema.description ? (
-                      <p className="customer-profile-notes" style={{ fontStyle: "normal" }}>{selectedForm.schema.description}</p>
-                    ) : null}
-                    {selectedForm.schema.fields.length === 0 ? (
-                      <p className="staff-list-empty">No fields defined. Edit to add fields.</p>
-                    ) : (
-                      <ul className="form-field-preview-list">
-                        {selectedForm.schema.fields.map((field) => (
-                          <li key={field.id} className="form-field-preview-item">
-                            <span className="form-field-preview-type">{field.type.replace(/_/g, " ")}</span>
-                            <span className="form-field-preview-label">{field.label}{field.required ? " *" : ""}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </section>
-                ) : (
-                  <section className="customer-profile-section">
-                    <p className="staff-list-empty">No schema defined. Edit to add fields.</p>
-                  </section>
-                )}
-
-                {selectedForm.serviceIds.length > 0 ? (
-                  <section className="customer-profile-section">
-                    <p className="rail-section-kicker">Attached to {selectedForm.serviceIds.length} service{selectedForm.serviceIds.length > 1 ? "s" : ""}</p>
-                  </section>
-                ) : null}
-              </div>
-            ) : (
-              <div className="staff-detail-empty">
-                <p>Select a form to view details, or click "Build form" to create one.</p>
-              </div>
-            )}
-          </section>
-        </div>
-      </section>
-
       {builder.kind !== "none" ? (
         <FormBuilderEditor
           tenantSlug={tenantSlug}
@@ -256,7 +138,127 @@ export function FormsPage({
           }}
           onStatus={setStatus}
         />
-      ) : null}
+      ) : (
+        <>
+          <h3>{definition.title}</h3>
+
+          <section className="staff-master-detail">
+            <div className="staff-grid">
+              <aside className="staff-list-rail" aria-label="Form list">
+                <div className="staff-list-rail-header">
+                  <h4>Forms</h4>
+                  {canManage ? (
+                    <button type="button" className="ghost-action" onClick={() => setBuilder({ kind: "add" })}>
+                      + Build form
+                    </button>
+                  ) : null}
+                </div>
+                {forms.length === 0 ? (
+                  <p className="staff-list-empty">No forms yet. Click "Build form" to create one.</p>
+                ) : (
+                  <ul className="staff-list">
+                    {forms.map((form) => (
+                      <li key={form.id}>
+                        <button
+                          type="button"
+                          className={`staff-list-item${selectedFormId === form.id ? " is-active" : ""}`}
+                          onClick={() => setSelectedFormId(form.id)}
+                        >
+                          <div>
+                            <strong>{form.name}</strong>
+                            <span>
+                              {SCOPE_LABELS[form.scope] ?? form.scope}
+                              {form.customerPromptTiming ? ` · ${TIMING_LABELS[form.customerPromptTiming] ?? form.customerPromptTiming}` : ""}
+                              {form.reviewRequired ? " · Review req." : ""}
+                              {" · "}{form.isActive ? "Active" : "Inactive"}
+                              {form.currentVersionNumber ? ` · v${form.currentVersionNumber}` : ""}
+                            </span>
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </aside>
+
+              <section className="staff-detail-panel" aria-label="Form details">
+                {selectedForm ? (
+                  <div className="customer-profile">
+                    <header className="customer-profile-header">
+                      <div>
+                        <h4>{selectedForm.name}</h4>
+                        <p className="customer-profile-since">
+                          {SCOPE_LABELS[selectedForm.scope] ?? selectedForm.scope}
+                          {selectedForm.customerPromptTiming ? ` · ${TIMING_LABELS[selectedForm.customerPromptTiming] ?? selectedForm.customerPromptTiming}` : ""}
+                          {selectedForm.reviewRequired ? " · Review required" : ""}
+                          {" · "}{selectedForm.isActive ? "Active" : "Inactive"}
+                          {selectedForm.currentVersionNumber ? ` · v${selectedForm.currentVersionNumber}` : ""}
+                        </p>
+                      </div>
+                      {canManage ? (
+                        <div className="staff-detail-actions">
+                          <button type="button" className="ghost-action" onClick={() => setBuilder({ kind: "edit", form: selectedForm })}>
+                            Edit
+                          </button>
+                          <button type="button" className="ghost-action" onClick={() => handleToggleActive(selectedForm)}>
+                            {selectedForm.isActive ? "Deactivate" : "Activate"}
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost-action ghost-action--danger"
+                            onClick={() => {
+                              if (window.confirm(`Delete "${selectedForm.name}"? This cannot be undone.`)) {
+                                handleDeleteForm(selectedForm);
+                              }
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ) : null}
+                    </header>
+
+                    {selectedForm.schema ? (
+                      <section className="customer-profile-section">
+                        <p className="rail-section-kicker">Schema · {selectedForm.schema.fields.length} fields</p>
+                        {selectedForm.schema.description ? (
+                          <p className="customer-profile-notes" style={{ fontStyle: "normal" }}>{selectedForm.schema.description}</p>
+                        ) : null}
+                        {selectedForm.schema.fields.length === 0 ? (
+                          <p className="staff-list-empty">No fields defined. Edit to add fields.</p>
+                        ) : (
+                          <ul className="form-field-preview-list">
+                            {selectedForm.schema.fields.map((field) => (
+                              <li key={field.id} className="form-field-preview-item">
+                                <span className="form-field-preview-type">{field.type.replace(/_/g, " ")}</span>
+                                <span className="form-field-preview-label">{field.label}{field.required ? " *" : ""}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </section>
+                    ) : (
+                      <section className="customer-profile-section">
+                        <p className="staff-list-empty">No schema defined. Edit to add fields.</p>
+                      </section>
+                    )}
+
+                    {selectedForm.serviceIds.length > 0 ? (
+                      <section className="customer-profile-section">
+                        <p className="rail-section-kicker">Attached to {selectedForm.serviceIds.length} service{selectedForm.serviceIds.length > 1 ? "s" : ""}</p>
+                      </section>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="staff-detail-empty">
+                    <p>Select a form to view details, or click "Build form" to create one.</p>
+                  </div>
+                )}
+              </section>
+            </div>
+          </section>
+        </>
+      )}
     </main>
   );
 
