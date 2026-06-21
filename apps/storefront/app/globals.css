@@ -2439,9 +2439,6 @@ button:disabled {
 
 /* Inline payment bar at bottom of step 2 */
 .booking-finalize {
-  position: sticky;
-  bottom: 0;
-  z-index: 10;
   padding: 0;
   background: transparent;
 }
