@@ -18,6 +18,7 @@ import {
 } from "./actions";
 import DeferrableFormCard from "./deferrable-form-card";
 import { PendingSubmitButton } from "./pending-submit-button";
+import SignatureField from "./signature-field";
 
 type BookingDraftPageProps = {
   params: Promise<{ tenantSlug: string; draftId: string }>;
@@ -99,7 +100,7 @@ function renderRequirementField(field: FormField) {
       </label>
     );
   }
-  if (field.type === "file_upload" || field.type === "signature") {
+  if (field.type === "file_upload") {
     return (
       <label key={field.id} className="requirement-form-field">
         <span>
@@ -109,6 +110,18 @@ function renderRequirementField(field: FormField) {
         {field.helpText ? <small>{field.helpText}</small> : null}
         <input name={field.id} type="file" accept="image/*" required={field.required} />
       </label>
+    );
+  }
+
+  if (field.type === "signature") {
+    return (
+      <SignatureField
+        key={field.id}
+        name={field.id}
+        label={field.label}
+        required={field.required}
+        helpText={field.helpText}
+      />
     );
   }
   return (

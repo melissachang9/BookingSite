@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { FormField, FormRequirement } from "@booking/shared-types";
 import { submitBookingRequirementAction } from "./actions";
+import SignatureField from "./signature-field";
 
 function formatTimingLabel(timing: string | null | undefined): string {
   switch (timing) {
@@ -79,7 +80,7 @@ function renderRequirementField(field: FormField) {
     );
   }
 
-  if (field.type === "file_upload" || field.type === "signature") {
+  if (field.type === "file_upload") {
     return (
       <label key={field.id} className="requirement-form-field">
         <span>
@@ -89,6 +90,18 @@ function renderRequirementField(field: FormField) {
         {field.helpText ? <small>{field.helpText}</small> : null}
         <input name={field.id} type="file" accept="image/*" required={field.required} />
       </label>
+    );
+  }
+
+  if (field.type === "signature") {
+    return (
+      <SignatureField
+        key={field.id}
+        name={field.id}
+        label={field.label}
+        required={field.required}
+        helpText={field.helpText}
+      />
     );
   }
 

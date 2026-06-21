@@ -1916,6 +1916,51 @@ button:disabled {
   margin-top: 0.25rem;
 }
 
+/* Signature pad */
+.signature-pad {
+  position: relative;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-canvas-raised);
+  overflow: hidden;
+}
+
+.signature-pad__canvas {
+  display: block;
+  width: 100%;
+  height: 150px;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.signature-pad__placeholder {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--ui-muted);
+  font-size: 0.88rem;
+  font-weight: 500;
+  pointer-events: none;
+}
+
+.signature-pad__clear {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  min-height: 2rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.68rem;
+}
+
+.signature-pad__file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
 .payment-card {
   background: var(--ui-blush-soft);
 }
