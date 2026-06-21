@@ -4,6 +4,19 @@ import { useState } from "react";
 import type { FormField, FormRequirement } from "@booking/shared-types";
 import { submitBookingRequirementAction } from "./actions";
 
+function formatTimingLabel(timing: string | null | undefined): string {
+  switch (timing) {
+    case "pre_booking":
+      return "Required to confirm";
+    case "pre_visit":
+      return "Complete before appointment";
+    case "post_visit":
+      return "Complete after appointment";
+    default:
+      return timing?.replaceAll("_", " ") ?? "Required";
+  }
+}
+
 function renderRequirementField(field: FormField) {
   if (field.type === "section") {
     return (
@@ -107,7 +120,7 @@ export default function DeferrableFormCard({
   const [expanded, setExpanded] = useState(false);
   const [skipped, setSkipped] = useState(false);
 
-  const timingLabel = requirement.customerPromptTiming?.replaceAll("_", " ") ?? requirement.scope;
+  const timingLabel = formatTimingLabel(requirement.customerPromptTiming);
   const title = requirement.formTitle ?? `Required form ${requirement.formVersionId}`;
   const description = requirement.formDescription ?? `Version ${requirement.formVersionId}`;
 

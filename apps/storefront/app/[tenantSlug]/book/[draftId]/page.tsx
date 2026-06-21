@@ -25,6 +25,19 @@ type BookingDraftPageProps = {
 
 export const dynamic = "force-dynamic";
 
+function formatTimingLabel(timing: string | null | undefined): string {
+  switch (timing) {
+    case "pre_booking":
+      return "Required to confirm";
+    case "pre_visit":
+      return "Complete before appointment";
+    case "post_visit":
+      return "Complete after appointment";
+    default:
+      return timing?.replaceAll("_", " ") ?? "Required";
+  }
+}
+
 function renderRequirementField(field: FormField) {
   if (field.type === "section") {
     return (
@@ -117,7 +130,7 @@ function renderRequirementPanel(
   lockedUntilContactDetails: boolean,
   tenantId: string,
 ) {
-  const timingLabel = requirement.customerPromptTiming?.replaceAll("_", " ") ?? requirement.scope;
+  const timingLabel = formatTimingLabel(requirement.customerPromptTiming);
   const title = requirement.formTitle ?? `Required form ${requirement.formVersionId}`;
   const description = requirement.formDescription ?? `Version ${requirement.formVersionId}`;
 
@@ -271,19 +284,19 @@ export default async function BookingDraftPage({ params }: BookingDraftPageProps
               </label>
 
               <fieldset className="intake-timing-fieldset">
-                <legend>Intake forms</legend>
+                <legend>When would you like to complete forms?</legend>
                 <label className="intake-timing-option">
                   <input type="radio" name="intakeCompletionTiming" value="before_booking" required />
                   <span>
-                    <strong>Complete before booking</strong>
-                    <small>Finish required intake before moving to payment.</small>
+                    <strong>Now, before I confirm</strong>
+                    <small>Complete all forms now. Required forms marked "Required to confirm" must be finished before payment.</small>
                   </span>
                 </label>
                 <label className="intake-timing-option">
                   <input type="radio" name="intakeCompletionTiming" value="before_visit" defaultChecked required />
                   <span>
-                    <strong>Complete later</strong>
-                    <small>Email and text reminders will be scheduled before the appointment.</small>
+                    <strong>Later, before my appointment</strong>
+                    <small>Only forms marked "Required to confirm" need to be done now. The rest can wait — we'll send reminders.</small>
                   </span>
                 </label>
               </fieldset>
