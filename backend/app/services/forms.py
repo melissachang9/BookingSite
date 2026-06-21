@@ -68,7 +68,7 @@ async def create_tenant_form(
     # Attach to services
     service_ids: list[str] = []
     if payload.service_ids:
-        await _sync_service_attachments(session, tenant.id, form.id, version.id, payload.service_ids)
+        await _sync_service_attachments(session, tenant.id, form.id, version.id, payload.service_ids, form.customer_prompt_timing or "pre_booking")
         service_ids = payload.service_ids
 
     await session.commit()
@@ -118,7 +118,7 @@ async def update_tenant_form(
     # Sync service attachments
     service_ids: list[str] | None = None
     if payload.service_ids is not None and latest_version is not None:
-        await _sync_service_attachments(session, tenant.id, form.id, latest_version.id, payload.service_ids)
+        await _sync_service_attachments(session, tenant.id, form.id, latest_version.id, payload.service_ids, form.customer_prompt_timing or "pre_booking")
         service_ids = payload.service_ids
 
     await session.commit()
@@ -172,6 +172,7 @@ async def _sync_service_attachments(
     form_id: str,
     version_id: str,
     service_ids: list[str],
+    timing: str = "pre_booking",
 ) -> None:
     """Replace all service attachments for a form with the given service IDs."""
     # Delete existing attachments
@@ -186,14 +187,14 @@ async def _sync_service_attachments(
     for att in existing:
         await session.delete(att)
 
-    # Create new attachments
+    # Create new attachments using the form's own timing
     for service_id in service_ids:
         att = ServiceFormAttachment(
             tenant_id=tenant_id,
             service_id=service_id,
             form_id=form_id,
             form_version_id=version_id,
-            customer_prompt_timing="pre_booking",  # default; can be refined later
+            customer_prompt_timing=timing,
         )
         session.add(att)
 

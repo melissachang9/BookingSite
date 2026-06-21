@@ -181,7 +181,7 @@ async def _seed_brow_prep_form(session: AsyncSession, tenant: Tenant, brow_servi
                 service_id=brow_service.id,
                 form_id=existing_form.id,
                 form_version_id=existing_version.id,
-                customer_prompt_timing="pre_booking",
+                customer_prompt_timing=existing_form.customer_prompt_timing or "pre_booking",
             )
         )
 
