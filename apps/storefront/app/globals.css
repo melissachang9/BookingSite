@@ -2389,3 +2389,109 @@ button:disabled {
     justify-self: flex-start;
   }
 }
+
+/* -------------------------------------------
+   Two-step booking flow (compact, no rail)
+   ------------------------------------------- */
+
+.visit-review-panel--compact {
+  padding: clamp(1rem, 3vw, 1.5rem);
+  gap: 1rem;
+}
+
+.visit-review-panel--compact .visit-review-panel__copy h1 {
+  font-size: clamp(2.2rem, 5vw, 3.6rem);
+}
+
+.summary-grid--compact {
+  gap: 0.75rem;
+}
+
+.summary-grid--compact .summary-card--visit {
+  min-height: auto;
+  padding: 1rem;
+}
+
+.summary-grid--compact .summary-card--visit strong {
+  font-size: clamp(1.2rem, 2.5vw, 1.6rem);
+}
+
+.contact-details-panel--standalone {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.contact-details-panel--standalone .section-header {
+  margin-bottom: 1.5rem;
+}
+
+.contact-details-panel--standalone .contact-details-form {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.contact-details-submit {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+/* Inline payment bar at bottom of step 2 */
+.booking-finalize {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  padding: 0;
+  background: transparent;
+}
+
+.booking-finalize__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1rem clamp(1rem, 3vw, 2rem);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-lg);
+  flex-wrap: wrap;
+}
+
+.booking-finalize__inner > div:first-child {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.booking-finalize__inner strong {
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.booking-finalize__inner span {
+  color: var(--ui-muted);
+  font-size: 0.88rem;
+}
+
+.booking-finalize__inner form {
+  flex-shrink: 0;
+}
+
+.booking-finalize__inner .store-button {
+  min-width: 180px;
+}
+
+@media (max-width: 600px) {
+  .booking-finalize__inner {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .booking-finalize__inner .store-button {
+    width: 100%;
+  }
+}

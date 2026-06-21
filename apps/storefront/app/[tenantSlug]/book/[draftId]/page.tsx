@@ -1,16 +1,13 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import type { FormField, FormRequirement } from "@booking/shared-types";
 
 import { storefrontApi, isApiClientError, isApiNotFoundError } from "../../../lib/storefront-api";
 import {
-  bookingJourney,
   formatCurrency,
   formatDuration,
   formatExpiryWindow,
   formatInTenantTime,
-  slugify,
   titleFromSlug,
 } from "../../../lib/storefront-shell";
 import {
@@ -206,9 +203,97 @@ export default async function BookingDraftPage({ params }: BookingDraftPageProps
       bookingAd?.body ?? "Businesses can configure this artwork and message for the booking review step.";
     const holdStatusLabel = `${formatExpiryWindow(draft.expiresAt)} remaining`;
 
+    // Step 1: Contact details only — minimal, centered, no rail
+    if (needsContactDetails) {
+      return (
+        <main className="page-stack">
+          <section className="store-section visit-review-panel visit-review-panel--compact">
+            <div className="visit-review-panel__header">
+              <div className="visit-review-panel__copy">
+                <p className="store-eyebrow">Selected visit</p>
+                <h1>{draft.service.name}</h1>
+              </div>
+              <div className="visit-review-panel__status">
+                <span className="panel-badge panel-badge--visit">Slot held</span>
+                <p>{holdStatusLabel}</p>
+              </div>
+            </div>
+
+            <div className="summary-grid summary-grid--visit summary-grid--compact">
+              <article className="summary-card summary-card--visit">
+                <span>Provider</span>
+                <strong>{draft.provider.name}</strong>
+                <p>{formatDuration(draft.durationMinutes)}</p>
+              </article>
+              <article className="summary-card summary-card--visit">
+                <span>When</span>
+                <strong>{formatInTenantTime(draft.startsAt, tenant.timezone)}</strong>
+                <p>{tenant.timezone}</p>
+              </article>
+              <article className="summary-card summary-card--visit">
+                <span>Payment</span>
+                <strong>{draft.depositCents > 0 ? `${formatCurrency(draft.depositCents)} deposit` : "No deposit"}</strong>
+                <p>Total {formatCurrency(draft.priceCents)}</p>
+              </article>
+            </div>
+          </section>
+
+          <section className="store-section contact-details-panel contact-details-panel--standalone">
+            <div className="section-header">
+              <div>
+                <p className="store-eyebrow">Step 1 of 2</p>
+                <h2>Your contact details</h2>
+              </div>
+            </div>
+
+            <form action={saveContactDetailsAction} className="contact-details-form">
+              <input type="hidden" name="tenantSlug" value={tenantSlug} />
+              <input type="hidden" name="bookingDraftId" value={draft.id} />
+
+              <label>
+                <span>Full name</span>
+                <input name="name" type="text" autoComplete="name" required />
+              </label>
+              <label>
+                <span>Email</span>
+                <input name="email" type="email" autoComplete="email" required />
+              </label>
+              <label>
+                <span>Phone number</span>
+                <input name="phone" type="tel" autoComplete="tel" required />
+              </label>
+
+              <fieldset className="intake-timing-fieldset">
+                <legend>Intake forms</legend>
+                <label className="intake-timing-option">
+                  <input type="radio" name="intakeCompletionTiming" value="before_booking" required />
+                  <span>
+                    <strong>Complete before booking</strong>
+                    <small>Finish required intake before moving to payment.</small>
+                  </span>
+                </label>
+                <label className="intake-timing-option">
+                  <input type="radio" name="intakeCompletionTiming" value="before_visit" defaultChecked required />
+                  <span>
+                    <strong>Complete later</strong>
+                    <small>Email and text reminders will be scheduled before the appointment.</small>
+                  </span>
+                </label>
+              </fieldset>
+
+              <button type="submit" className="store-button contact-details-submit">
+                Continue
+              </button>
+            </form>
+          </section>
+        </main>
+      );
+    }
+
+    // Step 2: Contact details saved — forms + payment inline, no right rail
     return (
       <main className="page-stack">
-        <section className="store-section visit-review-panel">
+        <section className="store-section visit-review-panel visit-review-panel--compact">
           <div className="visit-review-panel__header">
             <div className="visit-review-panel__copy">
               <p className="store-eyebrow">Selected visit</p>
@@ -220,7 +305,7 @@ export default async function BookingDraftPage({ params }: BookingDraftPageProps
             </div>
           </div>
 
-          <div className="summary-grid summary-grid--visit">
+          <div className="summary-grid summary-grid--visit summary-grid--compact">
             <article className="summary-card summary-card--visit">
               <span>Provider</span>
               <strong>{draft.provider.name}</strong>
@@ -232,157 +317,72 @@ export default async function BookingDraftPage({ params }: BookingDraftPageProps
               <p>{tenant.timezone}</p>
             </article>
             <article className="summary-card summary-card--visit">
-              <span>Payment</span>
-              <strong>{draft.depositCents > 0 ? `${formatCurrency(draft.depositCents)} deposit` : "No deposit"}</strong>
-              <p>Total service value {formatCurrency(draft.priceCents)}</p>
+              <span>Contact</span>
+              <strong>{draft.customer?.name}</strong>
+              <p>{draft.customer?.email}</p>
             </article>
             <article className="summary-card summary-card--visit">
-              <span>Contact</span>
-              <strong>{draft.customer?.name ?? "Contact details needed"}</strong>
-              <p>{draft.customer?.email ?? "Email will be attached to this appointment."}</p>
+              <span>Payment</span>
+              <strong>{draft.depositCents > 0 ? `${formatCurrency(draft.depositCents)} deposit` : "No deposit"}</strong>
+              <p>Total {formatCurrency(draft.priceCents)}</p>
             </article>
           </div>
         </section>
 
-        <section className="checkout-layout">
-          <div className="checkout-main">
-            {needsContactDetails ? (
-              <section className="store-section contact-details-panel">
-                <div className="section-header">
-                  <div>
-                    <p className="store-eyebrow">Required details</p>
-                    <h2>Add your contact details</h2>
-                  </div>
-                  <span className="panel-badge">Required</span>
-                </div>
-
-                <form action={saveContactDetailsAction} className="contact-details-form">
-                  <input type="hidden" name="tenantSlug" value={tenantSlug} />
-                  <input type="hidden" name="bookingDraftId" value={draft.id} />
-
-                  <label>
-                    <span>Full name</span>
-                    <input name="name" type="text" autoComplete="name" required />
-                  </label>
-                  <label>
-                    <span>Email</span>
-                    <input name="email" type="email" autoComplete="email" required />
-                  </label>
-                  <label>
-                    <span>Phone number</span>
-                    <input name="phone" type="tel" autoComplete="tel" required />
-                  </label>
-
-                  <fieldset className="intake-timing-fieldset">
-                    <legend>Intake forms</legend>
-                    <label className="intake-timing-option">
-                      <input type="radio" name="intakeCompletionTiming" value="before_booking" required />
-                      <span>
-                        <strong>Complete before booking</strong>
-                        <small>Finish required intake before moving to payment.</small>
-                      </span>
-                    </label>
-                    <label className="intake-timing-option">
-                      <input type="radio" name="intakeCompletionTiming" value="before_visit" defaultChecked required />
-                      <span>
-                        <strong>Complete later</strong>
-                        <small>Email and text reminders will be scheduled before the appointment.</small>
-                      </span>
-                    </label>
-                  </fieldset>
-
-                  <button type="submit" className="store-button contact-details-submit">
-                    Save contact details
-                  </button>
-                </form>
-              </section>
-            ) : null}
-
-            <section className="store-section">
-              <div className="section-header">
-                <div>
-                  <p className="store-eyebrow">Required intake</p>
-                  <h2>Forms and consent</h2>
-                </div>
-                <span className="panel-badge">{pendingRequirements.length} pending</span>
-              </div>
-
-              {draft.formRequirements.length > 0 ? (
-                <div className="requirement-stack">
-                  {draft.formRequirements.map((requirement) =>
-                    renderRequirementPanel(requirement, tenantSlug, draft.id, needsContactDetails, tenant.id),
-                  )}
-                </div>
-              ) : (
-                <div className="empty-panel empty-panel--compact">
-                  <strong>No intake forms are required for this service.</strong>
-                  <span>
-                    {draft.intakePlan
-                      ? deferredIntakeSelected
-                        ? `Reminder email and text scheduled ${draft.intakePlan.reminderHoursBefore} hours before the appointment.`
-                        : "Intake is marked to complete before booking."
-                      : "You can choose when to complete intake after adding contact details."}
-                  </span>
-                </div>
-              )}
-            </section>
+        <section className="store-section">
+          <div className="section-header">
+            <div>
+              <p className="store-eyebrow">Step 2 of 2</p>
+              <h2>Forms and consent</h2>
+            </div>
+            <span className="panel-badge">{pendingRequirements.length} pending</span>
           </div>
 
-          <aside className="checkout-rail">
-            <section className="booking-ad-panel booking-ad-panel--checkout" aria-label="Studio booking highlight">
-              <img src={bookingAdImageUrl} alt={bookingAdImageAlt} />
-              <div>
-                <p className="store-eyebrow">Studio highlight</p>
-                <strong>{bookingAdHeadline}</strong>
-                <p>{bookingAdBody}</p>
-              </div>
-            </section>
+          {draft.formRequirements.length > 0 ? (
+            <div className="requirement-stack">
+              {draft.formRequirements.map((requirement) =>
+                renderRequirementPanel(requirement, tenantSlug, draft.id, false, tenant.id),
+              )}
+            </div>
+          ) : (
+            <div className="empty-panel empty-panel--compact">
+              <strong>No intake forms are required for this service.</strong>
+              <span>
+                {draft.intakePlan
+                  ? deferredIntakeSelected
+                    ? `Reminder email and text scheduled ${draft.intakePlan.reminderHoursBefore} hours before the appointment.`
+                    : "Intake is marked to complete before booking."
+                  : "You can choose when to complete intake after adding contact details."}
+              </span>
+            </div>
+          )}
+        </section>
 
-            <section className="payment-card">
+        <section className="store-section booking-finalize">
+          <div className="booking-finalize__inner">
+            <div>
               <p className="store-eyebrow">Due now</p>
               <strong>{draft.depositCents > 0 ? formatCurrency(draft.depositCents) : "$0"}</strong>
               <span>{draft.depositCents > 0 ? "Deposit required to confirm" : "No payment required to confirm"}</span>
-              {paymentHandoffDetail ? (
-                <div className="payment-handoff-note">
-                  <strong>{paymentHandoffTitle}</strong>
-                  <p>{paymentHandoffDetail}</p>
-                </div>
-              ) : null}
-              {canConfirmWithoutPayment ? (
-                <form action={confirmBookingDraftAction}>
-                  <input type="hidden" name="tenantSlug" value={tenantSlug} />
-                  <input type="hidden" name="bookingDraftId" value={draft.id} />
-                  <button type="submit">{paymentCtaLabel}</button>
-                </form>
-              ) : canStartDepositCheckout ? (
-                <form action={startDepositCheckoutAction}>
-                  <input type="hidden" name="tenantSlug" value={tenantSlug} />
-                  <input type="hidden" name="bookingDraftId" value={draft.id} />
-                  <PendingSubmitButton label={paymentCtaLabel} pendingLabel={paymentPendingLabel} />
-                </form>
-              ) : (
-                <button type="button" disabled>
-                  {paymentCtaLabel}
-                </button>
-              )}
-            </section>
-
-            <section className="stepper-card" aria-label="Booking progress">
-              {bookingJourney.map((step, index) => (
-                <article key={step.state} className={step.state === activeState ? "stepper-item stepper-item--active" : "stepper-item"}>
-                  <span>{index + 1}</span>
-                  <div>
-                    <strong>{step.label}</strong>
-                    <p>{step.detail}</p>
-                  </div>
-                </article>
-              ))}
-            </section>
-
-            <Link href={`/${tenantSlug}/services/${slugify(draft.service.name)}`} className="ghost-link">
-              Choose another time
-            </Link>
-          </aside>
+            </div>
+            {canConfirmWithoutPayment ? (
+              <form action={confirmBookingDraftAction}>
+                <input type="hidden" name="tenantSlug" value={tenantSlug} />
+                <input type="hidden" name="bookingDraftId" value={draft.id} />
+                <button type="submit" className="store-button">{paymentCtaLabel}</button>
+              </form>
+            ) : canStartDepositCheckout ? (
+              <form action={startDepositCheckoutAction}>
+                <input type="hidden" name="tenantSlug" value={tenantSlug} />
+                <input type="hidden" name="bookingDraftId" value={draft.id} />
+                <PendingSubmitButton label={paymentCtaLabel} pendingLabel={paymentPendingLabel} />
+              </form>
+            ) : (
+              <button type="button" className="store-button" disabled>
+                {paymentCtaLabel}
+              </button>
+            )}
+          </div>
         </section>
       </main>
     );
