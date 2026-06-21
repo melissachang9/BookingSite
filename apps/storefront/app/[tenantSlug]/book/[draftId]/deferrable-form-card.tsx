@@ -105,6 +105,49 @@ function renderRequirementField(field: FormField) {
     );
   }
 
+  if (field.type === "date") {
+    return (
+      <label key={field.id} className="requirement-form-field">
+        <span>
+          {field.label}
+          {field.required ? " *" : ""}
+        </span>
+        {field.helpText ? <small>{field.helpText}</small> : null}
+        <input name={field.id} type="date" required={field.required} />
+      </label>
+    );
+  }
+
+  if (field.type === "number") {
+    return (
+      <label key={field.id} className="requirement-form-field">
+        <span>
+          {field.label}
+          {field.required ? " *" : ""}
+        </span>
+        {field.helpText ? <small>{field.helpText}</small> : null}
+        <input name={field.id} type="number" required={field.required} />
+      </label>
+    );
+  }
+
+  if (field.type === "select" || field.type === "multi_select") {
+    return (
+      <label key={field.id} className="requirement-form-field">
+        <span>
+          {field.label}
+          {field.required ? " *" : ""}
+        </span>
+        {field.helpText ? <small>{field.helpText}</small> : null}
+        <select name={field.id} required={field.required} multiple={field.type === "multi_select"}>
+          {field.options?.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+
   return (
     <label key={field.id} className="requirement-form-field">
       <span>
