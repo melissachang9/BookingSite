@@ -38,9 +38,9 @@ const SCOPE_LABELS: Record<string, string> = {
 };
 
 const TIMING_LABELS: Record<string, string> = {
-  pre_booking: "Pre-booking",
-  pre_visit: "Pre-visit",
-  post_visit: "Post-visit",
+  pre_booking: "Required to confirm",
+  pre_visit: "Complete before appointment",
+  post_visit: "Complete after appointment",
 };
 
 const FIELD_TYPE_LABELS: Record<FormFieldType, string> = {
