@@ -4660,6 +4660,13 @@ body {
   border-radius: 6px;
   background: #fff;
 }
+.form-editor__field-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--color-border, rgba(0,0,0,0.06));
+}
 .form-editor__field-row {
   display: flex;
   gap: 0.6rem;

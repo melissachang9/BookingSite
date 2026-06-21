@@ -777,6 +777,7 @@ function FormFieldsStep({
                     <FieldInlineEditor
                       field={field}
                       onUpdate={(patch) => handleUpdateField(index, patch)}
+                      onDone={() => setExpandedIndex(null)}
                     />
                   ) : null}
                 </div>
@@ -862,9 +863,11 @@ function FieldPaletteModal({
 function FieldInlineEditor({
   field,
   onUpdate,
+  onDone,
 }: {
   field: FormField;
   onUpdate: (patch: Partial<FormField>) => void;
+  onDone: () => void;
 }) {
   const isLayout = field.type === "section" || field.type === "static_text";
   const hasOptions = field.type === "select" || field.type === "multi_select";
@@ -941,6 +944,10 @@ function FieldInlineEditor({
           }}>+ Add option</button>
         </div>
       ) : null}
+
+      <div className="form-editor__field-editor-actions">
+        <button type="button" className="primary-action" onClick={onDone}>Done</button>
+      </div>
     </div>
   );
 }
