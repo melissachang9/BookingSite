@@ -16,6 +16,7 @@ import {
   startDepositCheckoutAction,
   submitBookingRequirementAction,
 } from "./actions";
+import DeferrableFormCard from "./deferrable-form-card";
 import { PendingSubmitButton } from "./pending-submit-button";
 
 type BookingDraftPageProps = {
@@ -173,9 +174,15 @@ export default async function BookingDraftPage({ params }: BookingDraftPageProps
     ]);
     const activeState = draft.status;
     const pendingRequirements = draft.formRequirements.filter((requirement) => requirement.status === "pending");
+    const blockingRequirements = pendingRequirements.filter(
+      (r) => r.customerPromptTiming === "pre_booking",
+    );
+    const deferrableRequirements = pendingRequirements.filter(
+      (r) => r.customerPromptTiming !== "pre_booking",
+    );
     const needsContactDetails = draft.customer == null;
     const deferredIntakeSelected = draft.intakePlan?.completionTiming === "before_visit";
-    const hasBlockingForms = pendingRequirements.length > 0;
+    const hasBlockingForms = blockingRequirements.length > 0;
     const canConfirmWithoutPayment = !needsContactDetails && !hasBlockingForms && draft.depositCents === 0;
     const canStartDepositCheckout = !needsContactDetails && !hasBlockingForms && draft.depositCents > 0;
     const paymentHandoffTitle = draft.status === "awaiting_payment" ? "Ready to resume" : "Next step";
@@ -340,9 +347,23 @@ export default async function BookingDraftPage({ params }: BookingDraftPageProps
 
           {draft.formRequirements.length > 0 ? (
             <div className="requirement-stack">
-              {draft.formRequirements.map((requirement) =>
+              {blockingRequirements.map((requirement) =>
                 renderRequirementPanel(requirement, tenantSlug, draft.id, false, tenant.id),
               )}
+              {deferrableRequirements.map((requirement) => (
+                <DeferrableFormCard
+                  key={requirement.id}
+                  requirement={requirement}
+                  tenantSlug={tenantSlug}
+                  bookingDraftId={draft.id}
+                  tenantId={tenant.id}
+                />
+              ))}
+              {draft.formRequirements
+                .filter((r) => r.status !== "pending")
+                .map((requirement) =>
+                  renderRequirementPanel(requirement, tenantSlug, draft.id, false, tenant.id),
+                )}
             </div>
           ) : (
             <div className="empty-panel empty-panel--compact">

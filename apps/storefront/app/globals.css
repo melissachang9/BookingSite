@@ -1905,6 +1905,17 @@ button:disabled {
   min-height: 128px;
 }
 
+.requirement-card--deferrable {
+  gap: 0.75rem;
+}
+
+.deferrable-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.25rem;
+}
+
 .payment-card {
   background: var(--ui-blush-soft);
 }
