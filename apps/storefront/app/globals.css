@@ -2417,8 +2417,6 @@ button:disabled {
 }
 
 .contact-details-panel--standalone {
-  max-width: 520px;
-  margin: 0 auto;
   padding: clamp(1.5rem, 4vw, 2.5rem);
   border-radius: var(--ui-radius-lg);
   background: var(--ui-surface);
