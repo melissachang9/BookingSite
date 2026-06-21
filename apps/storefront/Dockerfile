@@ -19,4 +19,6 @@ WORKDIR /app/apps/storefront
 
 EXPOSE 3000
 
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
 CMD ["sh", "-c", "rm -rf .next && npm run build && npm run start"]

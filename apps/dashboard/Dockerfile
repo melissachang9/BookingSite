@@ -19,4 +19,6 @@ WORKDIR /app/apps/dashboard
 
 EXPOSE 5173
 
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
 CMD ["npm", "run", "dev"]
