@@ -413,10 +413,14 @@ export default async function BookingDraftPage({ params }: BookingDraftPageProps
               <p className="store-eyebrow">Step 2 of 2</p>
               <h2>Forms and consent</h2>
             </div>
-            <span className="panel-badge">{pendingRequirements.length} pending</span>
+            {pendingRequirements.length > 0 ? (
+              <span className="panel-badge">{pendingRequirements.length} pending</span>
+            ) : (
+              <span className="panel-badge panel-badge--done">All done</span>
+            )}
           </div>
 
-          {draft.formRequirements.length > 0 ? (
+          {pendingRequirements.length > 0 ? (
             <div className="requirement-stack">
               {blockingRequirements.map((requirement) =>
                 renderRequirementPanel(requirement, tenantSlug, draft.id, false, tenant.id),
@@ -430,13 +434,8 @@ export default async function BookingDraftPage({ params }: BookingDraftPageProps
                   tenantId={tenant.id}
                 />
               ))}
-              {draft.formRequirements
-                .filter((r) => r.status !== "pending")
-                .map((requirement) =>
-                  renderRequirementPanel(requirement, tenantSlug, draft.id, false, tenant.id),
-                )}
             </div>
-          ) : (
+          ) : draft.formRequirements.length === 0 ? (
             <div className="empty-panel empty-panel--compact">
               <strong>No intake forms are required for this service.</strong>
               <span>
@@ -447,6 +446,26 @@ export default async function BookingDraftPage({ params }: BookingDraftPageProps
                   : "You can choose when to complete intake after adding contact details."}
               </span>
             </div>
+          ) : (
+            <div className="empty-panel empty-panel--compact">
+              <strong>All required forms are complete.</strong>
+              <span>You can review completed forms below or continue to payment.</span>
+            </div>
+          )}
+
+          {draft.formRequirements.filter((r) => r.status !== "pending").length > 0 && (
+            <details className="completed-forms-details">
+              <summary>
+                Completed forms ({draft.formRequirements.filter((r) => r.status !== "pending").length})
+              </summary>
+              <div className="requirement-stack">
+                {draft.formRequirements
+                  .filter((r) => r.status !== "pending")
+                  .map((requirement) =>
+                    renderRequirementPanel(requirement, tenantSlug, draft.id, false, tenant.id),
+                  )}
+              </div>
+            </details>
           )}
         </section>
 

@@ -1039,6 +1039,39 @@ button:disabled {
   gap: 0.95rem;
 }
 
+.completed-forms-details {
+  margin-top: 0.5rem;
+  border: 1px solid rgba(72, 111, 76, 0.12);
+  border-radius: var(--ui-radius-sm);
+  background: rgba(245, 239, 230, 0.52);
+  overflow: hidden;
+}
+
+.completed-forms-details summary {
+  padding: 0.85rem 1rem;
+  color: var(--ui-ink-soft);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  user-select: none;
+}
+
+.completed-forms-details summary:hover {
+  color: var(--ui-ink);
+}
+
+.completed-forms-details .requirement-stack {
+  padding: 0 1rem 1rem;
+}
+
+.panel-badge--done {
+  color: var(--ui-success);
+  background: rgba(72, 111, 76, 0.1);
+  border-color: rgba(72, 111, 76, 0.18);
+}
+
 .requirement-form-card {
   display: grid;
   gap: 0.9rem;
