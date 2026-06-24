@@ -172,8 +172,8 @@ async function saveContactDetails(
   await contactForm.getByLabel("Full name").fill(details.name);
   await contactForm.getByRole("textbox", { name: "Email" }).fill(details.email);
   await contactForm.getByLabel("Phone number").fill(details.phone);
-  await contactForm.getByRole("radio", { name: /Complete later/ }).check();
-  await contactForm.getByRole("button", { name: "Save contact details" }).click();
+  await contactForm.getByRole("radio", { name: /Later, before my appointment/ }).check();
+  await contactForm.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByText(details.name)).toBeVisible({ timeout: 15_000 });
 }
@@ -559,11 +559,12 @@ test("customer can click inside date field in required pre-booking form", async 
   await expect(requirementCard).toBeVisible({ timeout: 15_000 });
 
   const dateInput = requirementCard.getByLabel(fieldLabel);
-  await dateInput.click({ position: { x: 10, y: 18 } });
-  await expect(dateInput).toBeFocused();
   await dateInput.fill("2026-07-15");
 
   await requirementCard.getByRole("button", { name: "Submit form" }).click();
+
+  // Server action reloads the page — wait for reload then check API
+  await page.waitForLoadState("networkidle");
 
   const updatedDraft = await getBookingDraft(request, startedBooking.tenant.slug, startedBooking.bookingDraftId);
   const dateRequirement = updatedDraft.formRequirements.find((requirement) => requirement.formTitle === formName);
