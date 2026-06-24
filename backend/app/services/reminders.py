@@ -12,6 +12,7 @@ from app.db.models import (
     BookingDraft,
     BookingDraftFormRequirement,
     BookingDraftIntakePlan,
+    Tenant,
 )
 from app.services.notifications import send_transactional_email
 
@@ -98,11 +99,24 @@ async def send_due_intake_reminders(session: AsyncSession) -> dict[str, int]:
     return {"sent": sent, "skipped": skipped, "failed": failed}
 
 
-# Reminder cadence for confirmed bookings with pending intake forms.
-# We send reminders at these hours-before-appointment marks, with idempotency
-# enforced by Booking.last_form_reminder_sent_at and a minimum 6h gap between sends.
-_CONFIRMED_FORM_REMINDER_WINDOWS_HOURS = (72, 24, 4)
+# Reminder window for confirmed bookings with pending intake forms.
+# The primary window comes from the tenant's reminder_hours_before setting.
+# We enforce a minimum 6h gap between sends via Booking.last_form_reminder_sent_at.
 _CONFIRMED_FORM_REMINDER_MIN_GAP = timedelta(hours=6)
+# Fallback windows used when the tenant setting is unavailable.
+_FALLBACK_REMINDER_WINDOWS_HOURS = (72, 24, 4)
+
+
+def _get_reminder_windows(tenant_settings: dict) -> tuple[int, ...]:
+    """Return the reminder window(s) for a tenant.
+
+    Uses the tenant's configured reminder_hours_before as the primary window,
+    falling back to a sensible multi-window cadence when not configured.
+    """
+    raw = tenant_settings.get("reminderHoursBefore")
+    if isinstance(raw, int) and raw > 0:
+        return (raw,)
+    return _FALLBACK_REMINDER_WINDOWS_HOURS
 
 
 async def send_due_confirmed_booking_form_reminders(session: AsyncSession) -> dict[str, int]:
@@ -116,10 +130,20 @@ async def send_due_confirmed_booking_form_reminders(session: AsyncSession) -> di
     from app.core.security import create_customer_manage_token
 
     now = datetime.now(timezone.utc)
-    earliest_target = now
-    # Look ahead to the widest configured window so we can catch all bookings whose
-    # starts_at minus window-hours has passed.
-    latest_target = now + timedelta(hours=max(_CONFIRMED_FORM_REMINDER_WINDOWS_HOURS))
+
+    # Load all tenants so we can read per-tenant reminder settings.
+    tenants = (
+        await session.scalars(select(Tenant))
+    ).all()
+    tenant_by_id: dict[str, Tenant] = {t.id: t for t in tenants}
+
+    # Use the widest possible window across all tenants for the candidate query.
+    all_windows: set[int] = set()
+    for t in tenants:
+        all_windows.update(_get_reminder_windows(t.settings_json))
+    if not all_windows:
+        all_windows = set(_FALLBACK_REMINDER_WINDOWS_HOURS)
+    latest_target = now + timedelta(hours=max(all_windows))
 
     pending_requirement_subquery = (
         select(BookingDraftFormRequirement.id)
@@ -166,10 +190,13 @@ async def send_due_confirmed_booking_form_reminders(session: AsyncSession) -> di
                 continue
 
         hours_until_start = (booking.starts_at - now).total_seconds() / 3600.0
+        # Use the booking's tenant reminder windows.
+        tenant = tenant_by_id.get(booking.tenant_id)
+        tenant_windows = _get_reminder_windows(tenant.settings_json) if tenant is not None else _FALLBACK_REMINDER_WINDOWS_HOURS
         # Trigger when we've crossed (or are at) any reminder window. We pick the
         # smallest window that is >= hours_until_start.
         target_window = None
-        for window_hours in sorted(_CONFIRMED_FORM_REMINDER_WINDOWS_HOURS):
+        for window_hours in sorted(tenant_windows):
             if hours_until_start <= window_hours:
                 target_window = window_hours
                 break

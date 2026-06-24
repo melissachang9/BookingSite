@@ -633,6 +633,13 @@ async def update_booking_draft(
         draft.customer_id = customer.id
         draft.customer = customer
 
+        from app.services.funnel import contact_details_saved
+        contact_details_saved(
+            tenant_id=draft.tenant_id,
+            booking_draft_id=draft.id,
+            intake_timing=payload.intake_completion_timing,
+        )
+
     if payload.intake_completion_timing is not None:
         if draft.customer_id is None and payload.customer is None:
             raise api_exception(400, "bad_request", "Customer details are required before choosing intake timing.")

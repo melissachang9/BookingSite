@@ -3,6 +3,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
+from app.services.reminders import _get_reminder_windows, _FALLBACK_REMINDER_WINDOWS_HOURS
+
 
 def _auth_headers(client: TestClient, demo_credentials: dict) -> dict[str, str]:
     response = client.post("/api/v1/auth/login", json=demo_credentials)
@@ -42,3 +44,27 @@ def test_send_intake_reminders_endpoint_accessible_in_test_mode(
     assert response.status_code == 200
     payload = response.json()
     assert payload["sent"] == 0
+
+
+def test_get_reminder_windows_uses_tenant_setting() -> None:
+    """When a tenant configures reminderHoursBefore, that single value is used."""
+    windows = _get_reminder_windows({"reminderHoursBefore": 48})
+    assert windows == (48,)
+
+
+def test_get_reminder_windows_falls_back_when_missing() -> None:
+    """When no reminderHoursBefore is set, the fallback multi-window cadence is used."""
+    windows = _get_reminder_windows({})
+    assert windows == _FALLBACK_REMINDER_WINDOWS_HOURS
+
+
+def test_get_reminder_windows_falls_back_when_zero() -> None:
+    """A zero or negative value is treated as unconfigured."""
+    windows = _get_reminder_windows({"reminderHoursBefore": 0})
+    assert windows == _FALLBACK_REMINDER_WINDOWS_HOURS
+
+
+def test_get_reminder_windows_falls_back_when_wrong_type() -> None:
+    """A non-integer value is treated as unconfigured."""
+    windows = _get_reminder_windows({"reminderHoursBefore": "24"})
+    assert windows == _FALLBACK_REMINDER_WINDOWS_HOURS

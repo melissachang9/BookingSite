@@ -752,6 +752,15 @@ async def create_checkout_session(
     )
     session.add(payment)
     await session.flush()
+
+    from app.services.funnel import checkout_session_started
+    checkout_session_started(
+        tenant_id=tenant.id,
+        booking_draft_id=draft.id,
+        kind="deposit",
+        amount_cents=draft.deposit_cents,
+    )
+
     _append_payment_event(
         session,
         payment,
