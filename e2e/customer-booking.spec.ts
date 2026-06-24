@@ -570,4 +570,22 @@ test("customer can click inside date field in required pre-booking form", async 
   const dateRequirement = updatedDraft.formRequirements.find((requirement) => requirement.formTitle === formName);
   expect(dateRequirement).toBeDefined();
   expect(dateRequirement?.status).toBe("satisfied");
+
+  // Clean up the test form so it doesn't accumulate on the service
+  const loginResponse = await request.post(apiURL("auth/login"), {
+    data: { email: e2eDemoOwnerEmail, password: e2eDemoOwnerPassword },
+  });
+  await expect(loginResponse, "POST auth/login for cleanup").toBeOK();
+  const loginPayload = (await loginResponse.json()) as { accessToken: string };
+  const formsResponse = await request.get(apiURL(`tenants/${e2eTenantSlug}/forms`), {
+    headers: { Authorization: `Bearer ${loginPayload.accessToken}` },
+  });
+  await expect(formsResponse, "GET forms for cleanup").toBeOK();
+  const formsPayload = (await formsResponse.json()) as { items: Array<{ id: string; name: string }> };
+  const testForm = formsPayload.items.find((f) => f.name === formName);
+  if (testForm) {
+    await request.delete(apiURL(`tenants/${e2eTenantSlug}/forms/${testForm.id}`), {
+      headers: { Authorization: `Bearer ${loginPayload.accessToken}` },
+    });
+  }
 });
