@@ -19,8 +19,12 @@ export default function DateFieldInput({ name, required = false }: DateFieldInpu
       name={name}
       type="date"
       required={required}
-      onClick={(event) => openNativeDatePicker(event.currentTarget)}
-      onFocus={(event) => openNativeDatePicker(event.currentTarget)}
+      onClick={(event) => {
+        const input = event.currentTarget;
+        if (!input.value) {
+          openNativeDatePicker(input);
+        }
+      }}
     />
   );
 }
