@@ -16,6 +16,7 @@ import {
   startDepositCheckoutAction,
   submitBookingRequirementAction,
 } from "./actions";
+import DateFieldInput from "./date-field-input";
 import DeferrableFormCard from "./deferrable-form-card";
 import { PendingSubmitButton } from "./pending-submit-button";
 import SignatureField from "./signature-field";
@@ -133,7 +134,7 @@ function renderRequirementField(field: FormField) {
           {field.required ? " *" : ""}
         </span>
         {field.helpText ? <small>{field.helpText}</small> : null}
-        <input name={field.id} type="date" required={field.required} />
+        <DateFieldInput name={field.id} required={field.required} />
       </label>
     );
   }

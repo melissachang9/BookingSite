@@ -4,6 +4,8 @@ import type { BookingDraftSummary, ServiceSummary, TenantSummary } from "@bookin
 
 import {
   e2eApiBaseURL,
+  e2eDemoOwnerEmail,
+  e2eDemoOwnerPassword,
   e2eResetToken,
   e2eTenantSlug,
   expectSlotConflict,
@@ -138,7 +140,7 @@ async function startBookingForService(
     firstSlotButton.click(),
   ]);
 
-  await expect(page.getByRole("heading", { name: "Add your contact details" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /add your contact details|your contact details/i })).toBeVisible();
 
   const bookingDraftId = new URL(page.url()).pathname.split("/").pop();
   expect(bookingDraftId).toBeTruthy();
@@ -197,6 +199,59 @@ async function moveBookingStartForE2E(
   });
 
   await expect(response, `POST testing/e2e/bookings/${bookingId}/move-start`).toBeOK();
+}
+
+async function createPreBookingDateForm(
+  request: APIRequestContext,
+  tenantSlug: string,
+  serviceName: string,
+): Promise<{ formName: string; fieldLabel: string }> {
+  const serviceResponse = await listServices(request, tenantSlug);
+  const service = serviceResponse.services.find((entry) => entry.name === serviceName && entry.isActive);
+
+  expect(service).toBeDefined();
+  if (!service) {
+    throw new Error(`Service ${serviceName} was not found for ${tenantSlug}.`);
+  }
+
+  const loginResponse = await request.post(apiURL("auth/login"), {
+    data: {
+      email: e2eDemoOwnerEmail,
+      password: e2eDemoOwnerPassword,
+    },
+  });
+  await expect(loginResponse, "POST auth/login").toBeOK();
+  const loginPayload = (await loginResponse.json()) as { accessToken: string };
+
+  const formName = `Date Click E2E ${Date.now()}`;
+  const fieldLabel = "Date of last treatment";
+  const createResponse = await request.post(apiURL(`tenants/${tenantSlug}/forms`), {
+    data: {
+      name: formName,
+      scope: "customer",
+      customerPromptTiming: "pre_booking",
+      reviewRequired: false,
+      serviceIds: [service.id],
+      schema: {
+        title: formName,
+        description: "Regression form for date picker click behavior.",
+        fields: [
+          {
+            id: "last-treatment-date",
+            type: "date",
+            label: fieldLabel,
+            required: true,
+          },
+        ],
+      },
+    },
+    headers: {
+      Authorization: `Bearer ${loginPayload.accessToken}`,
+    },
+  });
+  await expect(createResponse, "POST tenants/{tenantSlug}/forms").toBeOK();
+
+  return { formName, fieldLabel };
 }
 
 test("customer can confirm a zero-deposit consultation", async ({ page, request }) => {
@@ -483,4 +538,35 @@ test("customer can complete a deposit checkout for a facial booking", async ({ p
   expect(booking.customer.email).toBe("paid-deposit@example.com");
 
   await expectSlotConflict(request, startedBooking.tenant.slug, startedBooking.draft);
+});
+
+test("customer can click inside date field in required pre-booking form", async ({ page, request }) => {
+  test.setTimeout(90_000);
+
+  const tenant = await getTenant(request, e2eTenantSlug);
+  const { formName, fieldLabel } = await createPreBookingDateForm(request, tenant.slug, "Brow Shape and Tint");
+  const startedBooking = await startBookingForService(page, request, "Brow Shape and Tint");
+
+  await saveContactDetails(page, {
+    name: "Date Field Guest",
+    email: "date-field@example.com",
+    phone: "555-0450",
+  });
+
+  const requirementCard = page.locator(".requirement-form-card").filter({
+    has: page.getByText(formName),
+  });
+  await expect(requirementCard).toBeVisible({ timeout: 15_000 });
+
+  const dateInput = requirementCard.getByLabel(fieldLabel);
+  await dateInput.click({ position: { x: 10, y: 18 } });
+  await expect(dateInput).toBeFocused();
+  await dateInput.fill("2026-07-15");
+
+  await requirementCard.getByRole("button", { name: "Submit form" }).click();
+
+  const updatedDraft = await getBookingDraft(request, startedBooking.tenant.slug, startedBooking.bookingDraftId);
+  const dateRequirement = updatedDraft.formRequirements.find((requirement) => requirement.formTitle === formName);
+  expect(dateRequirement).toBeDefined();
+  expect(dateRequirement?.status).toBe("satisfied");
 });

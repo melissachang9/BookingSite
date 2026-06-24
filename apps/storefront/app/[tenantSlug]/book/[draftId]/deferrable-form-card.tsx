@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { FormField, FormRequirement } from "@booking/shared-types";
 import { submitBookingRequirementAction } from "./actions";
+import DateFieldInput from "./date-field-input";
 import SignatureField from "./signature-field";
 
 function formatTimingLabel(timing: string | null | undefined): string {
@@ -113,7 +114,7 @@ function renderRequirementField(field: FormField) {
           {field.required ? " *" : ""}
         </span>
         {field.helpText ? <small>{field.helpText}</small> : null}
-        <input name={field.id} type="date" required={field.required} />
+        <DateFieldInput name={field.id} required={field.required} />
       </label>
     );
   }

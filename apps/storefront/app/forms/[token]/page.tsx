@@ -6,6 +6,7 @@ import type { BookingFormRequirementSummary, FormField } from "@booking/shared-t
 import { storefrontApi, isApiClientError, isApiNotFoundError } from "../../lib/storefront-api";
 import { formatInTenantTime, slugify } from "../../lib/storefront-shell";
 import { submitManageBookingFormRequirementAction } from "./actions";
+import DateFieldInput from "./date-field-input";
 
 type FormCompletionRouteProps = {
   params: Promise<{ token: string }>;
@@ -113,7 +114,7 @@ function renderRequirementField(field: FormField) {
           {field.required ? " *" : ""}
         </span>
         {field.helpText ? <small>{field.helpText}</small> : null}
-        <input name={field.id} type="date" required={field.required} />
+        <DateFieldInput name={field.id} required={field.required} />
       </label>
     );
   }
