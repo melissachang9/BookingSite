@@ -3903,9 +3903,14 @@ function CheckoutPanel({
   };
 
   const handleComplete = () => {
-    void onComplete(appointment).then(() => {
+    const result = onComplete(appointment);
+    if (result instanceof Promise) {
+      result.then(() => {
+        setSaleCompleted(true);
+      });
+    } else {
       setSaleCompleted(true);
-    });
+    }
   };
 
   const isSettled = remainingBalance <= 0;

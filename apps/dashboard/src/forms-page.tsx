@@ -497,14 +497,14 @@ function DetailsStep({
   categoryMap.delete(null);
 
   const handleAddService = (id: string) => {
-    setSelectedServiceIds((prev) => [...prev, id]);
-    setSelectKey((k) => k + 1); // force re-mount the select
+    setSelectedServiceIds([...selectedServiceIds, id]);
+    setSelectKey(selectKey + 1);
   };
 
   const handleAddAllInCategory = (catId: string) => {
     const ids = (categoryMap.get(catId) ?? []).map((s) => s.id);
-    setSelectedServiceIds((prev) => [...new Set([...prev, ...ids])]);
-    setSelectKey((k) => k + 1);
+    setSelectedServiceIds([...new Set([...selectedServiceIds, ...ids])]);
+    setSelectKey(selectKey + 1);
   };
   return (
     <div className="form-editor__cards">
@@ -598,7 +598,7 @@ function DetailsStep({
                   {services.filter((s) => selectedServiceIds.includes(s.id)).map((svc) => (
                     <div key={svc.id} className="form-editor__service-row">
                       <span>{svc.name}</span>
-                      <button type="button" className="ghost-action" onClick={() => setSelectedServiceIds((prev) => prev.filter((id) => id !== svc.id))}>
+                      <button type="button" className="ghost-action" onClick={() => setSelectedServiceIds(selectedServiceIds.filter((id: string) => id !== svc.id))}>
                         ✕
                       </button>
                     </div>

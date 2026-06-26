@@ -559,7 +559,7 @@ describe("StaffPage", () => {
 
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
     const payload = updateSpy.mock.calls[0][2];
-    expect(payload.serviceIds.sort()).toEqual(["svc1", "svc2"]);
+    expect((payload as { serviceIds: string[] }).serviceIds.sort()).toEqual(["svc1", "svc2"]);
   });
 
   it("bulk Clear shown removes only filtered locations", async () => {

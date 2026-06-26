@@ -62,6 +62,7 @@ const baseBooking = {
     imageAltText: null,
     availabilityLabel: null,
     isActive: true,
+    isBookableOnline: true,
     serviceIds: ["service-1"],
     locationIds: ["location-1"],
   },
