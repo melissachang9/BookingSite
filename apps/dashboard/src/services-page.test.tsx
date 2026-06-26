@@ -248,24 +248,18 @@ describe("ServicesPage", () => {
     render(<ServicesPage definition={definition} currentUser={ownerUser} />);
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /Brow Shape/ })).toBeInTheDocument(),
+      expect(screen.getByDisplayValue("Brow Shape")).toBeInTheDocument(),
     );
 
     fireEvent.click(screen.getByRole("button", { name: /^Brows/ }));
 
-    expect(screen.getByRole("button", { name: /Brow Shape/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Signature Facial/ })).toBeNull();
+    expect(screen.getByDisplayValue("Brow Shape")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Signature Facial")).toBeNull();
   });
 
-  it("opens the detail panel with a direct scheduling link when a service is clicked", async () => {
+  it("shows the direct scheduling link on each service card", async () => {
     mockLoaders();
     render(<ServicesPage definition={definition} currentUser={ownerUser} />);
-
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /Brow Shape/ })).toBeInTheDocument(),
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /Brow Shape/ }));
 
     const linkInput = (await screen.findByDisplayValue(
       /\?serviceId=svc-shape$/,
@@ -277,20 +271,17 @@ describe("ServicesPage", () => {
     mockLoaders();
     render(<ServicesPage definition={definition} currentUser={ownerUser} />);
 
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /Brow Shape/ })).toBeInTheDocument(),
-    );
-    fireEvent.click(screen.getByRole("button", { name: /Brow Shape/ }));
     await screen.findByDisplayValue(/\?serviceId=svc-shape$/);
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    const copyButtons = screen.getAllByRole("button", { name: "Copy" });
+    fireEvent.click(copyButtons[0]);
     await waitFor(() => expect(screen.getByText("Link copied!")).toBeInTheDocument());
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       expect.stringContaining("?serviceId=svc-shape"),
     );
   });
 
-  it("duplicates a service and selects the new one", async () => {
+  it("duplicates a service", async () => {
     mockLoaders();
     const duplicated = {
       ...baseServices[0],
@@ -304,15 +295,12 @@ describe("ServicesPage", () => {
     vi.spyOn(platformApi, "listServices").mockResolvedValueOnce({
       services: baseServices,
     } as any);
-    // After duplicate, listServices is re-fetched.
     vi.spyOn(platformApi, "listServices").mockResolvedValue({
       services: [...baseServices, duplicated],
     } as any);
 
     render(<ServicesPage definition={definition} currentUser={ownerUser} />);
-    await waitFor(() =>
-      expect(screen.getAllByRole("button", { name: /Brow Shape/ }).length).toBeGreaterThan(0),
-    );
+    await screen.findByDisplayValue("Brow Shape");
 
     const dupButtons = screen.getAllByRole("button", { name: "Duplicate" });
     fireEvent.click(dupButtons[0]);
@@ -334,13 +322,12 @@ describe("ServicesPage", () => {
     };
     render(<ServicesPage definition={definition} currentUser={viewOnly} />);
 
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /Brow Shape/ })).toBeInTheDocument(),
-    );
+    await screen.findByDisplayValue("Brow Shape");
 
     expect(screen.queryByRole("button", { name: /\+ Add category/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /\+ New service/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /\+ Add service/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Duplicate" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
 
   it("denies access entirely when services.view is false", async () => {
