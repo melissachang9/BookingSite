@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type {
   AuthenticatedUser,
   CategoryFaqItem,
@@ -37,6 +37,55 @@ function hasPermission(user: AuthenticatedUser, key: string): boolean {
 function formatMoney(cents: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
     cents / 100,
+  );
+}
+
+function formatDurationMinutes(minutes: number): string {
+  if (!Number.isFinite(minutes) || minutes <= 0) return "0 min";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours} hr` : `${hours} hr ${rest} min`;
+}
+
+function VariantField({
+  label,
+  defaultText,
+  isOverridden,
+  onReset,
+  canManage,
+  children,
+}: {
+  label: string;
+  defaultText: string;
+  isOverridden: boolean;
+  onReset: () => void;
+  canManage: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={`service-variant-row${
+        isOverridden ? " service-variant-row--overridden" : ""
+      }`}
+    >
+      <div className="service-variant-row__label">
+        <span>{label}</span>
+        <span className="service-variant-row__default">{defaultText}</span>
+      </div>
+      <div className="service-variant-row__control">
+        <div className="service-variant-row__input">{children}</div>
+        {isOverridden && canManage ? (
+          <button
+            type="button"
+            className="text-action service-variant-row__reset"
+            onClick={onReset}
+          >
+            Reset to default
+          </button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -966,6 +1015,7 @@ function ServiceDetailPanel({
   const [form, setForm] = useState<ServiceFormState>(() => toFormState(service));
   const [saving, setSaving] = useState(false);
   const [variants, setVariants] = useState<ProviderServiceVariantEntry[]>([]);
+  const [savedVariants, setSavedVariants] = useState<ProviderServiceVariantEntry[]>([]);
   const [variantsLoaded, setVariantsLoaded] = useState(false);
   const [variantsSaving, setVariantsSaving] = useState(false);
   const [copyHint, setCopyHint] = useState<string | null>(null);
@@ -983,6 +1033,7 @@ function ServiceDetailPanel({
       .then((resp) => {
         if (cancelled) return;
         setVariants(resp.variants);
+        setSavedVariants(resp.variants);
         setVariantsLoaded(true);
       })
       .catch(() => {
@@ -1140,6 +1191,7 @@ function ServiceDetailPanel({
         body,
       );
       setVariants(resp.variants);
+      setSavedVariants(resp.variants);
       onStatus("Per-provider variants saved.");
     } catch (error) {
       onStatus(readErrorMessage(error, "Unable to save variants."));
@@ -1148,7 +1200,50 @@ function ServiceDetailPanel({
     }
   };
 
-  const eligibleProviders = providers.filter((p) => p.isActive);
+  const eligibleProviders = useMemo(
+    () =>
+      providers.filter(
+        (provider) =>
+          provider.isActive && provider.serviceIds.includes(service.id),
+      ),
+    [providers, service.id],
+  );
+
+  const isVariantsDirty = useMemo(() => {
+    const normalize = (entries: ProviderServiceVariantEntry[]) => {
+      const map = new Map<string, string>();
+      for (const entry of entries) {
+        const price = entry.priceCents ?? null;
+        const duration = entry.durationMinutes ?? null;
+        const deposit = entry.depositCents ?? null;
+        if (price == null && duration == null && deposit == null) continue;
+        map.set(entry.providerId, `${price}|${duration}|${deposit}`);
+      }
+      return map;
+    };
+    const current = normalize(variants);
+    const saved = normalize(savedVariants);
+    if (current.size !== saved.size) return true;
+    for (const [providerId, signature] of current) {
+      if (saved.get(providerId) !== signature) return true;
+    }
+    return false;
+  }, [variants, savedVariants]);
+
+  // Base values from the in-progress form, falling back to the persisted service.
+  const formDuration = Number(form.durationMinutes);
+  const baseDurationMinutes =
+    Number.isFinite(formDuration) && formDuration > 0
+      ? formDuration
+      : service.durationMinutes;
+  const baseFormPrice = parseMoneyInput(form.priceAmount);
+  const basePriceCents =
+    baseFormPrice != null && baseFormPrice >= 0 ? baseFormPrice : service.priceCents;
+  const baseFormDeposit = parseMoneyInput(form.depositAmount);
+  const baseDepositCents =
+    baseFormDeposit != null && baseFormDeposit >= 0
+      ? baseFormDeposit
+      : service.depositCents;
 
   return (
     <div className="service-detail-panel">
@@ -1365,43 +1460,122 @@ function ServiceDetailPanel({
 
       <section className="service-variants">
         <header className="service-variants-header">
-          <h5>Per-provider variants</h5>
-          <span className="settings-form-help">
-            Override price, duration, or deposit per provider. Leave blank to use the base values.
-          </span>
+          <div className="service-variants-header__copy">
+            <h5>Per-provider variants</h5>
+            <p className="settings-form-help">
+              Override price, duration, or deposit for individual providers. Leave a field blank to use the service default shown next to it.
+            </p>
+          </div>
+          {canManage && eligibleProviders.length > 0 ? (
+            <button
+              type="button"
+              className="primary-action"
+              onClick={handleSaveVariants}
+              disabled={variantsSaving || !isVariantsDirty}
+            >
+              {variantsSaving ? "Saving…" : "Save variants"}
+            </button>
+          ) : null}
         </header>
         {!variantsLoaded ? (
           <div className="calendar-state">Loading variants…</div>
         ) : eligibleProviders.length === 0 ? (
-          <p className="settings-form-help">No active providers.</p>
+          <p className="settings-form-help">
+            No providers offer this service yet. Assign providers from the Staff page to enable per-provider pricing.
+          </p>
         ) : (
-          <table className="service-variants-table">
-            <thead>
-              <tr>
-                <th>Provider</th>
-                <th>Price ($)</th>
-                <th>Duration (min)</th>
-                <th>Deposit ($)</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {eligibleProviders.map((provider) => {
-                const entry = variantByProvider.get(provider.id) ?? {
-                  providerId: provider.id,
-                  priceCents: null,
-                  durationMinutes: null,
-                  depositCents: null,
-                };
-                return (
-                  <tr key={provider.id}>
-                    <td>{provider.name}</td>
-                    <td>
+          <div className="service-variant-grid">
+            {eligibleProviders.map((provider) => {
+              const entry = variantByProvider.get(provider.id) ?? {
+                providerId: provider.id,
+                priceCents: null,
+                durationMinutes: null,
+                depositCents: null,
+              };
+              const hasAnyOverride =
+                entry.priceCents != null ||
+                entry.durationMinutes != null ||
+                entry.depositCents != null;
+              return (
+                <article
+                  key={provider.id}
+                  className={`service-variant-card${
+                    hasAnyOverride ? " is-customized" : ""
+                  }`}
+                >
+                  <header className="service-variant-card__header">
+                    <div className="service-variant-card__title">
+                      <strong>{provider.name}</strong>
+                      <span
+                        className={`service-variant-card__badge${
+                          hasAnyOverride
+                            ? " service-variant-card__badge--custom"
+                            : ""
+                        }`}
+                      >
+                        {hasAnyOverride ? "Custom pricing" : "Using defaults"}
+                      </span>
+                    </div>
+                    {canManage && hasAnyOverride ? (
+                      <button
+                        type="button"
+                        className="text-action"
+                        onClick={() => removeVariantOverrides(provider.id)}
+                      >
+                        Reset all
+                      </button>
+                    ) : null}
+                  </header>
+                  <div className="service-variant-rows">
+                    <VariantField
+                      label="Duration"
+                      defaultText={`${formatDurationMinutes(baseDurationMinutes)} default`}
+                      isOverridden={entry.durationMinutes != null}
+                      onReset={() =>
+                        updateVariant(provider.id, { durationMinutes: null })
+                      }
+                      canManage={canManage}
+                    >
+                      <input
+                        type="number"
+                        min={15}
+                        max={480}
+                        step={15}
+                        disabled={!canManage}
+                        placeholder={String(baseDurationMinutes)}
+                        value={entry.durationMinutes ?? ""}
+                        onChange={(event) => {
+                          const raw = event.target.value;
+                          if (!raw) {
+                            updateVariant(provider.id, {
+                              durationMinutes: null,
+                            });
+                            return;
+                          }
+                          const n = Number(raw);
+                          updateVariant(provider.id, {
+                            durationMinutes: Number.isFinite(n) ? n : null,
+                          });
+                        }}
+                      />
+                      <span className="service-variant-row__unit">min</span>
+                    </VariantField>
+                    <VariantField
+                      label="Price"
+                      defaultText={`${formatMoney(basePriceCents)} default`}
+                      isOverridden={entry.priceCents != null}
+                      onReset={() =>
+                        updateVariant(provider.id, { priceCents: null })
+                      }
+                      canManage={canManage}
+                    >
+                      <span className="service-variant-row__prefix">$</span>
                       <input
                         type="number"
                         min={0}
                         step="0.01"
                         disabled={!canManage}
+                        placeholder={(basePriceCents / 100).toFixed(2)}
                         value={
                           entry.priceCents == null
                             ? ""
@@ -1419,36 +1593,23 @@ function ServiceDetailPanel({
                           });
                         }}
                       />
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        min={15}
-                        max={480}
-                        step={15}
-                        disabled={!canManage}
-                        value={entry.durationMinutes ?? ""}
-                        onChange={(event) => {
-                          const raw = event.target.value;
-                          if (!raw) {
-                            updateVariant(provider.id, {
-                              durationMinutes: null,
-                            });
-                            return;
-                          }
-                          const n = Number(raw);
-                          updateVariant(provider.id, {
-                            durationMinutes: Number.isFinite(n) ? n : null,
-                          });
-                        }}
-                      />
-                    </td>
-                    <td>
+                    </VariantField>
+                    <VariantField
+                      label="Deposit"
+                      defaultText={`${formatMoney(baseDepositCents)} default`}
+                      isOverridden={entry.depositCents != null}
+                      onReset={() =>
+                        updateVariant(provider.id, { depositCents: null })
+                      }
+                      canManage={canManage}
+                    >
+                      <span className="service-variant-row__prefix">$</span>
                       <input
                         type="number"
                         min={0}
                         step="0.01"
                         disabled={!canManage}
+                        placeholder={(baseDepositCents / 100).toFixed(2)}
                         value={
                           entry.depositCents == null
                             ? ""
@@ -1468,36 +1629,13 @@ function ServiceDetailPanel({
                           });
                         }}
                       />
-                    </td>
-                    <td>
-                      {canManage ? (
-                        <button
-                          type="button"
-                          className="ghost-action"
-                          onClick={() => removeVariantOverrides(provider.id)}
-                        >
-                          Reset
-                        </button>
-                      ) : null}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-        {canManage ? (
-          <div className="inline-meta">
-            <button
-              type="button"
-              className="primary-action"
-              onClick={handleSaveVariants}
-              disabled={variantsSaving}
-            >
-              {variantsSaving ? "Saving…" : "Save variants"}
-            </button>
+                    </VariantField>
+                  </div>
+                </article>
+              );
+            })}
           </div>
-        ) : null}
+        )}
       </section>
     </div>
   );
