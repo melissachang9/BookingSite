@@ -91,8 +91,8 @@ export default async function TenantHomePage({ params }: TenantPageProps) {
       <aside className="booking-ad-panel booking-ad-panel--entry" aria-label="Studio highlight">
         {bookingAd?.imageUrl ? <img src={bookingAd.imageUrl} alt={bookingAd.imageAltText ?? tenant.name} /> : null}
         <div>
-          <strong>{bookingAd?.headline ?? "A smoother way to book, confirm, and return."}</strong>
-          <p>{bookingAd?.body ?? "From screening to checkout, each step is designed to feel clear, calm, and studio-led."}</p>
+          {bookingAd?.headline ? <strong>{bookingAd.headline}</strong> : null}
+          {bookingAd?.body ? <p>{bookingAd.body}</p> : null}
         </div>
       </aside>
     </main>

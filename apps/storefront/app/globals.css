@@ -566,6 +566,7 @@ button:disabled {
 .booking-ad-panel--entry {
   min-height: 0;
   height: 26rem;
+  background: linear-gradient(180deg, rgba(9, 30, 25, 0.08), rgba(9, 30, 25, 0.58));
 }
 
 .booking-ad-panel--entry img {
