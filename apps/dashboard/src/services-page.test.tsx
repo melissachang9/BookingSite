@@ -267,12 +267,9 @@ describe("ServicesPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Brow Shape/ }));
 
-    await waitFor(() =>
-      expect(screen.getByText("Direct scheduling link")).toBeInTheDocument(),
-    );
-    const linkInput = screen.getByDisplayValue(
+    const linkInput = (await screen.findByDisplayValue(
       /\?serviceId=svc-shape$/,
-    ) as HTMLInputElement;
+    )) as HTMLInputElement;
     expect(linkInput.readOnly).toBe(true);
   });
 
@@ -284,9 +281,7 @@ describe("ServicesPage", () => {
       expect(screen.getByRole("button", { name: /Brow Shape/ })).toBeInTheDocument(),
     );
     fireEvent.click(screen.getByRole("button", { name: /Brow Shape/ }));
-    await waitFor(() =>
-      expect(screen.getByText("Direct scheduling link")).toBeInTheDocument(),
-    );
+    await screen.findByDisplayValue(/\?serviceId=svc-shape$/);
 
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(screen.getByText("Link copied!")).toBeInTheDocument());

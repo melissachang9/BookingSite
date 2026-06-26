@@ -5104,12 +5104,153 @@ body {
   justify-content: space-between;
   gap: 0.5rem;
 }
+.service-detail-desc {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--ui-ink, #1f2937);
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 250, 243, 0.5);
+  border-radius: 8px;
+  border-left: 3px solid rgba(106, 87, 69, 0.4);
+}
+.service-detail-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.service-detail-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--ui-border, #e5e7eb);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.service-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid var(--ui-border, #f3f4f6);
+  min-height: 2.8rem;
+}
+.service-detail-row:last-child {
+  border-bottom: 0;
+}
+.service-detail-row--full {
+  flex-direction: column;
+  align-items: stretch;
+}
+.service-detail-row--full .service-detail-row__control {
+  width: 100%;
+}
+.service-detail-row--full textarea {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.85rem;
+  border: 1px solid var(--ui-border, #d1d5db);
+  border-radius: 6px;
+  resize: vertical;
+  font-family: inherit;
+}
+.service-detail-row__label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 7rem;
+  flex-shrink: 0;
+}
+.service-detail-row__label > span:first-child {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ui-ink, #1f2937);
+}
+.service-detail-row__hint {
+  font-size: 0.7rem;
+  color: var(--ui-muted, #6b7280);
+}
+.service-detail-row__control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.service-detail-row__control > input,
+.service-detail-row__control > select {
+  flex: 1 1 auto;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+  border: 1px solid var(--ui-border, #d1d5db);
+  border-radius: 6px;
+  min-width: 0;
+}
+.service-detail-row__input-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid var(--ui-border, #d1d5db);
+  border-radius: 6px;
+  padding: 0.15rem 0.45rem;
+  background: var(--ui-paper, #fff);
+}
+.service-detail-row__input-group:focus-within {
+  border-color: var(--ui-ink, #1f2937);
+}
+.service-detail-row__input-group input {
+  width: 5.5rem;
+  border: 0;
+  background: transparent;
+  font-size: 0.85rem;
+  padding: 0.15rem 0;
+  outline: none;
+  text-align: right;
+}
+.service-detail-row__prefix,
+.service-detail-row__unit {
+  font-size: 0.78rem;
+  color: var(--ui-muted, #6b7280);
+  user-select: none;
+}
+.service-detail-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.service-detail-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--ui-border, #d1d5db);
+  border-radius: 20px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+  user-select: none;
+}
+.service-detail-chip.is-active {
+  background: rgba(106, 87, 69, 0.1);
+  border-color: rgba(106, 87, 69, 0.45);
+  font-weight: 600;
+}
+.service-detail-chip input {
+  display: none;
+}
+.service-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.25rem;
+}
 .service-scheduling-link {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   font-size: 0.8rem;
   color: var(--text-muted, #6b7280);
+  border-top: 1px solid var(--ui-border, #e5e7eb);
+  padding-top: 0.75rem;
 }
 .service-scheduling-row {
   display: flex;
@@ -5124,40 +5265,6 @@ body {
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.03);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-.service-detail-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-.service-locations-fieldset {
-  border: 1px solid var(--ui-border, #e5e7eb);
-  border-radius: 8px;
-  padding: 0.6rem 0.75rem;
-}
-.service-locations-fieldset legend {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-muted, #6b7280);
-  padding: 0 0.3rem;
-}
-.service-location-checks {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  margin-top: 0.4rem;
-}
-.service-location-checks label {
-  display: flex;
-  gap: 0.4rem;
-  align-items: center;
-  font-size: 0.85rem;
-}
-.service-active-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.85rem;
 }
 .service-variants {
   display: flex;

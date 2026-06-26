@@ -1257,159 +1257,214 @@ function ServiceDetailPanel({
         </button>
       </div>
 
-      <div className="service-scheduling-link">
-        <span className="eyebrow">Direct scheduling link</span>
-        <div className="service-scheduling-row">
-          <input
-            type="text"
-            readOnly
-            value={schedulingHref}
-            onFocus={(event) => event.currentTarget.select()}
-          />
-          <button type="button" className="secondary-action" onClick={handleCopyLink}>
-            Copy
-          </button>
-        </div>
-        {copyHint ? <span className="settings-form-help">{copyHint}</span> : null}
-      </div>
+      {service.description ? (
+        <p className="service-detail-desc">{service.description}</p>
+      ) : null}
 
       <form className="service-detail-form" onSubmit={handleSave}>
         <fieldset disabled={!canManage || saving}>
-          <div className="form-grid">
-            <label>
-              <span>Name</span>
-              <input
-                value={form.name}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, name: event.target.value }))
-                }
-                required
-              />
-            </label>
-            <label>
-              <span>Category</span>
-              <select
-                value={form.categoryId}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    categoryId: event.target.value,
-                  }))
-                }
-              >
-                <option value="">Uncategorized</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Duration (minutes)</span>
-              <input
-                type="number"
-                min={15}
-                step={15}
-                value={form.durationMinutes}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    durationMinutes: event.target.value,
-                  }))
-                }
-                required
-              />
-            </label>
-            <label>
-              <span>Setup buffer (minutes)</span>
-              <input
-                type="number"
-                min={0}
-                step={5}
-                value={form.setupBufferMinutes}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    setupBufferMinutes: event.target.value,
-                  }))
-                }
-              />
-              <small className="field-help">Time blocked before the appointment for room prep.</small>
-            </label>
-            <label>
-              <span>Cleanup buffer (minutes)</span>
-              <input
-                type="number"
-                min={0}
-                step={5}
-                value={form.cleanupBufferMinutes}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    cleanupBufferMinutes: event.target.value,
-                  }))
-                }
-              />
-              <small className="field-help">Time blocked after the appointment for turnover.</small>
-            </label>
-            <label>
-              <span>Price</span>
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                value={form.priceAmount}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    priceAmount: event.target.value,
-                  }))
-                }
-                required
-              />
-            </label>
-            <label>
-              <span>Deposit due today</span>
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                value={form.depositAmount}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    depositAmount: event.target.value,
-                  }))
-                }
-                required
-              />
-            </label>
-            <label className="form-grid__full">
-              <span>Description</span>
-              <textarea
-                rows={4}
-                value={form.description}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    description: event.target.value,
-                  }))
-                }
-                placeholder="What customers see when they pick this service."
-              />
-            </label>
-            <fieldset className="form-grid__full service-locations-fieldset">
-              <legend>Locations</legend>
-              {locations.length === 0 ? (
-                <p className="settings-form-help">No active locations.</p>
-              ) : (
-                <ul className="service-location-checks">
-                  {locations.map((location) => {
-                    const checked = form.locationIds.includes(location.id);
-                    return (
-                      <li key={location.id}>
-                        <label>
+          <div className="service-detail-rows">
+            <div className="service-detail-row">
+              <div className="service-detail-row__label">
+                <span>Name</span>
+              </div>
+              <div className="service-detail-row__control">
+                <input
+                  value={form.name}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, name: event.target.value }))
+                  }
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="service-detail-row">
+              <div className="service-detail-row__label">
+                <span>Category</span>
+              </div>
+              <div className="service-detail-row__control">
+                <select
+                  value={form.categoryId}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      categoryId: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="">Uncategorized</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="service-detail-row">
+              <div className="service-detail-row__label">
+                <span>Duration</span>
+                <span className="service-detail-row__hint">
+                  {formatDurationMinutes(service.durationMinutes)} default
+                </span>
+              </div>
+              <div className="service-detail-row__control">
+                <div className="service-detail-row__input-group">
+                  <input
+                    type="number"
+                    min={15}
+                    step={15}
+                    value={form.durationMinutes}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        durationMinutes: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                  <span className="service-detail-row__unit">min</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="service-detail-row">
+              <div className="service-detail-row__label">
+                <span>Price</span>
+                <span className="service-detail-row__hint">
+                  {formatMoney(service.priceCents)} default
+                </span>
+              </div>
+              <div className="service-detail-row__control">
+                <div className="service-detail-row__input-group">
+                  <span className="service-detail-row__prefix">$</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={form.priceAmount}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        priceAmount: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="service-detail-row">
+              <div className="service-detail-row__label">
+                <span>Deposit</span>
+                <span className="service-detail-row__hint">
+                  {formatMoney(service.depositCents)} default
+                </span>
+              </div>
+              <div className="service-detail-row__control">
+                <div className="service-detail-row__input-group">
+                  <span className="service-detail-row__prefix">$</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={form.depositAmount}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        depositAmount: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="service-detail-row">
+              <div className="service-detail-row__label">
+                <span>Setup buffer</span>
+              </div>
+              <div className="service-detail-row__control">
+                <div className="service-detail-row__input-group">
+                  <input
+                    type="number"
+                    min={0}
+                    step={5}
+                    value={form.setupBufferMinutes}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        setupBufferMinutes: event.target.value,
+                      }))
+                    }
+                  />
+                  <span className="service-detail-row__unit">min</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="service-detail-row">
+              <div className="service-detail-row__label">
+                <span>Cleanup buffer</span>
+              </div>
+              <div className="service-detail-row__control">
+                <div className="service-detail-row__input-group">
+                  <input
+                    type="number"
+                    min={0}
+                    step={5}
+                    value={form.cleanupBufferMinutes}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        cleanupBufferMinutes: event.target.value,
+                      }))
+                    }
+                  />
+                  <span className="service-detail-row__unit">min</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="service-detail-row service-detail-row--full">
+              <div className="service-detail-row__label">
+                <span>Description</span>
+              </div>
+              <div className="service-detail-row__control">
+                <textarea
+                  rows={3}
+                  value={form.description}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                  placeholder="What customers see when they pick this service."
+                />
+              </div>
+            </div>
+
+            <div className="service-detail-row">
+              <div className="service-detail-row__label">
+                <span>Locations</span>
+              </div>
+              <div className="service-detail-row__control">
+                {locations.length === 0 ? (
+                  <p className="settings-form-help">No active locations.</p>
+                ) : (
+                  <div className="service-detail-chips">
+                    {locations.map((location) => {
+                      const checked = form.locationIds.includes(location.id);
+                      return (
+                        <label
+                          key={location.id}
+                          className={`service-detail-chip${checked ? " is-active" : ""}`}
+                        >
                           <input
                             type="checkbox"
                             checked={checked}
@@ -1427,29 +1482,37 @@ function ServiceDetailPanel({
                           />
                           <span>{location.name}</span>
                         </label>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </fieldset>
-            <label className="service-active-toggle">
-              <input
-                type="checkbox"
-                checked={form.isActive}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    isActive: event.target.checked,
-                  }))
-                }
-              />
-              <span>Active and bookable</span>
-            </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="service-detail-row">
+              <div className="service-detail-row__label">
+                <span>Online booking</span>
+              </div>
+              <div className="service-detail-row__control">
+                <label className="settings-toggle">
+                  <input
+                    type="checkbox"
+                    checked={form.isActive}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        isActive: event.target.checked,
+                      }))
+                    }
+                  />
+                  <span>Enable in online booking</span>
+                </label>
+              </div>
+            </div>
           </div>
         </fieldset>
-        <div className="inline-meta">
-          <span>Deposit cannot exceed the service price.</span>
+
+        <div className="service-detail-actions">
           {canManage ? (
             <button type="submit" className="primary-action" disabled={saving}>
               {saving ? "Saving…" : "Save service"}
@@ -1458,12 +1521,28 @@ function ServiceDetailPanel({
         </div>
       </form>
 
+      <div className="service-scheduling-link">
+        <span className="eyebrow">Online booking</span>
+        <div className="service-scheduling-row">
+          <input
+            type="text"
+            readOnly
+            value={schedulingHref}
+            onFocus={(event) => event.currentTarget.select()}
+          />
+          <button type="button" className="secondary-action" onClick={handleCopyLink}>
+            Copy
+          </button>
+        </div>
+        {copyHint ? <span className="settings-form-help">{copyHint}</span> : null}
+      </div>
+
       <section className="service-variants">
         <header className="service-variants-header">
           <div className="service-variants-header__copy">
-            <h5>Per-provider variants</h5>
+            <h5>Per-provider pricing</h5>
             <p className="settings-form-help">
-              Override price, duration, or deposit for individual providers. Leave a field blank to use the service default shown next to it.
+              Override price, duration, or deposit for individual providers. Leave blank to use defaults above.
             </p>
           </div>
           {canManage && eligibleProviders.length > 0 ? (
@@ -1481,7 +1560,7 @@ function ServiceDetailPanel({
           <div className="calendar-state">Loading variants…</div>
         ) : eligibleProviders.length === 0 ? (
           <p className="settings-form-help">
-            No providers offer this service yet. Assign providers from the Staff page to enable per-provider pricing.
+            No providers offer this service yet. Assign providers from the Staff page.
           </p>
         ) : (
           <div className="service-variant-grid">
