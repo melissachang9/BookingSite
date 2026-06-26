@@ -4028,6 +4028,10 @@ body {
   user-select: none;
   -webkit-user-select: none;
 }
+.crop-modal__mask--rect {
+  width: 400px; height: 200px;
+  border-radius: 8px;
+}
 .crop-modal__mask img {
   display: block;
   pointer-events: none;

@@ -14,6 +14,7 @@ import {
 } from "@booking/shared-types";
 
 import { platformApi, apiBaseUrl } from "./platform-api";
+import { CropModal } from "./staff-page";
 
 type RouteDefinitionLike = {
   title: string;
@@ -1476,6 +1477,7 @@ function BrandingSection({
   const [bookingAdImageAltText, setBookingAdImageAltText] = useState<string>("");
   const [marketingImageUploading, setMarketingImageUploading] = useState(false);
   const [marketingImageError, setMarketingImageError] = useState<string | null>(null);
+  const [marketingCropFile, setMarketingCropFile] = useState<File | null>(null);
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
   useEffect(() => {
@@ -1547,6 +1549,16 @@ function BrandingSection({
     }
   };
 
+  const handleMarketingCropSave = async (blob: Blob) => {
+    setMarketingCropFile(null);
+    const croppedFile = new File([blob], "marketing.png", { type: "image/png" });
+    await handleMarketingImageUpload(croppedFile);
+  };
+
+  const handleMarketingCropCancel = () => {
+    setMarketingCropFile(null);
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canManageSettings || validationMessage !== null) return;
@@ -1583,7 +1595,16 @@ function BrandingSection({
   const disabled = !canManageSettings || saveState.kind === "submitting";
 
   return (
-    <form className="settings-form branding-section" onSubmit={handleSubmit}>
+    <>
+      {marketingCropFile ? (
+        <CropModal
+          file={marketingCropFile}
+          onSave={handleMarketingCropSave}
+          onCancel={handleMarketingCropCancel}
+          maskShape="rectangle"
+        />
+      ) : null}
+      <form className="settings-form branding-section" onSubmit={handleSubmit}>
       <div className="settings-form-row">
         <label className="settings-field">
           <span>Logo URL</span>
@@ -1703,7 +1724,9 @@ function BrandingSection({
                 accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
                 onChange={(event) => {
                   const file = event.target.files?.[0] ?? null;
-                  void handleMarketingImageUpload(file);
+                  if (file) {
+                    setMarketingCropFile(file);
+                  }
                   event.target.value = "";
                 }}
                 disabled={disabled || marketingImageUploading}
@@ -1801,6 +1824,7 @@ function BrandingSection({
         ) : null}
       </div>
     </form>
+    </>
   );
 }
 

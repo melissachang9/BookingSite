@@ -111,14 +111,16 @@ async function uploadAvatarFile(tenantSlug: string, file: File): Promise<string>
   return data.url;
 }
 
-function CropModal({
+export function CropModal({
   file,
   onSave,
   onCancel,
+  maskShape = "circle",
 }: {
   file: File;
   onSave: (blob: Blob) => void;
   onCancel: () => void;
+  maskShape?: "circle" | "rectangle";
 }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
@@ -145,7 +147,10 @@ function CropModal({
     offsetRef.current = { x: offsetX, y: offsetY };
   }, [offsetX, offsetY]);
 
-  // When image loads, compute the fit scale so the shorter side fills the circle
+  const maskW = maskShape === "rectangle" ? 400 : 260;
+  const maskH = maskShape === "rectangle" ? 200 : 260;
+
+  // When image loads, compute the fit scale so the shorter side fills the mask
   const onImageLoad = useCallback(() => {
     const img = imageRef.current;
     if (!img) return;
@@ -153,21 +158,19 @@ function CropModal({
     const nh = img.naturalHeight;
     if (!nw || !nh) return;
     setNaturalSize({ w: nw, h: nh });
-    const fs = maskSize / Math.min(nw, nh);
+    const fs = Math.max(maskW / nw, maskH / nh);
     setFitScale(fs);
     setZoom(1);
     setOffsetX(0);
     setOffsetY(0);
-  }, []);
-
-  const maskSize = 260; // px — the crop circle diameter
+  }, [maskW, maskH]);
 
   // Effective scale = fitScale × zoom multiplier
   const scale = fitScale * zoom;
 
   // Derived image display size at current scale
-  const imgW = naturalSize ? naturalSize.w * scale : maskSize;
-  const imgH = naturalSize ? naturalSize.h * scale : maskSize;
+  const imgW = naturalSize ? naturalSize.w * scale : maskW;
+  const imgH = naturalSize ? naturalSize.h * scale : maskH;
 
   const startDrag = useCallback((clientX: number, clientY: number) => {
     setDragging(true);
@@ -243,25 +246,27 @@ function CropModal({
     if (!imageRef.current) return;
     const img = imageRef.current;
     const canvas = document.createElement("canvas");
-    canvas.width = maskSize;
-    canvas.height = maskSize;
+    canvas.width = maskW;
+    canvas.height = maskH;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Clip to circle
-    ctx.beginPath();
-    ctx.arc(maskSize / 2, maskSize / 2, maskSize / 2, 0, Math.PI * 2);
-    ctx.clip();
+    if (maskShape === "circle") {
+      // Clip to circle
+      ctx.beginPath();
+      ctx.arc(maskW / 2, maskH / 2, maskW / 2, 0, Math.PI * 2);
+      ctx.clip();
+    }
 
     // Draw image at its natural-aspect display size, centered + offset
-    const drawX = (maskSize - imgW) / 2 + offsetX;
-    const drawY = (maskSize - imgH) / 2 + offsetY;
+    const drawX = (maskW - imgW) / 2 + offsetX;
+    const drawY = (maskH - imgH) / 2 + offsetY;
     ctx.drawImage(img, drawX, drawY, imgW, imgH);
 
     canvas.toBlob((blob) => {
       if (blob) onSave(blob);
     }, "image/png");
-  }, [offsetX, offsetY, imgW, imgH, onSave]);
+  }, [offsetX, offsetY, imgW, imgH, maskW, maskH, maskShape, onSave]);
 
   if (!dataUrl) {
     return (
@@ -288,14 +293,18 @@ function CropModal({
         </div>
         <div className="crop-modal__body">
           <div
-            className="crop-modal__mask"
+            className={`crop-modal__mask${maskShape === "rectangle" ? " crop-modal__mask--rect" : ""}`}
             onMouseDown={(e) => { e.preventDefault(); startDrag(e.clientX, e.clientY); }}
             onTouchStart={(e) => {
               e.preventDefault();
               const t = e.touches[0];
               if (t) startDrag(t.clientX, t.clientY);
             }}
-            style={{ cursor: dragging ? "grabbing" : "grab" }}
+            style={{
+              width: `${maskW}px`,
+              height: `${maskH}px`,
+              cursor: dragging ? "grabbing" : "grab",
+            }}
           >
             <img
               ref={imageRef}
