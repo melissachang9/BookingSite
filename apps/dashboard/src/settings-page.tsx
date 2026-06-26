@@ -13,7 +13,7 @@ import {
   type TenantSummary,
 } from "@booking/shared-types";
 
-import { platformApi } from "./platform-api";
+import { platformApi, apiBaseUrl } from "./platform-api";
 
 type RouteDefinitionLike = {
   title: string;
@@ -1474,6 +1474,8 @@ function BrandingSection({
   const [bookingAdBody, setBookingAdBody] = useState<string>("");
   const [bookingAdImageUrl, setBookingAdImageUrl] = useState<string>("");
   const [bookingAdImageAltText, setBookingAdImageAltText] = useState<string>("");
+  const [marketingImageUploading, setMarketingImageUploading] = useState(false);
+  const [marketingImageError, setMarketingImageError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
   useEffect(() => {
@@ -1510,6 +1512,40 @@ function BrandingSection({
     }
     return null;
   }, [primaryColor, accentColor]);
+
+  const handleMarketingImageUpload = async (file: File | null) => {
+    if (!file) return;
+    setMarketingImageError(null);
+    setMarketingImageUploading(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      body.append("tenant_id", tenantSlug);
+      const response = await fetch(`${apiBaseUrl}/forms/upload`, {
+        method: "POST",
+        body,
+      });
+      if (!response.ok) {
+        let detail = "Unable to upload image.";
+        try {
+          const data = (await response.json()) as { detail?: string };
+          if (typeof data.detail === "string" && data.detail.trim()) {
+            detail = data.detail;
+          }
+        } catch { /* ignore */ }
+        throw new Error(detail);
+      }
+      const data = (await response.json()) as { url?: string };
+      if (!data.url) {
+        throw new Error("Upload did not return a URL.");
+      }
+      setBookingAdImageUrl(data.url);
+    } catch (err) {
+      setMarketingImageError(err instanceof Error ? err.message : "Unable to upload image.");
+    } finally {
+      setMarketingImageUploading(false);
+    }
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1653,6 +1689,46 @@ function BrandingSection({
             placeholder="Quiet booking, clear next steps."
           />
         </label>
+        <label className="settings-field">
+          <span>Marketing image</span>
+          <div className="marketing-image-upload">
+            {bookingAdImageUrl ? (
+              <div className="marketing-image-upload__preview">
+                <img src={bookingAdImageUrl} alt="Marketing preview" />
+              </div>
+            ) : null}
+            <div className="marketing-image-upload__controls">
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  void handleMarketingImageUpload(file);
+                  event.target.value = "";
+                }}
+                disabled={disabled || marketingImageUploading}
+              />
+              {bookingAdImageUrl ? (
+                <button
+                  type="button"
+                  className="ghost-action"
+                  onClick={() => setBookingAdImageUrl("")}
+                  disabled={disabled || marketingImageUploading}
+                >
+                  Remove
+                </button>
+              ) : null}
+              {marketingImageUploading ? <small className="settings-form-help">Uploading…</small> : null}
+              {marketingImageError ? (
+                <small role="alert" className="settings-error">{marketingImageError}</small>
+              ) : null}
+            </div>
+          </div>
+          <span className="settings-field-help">Upload a photo or paste a URL below.</span>
+        </label>
+      </div>
+
+      <div className="settings-form-row">
         <label className="settings-field">
           <span>Marketing image URL</span>
           <input
