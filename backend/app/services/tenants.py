@@ -238,6 +238,12 @@ async def update_tenant_branding(
             "body": payload.booking_ad.body.strip() if payload.booking_ad.body else None,
             "imageUrl": payload.booking_ad.image_url.strip() if payload.booking_ad.image_url else None,
             "imageAltText": payload.booking_ad.image_alt_text.strip() if payload.booking_ad.image_alt_text else None,
+            "serviceHeadline": payload.booking_ad.service_headline.strip() if payload.booking_ad.service_headline else None,
+            "serviceBody": payload.booking_ad.service_body.strip() if payload.booking_ad.service_body else None,
+            "locationHeadline": payload.booking_ad.location_headline.strip() if payload.booking_ad.location_headline else None,
+            "locationBody": payload.booking_ad.location_body.strip() if payload.booking_ad.location_body else None,
+            "reviewHeadline": payload.booking_ad.review_headline.strip() if payload.booking_ad.review_headline else None,
+            "reviewBody": payload.booking_ad.review_body.strip() if payload.booking_ad.review_body else None,
         }
 
     tenant.branding_json = current_branding

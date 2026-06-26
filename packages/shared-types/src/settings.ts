@@ -26,6 +26,12 @@ export type TenantBranding = {
     body?: string | null;
     imageUrl?: string | null;
     imageAltText?: string | null;
+    serviceHeadline?: string | null;
+    serviceBody?: string | null;
+    locationHeadline?: string | null;
+    locationBody?: string | null;
+    reviewHeadline?: string | null;
+    reviewBody?: string | null;
   } | null;
 };
 
@@ -137,6 +143,12 @@ export type UpdateTenantBrandingRequest = {
     body?: string | null;
     imageUrl?: string | null;
     imageAltText?: string | null;
+    serviceHeadline?: string | null;
+    serviceBody?: string | null;
+    locationHeadline?: string | null;
+    locationBody?: string | null;
+    reviewHeadline?: string | null;
+    reviewBody?: string | null;
   } | null;
 };
 

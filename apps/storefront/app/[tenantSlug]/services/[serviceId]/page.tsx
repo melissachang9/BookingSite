@@ -101,22 +101,7 @@ export default async function ServiceRoutePage({ params, searchParams }: Service
             </Link>
             <p className="store-eyebrow">Provider preference</p>
             <h2>{service.name}</h2>
-            <p>{service.description ?? "Choose who you would like to see, or let the studio match you with the earliest opening."}</p>
           </div>
-          <dl className="summary-list booking-summary-list">
-            <div>
-              <dt>Duration</dt>
-              <dd>{formatDuration(service.durationMinutes)}</dd>
-            </div>
-            <div>
-              <dt>Price</dt>
-              <dd>{formatCurrency(service.priceCents)}</dd>
-            </div>
-            <div>
-              <dt>Location</dt>
-              <dd>{selectedLocation?.name ?? "Any available"}</dd>
-            </div>
-          </dl>
         </section>
 
         {error === "slot-unavailable" ? (
@@ -131,6 +116,7 @@ export default async function ServiceRoutePage({ params, searchParams }: Service
             <div>
               <p className="store-eyebrow">Step {providerStepNumber}</p>
               <h2>Choose your provider preference</h2>
+              <p className="booking-entry-intro">Choose who you would like to see, or let the studio match you with the earliest opening.</p>
             </div>
             <span className="panel-badge">{providerResponse.providers.length} providers</span>
           </div>
@@ -147,7 +133,6 @@ export default async function ServiceRoutePage({ params, searchParams }: Service
               <span className="provider-choice-copy">
                 <strong>Anyone</strong>
                 <small>All providers</small>
-                <span>{noPreferenceAvailability.days.reduce((total, day) => total + day.slotCount, 0)} openings in the next month</span>
               </span>
               <span className="provider-choice-price">{servicePriceLabel}</span>
             </Link>

@@ -61,14 +61,6 @@ export default async function BookingSuccessPage({ params, searchParams }: Booki
                 : booking.depositStatus === "forfeited"
                   ? "This deposit was retained under the studio cancellation policy."
                   : "Payment details stay attached to this appointment.";
-      const followUpTitle =
-        booking.intakePlan?.completionTiming === "before_visit"
-          ? "Pre-visit follow-up stays attached"
-          : "No extra pre-visit steps are scheduled";
-      const followUpDetail =
-        booking.intakePlan?.completionTiming === "before_visit"
-          ? "Required forms and reminder timing remain attached to this confirmed appointment."
-          : "Your private booking link stays available if you need to make changes before the visit.";
       const manageLinkDetail =
         booking.intakePlan?.completionTiming === "before_visit"
           ? "Use this secure link to review the visit, cancel if needed, and keep any required pre-visit follow-up tied to the appointment."
@@ -79,11 +71,6 @@ export default async function BookingSuccessPage({ params, searchParams }: Booki
           <section className="state-panel state-panel--success">
             <p className="store-eyebrow">Booking confirmed</p>
             <h2>Your appointment is confirmed.</h2>
-            <p>
-              {booking.intakePlan?.completionTiming === "before_visit"
-                ? "Your appointment is confirmed, and the pre-visit reminder schedule stays attached through your private booking link."
-                : "Your appointment is confirmed, and your private booking link is ready if you need to update anything later."}
-            </p>
             <span className="panel-badge">{booking.status.replaceAll("_", " ")}</span>
           </section>
 
@@ -113,11 +100,6 @@ export default async function BookingSuccessPage({ params, searchParams }: Booki
                 <p>{paymentSummaryDetail}</p>
               </article>
             </div>
-          </section>
-
-          <section className="status-banner">
-            <strong>{followUpTitle}</strong>
-            <span>{followUpDetail}</span>
           </section>
 
           <section className="support-panel">

@@ -11,21 +11,9 @@ export function TenantBackButton({ ariaLabel, fallbackHref }: TenantBackButtonPr
   const router = useRouter();
 
   const handleClick = () => {
-    if (typeof window === "undefined") {
-      router.push(fallbackHref);
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
       return;
-    }
-
-    if (document.referrer.length > 0) {
-      try {
-        if (new URL(document.referrer).origin === window.location.origin) {
-          router.back();
-          return;
-        }
-      } catch {
-        router.push(fallbackHref);
-        return;
-      }
     }
 
     router.push(fallbackHref);

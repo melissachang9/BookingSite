@@ -161,14 +161,6 @@ export default async function CategoryLandingPage({ params, searchParams }: Cate
                     <p>
                       {service.description ?? "Personalized studio service with live appointment availability."}
                     </p>
-                    <div className="service-row-card__meta">
-                      <span>
-                        {service.depositCents > 0
-                          ? `${formatCurrency(service.depositCents)} deposit`
-                          : "No deposit"}
-                      </span>
-                      <span>{service.formIds.length} forms</span>
-                    </div>
                   </div>
                   <Link
                     href={pathWithQuery(`/${tenantSlug}/services/${slugify(service.name)}`, {
@@ -210,11 +202,8 @@ export default async function CategoryLandingPage({ params, searchParams }: Cate
               <img src={bookingAd.imageUrl} alt={bookingAd.imageAltText ?? tenant.name} />
             ) : null}
             <div>
-              <strong>{bookingAd.headline ?? "A smoother way to book, confirm, and return."}</strong>
-              <p>
-                {bookingAd.body ??
-                  "From screening to checkout, each step is designed to feel clear, calm, and studio-led."}
-              </p>
+              {bookingAd.headline ? <strong>{bookingAd.headline}</strong> : null}
+              {bookingAd.body ? <p>{bookingAd.body}</p> : null}
             </div>
           </aside>
         ) : null}

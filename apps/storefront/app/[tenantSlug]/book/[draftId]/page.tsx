@@ -276,9 +276,8 @@ export default async function BookingDraftPage({ params }: BookingDraftPageProps
     const bookingAd = tenant.branding.bookingAd;
     const bookingAdImageUrl = bookingAd?.imageUrl ?? "/manage-hero.png";
     const bookingAdImageAlt = bookingAd?.imageAltText ?? `${tenant.name} booking highlight`;
-    const bookingAdHeadline = bookingAd?.headline ?? "Booking held while you review";
-    const bookingAdBody =
-      bookingAd?.body ?? "Businesses can configure this artwork and message for the booking review step.";
+    const bookingAdHeadline = bookingAd?.reviewHeadline ?? null;
+    const bookingAdBody = bookingAd?.reviewBody ?? null;
     const holdStatusLabel = `${formatExpiryWindow(draft.expiresAt)} remaining`;
 
     // Step 1: Contact details only — minimal, centered, no rail
@@ -292,28 +291,20 @@ export default async function BookingDraftPage({ params }: BookingDraftPageProps
                 <h1>{draft.service.name}</h1>
               </div>
               <div className="visit-review-panel__status">
-                <span className="panel-badge panel-badge--visit">Slot held</span>
-                <p>{holdStatusLabel}</p>
+                <p>Slot held &middot; {holdStatusLabel}</p>
               </div>
             </div>
 
-            <div className="summary-grid summary-grid--visit summary-grid--compact">
-              <article className="summary-card summary-card--visit">
-                <span>Provider</span>
-                <strong>{draft.provider.name}</strong>
-                <p>{formatDuration(draft.durationMinutes)}</p>
-              </article>
-              <article className="summary-card summary-card--visit">
-                <span>When</span>
-                <strong>{formatInTenantTime(draft.startsAt, tenant.timezone)}</strong>
-                <p>{tenant.timezone}</p>
-              </article>
-              <article className="summary-card summary-card--visit">
-                <span>Payment</span>
-                <strong>{draft.depositCents > 0 ? `${formatCurrency(draft.depositCents)} deposit` : "No deposit"}</strong>
-                <p>Total {formatCurrency(draft.priceCents)}</p>
-              </article>
-            </div>
+            <dl className="summary-list booking-summary-list">
+              <div>
+                <dt>Duration</dt>
+                <dd>{formatDuration(draft.durationMinutes)}</dd>
+              </div>
+              <div>
+                <dt>Price</dt>
+                <dd>{formatCurrency(draft.priceCents)}</dd>
+              </div>
+            </dl>
           </section>
 
           <section className="store-section contact-details-panel contact-details-panel--standalone">
@@ -381,29 +372,6 @@ export default async function BookingDraftPage({ params }: BookingDraftPageProps
               <span className="panel-badge panel-badge--visit">Slot held</span>
               <p>{holdStatusLabel}</p>
             </div>
-          </div>
-
-          <div className="summary-grid summary-grid--visit summary-grid--compact">
-            <article className="summary-card summary-card--visit">
-              <span>Provider</span>
-              <strong>{draft.provider.name}</strong>
-              <p>{formatDuration(draft.durationMinutes)}</p>
-            </article>
-            <article className="summary-card summary-card--visit">
-              <span>When</span>
-              <strong>{formatInTenantTime(draft.startsAt, tenant.timezone)}</strong>
-              <p>{tenant.timezone}</p>
-            </article>
-            <article className="summary-card summary-card--visit">
-              <span>Contact</span>
-              <strong>{draft.customer?.name}</strong>
-              <p>{draft.customer?.email}</p>
-            </article>
-            <article className="summary-card summary-card--visit">
-              <span>Payment</span>
-              <strong>{draft.depositCents > 0 ? `${formatCurrency(draft.depositCents)} deposit` : "No deposit"}</strong>
-              <p>Total {formatCurrency(draft.priceCents)}</p>
-            </article>
           </div>
         </section>
 

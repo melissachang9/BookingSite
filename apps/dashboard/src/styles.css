@@ -4017,7 +4017,7 @@ body {
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 0.5rem; }
 
 /* Crop modal */
-.crop-modal { width: min(420px, 100%); }
+.crop-modal { width: min(520px, 100%); }
 .crop-modal__body { display: flex; flex-direction: column; align-items: center; gap: 1rem; padding: 1.5rem 1.25rem 1rem; }
 .crop-modal__mask {
   width: 260px; height: 260px;
@@ -4029,7 +4029,7 @@ body {
   -webkit-user-select: none;
 }
 .crop-modal__mask--rect {
-  width: 400px; height: 200px;
+  width: 450px; height: 300px;
   border-radius: 8px;
 }
 .crop-modal__mask img {

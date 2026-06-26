@@ -85,7 +85,7 @@ button:disabled {
   display: grid;
   grid-template-columns: 3rem minmax(0, 1fr) minmax(0, 18rem);
   align-items: center;
-  min-height: 5rem;
+  min-height: 4rem;
   background: rgba(246, 241, 233, 0.76);
 }
 
@@ -396,6 +396,10 @@ button:disabled {
   padding: clamp(1.5rem, 4vw, 3.2rem) 0;
 }
 
+.booking-entry-layout {
+  padding: clamp(1rem, 3vw, 2rem) 0;
+}
+
 .booking-entry-layout,
 .booking-flow-layout {
   grid-template-columns: minmax(0, 0.92fr) minmax(340px, 1.08fr);
@@ -415,12 +419,12 @@ button:disabled {
 .booking-flow-panel,
 .service-selection-panel {
   display: grid;
-  gap: 1.35rem;
+  gap: 1.2rem;
 }
 
 .booking-entry-panel--editorial,
 .service-selection-panel--editorial {
-  padding: clamp(1.25rem, 3vw, 2rem);
+  padding: clamp(1rem, 2.5vw, 1.75rem);
   border: 1px solid var(--ui-border);
   border-radius: var(--ui-radius-lg);
   background: linear-gradient(180deg, rgba(251, 247, 241, 0.86), rgba(238, 228, 214, 0.56));
@@ -429,7 +433,7 @@ button:disabled {
 
 .booking-entry-copy {
   display: grid;
-  gap: 0.55rem;
+  gap: 0.45rem;
 }
 
 .booking-entry-intro {
@@ -441,10 +445,10 @@ button:disabled {
   margin: 0;
   color: var(--ui-ink);
   font-family: var(--ui-font-sans);
-  font-size: clamp(2.8rem, 5.4vw, 5.8rem);
-  line-height: 0.9;
+  font-size: clamp(2.5rem, 4.8vw, 5rem);
+  line-height: 0.92;
   font-weight: 300;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
 }
 
 .section-header--plain {
@@ -455,17 +459,17 @@ button:disabled {
 .location-option-list,
 .service-list--stacked {
   display: grid;
-  gap: 0.85rem;
+  gap: 0.75rem;
 }
 
 .screening-option-card,
 .location-option-card {
-  min-height: 6rem;
+  min-height: 5.5rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 1.1rem 1.25rem;
+  padding: 1rem 1.15rem;
   border: 1px solid rgba(18, 62, 54, 0.1);
   border-radius: var(--ui-radius-md);
   color: var(--ui-ink);

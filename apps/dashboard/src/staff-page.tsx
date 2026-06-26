@@ -147,8 +147,8 @@ export function CropModal({
     offsetRef.current = { x: offsetX, y: offsetY };
   }, [offsetX, offsetY]);
 
-  const maskW = maskShape === "rectangle" ? 400 : 260;
-  const maskH = maskShape === "rectangle" ? 200 : 260;
+  const maskW = maskShape === "rectangle" ? 450 : 260;
+  const maskH = maskShape === "rectangle" ? 300 : 260;
 
   // When image loads, compute the fit scale so the shorter side fills the mask
   const onImageLoad = useCallback(() => {
@@ -245,13 +245,15 @@ export function CropModal({
   const handleSave = useCallback(() => {
     if (!imageRef.current) return;
     const img = imageRef.current;
-    const outputScale = 2; // render at 2x for retina-quality output
+    const outputScale = 3; // render at 3x for retina-quality output
     const canvas = document.createElement("canvas");
     canvas.width = maskW * outputScale;
     canvas.height = maskH * outputScale;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
     ctx.scale(outputScale, outputScale);
 
     if (maskShape === "circle") {

@@ -26,6 +26,12 @@ class BookingAdResponse(CamelModel):
     body: str | None = None
     image_url: str | None = None
     image_alt_text: str | None = None
+    service_headline: str | None = None
+    service_body: str | None = None
+    location_headline: str | None = None
+    location_body: str | None = None
+    review_headline: str | None = None
+    review_body: str | None = None
 
 
 class TenantBrandingResponse(CamelModel):
@@ -67,7 +73,7 @@ class UpdateTenantBrandingRequest(CamelModel):
             for value in (self.booking_ad.image_url,):
                 if value is not None and len(value) > 2048:
                     raise ValueError("booking_ad.image_url must be 2048 characters or fewer.")
-            for value in (self.booking_ad.headline, self.booking_ad.body, self.booking_ad.image_alt_text):
+            for value in (self.booking_ad.headline, self.booking_ad.body, self.booking_ad.image_alt_text, self.booking_ad.service_headline, self.booking_ad.service_body, self.booking_ad.location_headline, self.booking_ad.location_body, self.booking_ad.review_headline, self.booking_ad.review_body):
                 if value is not None and len(value) > 512:
                     raise ValueError("booking_ad text fields must be 512 characters or fewer.")
         return self

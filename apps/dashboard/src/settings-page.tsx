@@ -1475,6 +1475,12 @@ function BrandingSection({
   const [bookingAdBody, setBookingAdBody] = useState<string>("");
   const [bookingAdImageUrl, setBookingAdImageUrl] = useState<string>("");
   const [bookingAdImageAltText, setBookingAdImageAltText] = useState<string>("");
+  const [bookingAdServiceHeadline, setBookingAdServiceHeadline] = useState<string>("");
+  const [bookingAdServiceBody, setBookingAdServiceBody] = useState<string>("");
+  const [bookingAdLocationHeadline, setBookingAdLocationHeadline] = useState<string>("");
+  const [bookingAdLocationBody, setBookingAdLocationBody] = useState<string>("");
+  const [bookingAdReviewHeadline, setBookingAdReviewHeadline] = useState<string>("");
+  const [bookingAdReviewBody, setBookingAdReviewBody] = useState<string>("");
   const [marketingImageUploading, setMarketingImageUploading] = useState(false);
   const [marketingImageError, setMarketingImageError] = useState<string | null>(null);
   const [marketingCropFile, setMarketingCropFile] = useState<File | null>(null);
@@ -1493,6 +1499,12 @@ function BrandingSection({
       setBookingAdBody(branding.bookingAd?.body ?? "");
       setBookingAdImageUrl(branding.bookingAd?.imageUrl ?? "");
       setBookingAdImageAltText(branding.bookingAd?.imageAltText ?? "");
+      setBookingAdServiceHeadline(branding.bookingAd?.serviceHeadline ?? "");
+      setBookingAdServiceBody(branding.bookingAd?.serviceBody ?? "");
+      setBookingAdLocationHeadline(branding.bookingAd?.locationHeadline ?? "");
+      setBookingAdLocationBody(branding.bookingAd?.locationBody ?? "");
+      setBookingAdReviewHeadline(branding.bookingAd?.reviewHeadline ?? "");
+      setBookingAdReviewBody(branding.bookingAd?.reviewBody ?? "");
     }
   }, [tenant]);
 
@@ -1576,6 +1588,12 @@ function BrandingSection({
           body: bookingAdBody.trim() || null,
           imageUrl: bookingAdImageUrl.trim() || null,
           imageAltText: bookingAdImageAltText.trim() || null,
+          serviceHeadline: bookingAdServiceHeadline.trim() || null,
+          serviceBody: bookingAdServiceBody.trim() || null,
+          locationHeadline: bookingAdLocationHeadline.trim() || null,
+          locationBody: bookingAdLocationBody.trim() || null,
+          reviewHeadline: bookingAdReviewHeadline.trim() || null,
+          reviewBody: bookingAdReviewBody.trim() || null,
         },
       });
       onTenantUpdated(updated);
@@ -1789,6 +1807,99 @@ function BrandingSection({
           />
         </label>
       </div>
+
+      <fieldset className="settings-fieldset">
+        <legend>Select service screen</legend>
+        <p className="settings-fieldset-help">Customize the marketing panel text shown on the &ldquo;Select a service&rdquo; step.</p>
+        <div className="settings-form-row">
+          <label className="settings-field">
+            <span>Service screen headline</span>
+            <input
+              type="text"
+              value={bookingAdServiceHeadline}
+              onChange={(event) => setBookingAdServiceHeadline(event.target.value)}
+              disabled={disabled}
+              maxLength={512}
+              placeholder="Choose a treatment that matches your ritual."
+            />
+          </label>
+        </div>
+        <div className="settings-form-row">
+          <label className="settings-field">
+            <span>Service screen body</span>
+            <textarea
+              value={bookingAdServiceBody}
+              onChange={(event) => setBookingAdServiceBody(event.target.value)}
+              disabled={disabled}
+              rows={3}
+              maxLength={512}
+              placeholder="Clear timing, transparent deposits, and provider selection stay connected all the way to checkout."
+            />
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset className="settings-fieldset">
+        <legend>Choose location screen</legend>
+        <p className="settings-fieldset-help">Customize the marketing panel text shown on the &ldquo;Choose a location&rdquo; step.</p>
+        <div className="settings-form-row">
+          <label className="settings-field">
+            <span>Location screen headline</span>
+            <input
+              type="text"
+              value={bookingAdLocationHeadline}
+              onChange={(event) => setBookingAdLocationHeadline(event.target.value)}
+              disabled={disabled}
+              maxLength={512}
+              placeholder="Choose the studio that fits your day."
+            />
+          </label>
+        </div>
+        <div className="settings-form-row">
+          <label className="settings-field">
+            <span>Location screen body</span>
+            <textarea
+              value={bookingAdLocationBody}
+              onChange={(event) => setBookingAdLocationBody(event.target.value)}
+              disabled={disabled}
+              rows={3}
+              maxLength={512}
+              placeholder="Location-aware booking keeps service availability, checkout, and booking details consistent."
+            />
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset className="settings-fieldset">
+        <legend>Booking review screen</legend>
+        <p className="settings-fieldset-help">Customize the marketing panel text shown on the booking review step.</p>
+        <div className="settings-form-row">
+          <label className="settings-field">
+            <span>Review screen headline</span>
+            <input
+              type="text"
+              value={bookingAdReviewHeadline}
+              onChange={(event) => setBookingAdReviewHeadline(event.target.value)}
+              disabled={disabled}
+              maxLength={512}
+              placeholder="Booking held while you review"
+            />
+          </label>
+        </div>
+        <div className="settings-form-row">
+          <label className="settings-field">
+            <span>Review screen body</span>
+            <textarea
+              value={bookingAdReviewBody}
+              onChange={(event) => setBookingAdReviewBody(event.target.value)}
+              disabled={disabled}
+              rows={3}
+              maxLength={512}
+              placeholder="Businesses can configure this artwork and message for the booking review step."
+            />
+          </label>
+        </div>
+      </fieldset>
 
       <div className="branding-preview" aria-label="Brand preview">
         <span className="branding-preview__label">Preview</span>

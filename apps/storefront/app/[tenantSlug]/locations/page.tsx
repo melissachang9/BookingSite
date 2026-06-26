@@ -88,8 +88,8 @@ export default async function LocationsPage({ params, searchParams }: LocationsP
       <aside className="booking-ad-panel booking-ad-panel--quiet" aria-label="Studio highlight">
         {bookingAd?.imageUrl ? <img src={bookingAd.imageUrl} alt={bookingAd.imageAltText ?? tenantName} /> : null}
         <div>
-          <strong>{bookingAd?.headline ?? "Choose the studio that fits your day."}</strong>
-          <p>{bookingAd?.body ?? "Location-aware booking keeps service availability, checkout, and booking details consistent."}</p>
+          {bookingAd?.locationHeadline ? <strong>{bookingAd.locationHeadline}</strong> : null}
+          {bookingAd?.locationBody ? <p>{bookingAd.locationBody}</p> : null}
         </div>
       </aside>
     </main>

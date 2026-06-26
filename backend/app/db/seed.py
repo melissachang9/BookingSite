@@ -430,6 +430,7 @@ async def seed_demo_data(session: AsyncSession) -> None:
             select(Service).where(Service.tenant_id == existing_tenant.id, Service.name == "Brow Shape and Tint")
         )
         if existing_brow_service is not None:
+            existing_brow_service.description = None
             await _seed_brow_prep_form(session, existing_tenant, existing_brow_service)
         # Seed booking history if no bookings exist (E2E reset may have wiped them)
         existing_booking_count = await session.scalar(
@@ -493,7 +494,6 @@ async def seed_demo_data(session: AsyncSession) -> None:
     brow = Service(
         tenant_id=tenant.id,
         name="Brow Shape and Tint",
-        description="A fast repeat-booking service with clear deposit and timing context.",
         duration_minutes=45,
         price_cents=7500,
         deposit_cents=1500,

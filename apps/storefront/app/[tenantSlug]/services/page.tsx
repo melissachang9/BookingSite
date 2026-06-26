@@ -68,10 +68,6 @@ export default async function ServicesPage({ params, searchParams }: ServicesPag
                     </div>
                     <h3>{service.name}</h3>
                     <p>{service.description ?? "Personalized studio service with live appointment availability."}</p>
-                    <div className="service-row-card__meta">
-                      <span>{service.depositCents > 0 ? `${formatCurrency(service.depositCents)} deposit` : "No deposit"}</span>
-                      <span>{service.formIds.length} forms</span>
-                    </div>
                   </div>
                   <Link
                     href={pathWithQuery(`/${tenantSlug}/services/${slugify(service.name)}`, {
@@ -96,8 +92,8 @@ export default async function ServicesPage({ params, searchParams }: ServicesPag
         <aside className="booking-ad-panel booking-ad-panel--service" aria-label="Studio highlight">
           {bookingAd?.imageUrl ? <img src={bookingAd.imageUrl} alt={bookingAd.imageAltText ?? tenant.name} /> : null}
           <div>
-            <strong>{bookingAd?.headline ?? "Choose a treatment that matches your ritual."}</strong>
-            <p>{bookingAd?.body ?? "Clear timing, transparent deposits, and provider selection stay connected all the way to checkout."}</p>
+            {bookingAd?.serviceHeadline ? <strong>{bookingAd.serviceHeadline}</strong> : null}
+            {bookingAd?.serviceBody ? <p>{bookingAd.serviceBody}</p> : null}
           </div>
         </aside>
       </main>

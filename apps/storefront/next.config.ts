@@ -11,6 +11,9 @@ const nextConfig = {
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   experimental: {
     reactDebugChannel: false,
+    serverActions: {
+      bodySizeLimit: "10mb",
+    },
   },
   turbopack: {
     root: repositoryRoot,
