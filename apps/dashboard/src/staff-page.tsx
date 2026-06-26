@@ -245,11 +245,14 @@ export function CropModal({
   const handleSave = useCallback(() => {
     if (!imageRef.current) return;
     const img = imageRef.current;
+    const outputScale = 2; // render at 2x for retina-quality output
     const canvas = document.createElement("canvas");
-    canvas.width = maskW;
-    canvas.height = maskH;
+    canvas.width = maskW * outputScale;
+    canvas.height = maskH * outputScale;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    ctx.scale(outputScale, outputScale);
 
     if (maskShape === "circle") {
       // Clip to circle
