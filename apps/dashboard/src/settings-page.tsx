@@ -60,9 +60,9 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
   },
   {
     id: "branding",
-    title: "Logo & Branding",
-    eyebrow: "Business setup",
-    description: "Logo URL, favicon, gallery photos, and brand colors.",
+    title: "Marketing",
+    eyebrow: "Marketing",
+    description: "Brand colors, gallery photos, and the storefront marketing panel.",
     status: "available",
   },
   {

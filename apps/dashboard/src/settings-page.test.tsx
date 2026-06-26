@@ -97,7 +97,7 @@ afterEach(() => {
 });
 
 describe("SettingsPage", () => {
-  it("renders the sectioned anchor nav with Business Setup and Calendar groups", () => {
+  it("renders the sectioned anchor nav with Business Setup, Marketing, and Calendar groups", () => {
     render(
       <SettingsPage
         definition={definition}
@@ -110,6 +110,7 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("navigation", { name: /settings sections/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Business Details" })).toHaveAttribute("href", "#business-details");
     expect(screen.getByRole("link", { name: "Business Hours" })).toHaveAttribute("href", "#business-hours");
+    expect(screen.getByRole("link", { name: "Marketing" })).toHaveAttribute("href", "#branding");
     expect(screen.getByRole("link", { name: "Calendar Display" })).toHaveAttribute("href", "#calendar");
     expect(screen.getByRole("link", { name: "Wallet & Membership" })).toHaveAttribute("href", "#wallet-membership");
   });

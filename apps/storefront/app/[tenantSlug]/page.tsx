@@ -63,10 +63,9 @@ export default async function TenantHomePage({ params }: TenantPageProps) {
       ? pathWithQuery(`/${tenantSlug}/locations`, { screening: screeningId })
       : pathWithQuery(`/${tenantSlug}/services`, { screening: screeningId, locationId: activeLocations[0]?.id });
   const bookingAd = tenant.branding.bookingAd;
-  const showBookingAd = (bookingAd as { enabled?: boolean } | null | undefined)?.enabled ?? true;
 
   return (
-    <main className="booking-entry-layout booking-entry-layout--balanced">
+    <main className="booking-entry-layout">
       <section className="booking-entry-panel booking-entry-panel--editorial">
         <div className="booking-entry-copy">
           <p className="store-eyebrow">Begin booking</p>
@@ -89,15 +88,13 @@ export default async function TenantHomePage({ params }: TenantPageProps) {
         </div>
       </section>
 
-      {showBookingAd ? (
-        <aside className="booking-ad-panel booking-ad-panel--entry" aria-label="Studio highlight">
-          {bookingAd?.imageUrl ? <img src={bookingAd.imageUrl} alt={bookingAd.imageAltText ?? tenant.name} /> : null}
-          <div>
-            <strong>{bookingAd?.headline ?? "A smoother way to book, confirm, and return."}</strong>
-            <p>{bookingAd?.body ?? "From screening to checkout, each step is designed to feel clear, calm, and studio-led."}</p>
-          </div>
-        </aside>
-      ) : null}
+      <aside className="booking-ad-panel booking-ad-panel--entry" aria-label="Studio highlight">
+        {bookingAd?.imageUrl ? <img src={bookingAd.imageUrl} alt={bookingAd.imageAltText ?? tenant.name} /> : null}
+        <div>
+          <strong>{bookingAd?.headline ?? "A smoother way to book, confirm, and return."}</strong>
+          <p>{bookingAd?.body ?? "From screening to checkout, each step is designed to feel clear, calm, and studio-led."}</p>
+        </div>
+      </aside>
     </main>
   );
 }
