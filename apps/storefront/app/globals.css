@@ -559,6 +559,16 @@ button:disabled {
   min-height: 22rem;
 }
 
+.booking-ad-panel--entry {
+  min-height: 0;
+  height: 18rem;
+}
+
+.booking-ad-panel--entry img {
+  min-height: 0;
+  height: 18rem;
+}
+
 .booking-ad-panel--checkout img {
   min-height: 22rem;
 }
