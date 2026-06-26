@@ -399,7 +399,11 @@ button:disabled {
 .booking-entry-layout,
 .booking-flow-layout {
   grid-template-columns: minmax(0, 0.92fr) minmax(340px, 1.08fr);
-  align-items: center;
+  align-items: stretch;
+}
+
+.booking-entry-layout > .booking-entry-panel {
+  align-self: center;
 }
 
 .service-selection-layout {
@@ -561,12 +565,12 @@ button:disabled {
 
 .booking-ad-panel--entry {
   min-height: 0;
-  height: 18rem;
+  height: 26rem;
 }
 
 .booking-ad-panel--entry img {
   min-height: 0;
-  height: 18rem;
+  height: 100%;
 }
 
 .booking-ad-panel--checkout img {
