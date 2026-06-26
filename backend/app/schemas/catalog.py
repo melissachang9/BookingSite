@@ -21,6 +21,7 @@ class BookingScreeningResponse(CamelModel):
 
 
 class BookingAdResponse(CamelModel):
+    enabled: bool = True
     headline: str | None = None
     body: str | None = None
     image_url: str | None = None
@@ -49,6 +50,7 @@ class UpdateTenantBrandingRequest(CamelModel):
     primary_color: str | None = Field(default=None, max_length=16)
     accent_color: str | None = Field(default=None, max_length=16)
     photos: list[str] | None = Field(default=None, max_length=24)
+    booking_ad: BookingAdResponse | None = None
 
     @model_validator(mode="after")
     def _validate(self) -> "UpdateTenantBrandingRequest":
@@ -61,6 +63,13 @@ class UpdateTenantBrandingRequest(CamelModel):
                     raise ValueError("photos entries must be non-empty URLs.")
                 if len(url) > 2048:
                     raise ValueError("photos entries must be 2048 characters or fewer.")
+        if self.booking_ad is not None:
+            for value in (self.booking_ad.image_url,):
+                if value is not None and len(value) > 2048:
+                    raise ValueError("booking_ad.image_url must be 2048 characters or fewer.")
+            for value in (self.booking_ad.headline, self.booking_ad.body, self.booking_ad.image_alt_text):
+                if value is not None and len(value) > 512:
+                    raise ValueError("booking_ad text fields must be 512 characters or fewer.")
         return self
 
 

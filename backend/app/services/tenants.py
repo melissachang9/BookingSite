@@ -109,6 +109,7 @@ def _default_branding(payload: CreateTenantRequest) -> dict[str, object]:
             "options": [],
         },
         "bookingAd": {
+            "enabled": True,
             "headline": f"{payload.name.strip()} online booking",
             "body": "Services will appear here as soon as the launch checklist is completed.",
         },
@@ -230,6 +231,14 @@ async def update_tenant_branding(
         current_branding["accentColor"] = color or None
     if payload.photos is not None:
         current_branding["photos"] = [url.strip() for url in payload.photos]
+    if payload.booking_ad is not None:
+        current_branding["bookingAd"] = {
+            "enabled": payload.booking_ad.enabled,
+            "headline": payload.booking_ad.headline.strip() if payload.booking_ad.headline else None,
+            "body": payload.booking_ad.body.strip() if payload.booking_ad.body else None,
+            "imageUrl": payload.booking_ad.image_url.strip() if payload.booking_ad.image_url else None,
+            "imageAltText": payload.booking_ad.image_alt_text.strip() if payload.booking_ad.image_alt_text else None,
+        }
 
     tenant.branding_json = current_branding
     await session.commit()

@@ -55,6 +55,7 @@ DEMO_BRANDING = {
         ],
     },
     "bookingAd": {
+        "enabled": True,
         "headline": "Quiet booking, clear next steps.",
         "body": "Choose the visit type, location, provider preference, and time without losing context.",
         "imageUrl": "/studio-hero.png",

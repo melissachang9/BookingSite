@@ -402,6 +402,11 @@ button:disabled {
   align-items: center;
 }
 
+.booking-entry-layout--balanced {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
 .service-selection-layout {
   grid-template-columns: minmax(0, 1fr) minmax(300px, 0.38fr);
   align-items: start;
@@ -557,6 +562,16 @@ button:disabled {
 
 .booking-ad-panel--checkout {
   min-height: 22rem;
+}
+
+.booking-ad-panel--entry,
+.booking-ad-panel--entry img {
+  min-height: 0;
+}
+
+.booking-ad-panel--entry {
+  min-height: 0;
+  height: 100%;
 }
 
 .booking-ad-panel--checkout img {

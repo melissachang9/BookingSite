@@ -1469,6 +1469,11 @@ function BrandingSection({
   const [primaryColor, setPrimaryColor] = useState<string>("#9f5323");
   const [accentColor, setAccentColor] = useState<string>("#7a3c13");
   const [photosText, setPhotosText] = useState<string>("");
+  const [bookingAdEnabled, setBookingAdEnabled] = useState<boolean>(true);
+  const [bookingAdHeadline, setBookingAdHeadline] = useState<string>("");
+  const [bookingAdBody, setBookingAdBody] = useState<string>("");
+  const [bookingAdImageUrl, setBookingAdImageUrl] = useState<string>("");
+  const [bookingAdImageAltText, setBookingAdImageAltText] = useState<string>("");
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
   useEffect(() => {
@@ -1479,6 +1484,11 @@ function BrandingSection({
       setPrimaryColor(branding.primaryColor ?? "#9f5323");
       setAccentColor(branding.accentColor ?? "#7a3c13");
       setPhotosText((branding.photos ?? []).join("\n"));
+      setBookingAdEnabled(branding.bookingAd?.enabled ?? true);
+      setBookingAdHeadline(branding.bookingAd?.headline ?? "");
+      setBookingAdBody(branding.bookingAd?.body ?? "");
+      setBookingAdImageUrl(branding.bookingAd?.imageUrl ?? "");
+      setBookingAdImageAltText(branding.bookingAd?.imageAltText ?? "");
     }
   }, [tenant]);
 
@@ -1512,6 +1522,13 @@ function BrandingSection({
         primaryColor: primaryColor.trim() || null,
         accentColor: accentColor.trim() || null,
         photos: parsedPhotos,
+        bookingAd: {
+          enabled: bookingAdEnabled,
+          headline: bookingAdHeadline.trim() || null,
+          body: bookingAdBody.trim() || null,
+          imageUrl: bookingAdImageUrl.trim() || null,
+          imageAltText: bookingAdImageAltText.trim() || null,
+        },
       });
       onTenantUpdated(updated);
       setSaveState({ kind: "success", message: "Branding saved." });
@@ -1610,6 +1627,69 @@ function BrandingSection({
         />
         <span className="settings-field-help">One URL per line.</span>
       </label>
+
+      <label className="settings-toggle-field">
+        <input
+          type="checkbox"
+          checked={bookingAdEnabled}
+          onChange={(event) => setBookingAdEnabled(event.target.checked)}
+          disabled={disabled}
+        />
+        <span>
+          <strong>Show marketing panel on Begin booking</strong>
+          <small>Turn this off to hide the right-side marketing container on the first booking screen.</small>
+        </span>
+      </label>
+
+      <div className="settings-form-row">
+        <label className="settings-field">
+          <span>Marketing headline</span>
+          <input
+            type="text"
+            value={bookingAdHeadline}
+            onChange={(event) => setBookingAdHeadline(event.target.value)}
+            disabled={disabled}
+            maxLength={512}
+            placeholder="Quiet booking, clear next steps."
+          />
+        </label>
+        <label className="settings-field">
+          <span>Marketing image URL</span>
+          <input
+            type="url"
+            value={bookingAdImageUrl}
+            onChange={(event) => setBookingAdImageUrl(event.target.value)}
+            disabled={disabled}
+            maxLength={2048}
+            placeholder="https://cdn.example.com/booking-hero.jpg"
+          />
+        </label>
+      </div>
+
+      <div className="settings-form-row">
+        <label className="settings-field">
+          <span>Marketing body</span>
+          <textarea
+            value={bookingAdBody}
+            onChange={(event) => setBookingAdBody(event.target.value)}
+            disabled={disabled}
+            rows={3}
+            maxLength={512}
+            placeholder="Choose the visit type, location, provider preference, and time without losing context."
+          />
+        </label>
+        <label className="settings-field">
+          <span>Marketing image alt text</span>
+          <input
+            type="text"
+            value={bookingAdImageAltText}
+            onChange={(event) => setBookingAdImageAltText(event.target.value)}
+            disabled={disabled}
+            maxLength={512}
+            placeholder="Studio reception area"
+          />
+        </label>
+      </div>
 
       <div className="branding-preview" aria-label="Brand preview">
         <span className="branding-preview__label">Preview</span>

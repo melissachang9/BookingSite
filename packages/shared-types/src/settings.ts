@@ -21,6 +21,7 @@ export type TenantBranding = {
     }>;
   } | null;
   bookingAd?: {
+    enabled?: boolean;
     headline?: string | null;
     body?: string | null;
     imageUrl?: string | null;
@@ -130,6 +131,13 @@ export type UpdateTenantBrandingRequest = {
   primaryColor?: string | null;
   accentColor?: string | null;
   photos?: string[];
+  bookingAd?: {
+    enabled?: boolean;
+    headline?: string | null;
+    body?: string | null;
+    imageUrl?: string | null;
+    imageAltText?: string | null;
+  } | null;
 };
 
 export type UpdateTenantClientOwnershipRequest = {
