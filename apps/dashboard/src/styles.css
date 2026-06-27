@@ -5292,39 +5292,77 @@ body {
   background: rgba(0,0,0,0.03);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
-.service-card__variants {
+.service-card__providers {
   border-top: 1px solid var(--ui-border, #e5e7eb);
+  display: flex;
+  flex-direction: column;
 }
-.service-card__variants-toggle {
+.service-card__providers-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0.6rem 1rem;
-  cursor: pointer;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--ui-ink, #1f2937);
-  user-select: none;
-  list-style: none;
-}
-.service-card__variants-toggle::-webkit-details-marker {
-  display: none;
-}
-.service-card__variants-count {
-  font-size: 0.72rem;
-  font-weight: 400;
-  color: var(--ui-muted, #6b7280);
-}
-.service-card__variants-body {
-  padding: 0 1rem 0.75rem;
-  display: flex;
-  flex-direction: column;
   gap: 0.5rem;
 }
-.service-card__variants-save {
+.service-card__provider-list {
   display: flex;
-  justify-content: flex-end;
-  padding-top: 0.25rem;
+  flex-direction: column;
+}
+.service-card__provider {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.6rem 1rem;
+  border-top: 1px solid var(--ui-border, #f3f4f6);
+}
+.service-card__provider.is-customized {
+  background: rgba(255, 250, 243, 0.35);
+}
+.service-card__provider-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.service-card__provider-header strong {
+  font-size: 0.88rem;
+  color: var(--ui-ink, #1f2937);
+}
+.service-card__provider-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ui-warning, #92400e);
+}
+.service-card__provider-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.service-card__provider-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.service-card__provider-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ui-ink, #1f2937);
+  min-width: 4.5rem;
+  flex-shrink: 0;
+}
+.service-card__provider-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.service-card__provider-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding-top: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--text-muted, #6b7280);
 }
 .service-detail-header {
   display: flex;

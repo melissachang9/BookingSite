@@ -981,77 +981,107 @@ function ServiceCard({
       </div>
 
       {eligibleProviders.length > 0 ? (
-        <details className="service-card__variants">
-          <summary className="service-card__variants-toggle">
-            <span>Per-provider pricing</span>
-            <span className="service-card__variants-count">{eligibleProviders.length} provider{eligibleProviders.length !== 1 ? "s" : ""}</span>
-          </summary>
-          <div className="service-card__variants-body">
-            {!variantsLoaded ? (
-              <div className="calendar-state">Loading…</div>
-            ) : (
-              <>
-                <div className="service-variant-grid">
-                  {eligibleProviders.map((provider) => {
-                    const entry = variantByProvider.get(provider.id) ?? { providerId: provider.id, priceCents: null, durationMinutes: null, depositCents: null };
-                    const hasAnyOverride = entry.priceCents != null || entry.durationMinutes != null || entry.depositCents != null;
-                    return (
-                      <article key={provider.id} className={`service-variant-card${hasAnyOverride ? " is-customized" : ""}`}>
-                        <header className="service-variant-card__header">
-                          <div className="service-variant-card__title">
-                            <strong>{provider.name}</strong>
-                            <span className={`service-variant-card__badge${hasAnyOverride ? " service-variant-card__badge--custom" : ""}`}>
-                              {hasAnyOverride ? "Custom pricing" : "Using defaults"}
-                            </span>
-                          </div>
-                          {canManage && hasAnyOverride ? (
-                            <button type="button" className="text-action" onClick={() => removeVariantOverrides(provider.id)}>Reset all</button>
-                          ) : null}
-                        </header>
-                        <div className="service-variant-rows">
-                          <VariantField label="Duration" defaultText={`${formatDurationMinutes(baseDurationMinutes)} default`}
-                            isOverridden={entry.durationMinutes != null}
-                            onReset={() => updateVariant(provider.id, { durationMinutes: null })} canManage={canManage}>
+        <div className="service-card__providers">
+          <div className="service-card__providers-header">
+            <span className="eyebrow">Per-provider pricing</span>
+            {canManage && isVariantsDirty ? (
+              <button type="button" className="primary-action" onClick={handleSaveVariants}
+                disabled={variantsSaving}>
+                {variantsSaving ? "Saving…" : "Save variants"}
+              </button>
+            ) : null}
+          </div>
+          {!variantsLoaded ? (
+            <div className="calendar-state">Loading…</div>
+          ) : (
+            <div className="service-card__provider-list">
+              {eligibleProviders.map((provider) => {
+                const entry = variantByProvider.get(provider.id) ?? { providerId: provider.id, priceCents: null, durationMinutes: null, depositCents: null };
+                const hasAnyOverride = entry.priceCents != null || entry.durationMinutes != null || entry.depositCents != null;
+                const providerLink = `${storefrontBaseUrl}/${tenantSlug}?serviceId=${service.id}&staffId=${provider.id}`;
+                return (
+                  <div key={provider.id} className={`service-card__provider${hasAnyOverride ? " is-customized" : ""}`}>
+                    <div className="service-card__provider-header">
+                      <strong>{provider.name}</strong>
+                      {hasAnyOverride ? (
+                        <span className="service-card__provider-badge">Custom pricing</span>
+                      ) : null}
+                    </div>
+                    <div className="service-card__provider-rows">
+                      <div className="service-card__provider-row">
+                        <span className="service-card__provider-label">Duration</span>
+                        <div className="service-card__provider-control">
+                          <div className="service-card__input-group">
                             <input type="number" min={15} max={480} step={15} disabled={!canManage}
                               placeholder={String(baseDurationMinutes)} value={entry.durationMinutes ?? ""}
                               onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { durationMinutes: null }); return; } const n = Number(raw); updateVariant(provider.id, { durationMinutes: Number.isFinite(n) ? n : null }); }} />
-                            <span className="service-variant-row__unit">min</span>
-                          </VariantField>
-                          <VariantField label="Price" defaultText={`${formatMoney(basePriceCents)} default`}
-                            isOverridden={entry.priceCents != null}
-                            onReset={() => updateVariant(provider.id, { priceCents: null })} canManage={canManage}>
-                            <span className="service-variant-row__prefix">$</span>
+                            <span className="service-card__unit">min</span>
+                          </div>
+                          {entry.durationMinutes != null && canManage ? (
+                            <button type="button" className="text-action"
+                              onClick={() => updateVariant(provider.id, { durationMinutes: null })}>
+                              Reset to default
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="service-card__provider-row">
+                        <span className="service-card__provider-label">Price</span>
+                        <div className="service-card__provider-control">
+                          <div className="service-card__input-group">
+                            <span className="service-card__prefix">$</span>
                             <input type="number" min={0} step="0.01" disabled={!canManage}
                               placeholder={(basePriceCents / 100).toFixed(2)}
                               value={entry.priceCents == null ? "" : (entry.priceCents / 100).toFixed(2)}
                               onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { priceCents: null }); return; } const cents = parseMoneyInput(raw); updateVariant(provider.id, { priceCents: cents }); }} />
-                          </VariantField>
-                          <VariantField label="Deposit" defaultText={`${formatMoney(baseDepositCents)} default`}
-                            isOverridden={entry.depositCents != null}
-                            onReset={() => updateVariant(provider.id, { depositCents: null })} canManage={canManage}>
-                            <span className="service-variant-row__prefix">$</span>
+                          </div>
+                          {entry.priceCents != null && canManage ? (
+                            <button type="button" className="text-action"
+                              onClick={() => updateVariant(provider.id, { priceCents: null })}>
+                              Reset to default
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="service-card__provider-row">
+                        <span className="service-card__provider-label">Deposit</span>
+                        <div className="service-card__provider-control">
+                          <div className="service-card__input-group">
+                            <span className="service-card__prefix">$</span>
                             <input type="number" min={0} step="0.01" disabled={!canManage}
                               placeholder={(baseDepositCents / 100).toFixed(2)}
                               value={entry.depositCents == null ? "" : (entry.depositCents / 100).toFixed(2)}
                               onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { depositCents: null }); return; } const cents = parseMoneyInput(raw); updateVariant(provider.id, { depositCents: cents }); }} />
-                          </VariantField>
+                          </div>
+                          {entry.depositCents != null && canManage ? (
+                            <button type="button" className="text-action"
+                              onClick={() => updateVariant(provider.id, { depositCents: null })}>
+                              Reset to default
+                            </button>
+                          ) : null}
                         </div>
-                      </article>
-                    );
-                  })}
-                </div>
-                {canManage ? (
-                  <div className="service-card__variants-save">
-                    <button type="button" className="primary-action" onClick={handleSaveVariants}
-                      disabled={variantsSaving || !isVariantsDirty}>
-                      {variantsSaving ? "Saving…" : "Save variants"}
-                    </button>
+                      </div>
+                    </div>
+                    <div className="service-card__provider-link">
+                      <span className="eyebrow">Direct link</span>
+                      <div className="service-card__link-row">
+                        <input type="text" readOnly value={providerLink}
+                          onFocus={(e) => e.currentTarget.select()} />
+                        <button type="button" className="secondary-action"
+                          onClick={async () => {
+                            try { await navigator.clipboard.writeText(providerLink); setCopyHint("Link copied!"); }
+                            catch { setCopyHint("Copy failed."); }
+                            if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
+                            copyTimerRef.current = window.setTimeout(() => setCopyHint(null), 2000);
+                          }}>Copy</button>
+                      </div>
+                    </div>
                   </div>
-                ) : null}
-              </>
-            )}
-          </div>
-        </details>
+                );
+              })}
+            </div>
+          )}
+        </div>
       ) : null}
     </article>
   );
