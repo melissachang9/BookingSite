@@ -747,16 +747,6 @@ function ServiceDetail({
         <div>
           <p className="eyebrow">Service</p>
           <h4>{service.name}</h4>
-          <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap", marginTop: "4px" }}>
-            <span className="svc-pill">{formatDurationMinutes(service.durationMinutes)}</span>
-            <span className="svc-pill">{formatMoney(service.priceCents)}</span>
-            {service.depositCents > 0 ? (
-              <span className="svc-pill">Deposit {formatMoney(service.depositCents)}</span>
-            ) : null}
-            <span className="svc-pill svc-pill--muted">
-              {service.categoryId ? categories.find((c) => c.id === service.categoryId)?.name ?? "Uncategorized" : "Uncategorized"}
-            </span>
-          </div>
         </div>
         <div className="staff-detail-actions">
           {canManage ? (

@@ -3714,7 +3714,8 @@ body {
 
 .settings-panel-help {
   margin: 0 0 0.75rem;
-  color: var(--color-fg-muted, #5a5a64);
+  color: #8B7960;
+  font-size: 11px;
 }
 .settings-form-row {
   display: flex;
@@ -3726,24 +3727,42 @@ body {
   flex-direction: column;
   gap: 0.25rem;
 }
-.settings-field select {
-  padding: 0.5rem 0.75rem;
-  border-radius: 6px;
-  border: 1px solid var(--color-border, #d4d4d8);
-  background: var(--color-bg-surface, #fff);
+.settings-field label,
+.settings-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #4A3D30;
+  letter-spacing: 0.02em;
+}
+.settings-field select,
+.settings-input {
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 0.5px solid #C9B998;
+  background: #FBF6E8;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 13px;
+  color: #1F1612;
+  outline: none;
+}
+.settings-field select:focus,
+.settings-input:focus {
+  border-color: #1F1612;
+  box-shadow: 0 0 0 2px rgba(31,22,18,0.08);
 }
 .settings-actions {
   margin-top: 0.75rem;
 }
 .settings-status {
-  color: var(--color-success, #166534);
+  color: #2d6a4f;
 }
 .settings-error {
-  color: var(--color-danger, #b91c1c);
+  color: #b91c1c;
 }
 .settings-permission-note {
   margin-top: 0.5rem;
-  color: var(--color-fg-muted, #5a5a64);
+  color: #8B7960;
+  font-size: 11px;
 }
 
 .ops-nav-group {
@@ -3812,13 +3831,14 @@ body {
   flex-direction: column;
   gap: 1.25rem;
   padding: 1rem 0.5rem;
-  border-right: 1px solid var(--color-border, rgba(0, 0, 0, 0.08));
+  border-right: 0.5px solid #D9CBB1;
+  background: transparent;
 }
 @media (max-width: 880px) {
   .settings-anchor-nav {
     position: static;
     border-right: none;
-    border-bottom: 1px solid var(--color-border, rgba(0, 0, 0, 0.08));
+    border-bottom: 0.5px solid #D9CBB1;
   }
 }
 .settings-anchor-group {
@@ -3829,9 +3849,11 @@ body {
 .settings-anchor-group__title {
   margin: 0;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-size: 0.7rem;
-  color: var(--color-fg-muted, #5a5a64);
+  letter-spacing: 0.18em;
+  font-size: 10px;
+  color: #6B5A47;
+  font-weight: 500;
+  font-family: 'DM Sans', system-ui, sans-serif;
 }
 .settings-anchor-group ul {
   list-style: none;
@@ -3845,16 +3867,17 @@ body {
   display: block;
   padding: 0.4rem 0.6rem;
   border-radius: 6px;
-  color: inherit;
+  color: #4A3D30;
   text-decoration: none;
   font-size: 0.9rem;
 }
 .settings-anchor-link:hover {
-  background: var(--color-bg-elevated, rgba(0, 0, 0, 0.04));
+  background: rgba(31,22,18,0.05);
 }
 .settings-anchor-link--active {
-  background: var(--color-bg-elevated-strong, rgba(0, 0, 0, 0.08));
+  background: rgba(31,22,18,0.08);
   font-weight: 600;
+  color: #1F1612;
 }
 .settings-content {
   display: flex;
@@ -3862,9 +3885,9 @@ body {
   gap: 1.5rem;
 }
 .settings-section {
-  background: var(--color-bg-card, #fff);
-  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.08));
-  border-radius: 10px;
+  background: #F7F0DE;
+  border: 0.5px solid #D9CBB1;
+  border-radius: 12px;
   padding: 1.5rem;
   scroll-margin-top: 1.5rem;
 }
@@ -3876,6 +3899,7 @@ body {
 }
 .settings-section__header h4 {
   margin: 0;
+  color: #1F1612;
 }
 .settings-section__body {
   display: flex;
@@ -3884,10 +3908,10 @@ body {
 }
 .settings-placeholder {
   padding: 1.25rem;
-  border: 1px dashed var(--color-border, rgba(0, 0, 0, 0.12));
+  border: 0.5px dashed #C9B998;
   border-radius: 8px;
-  color: var(--color-fg-muted, #5a5a64);
-  background: var(--color-bg-subtle, rgba(0, 0, 0, 0.02));
+  color: #8B7960;
+  background: #FBF6E8;
 }
 .settings-placeholder p {
   margin: 0;
@@ -3977,9 +4001,25 @@ body {
 .staff-roster-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
 .settings-table { width: 100%; border-collapse: collapse; }
 .settings-table th,
-.settings-table td { text-align: left; padding: 0.55rem 0.65rem; border-bottom: 1px solid var(--color-border, rgba(0,0,0,0.08)); font-size: 0.92rem; }
-.settings-table th { font-weight: 700; color: var(--ui-ink, #2b2b30); background: rgba(0,0,0,0.02); }
+.settings-table td { text-align: left; padding: 0.55rem 0.65rem; border-bottom: 0.5px solid #D9CBB1; font-size: 0.92rem; }
+.settings-table th { font-weight: 700; color: #1F1612; background: rgba(31,22,18,0.04); }
 .settings-table tbody tr:last-child td { border-bottom: 0; }
+
+.settings-fieldset {
+  border: 0.5px solid #D9CBB1;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  background: #FBF6E8;
+}
+
+.rail-section-kicker {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #6B5A47;
+  font-weight: 500;
+}
 
 /* Modal (Phase A) */
 .modal-backdrop {
