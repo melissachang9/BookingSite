@@ -348,9 +348,9 @@ export function ServicesPage({
       ) : null}
 
       <section className="services-layout">
-        <aside className="services-sidebar" aria-label="Service categories">
+        <aside className="services-sidebar" aria-label="Services">
           <div className="services-sidebar-header">
-            <h4>Categories</h4>
+            <h4>Services</h4>
             {canManage ? (
               <button
                 type="button"
@@ -361,35 +361,19 @@ export function ServicesPage({
               </button>
             ) : null}
           </div>
-          <ul className="services-category-list">
-            <li>
-              <button
-                type="button"
-                className={
-                  selection.kind === "none"
-                    ? "services-category-btn is-active"
-                    : "services-category-btn"
-                }
-                onClick={() => setSelection({ kind: "none" })}
-              >
-                <span>All services</span>
-                <span className="services-category-count">{services.length}</span>
-              </button>
-            </li>
+          <div className="services-sidebar-list">
             {orderedCategories.map((category) => {
-              const count = (servicesByCategory.get(category.id) ?? []).length;
-              const isActive =
-                selection.kind === "category" &&
-                selection.categoryId === category.id;
+              const list = servicesByCategory.get(category.id) ?? [];
               const isDragOver =
                 dragOverTarget.kind === "category" &&
                 dragOverTarget.categoryId === category.id;
               const isDragging =
                 drag.kind === "category" && drag.categoryId === category.id;
               return (
-                <li
+                <div
                   key={category.id}
                   className={[
+                    "services-category-group",
                     isDragging ? "services-category-dragging" : "",
                     isDragOver ? "services-category-drop-target" : "",
                   ]
@@ -432,97 +416,109 @@ export function ServicesPage({
                     void handleReorderCategories(moved);
                   }}
                 >
-                  <button
-                    type="button"
-                    className={
-                      isActive
-                        ? "services-category-btn is-active"
-                        : "services-category-btn"
-                    }
-                    onClick={() =>
-                      setSelection({ kind: "category", categoryId: category.id })
-                    }
-                  >
-                    <span className="services-category-btn__text">
-                      <span className="services-category-btn__name">
-                        <span className="services-category-handle" aria-hidden="true">
-                          ⋮⋮
-                        </span>
-                        {category.name}
-                      </span>
-                      {category.subheadline ? (
-                        <span className="services-category-btn__subheadline">
-                          {category.subheadline}
-                        </span>
-                      ) : null}
-                      {category.featuredLabel ? (
-                        <span className={`services-category-badge services-category-badge--${category.featuredLabel}`}>
-                          {FEATURED_LABEL_DISPLAY[category.featuredLabel] ?? category.featuredLabel}
-                        </span>
-                      ) : null}
+                  <div className="services-category-group-header">
+                    <span className="services-category-handle" aria-hidden="true">
+                      ⋮⋮
                     </span>
-                    <span className="services-category-count">{count}</span>
-                  </button>
-                </li>
+                    <span className="services-category-group-name">{category.name}</span>
+                    {category.subheadline ? (
+                      <span className="services-category-group-subheadline">{category.subheadline}</span>
+                    ) : null}
+                    {category.featuredLabel ? (
+                      <span className={`services-category-badge services-category-badge--${category.featuredLabel}`}>
+                        {FEATURED_LABEL_DISPLAY[category.featuredLabel] ?? category.featuredLabel}
+                      </span>
+                    ) : null}
+                    <span className="services-category-count">{list.length}</span>
+                    {canManage ? (
+                      <span className="services-category-group-actions">
+                        <button
+                          type="button"
+                          className="text-action"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRenameCategory(category);
+                          }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          className="text-action"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteCategory(category);
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </span>
+                    ) : null}
+                  </div>
+                  {list.length === 0 ? (
+                    <p className="services-list-empty">No services yet.</p>
+                  ) : (
+                    <ul className="services-list">
+                      {list.map((service) => (
+                        <li key={service.id}>
+                          <button
+                            type="button"
+                            className={`services-list-item${selection.kind === "service" && selection.serviceId === service.id ? " is-active" : ""}`}
+                            onClick={() => setSelection({ kind: "service", serviceId: service.id })}
+                          >
+                            <span className="services-list-item__name">{service.name}</span>
+                            <span className="services-list-item__meta">
+                              {formatDurationMinutes(service.durationMinutes)} · {formatMoney(service.priceCents)}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               );
             })}
-            <li>
-              <button
-                type="button"
-                className={
-                  selection.kind === "category" &&
-                  selection.categoryId === UNCATEGORIZED_KEY
-                    ? "services-category-btn is-active"
-                    : "services-category-btn"
-                }
-                onClick={() =>
-                  setSelection({
-                    kind: "category",
-                    categoryId: UNCATEGORIZED_KEY,
-                  })
-                }
-              >
-                <span>Uncategorized</span>
-                <span className="services-category-count">
-                  {(servicesByCategory.get(UNCATEGORIZED_KEY) ?? []).length}
-                </span>
-              </button>
-            </li>
-          </ul>
+            {/* Uncategorized */}
+            {(() => {
+              const uncategorized = servicesByCategory.get(UNCATEGORIZED_KEY) ?? [];
+              if (uncategorized.length === 0) return null;
+              return (
+                <div className="services-category-group">
+                  <div className="services-category-group-header">
+                    <span className="services-category-group-name">Uncategorized</span>
+                    <span className="services-category-count">{uncategorized.length}</span>
+                  </div>
+                  <ul className="services-list">
+                    {uncategorized.map((service) => (
+                      <li key={service.id}>
+                        <button
+                          type="button"
+                          className={`services-list-item${selection.kind === "service" && selection.serviceId === service.id ? " is-active" : ""}`}
+                          onClick={() => setSelection({ kind: "service", serviceId: service.id })}
+                        >
+                          <span className="services-list-item__name">{service.name}</span>
+                          <span className="services-list-item__meta">
+                            {formatDurationMinutes(service.durationMinutes)} · {formatMoney(service.priceCents)}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
+          </div>
         </aside>
 
         <section className="services-main">
           <div className="services-main-header">
             <h4>
-              {selection.kind === "category"
-                ? selection.categoryId === UNCATEGORIZED_KEY
-                  ? "Uncategorized"
-                  : categories.find((c) => c.id === selection.categoryId)?.name ??
-                    "Category"
-                : "All services"}
+              {selection.kind === "service"
+                ? services.find((s) => s.id === selection.serviceId)?.name ?? "Service"
+                : "Service details"}
             </h4>
             {canManage ? (
               <div className="services-main-actions">
-                {selection.kind === "category" &&
-                selection.categoryId !== UNCATEGORIZED_KEY &&
-                selectedCategory ? (
-                  <>
-                    <button
-                      type="button"
-                      className="ghost-action"
-                      onClick={() => handleRenameCategory(selectedCategory)}
-                    >
-                      Rename
-                    </button>
-                    <button
-                      type="button"
-                      className="ghost-action"
-                      onClick={() => handleDeleteCategory(selectedCategory)}
-                    >
-                      Delete
-                    </button>
-                  </>
-                ) : null}
                 <button
                   type="button"
                   className="primary-action"
@@ -534,50 +530,39 @@ export function ServicesPage({
             ) : null}
           </div>
 
-          <div className="services-master-detail">
-            <div className="services-list-panel">
-              {renderServiceList({
-                orderedCategories,
-                servicesByCategory,
-                selection,
-                selectedServiceId: selection.kind === "service" ? selection.serviceId : null,
-                onSelect: (serviceId) => setSelection({ kind: "service", serviceId }),
-              })}
-            </div>
-            <div className="services-detail-panel">
-              {selection.kind === "service" ? (
-                (() => {
-                  const selectedService = services.find((s) => s.id === selection.serviceId);
-                  if (!selectedService) {
-                    return (
-                      <div className="services-detail-empty">
-                        <p>Service not found.</p>
-                      </div>
-                    );
-                  }
+          <div className="services-detail-panel">
+            {selection.kind === "service" ? (
+              (() => {
+                const selectedService = services.find((s) => s.id === selection.serviceId);
+                if (!selectedService) {
                   return (
-                    <ServiceCard
-                      key={selectedService.id}
-                      service={selectedService}
-                      categories={orderedCategories}
-                      locations={locations}
-                      providers={providers}
-                      canManage={canManage}
-                      tenantSlug={tenantSlug}
-                      onSaved={async (msg) => {
-                        await refreshServices();
-                        if (msg) setStatus(msg);
-                      }}
-                      onDuplicate={handleDuplicateService}
-                    />
+                    <div className="services-detail-empty">
+                      <p>Service not found.</p>
+                    </div>
                   );
-                })()
-              ) : (
-                <div className="services-detail-empty">
-                  <p>Select a service to edit its details.</p>
-                </div>
-              )}
-            </div>
+                }
+                return (
+                  <ServiceCard
+                    key={selectedService.id}
+                    service={selectedService}
+                    categories={orderedCategories}
+                    locations={locations}
+                    providers={providers}
+                    canManage={canManage}
+                    tenantSlug={tenantSlug}
+                    onSaved={async (msg) => {
+                      await refreshServices();
+                      if (msg) setStatus(msg);
+                    }}
+                    onDuplicate={handleDuplicateService}
+                  />
+                );
+              })()
+            ) : (
+              <div className="services-detail-empty">
+                <p>Select a service to edit its details.</p>
+              </div>
+            )}
           </div>
         </section>
       </section>

@@ -4835,7 +4835,7 @@ body {
 /* ===== Phase H services page ===== */
 .services-layout {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-columns: 320px minmax(0, 1fr);
   gap: 1rem;
   align-items: stretch;
 }
@@ -4843,22 +4843,71 @@ body {
   background: var(--ui-paper, #fff);
   border: 1px solid var(--ui-border, #e5e7eb);
   border-radius: 12px;
-  padding: 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
   min-height: 320px;
+  max-height: calc(100vh - 14rem);
+  overflow: hidden;
 }
 .services-sidebar-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.25rem 0.5rem;
+  padding: 0.75rem 1rem;
   font-weight: 600;
   font-size: 0.85rem;
   color: var(--text-muted, #6b7280);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--ui-border, #e5e7eb);
+  flex-shrink: 0;
+}
+.services-sidebar-list {
+  overflow-y: auto;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Category group in sidebar */
+.services-category-group {
+  border-bottom: 1px solid var(--ui-border, #f3f4f6);
+}
+.services-category-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted, #6b7280);
+  background: rgba(0,0,0,0.02);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.services-category-group-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.services-category-group-actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.services-category-group:hover .services-category-group-actions {
+  opacity: 1;
+}
+.services-category-group-actions .text-action {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.3rem;
 }
 .services-category-list {
   list-style: none;
@@ -4986,21 +5035,7 @@ body {
   gap: 0.5rem;
 }
 
-/* Master-detail: service list (left) + detail panel (right) */
-.services-master-detail {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  gap: 0;
-  flex: 1 1 auto;
-  min-height: 0;
-  border-top: 1px solid var(--ui-border, #e5e7eb);
-  margin: 0 -1rem -1rem;
-}
-.services-list-panel {
-  border-right: 1px solid var(--ui-border, #e5e7eb);
-  overflow-y: auto;
-  max-height: calc(100vh - 18rem);
-}
+/* Detail panel (right side) */
 .services-detail-panel {
   overflow-y: auto;
   max-height: calc(100vh - 18rem);
@@ -5015,36 +5050,12 @@ body {
   font-size: 0.9rem;
 }
 
-/* Service list (left panel) */
-.services-list-groups {
-  display: flex;
-  flex-direction: column;
-}
-.services-list-group {
-  display: flex;
-  flex-direction: column;
-}
-.services-list-group-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted, #6b7280);
-  background: rgba(0,0,0,0.02);
-  border-bottom: 1px solid var(--ui-border, #f3f4f6);
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
+/* Service list items (inside sidebar category groups) */
 .services-list-empty {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: var(--text-muted, #6b7280);
   font-style: italic;
-  padding: 0.75rem;
+  padding: 0.5rem 0.75rem;
 }
 .services-list {
   list-style: none;
@@ -5059,11 +5070,11 @@ body {
   background: transparent;
   border: 0;
   border-bottom: 1px solid var(--ui-border, #f3f4f6);
-  padding: 0.6rem 0.75rem;
+  padding: 0.55rem 0.75rem;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.1rem;
   font-size: 0.85rem;
   color: var(--ui-ink, #1f2937);
   transition: background 100ms ease;
@@ -5077,11 +5088,11 @@ body {
   font-weight: 600;
 }
 .services-list-item__name {
-  font-size: 0.88rem;
+  font-size: 0.85rem;
   line-height: 1.3;
 }
 .services-list-item__meta {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   color: var(--text-muted, #6b7280);
 }
 

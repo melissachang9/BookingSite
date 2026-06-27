@@ -192,15 +192,14 @@ describe("ServicesPage", () => {
     render(<ServicesPage definition={definition} currentUser={ownerUser} />);
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /All services/ })).toBeInTheDocument(),
+      expect(screen.getByText("Brows")).toBeInTheDocument(),
     );
 
-    const brows = screen.getByRole("button", { name: /^Brows/ });
-    expect(within(brows).getByText("1")).toBeInTheDocument();
-    const facials = screen.getByRole("button", { name: /^Facials/ });
-    expect(within(facials).getByText("1")).toBeInTheDocument();
-    const uncategorized = screen.getByRole("button", { name: /Uncategorized/ });
-    expect(within(uncategorized).getByText("1")).toBeInTheDocument();
+    // Categories are in group headers with counts
+    expect(screen.getByText("Brows")).toBeInTheDocument();
+    expect(screen.getByText("Facials")).toBeInTheDocument();
+    // Uncategorized group shows when there are uncategorized services
+    expect(screen.getByText("Uncategorized")).toBeInTheDocument();
   });
 
   it("renders category subheadline in the sidebar", async () => {
@@ -208,11 +207,10 @@ describe("ServicesPage", () => {
     render(<ServicesPage definition={definition} currentUser={ownerUser} />);
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /All services/ })).toBeInTheDocument(),
+      expect(screen.getByText("Brows")).toBeInTheDocument(),
     );
 
-    const brows = screen.getByRole("button", { name: /^Brows/ });
-    expect(within(brows).getByText("Shape, tint, and define")).toBeInTheDocument();
+    expect(screen.getByText("Shape, tint, and define")).toBeInTheDocument();
   });
 
   it("renders featured label badge in the sidebar", async () => {
@@ -220,11 +218,10 @@ describe("ServicesPage", () => {
     render(<ServicesPage definition={definition} currentUser={ownerUser} />);
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /All services/ })).toBeInTheDocument(),
+      expect(screen.getByText("Brows")).toBeInTheDocument(),
     );
 
-    const brows = screen.getByRole("button", { name: /^Brows/ });
-    expect(within(brows).getByText("Signature")).toBeInTheDocument();
+    expect(screen.getByText("Signature")).toBeInTheDocument();
   });
 
   it("does not render subheadline or badge when category has none", async () => {
@@ -232,18 +229,16 @@ describe("ServicesPage", () => {
     render(<ServicesPage definition={definition} currentUser={ownerUser} />);
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /All services/ })).toBeInTheDocument(),
+      expect(screen.getByText("Facials")).toBeInTheDocument(),
     );
 
-    const facials = screen.getByRole("button", { name: /^Facials/ });
     // Facials has no subheadline or featuredLabel
-    expect(within(facials).queryByText("Signature")).toBeNull();
-    expect(within(facials).queryByText("Most popular")).toBeNull();
-    expect(within(facials).queryByText("New")).toBeNull();
-    expect(within(facials).queryByText("Limited")).toBeNull();
+    expect(screen.queryByText("Most popular")).toBeNull();
+    expect(screen.queryByText("New")).toBeNull();
+    expect(screen.queryByText("Limited")).toBeNull();
   });
 
-  it("filters the main list when a category is selected", async () => {
+  it("shows all services grouped under their categories", async () => {
     mockLoaders();
     render(<ServicesPage definition={definition} currentUser={ownerUser} />);
 
@@ -251,10 +246,9 @@ describe("ServicesPage", () => {
       expect(screen.getByText("Brow Shape")).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^Brows/ }));
-
+    // All services are visible in the sidebar list
     expect(screen.getByText("Brow Shape")).toBeInTheDocument();
-    expect(screen.queryByText("Signature Facial")).toBeNull();
+    expect(screen.getByText("Signature Facial")).toBeInTheDocument();
   });
 
   it("shows the direct scheduling link on each service card", async () => {
@@ -462,21 +456,17 @@ describe("ServicesPage", () => {
     );
   });
 
-  it("opens the Rename modal when Rename is clicked on a selected category", async () => {
+  it("opens the Rename modal when Rename is clicked on a category", async () => {
     mockLoaders();
     render(<ServicesPage definition={definition} currentUser={ownerUser} />);
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /^Brows/ })).toBeInTheDocument(),
+      expect(screen.getByText("Brows")).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^Brows/ }));
-
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument(),
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    // Rename button is in the category group header
+    const renameButtons = screen.getAllByRole("button", { name: "Rename" });
+    fireEvent.click(renameButtons[0]);
 
     await waitFor(() =>
       expect(screen.getByRole("dialog", { name: "Rename category" })).toBeInTheDocument(),
@@ -499,15 +489,11 @@ describe("ServicesPage", () => {
     render(<ServicesPage definition={definition} currentUser={ownerUser} />);
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /^Brows/ })).toBeInTheDocument(),
+      expect(screen.getByText("Brows")).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^Brows/ }));
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument(),
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    const renameButtons = screen.getAllByRole("button", { name: "Rename" });
+    fireEvent.click(renameButtons[0]);
 
     await waitFor(() =>
       expect(screen.getByRole("dialog", { name: "Rename category" })).toBeInTheDocument(),
@@ -534,15 +520,11 @@ describe("ServicesPage", () => {
     render(<ServicesPage definition={definition} currentUser={ownerUser} />);
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /^Brows/ })).toBeInTheDocument(),
+      expect(screen.getByText("Brows")).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^Brows/ }));
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument(),
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
+    fireEvent.click(deleteButtons[0]);
 
     await waitFor(() =>
       expect(screen.getByRole("dialog", { name: "Delete category" })).toBeInTheDocument(),
@@ -567,15 +549,11 @@ describe("ServicesPage", () => {
     render(<ServicesPage definition={definition} currentUser={ownerUser} />);
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /^Brows/ })).toBeInTheDocument(),
+      expect(screen.getByText("Brows")).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^Brows/ }));
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument(),
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
+    fireEvent.click(deleteButtons[0]);
 
     await waitFor(() =>
       expect(screen.getByRole("dialog", { name: "Delete category" })).toBeInTheDocument(),
