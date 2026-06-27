@@ -172,6 +172,11 @@ class Provider(Base, IdMixin, TimestampMixin):
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_bookable_online: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="1")
+    compensation_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    compensation_service_percent_bp: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    compensation_product_percent_bp: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    compensation_hourly_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    compensation_sliding_scale: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="providers")
     user: Mapped[Optional[User]] = relationship(foreign_keys=[user_id], lazy="raise_on_sql")

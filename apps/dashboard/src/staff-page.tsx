@@ -41,7 +41,7 @@ type ModalState =
   | { kind: "password"; user: TenantUserSummary }
   | { kind: "addProviderFor"; user: TenantUserSummary };
 
-type TabKey = "details" | "services" | "schedule" | "timeOff" | "permissions";
+type TabKey = "details" | "services" | "schedule" | "timeOff" | "permissions" | "compensation";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Owner",
@@ -660,6 +660,7 @@ function StaffDetail({
     { key: "services", label: "Services", disabled: !provider },
     { key: "schedule", label: "Work hours", disabled: !provider },
     { key: "timeOff", label: "Time off", disabled: !provider },
+    { key: "compensation", label: "Compensation", disabled: !provider },
     { key: "permissions", label: "Permissions" },
   ];
 
@@ -729,6 +730,9 @@ function StaffDetail({
       ) : null}
       {activeTab === "timeOff" && provider ? (
         <TimeOffTab tenantSlug={tenantSlug} provider={provider} />
+      ) : null}
+      {activeTab === "compensation" && provider ? (
+        <CompensationTab tenantSlug={tenantSlug} provider={provider} onSaved={onSaved} />
       ) : null}
       {activeTab === "permissions" ? (
         <PermissionsTab tenantSlug={tenantSlug} user={user} />
@@ -1952,6 +1956,301 @@ type PermissionsTabProps = {
   tenantSlug: string;
   user: TenantUserSummary;
 };
+
+// ===========================================================================
+// Compensation tab
+// ===========================================================================
+
+type CompensationTabProps = {
+  tenantSlug: string;
+  provider: ProviderSummary;
+  onSaved: () => void;
+};
+
+type CompensationMode = "service_percent" | "sliding_scale" | "product_percent" | "hourly" | "";
+
+function CompensationTab({ tenantSlug, provider, onSaved }: CompensationTabProps) {
+  const [mode, setMode] = useState<CompensationMode>(
+    (provider.compensationMode as CompensationMode) ?? "",
+  );
+  const [servicePercent, setServicePercent] = useState(
+    provider.compensationServicePercentBp != null
+      ? (provider.compensationServicePercentBp / 100).toString()
+      : "",
+  );
+  const [productPercent, setProductPercent] = useState(
+    provider.compensationProductPercentBp != null
+      ? (provider.compensationProductPercentBp / 100).toString()
+      : "",
+  );
+  const [hourlyRate, setHourlyRate] = useState(
+    provider.compensationHourlyCents != null
+      ? (provider.compensationHourlyCents / 100).toFixed(2)
+      : "",
+  );
+  const [slidingTiers, setSlidingTiers] = useState<
+    Array<{ upToAmountCents: number; percentBp: number }>
+  >(
+    (provider.compensationSlidingScale as Array<{ upToAmountCents: number; percentBp: number }>) ?? [],
+  );
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMode((provider.compensationMode as CompensationMode) ?? "");
+    setServicePercent(
+      provider.compensationServicePercentBp != null
+        ? (provider.compensationServicePercentBp / 100).toString()
+        : "",
+    );
+    setProductPercent(
+      provider.compensationProductPercentBp != null
+        ? (provider.compensationProductPercentBp / 100).toString()
+        : "",
+    );
+    setHourlyRate(
+      provider.compensationHourlyCents != null
+        ? (provider.compensationHourlyCents / 100).toFixed(2)
+        : "",
+    );
+    setSlidingTiers(
+      (provider.compensationSlidingScale as Array<{ upToAmountCents: number; percentBp: number }>) ?? [],
+    );
+  }, [provider]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setStatus(null);
+    try {
+      const body: Record<string, unknown> = { compensationMode: mode || null };
+      if (mode === "service_percent") {
+        body.compensationServicePercentBp = servicePercent ? Math.round(Number(servicePercent) * 100) : null;
+      }
+      if (mode === "product_percent") {
+        body.compensationProductPercentBp = productPercent ? Math.round(Number(productPercent) * 100) : null;
+      }
+      if (mode === "hourly") {
+        body.compensationHourlyCents = hourlyRate ? Math.round(Number(hourlyRate) * 100) : null;
+      }
+      if (mode === "sliding_scale") {
+        body.compensationSlidingScale = slidingTiers.length > 0 ? slidingTiers : null;
+      }
+      await platformApi.fetchJson(
+        `${apiBaseUrl}/tenants/${tenantSlug}/providers/${provider.id}/compensation`,
+        { method: "PATCH", body: JSON.stringify(body) },
+      );
+      setStatus("Compensation saved.");
+      onSaved();
+    } catch (error) {
+      setStatus(readErrorMessage(error, "Unable to save compensation."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addSlidingTier = () => {
+    const last = slidingTiers[slidingTiers.length - 1];
+    const nextUpTo = last ? last.upToAmountCents + 10000 : 50000;
+    setSlidingTiers([...slidingTiers, { upToAmountCents: nextUpTo, percentBp: 5000 }]);
+  };
+
+  const removeSlidingTier = (index: number) => {
+    setSlidingTiers(slidingTiers.filter((_, i) => i !== index));
+  };
+
+  const updateSlidingTier = (index: number, field: "upToAmountCents" | "percentBp", value: string) => {
+    const num = Number(value);
+    if (!Number.isFinite(num) || num < 0) return;
+    setSlidingTiers((prev) =>
+      prev.map((t, i) =>
+        i === index
+          ? { ...t, [field]: field === "upToAmountCents" ? Math.round(num) : Math.round(num) }
+          : t,
+      ),
+    );
+  };
+
+  return (
+    <div className="staff-detail-form">
+      {status ? (
+        <div className="message-banner" role="status">
+          {status}
+          <button type="button" className="ghost-action" onClick={() => setStatus(null)}>Dismiss</button>
+        </div>
+      ) : null}
+
+      <div className="staff-fieldset">
+        <h5 style={{ margin: "0 0 0.5rem" }}>Service Commission</h5>
+        <p className="settings-form-help" style={{ margin: "0 0 0.75rem" }}>
+          Compensation is calculated as a percentage of service sales
+        </p>
+
+        <label className="settings-label" style={{ marginBottom: "0.5rem", display: "block" }}>
+          <input
+            type="radio"
+            name="compensationMode"
+            value="service_percent"
+            checked={mode === "service_percent"}
+            onChange={() => setMode("service_percent")}
+            style={{ marginRight: "0.5rem" }}
+          />
+          Basic Service Commission
+        </label>
+        <p className="settings-form-help" style={{ margin: "0 0 0.75rem 1.5rem" }}>
+          A flat percentage of total sales
+        </p>
+        {mode === "service_percent" ? (
+          <div style={{ marginLeft: "1.5rem", marginBottom: "0.75rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <input
+                className="settings-input"
+                type="number"
+                min={0}
+                max={100}
+                step="0.1"
+                value={servicePercent}
+                onChange={(e) => setServicePercent(e.target.value)}
+                placeholder="0"
+                style={{ width: "6rem" }}
+              />
+              <span>%</span>
+            </div>
+          </div>
+        ) : null}
+
+        <label className="settings-label" style={{ marginBottom: "0.5rem", display: "block" }}>
+          <input
+            type="radio"
+            name="compensationMode"
+            value="sliding_scale"
+            checked={mode === "sliding_scale"}
+            onChange={() => setMode("sliding_scale")}
+            style={{ marginRight: "0.5rem" }}
+          />
+          Sliding Scale Service Commission
+        </label>
+        <p className="settings-form-help" style={{ margin: "0 0 0.75rem 1.5rem" }}>
+          Percentage depends on amount sold
+        </p>
+        {mode === "sliding_scale" ? (
+          <div style={{ marginLeft: "1.5rem", marginBottom: "0.75rem" }}>
+            {slidingTiers.map((tier, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.4rem" }}>
+                <span style={{ fontSize: "0.8rem", whiteSpace: "nowrap" }}>Up to</span>
+                <span>$</span>
+                <input
+                  className="settings-input"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={(tier.upToAmountCents / 100).toFixed(2)}
+                  onChange={(e) => updateSlidingTier(i, "upToAmountCents", String(Number(e.target.value) * 100))}
+                  style={{ width: "6rem" }}
+                />
+                <span style={{ fontSize: "0.8rem" }}>→</span>
+                <input
+                  className="settings-input"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.1"
+                  value={(tier.percentBp / 100).toString()}
+                  onChange={(e) => updateSlidingTier(i, "percentBp", String(Number(e.target.value) * 100))}
+                  style={{ width: "5rem" }}
+                />
+                <span>%</span>
+                <button type="button" className="ghost-action" onClick={() => removeSlidingTier(i)} style={{ fontSize: "0.75rem" }}>
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button type="button" className="ghost-action" onClick={addSlidingTier} style={{ fontSize: "0.8rem" }}>
+              + Add tier
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="staff-fieldset">
+        <h5 style={{ margin: "0 0 0.5rem" }}>Product Commission</h5>
+        <p className="settings-form-help" style={{ margin: "0 0 0.75rem" }}>
+          Compensation is calculated as a percentage of product sales
+        </p>
+        <label className="settings-label" style={{ marginBottom: "0.5rem", display: "block" }}>
+          <input
+            type="radio"
+            name="compensationMode"
+            value="product_percent"
+            checked={mode === "product_percent"}
+            onChange={() => setMode("product_percent")}
+            style={{ marginRight: "0.5rem" }}
+          />
+          Product Commission
+        </label>
+        {mode === "product_percent" ? (
+          <div style={{ marginLeft: "1.5rem", marginBottom: "0.75rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <input
+                className="settings-input"
+                type="number"
+                min={0}
+                max={100}
+                step="0.1"
+                value={productPercent}
+                onChange={(e) => setProductPercent(e.target.value)}
+                placeholder="0"
+                style={{ width: "6rem" }}
+              />
+              <span>%</span>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="staff-fieldset">
+        <h5 style={{ margin: "0 0 0.5rem" }}>Hourly</h5>
+        <p className="settings-form-help" style={{ margin: "0 0 0.75rem" }}>
+          Compensation is calculated using a flat rate per hour
+        </p>
+        <label className="settings-label" style={{ marginBottom: "0.5rem", display: "block" }}>
+          <input
+            type="radio"
+            name="compensationMode"
+            value="hourly"
+            checked={mode === "hourly"}
+            onChange={() => setMode("hourly")}
+            style={{ marginRight: "0.5rem" }}
+          />
+          Hourly Rate
+        </label>
+        {mode === "hourly" ? (
+          <div style={{ marginLeft: "1.5rem", marginBottom: "0.75rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <span>$</span>
+              <input
+                className="settings-input"
+                type="number"
+                min={0}
+                step="0.01"
+                value={hourlyRate}
+                onChange={(e) => setHourlyRate(e.target.value)}
+                placeholder="0.00"
+                style={{ width: "6rem" }}
+              />
+              <span>/ hr</span>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button type="button" className="primary-action" onClick={handleSave} disabled={saving}>
+          {saving ? "Saving…" : "Save compensation"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 type PermissionTriState = "inherit" | "allow" | "deny";
 

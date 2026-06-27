@@ -226,6 +226,11 @@ def provider_to_summary(provider: Provider, tenant: Tenant | None = None) -> Pro
         is_bookable_online=getattr(provider, "is_bookable_online", True),
         service_ids=[link.service_id for link in provider.service_links],
         location_ids=[link.location_id for link in provider.location_links],
+        compensation_mode=provider.compensation_mode,
+        compensation_service_percent_bp=provider.compensation_service_percent_bp,
+        compensation_product_percent_bp=provider.compensation_product_percent_bp,
+        compensation_hourly_cents=provider.compensation_hourly_cents,
+        compensation_sliding_scale=provider.compensation_sliding_scale,
     )
 
 

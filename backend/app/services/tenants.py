@@ -948,6 +948,28 @@ async def deactivate_tenant_provider(
     return provider_to_summary(provider, tenant)
 
 
+async def update_provider_compensation(
+    session: AsyncSession, tenant_slug: str, provider_id: str, payload
+) -> ProviderSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    provider = await _load_provider_with_links(session, provider_id, tenant.id)
+
+    if payload.compensation_mode is not None:
+        provider.compensation_mode = payload.compensation_mode or None
+    if payload.compensation_service_percent_bp is not None:
+        provider.compensation_service_percent_bp = payload.compensation_service_percent_bp or None
+    if payload.compensation_product_percent_bp is not None:
+        provider.compensation_product_percent_bp = payload.compensation_product_percent_bp or None
+    if payload.compensation_hourly_cents is not None:
+        provider.compensation_hourly_cents = payload.compensation_hourly_cents or None
+    if payload.compensation_sliding_scale is not None:
+        provider.compensation_sliding_scale = [t.model_dump() for t in payload.compensation_sliding_scale] if payload.compensation_sliding_scale else None
+
+    await session.commit()
+    provider = await _load_provider_with_links(session, provider.id, tenant.id)
+    return provider_to_summary(provider, tenant)
+
+
 async def create_tenant_staff(
     session: AsyncSession, tenant_slug: str, payload: CreateStaffRequest
 ) -> CreateStaffResponse:

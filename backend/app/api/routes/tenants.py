@@ -27,6 +27,7 @@ from app.schemas.catalog import (
     TenantUserListResponse,
     TenantUserSummaryResponse,
     UpdateLocationRequest,
+    UpdateProviderCompensationRequest,
     UpdateProviderRequest,
     UpdateTenantBrandingRequest,
     UpdateTenantBusinessHoursRequest,
@@ -477,6 +478,22 @@ async def patch_tenant_provider(
     session: AsyncSession = Depends(get_db_session),
 ) -> ProviderSummaryResponse:
     return await update_tenant_provider(session, tenant_slug, provider_id, payload)
+
+
+@router.patch(
+    "/{tenant_slug}/providers/{provider_id}/compensation",
+    response_model=ProviderSummaryResponse,
+    summary="Update provider compensation settings",
+)
+async def patch_provider_compensation(
+    tenant_slug: str,
+    provider_id: str,
+    payload: UpdateProviderCompensationRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ProviderSummaryResponse:
+    from app.services.tenants import update_provider_compensation
+    return await update_provider_compensation(session, tenant_slug, provider_id, payload)
 
 
 @router.delete(

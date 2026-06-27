@@ -200,7 +200,25 @@ export type ProviderSummary = AuditFields &
     isBookableOnline: boolean;
     serviceIds: UUID[];
     locationIds: UUID[];
+    compensationMode?: string | null;
+    compensationServicePercentBp?: number | null;
+    compensationProductPercentBp?: number | null;
+    compensationHourlyCents?: number | null;
+    compensationSlidingScale?: SlidingScaleTier[] | null;
   };
+
+export type SlidingScaleTier = {
+  upToAmountCents: number;
+  percentBp: number;
+};
+
+export type UpdateProviderCompensationRequest = {
+  compensationMode?: string | null;
+  compensationServicePercentBp?: number | null;
+  compensationProductPercentBp?: number | null;
+  compensationHourlyCents?: number | null;
+  compensationSlidingScale?: SlidingScaleTier[] | null;
+};
 
 export type ServiceListResponse = {
   services: ServiceSummary[];

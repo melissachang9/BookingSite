@@ -958,7 +958,7 @@ function ServiceStaffTab({
       {!variantsLoaded ? (
         <p className="settings-form-help">Loading…</p>
       ) : (
-        <div className="staff-detail-grid">
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", overflowY: "auto", maxHeight: "calc(100vh - 22rem)" }}>
           {eligibleProviders.map((provider) => {
             const entry = variantByProvider.get(provider.id) ?? {
               providerId: provider.id, priceCents: null, durationMinutes: null,
@@ -970,7 +970,7 @@ function ServiceStaffTab({
             const providerLink = `${storefrontBaseUrl}/${tenantSlug}?serviceId=${service.id}&staffId=${provider.id}`;
             return (
               <div key={provider.id} className="staff-fieldset" style={hasAnyOverride ? { background: "rgba(255,250,243,0.5)" } : undefined}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
                   <strong>{provider.name}</strong>
                   {hasAnyOverride ? <span className="service-card__provider-badge">Custom</span> : null}
                 </div>

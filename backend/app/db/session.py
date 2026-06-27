@@ -185,6 +185,27 @@ async def _ensure_postgres_schema_compatibility() -> None:
                     text(f"ALTER TABLE provider_services ADD COLUMN {commission_column} INTEGER")
                 )
 
+        # Provider compensation columns
+        for comp_column, comp_type in [
+            ("compensation_mode", "VARCHAR(32)"),
+            ("compensation_service_percent_bp", "INTEGER"),
+            ("compensation_product_percent_bp", "INTEGER"),
+            ("compensation_hourly_cents", "INTEGER"),
+            ("compensation_sliding_scale", "JSON"),
+        ]:
+            exists = await connection.scalar(
+                text(
+                    f"""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = 'providers' AND column_name = '{comp_column}'
+                    """
+                )
+            )
+            if not exists:
+                await connection.execute(
+                    text(f"ALTER TABLE providers ADD COLUMN {comp_column} {comp_type}")
+                )
+
         # Phase I: service category merchandising columns
         category_columns = {
             "slug": "VARCHAR(255)",
