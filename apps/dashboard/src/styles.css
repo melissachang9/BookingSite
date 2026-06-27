@@ -6652,3 +6652,115 @@ body {
   cursor: not-allowed;
 }
 
+/* Staff tab rows */
+.svc-staff-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 0.5px solid #E3D9C7;
+  flex-wrap: wrap;
+}
+.svc-staff-row:first-of-type {
+  border-top: none;
+  padding-top: 4px;
+}
+.svc-staff-row--dim {
+  opacity: 0.5;
+}
+.svc-staff-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: #F7F0DE;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+.svc-staff-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1F1612;
+}
+.svc-staff-meta {
+  font-size: 11px;
+  color: #8B7960;
+  margin-top: 1px;
+}
+.svc-chev {
+  color: #8B7960;
+  font-size: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+.svc-override-card {
+  background: #FBF6E8;
+  border: 0.5px solid #C9B998;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-top: 10px;
+  margin-left: 44px;
+  width: calc(100% - 44px);
+}
+.svc-summary-row {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  font-size: 12px;
+  color: #4A3D30;
+}
+.svc-text-btn {
+  background: transparent;
+  border: none;
+  color: #6B5A47;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+.svc-text-btn:hover {
+  color: #1F1612;
+}
+
+/* Client selection options */
+.svc-selection-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 0.5px solid #D9CBB1;
+  border-radius: 8px;
+  background: #FBF6E8;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.svc-selection-opt--active {
+  border: 1.5px solid #1F1612;
+  background: #F7F0DE;
+  padding: 11.5px 13.5px;
+}
+.svc-radio {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid #8B7960;
+  flex-shrink: 0;
+  margin-top: 2px;
+  position: relative;
+}
+.svc-radio--on {
+  border-color: #1F1612;
+}
+.svc-radio--on::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  background: #1F1612;
+  border-radius: 50%;
+}
+

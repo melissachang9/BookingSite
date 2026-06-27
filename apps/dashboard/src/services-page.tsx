@@ -1009,23 +1009,51 @@ function ServiceStaffTab({
   tenantSlug: string;
   storefrontBaseUrl: string;
 }) {
+  const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
+
   if (eligibleProviders.length === 0) {
-    return <div className="staff-detail-form"><p className="settings-form-help">No providers offer this service yet.</p></div>;
+    return (
+      <div className="svc-detail-form">
+        <div className="svc-card">
+          <p className="svc-helper">No providers offer this service yet.</p>
+        </div>
+      </div>
+    );
   }
+
+  const enabledCount = eligibleProviders.filter((p) => p.isActive).length;
+
   return (
-    <div className="staff-detail-form">
+    <div className="svc-detail-form">
       {canManage && isVariantsDirty ? (
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button type="button" className="primary-action" onClick={handleSaveVariants} disabled={variantsSaving}>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "8px" }}>
+          <button type="button" className="svc-save-btn" onClick={handleSaveVariants} disabled={variantsSaving}>
             {variantsSaving ? "Saving…" : "Save overrides"}
           </button>
         </div>
       ) : null}
-      {!variantsLoaded ? (
-        <p className="settings-form-help">Loading…</p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", overflowY: "auto", maxHeight: "calc(100vh - 22rem)" }}>
-          {eligibleProviders.map((provider) => {
+
+      {/* Eligible staff card */}
+      <div className="svc-card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px" }}>
+          <div>
+            <span className="svc-card__eyebrow">Eligible staff</span>
+            <div className="svc-summary-row" style={{ marginTop: "4px" }}>
+              <span><strong style={{ fontWeight: 500 }}>{enabledCount}</strong> of {eligibleProviders.length} staff can perform this service</span>
+            </div>
+          </div>
+          {canManage ? (
+            <div style={{ display: "flex", gap: "14px", alignItems: "center" }}>
+              <button type="button" className="svc-text-btn">Enable all</button>
+              <button type="button" className="svc-text-btn">Disable all</button>
+            </div>
+          ) : null}
+        </div>
+
+        {!variantsLoaded ? (
+          <p className="svc-helper">Loading…</p>
+        ) : (
+          eligibleProviders.map((provider) => {
             const entry = variantByProvider.get(provider.id) ?? {
               providerId: provider.id, priceCents: null, durationMinutes: null,
               depositCents: null, commissionFlatCents: null, commissionBasisPoints: null,
@@ -1033,67 +1061,129 @@ function ServiceStaffTab({
             const hasAnyOverride = entry.priceCents != null || entry.durationMinutes != null ||
               entry.depositCents != null || entry.commissionFlatCents != null || entry.commissionBasisPoints != null;
             const commissionMode: "flat" | "percent" = entry.commissionFlatCents != null ? "flat" : "percent";
-            const providerLink = `${storefrontBaseUrl}/${tenantSlug}?serviceId=${service.id}&staffId=${provider.id}`;
+            const isExpanded = expandedProvider === provider.id;
+            const isActive = provider.isActive;
+
+            const metaParts: string[] = [];
+            if (hasAnyOverride) metaParts.push("Custom pricing");
+            if (entry.commissionBasisPoints != null) metaParts.push(`${entry.commissionBasisPoints / 100}% commission`);
+            if (entry.commissionFlatCents != null) metaParts.push(`$${(entry.commissionFlatCents / 100).toFixed(2)} commission`);
+            if (metaParts.length === 0) metaParts.push("Uses service defaults");
+
             return (
-              <div key={provider.id} className="staff-fieldset" style={hasAnyOverride ? { background: "rgba(255,250,243,0.5)" } : undefined}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
-                  <strong>{provider.name}</strong>
-                  {hasAnyOverride ? <span className="service-card__provider-badge">Custom</span> : null}
+              <div key={provider.id} className={`svc-staff-row${isActive ? "" : " svc-staff-row--dim"}`}>
+                <div className="svc-staff-avatar" style={{ background: isActive ? "#6B5A47" : "#8B7960" }}>
+                  {provider.name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("")}
                 </div>
-                <div className="staff-detail-grid">
-                  <div>
-                    <label className="settings-label">Duration (min)</label>
-                    <input className="settings-input" type="number" min={15} max={480} step={15} disabled={!canManage}
-                      placeholder={String(baseDurationMinutes)} value={entry.durationMinutes ?? ""}
-                      onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { durationMinutes: null }); return; } const n = Number(raw); updateVariant(provider.id, { durationMinutes: Number.isFinite(n) ? n : null }); }} />
-                  </div>
-                  <div>
-                    <label className="settings-label">Price ($)</label>
-                    <input className="settings-input" type="number" min={0} step="0.01" disabled={!canManage}
-                      placeholder={(basePriceCents / 100).toFixed(2)}
-                      value={entry.priceCents == null ? "" : (entry.priceCents / 100).toFixed(2)}
-                      onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { priceCents: null }); return; } const cents = parseMoneyInput(raw); updateVariant(provider.id, { priceCents: cents }); }} />
-                  </div>
-                  <div>
-                    <label className="settings-label">Deposit ($)</label>
-                    <input className="settings-input" type="number" min={0} step="0.01" disabled={!canManage}
-                      placeholder={(baseDepositCents / 100).toFixed(2)}
-                      value={entry.depositCents == null ? "" : (entry.depositCents / 100).toFixed(2)}
-                      onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { depositCents: null }); return; } const cents = parseMoneyInput(raw); updateVariant(provider.id, { depositCents: cents }); }} />
-                  </div>
-                  <div>
-                    <label className="settings-label">Commission</label>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                      <div className="service-card__pill-toggle" role="group" aria-label="Commission type">
-                        <button type="button" className={`service-card__pill${commissionMode === "flat" ? " is-active" : ""}`} disabled={!canManage}
-                          onClick={() => { if (commissionMode === "flat") return; updateVariant(provider.id, { commissionBasisPoints: null, commissionFlatCents: entry.commissionFlatCents ?? 0 }); }}>$</button>
-                        <button type="button" className={`service-card__pill${commissionMode === "percent" ? " is-active" : ""}`} disabled={!canManage}
-                          onClick={() => { if (commissionMode === "percent") return; updateVariant(provider.id, { commissionFlatCents: null, commissionBasisPoints: entry.commissionBasisPoints ?? 0 }); }}>%</button>
+                <div style={{ flex: 1 }}>
+                  <span className="svc-staff-name">{provider.name}</span>
+                  <div className="svc-staff-meta">{metaParts.join(" · ")}</div>
+                </div>
+                {hasAnyOverride ? (
+                  <span className="svc-chev" onClick={() => setExpandedProvider(isExpanded ? null : provider.id)}>
+                    {isExpanded ? "▾" : "▸"}
+                  </span>
+                ) : (
+                  <span className="svc-chev" style={{ visibility: "hidden" }}>▸</span>
+                )}
+                <label className={`svc-toggle${isActive ? "" : " svc-toggle--off"}`} aria-label={`Toggle ${provider.name}`}>
+                  <input type="checkbox" checked={isActive}
+                    onChange={() => {}} disabled={!canManage}
+                    style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
+                </label>
+
+                {isExpanded && hasAnyOverride ? (
+                  <div className="svc-override-card">
+                    <div className="svc-grid-3">
+                      <div>
+                        <label className="svc-field-label">Duration</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                          <input className="svc-input" type="number" min={15} max={480} step={15} disabled={!canManage}
+                            placeholder={String(baseDurationMinutes)} value={entry.durationMinutes ?? ""}
+                            onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { durationMinutes: null }); return; } const n = Number(raw); updateVariant(provider.id, { durationMinutes: Number.isFinite(n) ? n : null }); }} />
+                          <span style={{ fontSize: "12px", color: "#6B5A47" }}>min</span>
+                        </div>
                       </div>
-                      {commissionMode === "flat" ? (
-                        <input className="settings-input" type="number" min={0} step="0.01" disabled={!canManage} placeholder="0.00" style={{ width: "6rem" }}
-                          value={entry.commissionFlatCents == null ? "" : (entry.commissionFlatCents / 100).toFixed(2)}
-                          onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { commissionFlatCents: null }); return; } const cents = parseMoneyInput(raw); updateVariant(provider.id, { commissionFlatCents: cents, commissionBasisPoints: null }); }} />
-                      ) : (
-                        <input className="settings-input" type="number" min={0} max={100} step="0.1" disabled={!canManage} placeholder="0" style={{ width: "5rem" }}
-                          value={entry.commissionBasisPoints == null ? "" : (entry.commissionBasisPoints / 100).toString()}
-                          onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { commissionBasisPoints: null }); return; } const pct = Number(raw); if (!Number.isFinite(pct)) return; const bp = Math.round(pct * 100); updateVariant(provider.id, { commissionBasisPoints: Math.max(0, Math.min(10_000, bp)), commissionFlatCents: null }); }} />
-                      )}
+                      <div>
+                        <label className="svc-field-label">Price override</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                          <span style={{ fontSize: "13px", color: "#1F1612" }}>$</span>
+                          <input className="svc-input" type="number" min={0} step="0.01" disabled={!canManage}
+                            placeholder={(basePriceCents / 100).toFixed(2)}
+                            value={entry.priceCents == null ? "" : (entry.priceCents / 100).toFixed(2)}
+                            onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { priceCents: null }); return; } const cents = parseMoneyInput(raw); updateVariant(provider.id, { priceCents: cents }); }} />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="svc-field-label">Commission</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                          <div className="service-card__pill-toggle" role="group" aria-label="Commission type" style={{ marginRight: "4px" }}>
+                            <button type="button" className={`service-card__pill${commissionMode === "flat" ? " is-active" : ""}`} disabled={!canManage}
+                              onClick={() => { if (commissionMode === "flat") return; updateVariant(provider.id, { commissionBasisPoints: null, commissionFlatCents: entry.commissionFlatCents ?? 0 }); }}>$</button>
+                            <button type="button" className={`service-card__pill${commissionMode === "percent" ? " is-active" : ""}`} disabled={!canManage}
+                              onClick={() => { if (commissionMode === "percent") return; updateVariant(provider.id, { commissionFlatCents: null, commissionBasisPoints: entry.commissionBasisPoints ?? 0 }); }}>%</button>
+                          </div>
+                          {commissionMode === "flat" ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                              <span style={{ fontSize: "13px", color: "#1F1612" }}>$</span>
+                              <input className="svc-input" type="number" min={0} step="0.01" disabled={!canManage} placeholder="0.00" style={{ width: "5rem" }}
+                                value={entry.commissionFlatCents == null ? "" : (entry.commissionFlatCents / 100).toFixed(2)}
+                                onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { commissionFlatCents: null }); return; } const cents = parseMoneyInput(raw); updateVariant(provider.id, { commissionFlatCents: cents, commissionBasisPoints: null }); }} />
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                              <input className="svc-input" type="number" min={0} max={100} step="0.1" disabled={!canManage} placeholder="0" style={{ width: "4rem" }}
+                                value={entry.commissionBasisPoints == null ? "" : (entry.commissionBasisPoints / 100).toString()}
+                                onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { commissionBasisPoints: null }); return; } const pct = Number(raw); if (!Number.isFinite(pct)) return; const bp = Math.round(pct * 100); updateVariant(provider.id, { commissionBasisPoints: Math.max(0, Math.min(10_000, bp)), commissionFlatCents: null }); }} />
+                              <span style={{ fontSize: "12px", color: "#6B5A47" }}>%</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
+                    <button type="button" className="svc-text-btn" style={{ marginTop: "10px" }}
+                      onClick={() => updateVariant(provider.id, { priceCents: null, durationMinutes: null, depositCents: null, commissionFlatCents: null, commissionBasisPoints: null })}>
+                      Reset to service defaults
+                    </button>
                   </div>
-                  <div>
-                    <label className="settings-label">Direct link</label>
-                    <a href={providerLink} target="_blank" rel="noopener noreferrer" className="service-card__link-action"
-                      onClick={async (e) => { e.preventDefault(); try { await navigator.clipboard.writeText(providerLink); } catch {} window.open(providerLink, "_blank", "noopener,noreferrer"); }}>
-                      Open booking page
-                    </a>
-                  </div>
-                </div>
+                ) : null}
               </div>
             );
-          })}
-        </div>
-      )}
+          })
+        )}
+      </div>
+
+      {/* Client selection card */}
+      <div className="svc-card" style={{ marginBottom: 0 }}>
+        <span className="svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Client selection on booking</span>
+
+        <label className="svc-selection-opt svc-selection-opt--active">
+          <input type="radio" name="clientSelection" defaultChecked style={{ display: "none" }} />
+          <div className="svc-radio svc-radio--on" />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "13px", fontWeight: 500 }}>Let clients choose their artist</div>
+            <div className="svc-helper">Clients see all eligible staff and pick one when booking online.</div>
+          </div>
+        </label>
+
+        <label className="svc-selection-opt">
+          <input type="radio" name="clientSelection" style={{ display: "none" }} />
+          <div className="svc-radio" />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "13px", fontWeight: 500 }}>Assign automatically</div>
+            <div className="svc-helper">Distribute bookings evenly across eligible staff. Best for fairness.</div>
+          </div>
+        </label>
+
+        <label className="svc-selection-opt" style={{ marginBottom: 0 }}>
+          <input type="radio" name="clientSelection" style={{ display: "none" }} />
+          <div className="svc-radio" />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "13px", fontWeight: 500 }}>Hide artist selection</div>
+            <div className="svc-helper">Clients book the service without seeing who'll perform it. Useful for new staff or training periods.</div>
+          </div>
+        </label>
+      </div>
     </div>
   );
 }
@@ -1109,25 +1199,25 @@ function ServiceOnlineBookingTab({
   copyHint: string | null;
 }) {
   return (
-    <div className="staff-detail-form">
-      <div className="staff-detail-grid">
-        <div className="staff-detail-grid-wide">
-          <label className="settings-label">Enable in online booking</label>
-          <label className="settings-toggle">
+    <div className="svc-detail-form">
+      <div className="svc-card">
+        <span className="svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Online booking</span>
+        <div className="svc-card__row" style={{ marginBottom: "10px" }}>
+          <div>
+            <div style={{ fontSize: "13px", color: "#1F1612", fontWeight: 500 }}>Enable in online booking</div>
+            <div className="svc-helper" style={{ marginTop: "2px" }}>Clients can self-book this service.</div>
+          </div>
+          <label className={`svc-toggle${form.isActive ? "" : " svc-toggle--off"}`} aria-label="Online booking toggle">
             <input type="checkbox" checked={form.isActive} disabled={!canManage}
-              onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.checked }))} />
-            <span>{form.isActive ? "Service is bookable online" : "Service is hidden from online booking"}</span>
+              onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.checked }))}
+              style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
           </label>
         </div>
-        <div className="staff-detail-grid-wide">
-          <label className="settings-label">Direct booking link</label>
-          <div style={{ display: "flex", gap: "0.4rem" }}>
-            <input className="settings-input" type="text" readOnly value={schedulingHref}
-              onFocus={(e) => e.currentTarget.select()} style={{ flex: 1 }} />
-            <button type="button" className="secondary-action" onClick={handleCopyLink}>Copy</button>
-          </div>
-          {copyHint ? <p className="settings-form-help" style={{ color: "var(--ui-success, #2d6a4f)" }}>{copyHint}</p> : null}
+        <div className="svc-card__row" style={{ paddingTop: "10px", borderTop: "0.5px dashed #D9CBB1" }}>
+          <div style={{ fontSize: "12px", color: "#4A3D30" }}>Direct booking link</div>
+          <span className="svc-reset-link" onClick={handleCopyLink}>Copy link</span>
         </div>
+        {copyHint ? <div className="svc-helper" style={{ color: "#2d6a4f" }}>{copyHint}</div> : null}
       </div>
     </div>
   );
