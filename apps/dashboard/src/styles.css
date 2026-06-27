@@ -6668,6 +6668,22 @@ body {
 .svc-staff-row--dim {
   opacity: 0.5;
 }
+.svc-staff-row__main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+.svc-staff-row__main:hover .svc-staff-name {
+  text-decoration: underline;
+}
 .svc-staff-avatar {
   width: 32px;
   height: 32px;
@@ -6705,6 +6721,34 @@ body {
   margin-top: 10px;
   margin-left: 44px;
   width: calc(100% - 44px);
+}
+.svc-override-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.svc-override-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 0.5px solid #E3D9C7;
+}
+.svc-override-row:last-child {
+  border-bottom: 0;
+}
+.svc-override-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #4A3D30;
+  flex-shrink: 0;
+}
+.svc-override-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
 }
 .svc-summary-row {
   display: flex;
