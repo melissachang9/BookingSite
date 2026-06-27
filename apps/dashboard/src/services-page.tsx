@@ -738,24 +738,29 @@ function ServiceDetail({
     { key: "staff", label: "Staff" },
     { key: "resources", label: "Resources" },
     { key: "customizations", label: "Customizations" },
-    { key: "onlineBooking", label: "Online Booking" },
+    { key: "onlineBooking", label: "Online booking" },
   ];
 
   return (
     <div className="staff-detail-inner">
       <header className="staff-detail-header">
         <div>
-          <p className="eyebrow">{service.categoryId ? categories.find((c) => c.id === service.categoryId)?.name ?? "Service" : "Service"}</p>
+          <p className="eyebrow">Service</p>
           <h4>{service.name}</h4>
-          <p className="settings-form-help">
-            {formatDurationMinutes(service.durationMinutes)} · {formatMoney(service.priceCents)}
-            {service.depositCents > 0 ? ` · Deposit ${formatMoney(service.depositCents)}` : ""}
-            {!service.isActive ? " · Inactive" : ""}
-          </p>
+          <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap", marginTop: "4px" }}>
+            <span className="svc-pill">{formatDurationMinutes(service.durationMinutes)}</span>
+            <span className="svc-pill">{formatMoney(service.priceCents)}</span>
+            {service.depositCents > 0 ? (
+              <span className="svc-pill">Deposit {formatMoney(service.depositCents)}</span>
+            ) : null}
+            <span className="svc-pill svc-pill--muted">
+              {service.categoryId ? categories.find((c) => c.id === service.categoryId)?.name ?? "Uncategorized" : "Uncategorized"}
+            </span>
+          </div>
         </div>
         <div className="staff-detail-actions">
           {canManage ? (
-            <button type="button" className="ghost-action" onClick={() => onDuplicate(service)}>Duplicate</button>
+            <button type="button" className="svc-duplicate-btn" onClick={() => onDuplicate(service)}>Duplicate</button>
           ) : null}
         </div>
       </header>
@@ -820,54 +825,38 @@ function ServiceDetailsTab({
   handleSave: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
   return (
-    <form className="staff-detail-form" onSubmit={handleSave}>
-      <fieldset disabled={!canManage || saving}>
-        <div className="staff-detail-grid">
-          <div className="staff-detail-grid-wide">
-            <label className="settings-label">Name</label>
-            <input className="settings-input" value={form.name}
+    <form className="svc-detail-form" onSubmit={handleSave}>
+      <fieldset disabled={!canManage || saving} style={{ border: 0, padding: 0, margin: 0 }}>
+
+        {/* Basics card */}
+        <div className="svc-card">
+          <div className="svc-card__row">
+            <span className="svc-card__eyebrow">Basics</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "12px", color: "#4A3D30" }}>Active</span>
+              <label className={`svc-toggle${form.isActive ? "" : " svc-toggle--off"}`} aria-label="Active toggle">
+                <input type="checkbox" checked={form.isActive}
+                  onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.checked }))}
+                  style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
+              </label>
+            </div>
+          </div>
+          <div style={{ marginBottom: "12px" }}>
+            <label className="svc-field-label">Service name</label>
+            <input className="svc-input" value={form.name}
               onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))}
               placeholder="Service name" required />
           </div>
-          <div className="staff-detail-grid-wide">
-            <label className="settings-label">Description</label>
-            <textarea className="settings-input" rows={3} value={form.description}
+          <div style={{ marginBottom: "12px" }}>
+            <label className="svc-field-label">Description</label>
+            <textarea className="svc-input" rows={2} style={{ resize: "vertical" }}
+              value={form.description}
               onChange={(e) => setForm((c) => ({ ...c, description: e.target.value }))}
-              placeholder="What customers see when they pick this service." />
+              placeholder="A 60-minute treatment with clean skin." />
           </div>
           <div>
-            <label className="settings-label">Duration (minutes)</label>
-            <input className="settings-input" type="number" min={15} step={15}
-              value={form.durationMinutes}
-              onChange={(e) => setForm((c) => ({ ...c, durationMinutes: e.target.value }))} required />
-          </div>
-          <div>
-            <label className="settings-label">Price ($)</label>
-            <input className="settings-input" type="number" min={0} step="0.01"
-              value={form.priceAmount}
-              onChange={(e) => setForm((c) => ({ ...c, priceAmount: e.target.value }))} required />
-          </div>
-          <div>
-            <label className="settings-label">Deposit ($)</label>
-            <input className="settings-input" type="number" min={0} step="0.01"
-              value={form.depositAmount}
-              onChange={(e) => setForm((c) => ({ ...c, depositAmount: e.target.value }))} required />
-          </div>
-          <div>
-            <label className="settings-label">Setup buffer (min)</label>
-            <input className="settings-input" type="number" min={0} step={5}
-              value={form.setupBufferMinutes}
-              onChange={(e) => setForm((c) => ({ ...c, setupBufferMinutes: e.target.value }))} />
-          </div>
-          <div>
-            <label className="settings-label">Cleanup buffer (min)</label>
-            <input className="settings-input" type="number" min={0} step={5}
-              value={form.cleanupBufferMinutes}
-              onChange={(e) => setForm((c) => ({ ...c, cleanupBufferMinutes: e.target.value }))} />
-          </div>
-          <div>
-            <label className="settings-label">Category</label>
-            <select className="settings-input" value={form.categoryId}
+            <label className="svc-field-label">Category</label>
+            <select className="svc-input" value={form.categoryId}
               onChange={(e) => setForm((c) => ({ ...c, categoryId: e.target.value }))}>
               <option value="">Uncategorized</option>
               {categories.map((cat) => (
@@ -875,47 +864,124 @@ function ServiceDetailsTab({
               ))}
             </select>
           </div>
-          <div>
-            <label className="settings-label">Active</label>
-            <label className="settings-toggle">
+        </div>
+
+        {/* Pricing & deposit card */}
+        <div className="svc-card">
+          <div className="svc-card__row">
+            <span className="svc-card__eyebrow">Pricing &amp; deposit</span>
+            {(Number(form.priceAmount) !== service.priceCents / 100 || Number(form.depositAmount) !== service.depositCents / 100) && canManage ? (
+              <span className="svc-reset-link" onClick={() => setForm((c) => ({
+                ...c,
+                priceAmount: (service.priceCents / 100).toFixed(2),
+                depositAmount: (service.depositCents / 100).toFixed(2),
+              }))}>Reset to default</span>
+            ) : null}
+          </div>
+          <div className="svc-grid-2">
+            <div>
+              <label className="svc-field-label">Price</label>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                <span style={{ fontSize: "13px", color: "#1F1612" }}>$</span>
+                <input className="svc-input" type="number" min={0} step="0.01"
+                  value={form.priceAmount}
+                  onChange={(e) => setForm((c) => ({ ...c, priceAmount: e.target.value }))} required />
+              </div>
+            </div>
+            <div>
+              <label className="svc-field-label">Deposit</label>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                <span style={{ fontSize: "13px", color: "#1F1612" }}>$</span>
+                <input className="svc-input" type="number" min={0} step="0.01"
+                  value={form.depositAmount}
+                  onChange={(e) => setForm((c) => ({ ...c, depositAmount: e.target.value }))} required />
+              </div>
+              <div className="svc-helper">Required to book online.</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Scheduling card */}
+        <div className="svc-card">
+          <span className="svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Scheduling</span>
+          <div className="svc-grid-3">
+            <div>
+              <label className="svc-field-label">Duration</label>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                <input className="svc-input" type="number" min={15} step={15}
+                  value={form.durationMinutes}
+                  onChange={(e) => setForm((c) => ({ ...c, durationMinutes: e.target.value }))} required />
+                <span style={{ fontSize: "12px", color: "#6B5A47" }}>min</span>
+              </div>
+            </div>
+            <div>
+              <label className="svc-field-label">Setup buffer</label>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                <input className="svc-input" type="number" min={0} step={5}
+                  value={form.setupBufferMinutes}
+                  onChange={(e) => setForm((c) => ({ ...c, setupBufferMinutes: e.target.value }))} />
+                <span style={{ fontSize: "12px", color: "#6B5A47" }}>min</span>
+              </div>
+            </div>
+            <div>
+              <label className="svc-field-label">Cleanup buffer</label>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                <input className="svc-input" type="number" min={0} step={5}
+                  value={form.cleanupBufferMinutes}
+                  onChange={(e) => setForm((c) => ({ ...c, cleanupBufferMinutes: e.target.value }))} />
+                <span style={{ fontSize: "12px", color: "#6B5A47" }}>min</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Online booking card */}
+        <div className="svc-card">
+          <span className="svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Online booking</span>
+          <div className="svc-card__row" style={{ marginBottom: "10px" }}>
+            <div>
+              <div style={{ fontSize: "13px", color: "#1F1612", fontWeight: 500 }}>Enable in online booking</div>
+              <div className="svc-helper" style={{ marginTop: "2px" }}>Clients can self-book this service.</div>
+            </div>
+            <label className={`svc-toggle${form.isActive ? "" : " svc-toggle--off"}`} aria-label="Online booking toggle">
               <input type="checkbox" checked={form.isActive}
-                onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.checked }))} />
-              <span>Enable in online booking</span>
+                onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.checked }))}
+                style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
             </label>
           </div>
-          <div className="staff-detail-grid-wide">
-            <label className="settings-label">Locations</label>
-            <div className="service-card__chips">
-              {locations.map((loc) => {
-                const checked = form.locationIds.includes(loc.id);
-                return (
-                  <label key={loc.id} className={`service-card__chip${checked ? " is-active" : ""}`}>
-                    <input type="checkbox" checked={checked}
-                      onChange={(e) => {
-                        const next = e.target.checked;
-                        setForm((c) => ({ ...c, locationIds: next ? [...c.locationIds, loc.id] : c.locationIds.filter((id) => id !== loc.id) }));
-                      }} />
-                    <span>{loc.name}</span>
-                  </label>
-                );
-              })}
-            </div>
+          <div className="svc-card__row" style={{ paddingTop: "10px", borderTop: "0.5px dashed #D9CBB1" }}>
+            <div style={{ fontSize: "12px", color: "#4A3D30" }}>Direct booking link</div>
+            <span className="svc-reset-link" onClick={handleCopyLink}>Copy link</span>
           </div>
-          <div className="staff-detail-grid-wide">
-            <label className="settings-label">Booking link</label>
-            <div style={{ display: "flex", gap: "0.4rem" }}>
-              <input className="settings-input" type="text" readOnly value={schedulingHref}
-                onFocus={(e) => e.currentTarget.select()} style={{ flex: 1 }} />
-              <button type="button" className="secondary-action" onClick={handleCopyLink}>Copy</button>
-            </div>
-            {copyHint ? <p className="settings-form-help" style={{ color: "var(--ui-success, #2d6a4f)" }}>{copyHint}</p> : null}
+          {copyHint ? <div className="svc-helper" style={{ color: "#2d6a4f" }}>{copyHint}</div> : null}
+        </div>
+
+        {/* Locations card */}
+        <div className="svc-card" style={{ marginBottom: 0 }}>
+          <span className="svc-card__eyebrow" style={{ marginBottom: "12px", display: "block" }}>Available at locations</span>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {locations.map((loc) => {
+              const checked = form.locationIds.includes(loc.id);
+              return (
+                <label key={loc.id} className={`svc-chip${checked ? " svc-chip--on" : ""}`}>
+                  <input type="checkbox" checked={checked}
+                    onChange={(e) => {
+                      const next = e.target.checked;
+                      setForm((c) => ({ ...c, locationIds: next ? [...c.locationIds, loc.id] : c.locationIds.filter((id) => id !== loc.id) }));
+                    }}
+                    style={{ display: "none" }} />
+                  {checked ? "✓ " : ""}{loc.name}
+                </label>
+              );
+            })}
           </div>
         </div>
       </fieldset>
-      <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: "0.5rem" }}>
+
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "18px" }}>
         {canManage ? (
-          <button type="submit" className="primary-action" disabled={saving}>
-            {saving ? "Saving…" : "Save"}
+          <button type="submit" className="svc-save-btn" disabled={saving}>
+            {saving ? "Saving…" : "Save changes"}
           </button>
         ) : null}
       </div>

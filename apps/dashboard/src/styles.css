@@ -6471,3 +6471,184 @@ body {
   color: #92400e;
 }
 
+/* ===== Service detail card-based UI (warm beige) ===== */
+.svc-detail-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.svc-card {
+  background: #F7F0DE;
+  border: 0.5px solid #D9CBB1;
+  border-radius: 12px;
+  padding: 18px 20px;
+  margin-bottom: 12px;
+}
+.svc-card__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.svc-card__eyebrow {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #6B5A47;
+  font-weight: 500;
+}
+.svc-field-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #4A3D30;
+  margin-bottom: 6px;
+  display: block;
+  letter-spacing: 0.02em;
+}
+.svc-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: #FBF6E8;
+  border: 0.5px solid #C9B998;
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 13px;
+  color: #1F1612;
+  outline: none;
+}
+.svc-input:focus {
+  border-color: #1F1612;
+  box-shadow: 0 0 0 2px rgba(31,22,18,0.08);
+}
+.svc-helper {
+  font-size: 11px;
+  color: #8B7960;
+  margin-top: 4px;
+}
+.svc-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.svc-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 14px;
+}
+.svc-reset-link {
+  font-size: 11px;
+  color: #6B5A47;
+  text-decoration: underline;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: inherit;
+}
+.svc-reset-link:hover {
+  color: #1F1612;
+}
+
+/* Toggle (dark when on, beige when off) */
+.svc-toggle {
+  width: 34px;
+  height: 20px;
+  background: #1F1612;
+  border-radius: 999px;
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.svc-toggle--off {
+  background: #C9B998;
+}
+.svc-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 16px;
+  width: 16px;
+  height: 16px;
+  background: #FBF6E8;
+  border-radius: 50%;
+  transition: left 0.2s;
+}
+.svc-toggle--off::after {
+  left: 2px;
+}
+
+/* Location chips */
+.svc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 0.5px solid #C9B998;
+  background: #FBF6E8;
+  font-size: 12px;
+  color: #4A3D30;
+  cursor: pointer;
+  user-select: none;
+}
+.svc-chip--on {
+  background: #1F1612;
+  color: #F7F0DE;
+  border-color: #1F1612;
+}
+
+/* Pills in header */
+.svc-pill {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #E5D7BB;
+  color: #4A3D30;
+  font-size: 11px;
+  font-weight: 500;
+}
+.svc-pill--muted {
+  background: transparent;
+  color: #6B5A47;
+}
+
+/* Duplicate button */
+.svc-duplicate-btn {
+  background: transparent;
+  border: 0.5px solid #1F1612;
+  color: #1F1612;
+  border-radius: 999px;
+  padding: 7px 16px;
+  font-size: 12px;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+}
+.svc-duplicate-btn:hover {
+  background: rgba(31,22,18,0.05);
+}
+
+/* Save button */
+.svc-save-btn {
+  background: #1F1612;
+  color: #F7F0DE;
+  border: none;
+  border-radius: 999px;
+  padding: 9px 22px;
+  font-size: 12px;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.svc-save-btn:hover {
+  background: #3D2E24;
+}
+.svc-save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+

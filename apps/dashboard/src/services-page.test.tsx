@@ -261,10 +261,10 @@ describe("ServicesPage", () => {
     );
     fireEvent.click(screen.getByText("Brow Shape"));
 
-    const linkInput = (await screen.findByDisplayValue(
-      /\?serviceId=svc-shape$/,
-    )) as HTMLInputElement;
-    expect(linkInput.readOnly).toBe(true);
+    // The "Copy link" action is visible in the Online booking card
+    await waitFor(() =>
+      expect(screen.getByText("Copy link")).toBeInTheDocument(),
+    );
   });
 
   it("copies the scheduling link to the clipboard", async () => {
@@ -277,16 +277,11 @@ describe("ServicesPage", () => {
     );
     fireEvent.click(screen.getByText("Brow Shape"));
 
-    await screen.findByDisplayValue(/\?serviceId=svc-shape$/);
+    await waitFor(() =>
+      expect(screen.getByText("Copy link")).toBeInTheDocument(),
+    );
 
-    // Open the "More options" details so the booking-link Copy button is interactable
-    const detailsEls = document.querySelectorAll<HTMLDetailsElement>(".service-card__more");
-    detailsEls.forEach((d) => {
-      d.open = true;
-    });
-
-    const copyButtons = screen.getAllByRole("button", { name: "Copy" });
-    fireEvent.click(copyButtons[0]);
+    fireEvent.click(screen.getByText("Copy link"));
     await waitFor(() => expect(screen.getByText("Link copied!")).toBeInTheDocument());
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       expect.stringContaining("?serviceId=svc-shape"),
