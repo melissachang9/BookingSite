@@ -835,11 +835,21 @@ function ServiceCard({
   const baseDepositCents = baseFormDeposit != null && baseFormDeposit >= 0 ? baseFormDeposit : service.depositCents;
 
   return (
-    <article className="service-card">
+    <article className={`service-card${form.isActive ? "" : " is-disabled"}`}>
       <form className="service-card__form" onSubmit={handleSave}>
         <fieldset disabled={!canManage || saving}>
-          <div className="service-card__header">
-            <div className="service-card__title-row">
+          <div className="service-card__top">
+            <label className="service-card__toggle" title={form.isActive ? "Enabled" : "Disabled"}>
+              <input
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.checked }))}
+              />
+              <span className="service-card__toggle-track" aria-hidden="true">
+                <span className="service-card__toggle-thumb" />
+              </span>
+            </label>
+            <div className="service-card__title-block">
               <input
                 className="service-card__name"
                 value={form.name}
@@ -847,109 +857,222 @@ function ServiceCard({
                 placeholder="Service name"
                 required
               />
-              <span className={`service-card__status${form.isActive ? " is-active" : ""}`}>
-                {form.isActive ? "Active" : "Inactive"}
-              </span>
-            </div>
-            {service.description || form.description ? (
               <textarea
                 className="service-card__desc"
                 rows={2}
                 value={form.description}
                 onChange={(e) => setForm((c) => ({ ...c, description: e.target.value }))}
-                placeholder="What customers see when they pick this service."
+                placeholder="Add a description customers will see."
               />
-            ) : null}
+            </div>
           </div>
 
           <div className="service-card__rows">
             <div className="service-card__row">
-              <div className="service-card__row-label">
-                <span>Duration</span>
-                <span className="service-card__row-hint">{formatDurationMinutes(service.durationMinutes)} default</span>
-              </div>
-              <div className="service-card__row-control">
-                <div className="service-card__input-group">
-                  <input type="number" min={15} step={15} value={form.durationMinutes}
-                    onChange={(e) => setForm((c) => ({ ...c, durationMinutes: e.target.value }))} required />
-                  <span className="service-card__unit">min</span>
+              <span className="service-card__row-label">Duration</span>
+              <div className="service-card__row-value">
+                <div className="service-card__field-inline">
+                  <input
+                    type="number"
+                    min={15}
+                    step={15}
+                    value={form.durationMinutes}
+                    onChange={(e) => setForm((c) => ({ ...c, durationMinutes: e.target.value }))}
+                    required
+                  />
+                  <span className="service-card__field-suffix">min</span>
                 </div>
+                <span className="service-card__row-preview">
+                  {formatDurationMinutes(Number(form.durationMinutes) || service.durationMinutes)}
+                </span>
               </div>
             </div>
 
             <div className="service-card__row">
-              <div className="service-card__row-label">
-                <span>Price</span>
-                <span className="service-card__row-hint">{formatMoney(service.priceCents)} default</span>
-              </div>
-              <div className="service-card__row-control">
-                <div className="service-card__input-group">
-                  <span className="service-card__prefix">$</span>
-                  <input type="number" min={0} step="0.01" value={form.priceAmount}
-                    onChange={(e) => setForm((c) => ({ ...c, priceAmount: e.target.value }))} required />
+              <span className="service-card__row-label">Price</span>
+              <div className="service-card__row-value">
+                <div className="service-card__field-inline">
+                  <span className="service-card__field-prefix">$</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={form.priceAmount}
+                    onChange={(e) => setForm((c) => ({ ...c, priceAmount: e.target.value }))}
+                    required
+                  />
                 </div>
+                {Number(form.priceAmount) !== service.priceCents / 100 && canManage ? (
+                  <button
+                    type="button"
+                    className="service-card__row-reset"
+                    onClick={() =>
+                      setForm((c) => ({ ...c, priceAmount: (service.priceCents / 100).toFixed(2) }))
+                    }
+                  >
+                    Reset to default
+                  </button>
+                ) : null}
               </div>
             </div>
 
             <div className="service-card__row">
-              <div className="service-card__row-label">
-                <span>Deposit</span>
-                <span className="service-card__row-hint">{formatMoney(service.depositCents)} default</span>
-              </div>
-              <div className="service-card__row-control">
-                <div className="service-card__input-group">
-                  <span className="service-card__prefix">$</span>
-                  <input type="number" min={0} step="0.01" value={form.depositAmount}
-                    onChange={(e) => setForm((c) => ({ ...c, depositAmount: e.target.value }))} required />
+              <span className="service-card__row-label">Deposit</span>
+              <div className="service-card__row-value">
+                <div className="service-card__field-inline">
+                  <span className="service-card__field-prefix">$</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={form.depositAmount}
+                    onChange={(e) => setForm((c) => ({ ...c, depositAmount: e.target.value }))}
+                    required
+                  />
                 </div>
+                {Number(form.depositAmount) !== service.depositCents / 100 && canManage ? (
+                  <button
+                    type="button"
+                    className="service-card__row-reset"
+                    onClick={() =>
+                      setForm((c) => ({ ...c, depositAmount: (service.depositCents / 100).toFixed(2) }))
+                    }
+                  >
+                    Reset to default
+                  </button>
+                ) : null}
               </div>
             </div>
 
             <div className="service-card__row">
-              <div className="service-card__row-label"><span>Category</span></div>
-              <div className="service-card__row-control">
-                <select value={form.categoryId}
-                  onChange={(e) => setForm((c) => ({ ...c, categoryId: e.target.value }))}>
-                  <option value="">Uncategorized</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="service-card__row">
-              <div className="service-card__row-label"><span>Locations</span></div>
-              <div className="service-card__row-control">
-                <div className="service-card__chips">
-                  {locations.map((loc) => {
-                    const checked = form.locationIds.includes(loc.id);
-                    return (
-                      <label key={loc.id} className={`service-card__chip${checked ? " is-active" : ""}`}>
-                        <input type="checkbox" checked={checked}
-                          onChange={(e) => {
-                            const next = e.target.checked;
-                            setForm((c) => ({ ...c, locationIds: next ? [...c.locationIds, loc.id] : c.locationIds.filter((id) => id !== loc.id) }));
-                          }} />
-                        <span>{loc.name}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            <div className="service-card__row">
-              <div className="service-card__row-label"><span>Online booking</span></div>
-              <div className="service-card__row-control">
-                <label className="settings-toggle">
-                  <input type="checkbox" checked={form.isActive}
-                    onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.checked }))} />
-                  <span>Enable in online booking</span>
+              <span className="service-card__row-label">Enable in online booking</span>
+              <div className="service-card__row-value">
+                <label className="service-card__toggle service-card__toggle--inline">
+                  <input
+                    type="checkbox"
+                    checked={form.isActive}
+                    onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.checked }))}
+                  />
+                  <span className="service-card__toggle-track" aria-hidden="true">
+                    <span className="service-card__toggle-thumb" />
+                  </span>
                 </label>
               </div>
             </div>
+
+            <div className="service-card__row">
+              <span className="service-card__row-label">Online booking</span>
+              <div className="service-card__row-value">
+                <a
+                  href={schedulingHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="service-card__link-action"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    void handleCopyLink();
+                    window.open(schedulingHref, "_blank", "noopener,noreferrer");
+                  }}
+                >
+                  Direct link
+                </a>
+              </div>
+            </div>
           </div>
+
+          <details className="service-card__more">
+            <summary>More options</summary>
+            <div className="service-card__more-body">
+              <div className="service-card__row">
+                <span className="service-card__row-label">Category</span>
+                <div className="service-card__row-value">
+                  <select
+                    value={form.categoryId}
+                    onChange={(e) => setForm((c) => ({ ...c, categoryId: e.target.value }))}
+                  >
+                    <option value="">Uncategorized</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="service-card__row">
+                <span className="service-card__row-label">Setup buffer</span>
+                <div className="service-card__row-value">
+                  <div className="service-card__field-inline">
+                    <input
+                      type="number"
+                      min={0}
+                      step={5}
+                      value={form.setupBufferMinutes}
+                      onChange={(e) => setForm((c) => ({ ...c, setupBufferMinutes: e.target.value }))}
+                    />
+                    <span className="service-card__field-suffix">min</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="service-card__row">
+                <span className="service-card__row-label">Cleanup buffer</span>
+                <div className="service-card__row-value">
+                  <div className="service-card__field-inline">
+                    <input
+                      type="number"
+                      min={0}
+                      step={5}
+                      value={form.cleanupBufferMinutes}
+                      onChange={(e) => setForm((c) => ({ ...c, cleanupBufferMinutes: e.target.value }))}
+                    />
+                    <span className="service-card__field-suffix">min</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="service-card__row">
+                <span className="service-card__row-label">Locations</span>
+                <div className="service-card__row-value">
+                  <div className="service-card__chips">
+                    {locations.map((loc) => {
+                      const checked = form.locationIds.includes(loc.id);
+                      return (
+                        <label key={loc.id} className={`service-card__chip${checked ? " is-active" : ""}`}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              const next = e.target.checked;
+                              setForm((c) => ({
+                                ...c,
+                                locationIds: next
+                                  ? [...c.locationIds, loc.id]
+                                  : c.locationIds.filter((id) => id !== loc.id),
+                              }));
+                            }}
+                          />
+                          <span>{loc.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="service-card__copy-row">
+                <span className="service-card__row-label">Booking link</span>
+                <input
+                  type="text"
+                  readOnly
+                  value={schedulingHref}
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+                <button type="button" className="secondary-action" onClick={handleCopyLink}>
+                  Copy
+                </button>
+              </div>
+            </div>
+          </details>
         </fieldset>
 
         <div className="service-card__actions">
@@ -970,24 +1093,16 @@ function ServiceCard({
         </div>
       </form>
 
-      <div className="service-card__link">
-        <span className="eyebrow">Direct link</span>
-        <div className="service-card__link-row">
-          <input type="text" readOnly value={schedulingHref}
-            onFocus={(e) => e.currentTarget.select()} />
-          <button type="button" className="secondary-action" onClick={handleCopyLink}>Copy</button>
-        </div>
-        {copyHint ? <span className="settings-form-help">{copyHint}</span> : null}
-      </div>
+      {copyHint ? <p className="service-card__copy-hint">{copyHint}</p> : null}
 
       {eligibleProviders.length > 0 ? (
         <div className="service-card__providers">
           <div className="service-card__providers-header">
-            <span className="eyebrow">Per-provider pricing</span>
+            <span className="eyebrow">Per-provider overrides</span>
             {canManage && isVariantsDirty ? (
               <button type="button" className="primary-action" onClick={handleSaveVariants}
                 disabled={variantsSaving}>
-                {variantsSaving ? "Saving…" : "Save variants"}
+                {variantsSaving ? "Saving…" : "Save overrides"}
               </button>
             ) : null}
           </div>
@@ -1004,76 +1119,83 @@ function ServiceCard({
                     <div className="service-card__provider-header">
                       <strong>{provider.name}</strong>
                       {hasAnyOverride ? (
-                        <span className="service-card__provider-badge">Custom pricing</span>
+                        <span className="service-card__provider-badge">Custom</span>
                       ) : null}
                     </div>
-                    <div className="service-card__provider-rows">
-                      <div className="service-card__provider-row">
-                        <span className="service-card__provider-label">Duration</span>
-                        <div className="service-card__provider-control">
-                          <div className="service-card__input-group">
+                    <div className="service-card__rows">
+                      <div className="service-card__row">
+                        <span className="service-card__row-label">Duration</span>
+                        <div className="service-card__row-value">
+                          <div className="service-card__field-inline">
                             <input type="number" min={15} max={480} step={15} disabled={!canManage}
                               placeholder={String(baseDurationMinutes)} value={entry.durationMinutes ?? ""}
                               onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { durationMinutes: null }); return; } const n = Number(raw); updateVariant(provider.id, { durationMinutes: Number.isFinite(n) ? n : null }); }} />
-                            <span className="service-card__unit">min</span>
+                            <span className="service-card__field-suffix">min</span>
                           </div>
                           {entry.durationMinutes != null && canManage ? (
-                            <button type="button" className="text-action"
+                            <button type="button" className="service-card__row-reset"
                               onClick={() => updateVariant(provider.id, { durationMinutes: null })}>
                               Reset to default
                             </button>
                           ) : null}
                         </div>
                       </div>
-                      <div className="service-card__provider-row">
-                        <span className="service-card__provider-label">Price</span>
-                        <div className="service-card__provider-control">
-                          <div className="service-card__input-group">
-                            <span className="service-card__prefix">$</span>
+                      <div className="service-card__row">
+                        <span className="service-card__row-label">Price</span>
+                        <div className="service-card__row-value">
+                          <div className="service-card__field-inline">
+                            <span className="service-card__field-prefix">$</span>
                             <input type="number" min={0} step="0.01" disabled={!canManage}
                               placeholder={(basePriceCents / 100).toFixed(2)}
                               value={entry.priceCents == null ? "" : (entry.priceCents / 100).toFixed(2)}
                               onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { priceCents: null }); return; } const cents = parseMoneyInput(raw); updateVariant(provider.id, { priceCents: cents }); }} />
                           </div>
                           {entry.priceCents != null && canManage ? (
-                            <button type="button" className="text-action"
+                            <button type="button" className="service-card__row-reset"
                               onClick={() => updateVariant(provider.id, { priceCents: null })}>
                               Reset to default
                             </button>
                           ) : null}
                         </div>
                       </div>
-                      <div className="service-card__provider-row">
-                        <span className="service-card__provider-label">Deposit</span>
-                        <div className="service-card__provider-control">
-                          <div className="service-card__input-group">
-                            <span className="service-card__prefix">$</span>
+                      <div className="service-card__row">
+                        <span className="service-card__row-label">Deposit</span>
+                        <div className="service-card__row-value">
+                          <div className="service-card__field-inline">
+                            <span className="service-card__field-prefix">$</span>
                             <input type="number" min={0} step="0.01" disabled={!canManage}
                               placeholder={(baseDepositCents / 100).toFixed(2)}
                               value={entry.depositCents == null ? "" : (entry.depositCents / 100).toFixed(2)}
                               onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { depositCents: null }); return; } const cents = parseMoneyInput(raw); updateVariant(provider.id, { depositCents: cents }); }} />
                           </div>
                           {entry.depositCents != null && canManage ? (
-                            <button type="button" className="text-action"
+                            <button type="button" className="service-card__row-reset"
                               onClick={() => updateVariant(provider.id, { depositCents: null })}>
                               Reset to default
                             </button>
                           ) : null}
                         </div>
                       </div>
-                    </div>
-                    <div className="service-card__provider-link">
-                      <span className="eyebrow">Direct link</span>
-                      <div className="service-card__link-row">
-                        <input type="text" readOnly value={providerLink}
-                          onFocus={(e) => e.currentTarget.select()} />
-                        <button type="button" className="secondary-action"
-                          onClick={async () => {
-                            try { await navigator.clipboard.writeText(providerLink); setCopyHint("Link copied!"); }
-                            catch { setCopyHint("Copy failed."); }
-                            if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
-                            copyTimerRef.current = window.setTimeout(() => setCopyHint(null), 2000);
-                          }}>Copy</button>
+                      <div className="service-card__row">
+                        <span className="service-card__row-label">Online booking</span>
+                        <div className="service-card__row-value">
+                          <a
+                            href={providerLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="service-card__link-action"
+                            onClick={async (e) => {
+                              e.preventDefault();
+                              try { await navigator.clipboard.writeText(providerLink); setCopyHint("Link copied!"); }
+                              catch { setCopyHint("Copy failed."); }
+                              if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
+                              copyTimerRef.current = window.setTimeout(() => setCopyHint(null), 2000);
+                              window.open(providerLink, "_blank", "noopener,noreferrer");
+                            }}
+                          >
+                            Direct link
+                          </a>
+                        </div>
                       </div>
                     </div>
                   </div>

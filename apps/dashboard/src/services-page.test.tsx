@@ -273,6 +273,12 @@ describe("ServicesPage", () => {
 
     await screen.findByDisplayValue(/\?serviceId=svc-shape$/);
 
+    // Open the "More options" details so the booking-link Copy button is interactable
+    const detailsEls = document.querySelectorAll<HTMLDetailsElement>(".service-card__more");
+    detailsEls.forEach((d) => {
+      d.open = true;
+    });
+
     const copyButtons = screen.getAllByRole("button", { name: "Copy" });
     fireEvent.click(copyButtons[0]);
     await waitFor(() => expect(screen.getByText("Link copied!")).toBeInTheDocument());
