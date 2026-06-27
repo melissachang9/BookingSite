@@ -111,6 +111,8 @@ type SelectionState =
   | { kind: "service"; serviceId: string }
   | { kind: "category"; categoryId: string };
 
+type ServiceTabKey = "details" | "staff" | "resources" | "customizations" | "onlineBooking";
+
 type DragState =
   | { kind: "none" }
   | { kind: "service"; serviceId: string; fromCategoryKey: string }
@@ -142,6 +144,7 @@ export function ServicesPage({
   const [locations, setLocations] = useState<LocationSummary[]>([]);
   const [providers, setProviders] = useState<ProviderSummary[]>([]);
   const [selection, setSelection] = useState<SelectionState>({ kind: "none" });
+  const [activeTab, setActiveTab] = useState<ServiceTabKey>("details");
   const [drag, setDrag] = useState<DragState>({ kind: "none" });
   const [dragOverTarget, setDragOverTarget] = useState<DragOverTarget>({ kind: "none" });
   const [showCreate, setShowCreate] = useState(false);
@@ -347,124 +350,85 @@ export function ServicesPage({
         </div>
       ) : null}
 
-      <section className="services-layout">
-        <aside className="services-sidebar" aria-label="Services">
-          <div className="services-sidebar-header">
-            <h4>Services</h4>
-            {canManage ? (
-              <button
-                type="button"
-                className="ghost-action"
-                onClick={handleCreateCategory}
-              >
-                + Add category
-              </button>
-            ) : null}
-          </div>
-          <div className="services-sidebar-list">
-            {orderedCategories.map((category) => {
-              const list = servicesByCategory.get(category.id) ?? [];
-              const isDragOver =
-                dragOverTarget.kind === "category" &&
-                dragOverTarget.categoryId === category.id;
-              const isDragging =
-                drag.kind === "category" && drag.categoryId === category.id;
-              return (
-                <div
-                  key={category.id}
-                  className={[
-                    "services-category-group",
-                    isDragging ? "services-category-dragging" : "",
-                    isDragOver ? "services-category-drop-target" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  draggable={canManage}
-                  onDragStart={() =>
-                    setDrag({ kind: "category", categoryId: category.id })
-                  }
-                  onDragEnd={() => {
-                    setDrag({ kind: "none" });
-                    setDragOverTarget({ kind: "none" });
-                  }}
-                  onDragEnter={() => {
-                    if (drag.kind === "category") {
-                      setDragOverTarget({ kind: "category", categoryId: category.id });
-                    }
-                  }}
-                  onDragLeave={(event) => {
-                    if (
-                      drag.kind === "category" &&
-                      !(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node)
-                    ) {
-                      setDragOverTarget({ kind: "none" });
-                    }
-                  }}
-                  onDragOver={(event) => {
-                    if (drag.kind === "category") event.preventDefault();
-                  }}
-                  onDrop={(event) => {
-                    if (drag.kind !== "category") return;
-                    event.preventDefault();
-                    if (drag.categoryId === category.id) return;
-                    const ids = orderedCategories.map((c) => c.id);
-                    const moved = ids.filter((id) => id !== drag.categoryId);
-                    const idx = moved.indexOf(category.id);
-                    moved.splice(idx, 0, drag.categoryId);
-                    setDrag({ kind: "none" });
-                    setDragOverTarget({ kind: "none" });
-                    void handleReorderCategories(moved);
-                  }}
+      <section className="ops-panel staff-master-detail">
+        <div className="staff-grid">
+          <aside className="staff-list-rail">
+            <header className="staff-list-rail-header">
+              <h4>Services</h4>
+              {canManage ? (
+                <button
+                  type="button"
+                  className="primary-action"
+                  onClick={() => setShowCreate(true)}
                 >
-                  <div className="services-category-group-header">
-                    <span className="services-category-handle" aria-hidden="true">
-                      ⋮⋮
-                    </span>
-                    <span className="services-category-group-name">{category.name}</span>
-                    {category.subheadline ? (
-                      <span className="services-category-group-subheadline">{category.subheadline}</span>
-                    ) : null}
-                    {category.featuredLabel ? (
-                      <span className={`services-category-badge services-category-badge--${category.featuredLabel}`}>
-                        {FEATURED_LABEL_DISPLAY[category.featuredLabel] ?? category.featuredLabel}
-                      </span>
-                    ) : null}
-                    <span className="services-category-count">{list.length}</span>
-                    {canManage ? (
-                      <span className="services-category-group-actions">
-                        <button
-                          type="button"
-                          className="text-action"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRenameCategory(category);
-                          }}
-                        >
-                          Rename
-                        </button>
-                        <button
-                          type="button"
-                          className="text-action"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteCategory(category);
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </span>
-                    ) : null}
+                  Add service
+                </button>
+              ) : null}
+            </header>
+            <div className="staff-list" style={{ flexDirection: "column", gap: 0 }}>
+              {orderedCategories.map((category) => {
+                const list = servicesByCategory.get(category.id) ?? [];
+                return (
+                  <div key={category.id} className="services-category-group">
+                    <div className="services-category-group-header">
+                      <span className="services-category-group-name">{category.name}</span>
+                      {category.subheadline ? (
+                        <span className="services-category-group-subheadline">{category.subheadline}</span>
+                      ) : null}
+                      {category.featuredLabel ? (
+                        <span className={`services-category-badge services-category-badge--${category.featuredLabel}`}>
+                          {FEATURED_LABEL_DISPLAY[category.featuredLabel] ?? category.featuredLabel}
+                        </span>
+                      ) : null}
+                      <span className="services-category-count">{list.length}</span>
+                      {canManage ? (
+                        <span className="services-category-group-actions">
+                          <button type="button" className="text-action"
+                            onClick={() => handleRenameCategory(category)}>Rename</button>
+                          <button type="button" className="text-action"
+                            onClick={() => handleDeleteCategory(category)}>Delete</button>
+                        </span>
+                      ) : null}
+                    </div>
+                    {list.length === 0 ? (
+                      <p className="services-list-empty">No services yet.</p>
+                    ) : (
+                      <ul className="services-list">
+                        {list.map((service) => (
+                          <li key={service.id}>
+                            <button
+                              type="button"
+                              className={`services-list-item${selection.kind === "service" && selection.serviceId === service.id ? " is-active" : ""}`}
+                              onClick={() => { setSelection({ kind: "service", serviceId: service.id }); setActiveTab("details"); }}
+                            >
+                              <span className="services-list-item__name">{service.name}</span>
+                              <span className="services-list-item__meta">
+                                {formatDurationMinutes(service.durationMinutes)} · {formatMoney(service.priceCents)}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
-                  {list.length === 0 ? (
-                    <p className="services-list-empty">No services yet.</p>
-                  ) : (
+                );
+              })}
+              {(() => {
+                const uncategorized = servicesByCategory.get(UNCATEGORIZED_KEY) ?? [];
+                if (uncategorized.length === 0) return null;
+                return (
+                  <div className="services-category-group">
+                    <div className="services-category-group-header">
+                      <span className="services-category-group-name">Uncategorized</span>
+                      <span className="services-category-count">{uncategorized.length}</span>
+                    </div>
                     <ul className="services-list">
-                      {list.map((service) => (
+                      {uncategorized.map((service) => (
                         <li key={service.id}>
                           <button
                             type="button"
                             className={`services-list-item${selection.kind === "service" && selection.serviceId === service.id ? " is-active" : ""}`}
-                            onClick={() => setSelection({ kind: "service", serviceId: service.id })}
+                            onClick={() => { setSelection({ kind: "service", serviceId: service.id }); setActiveTab("details"); }}
                           >
                             <span className="services-list-item__name">{service.name}</span>
                             <span className="services-list-item__meta">
@@ -474,82 +438,36 @@ export function ServicesPage({
                         </li>
                       ))}
                     </ul>
-                  )}
-                </div>
-              );
-            })}
-            {/* Uncategorized */}
-            {(() => {
-              const uncategorized = servicesByCategory.get(UNCATEGORIZED_KEY) ?? [];
-              if (uncategorized.length === 0) return null;
-              return (
-                <div className="services-category-group">
-                  <div className="services-category-group-header">
-                    <span className="services-category-group-name">Uncategorized</span>
-                    <span className="services-category-count">{uncategorized.length}</span>
                   </div>
-                  <ul className="services-list">
-                    {uncategorized.map((service) => (
-                      <li key={service.id}>
-                        <button
-                          type="button"
-                          className={`services-list-item${selection.kind === "service" && selection.serviceId === service.id ? " is-active" : ""}`}
-                          onClick={() => setSelection({ kind: "service", serviceId: service.id })}
-                        >
-                          <span className="services-list-item__name">{service.name}</span>
-                          <span className="services-list-item__meta">
-                            {formatDurationMinutes(service.durationMinutes)} · {formatMoney(service.priceCents)}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })()}
-          </div>
-        </aside>
-
-        <section className="services-main">
-          <div className="services-main-header">
-            <h4>
-              {selection.kind === "service"
-                ? services.find((s) => s.id === selection.serviceId)?.name ?? "Service"
-                : "Service details"}
-            </h4>
+                );
+              })()}
+            </div>
             {canManage ? (
-              <div className="services-main-actions">
-                <button
-                  type="button"
-                  className="primary-action"
-                  onClick={() => setShowCreate(true)}
-                >
-                  + Add service
+              <div style={{ padding: "0.5rem 0.75rem", borderTop: "1px solid var(--ui-border, #e5e7eb)" }}>
+                <button type="button" className="ghost-action" onClick={handleCreateCategory}>
+                  + Add category
                 </button>
               </div>
             ) : null}
-          </div>
+          </aside>
 
-          <div className="services-detail-panel">
+          <div className="staff-detail">
             {selection.kind === "service" ? (
               (() => {
                 const selectedService = services.find((s) => s.id === selection.serviceId);
                 if (!selectedService) {
-                  return (
-                    <div className="services-detail-empty">
-                      <p>Service not found.</p>
-                    </div>
-                  );
+                  return <p className="settings-form-help">Service not found.</p>;
                 }
                 return (
-                  <ServiceCard
-                    key={selectedService.id}
+                  <ServiceDetail
                     service={selectedService}
                     categories={orderedCategories}
                     locations={locations}
                     providers={providers}
                     canManage={canManage}
                     tenantSlug={tenantSlug}
+                    activeTab={activeTab}
+                    onTabChange={setActiveTab}
                     onSaved={async (msg) => {
                       await refreshServices();
                       if (msg) setStatus(msg);
@@ -559,12 +477,10 @@ export function ServicesPage({
                 );
               })()
             ) : (
-              <div className="services-detail-empty">
-                <p>Select a service to edit its details.</p>
-              </div>
+              <p className="settings-form-help">Select a service to view details.</p>
             )}
           </div>
-        </section>
+        </div>
       </section>
 
       {showCreate && canManage ? (
@@ -668,13 +584,15 @@ function toCardState(service: ServiceSummary): ServiceCardState {
   };
 }
 
-function ServiceCard({
+function ServiceDetail({
   service,
   categories,
   locations,
   providers,
   canManage,
   tenantSlug,
+  activeTab,
+  onTabChange,
   onSaved,
   onDuplicate,
 }: {
@@ -684,6 +602,8 @@ function ServiceCard({
   providers: ProviderSummary[];
   canManage: boolean;
   tenantSlug: string;
+  activeTab: ServiceTabKey;
+  onTabChange: (tab: ServiceTabKey) => void;
   onSaved: (msg?: string) => void;
   onDuplicate: (service: ServiceSummary) => void;
 }) {
@@ -696,42 +616,29 @@ function ServiceCard({
   const [copyHint, setCopyHint] = useState<string | null>(null);
   const copyTimerRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    setForm(toCardState(service));
-  }, [service]);
+  useEffect(() => { setForm(toCardState(service)); }, [service]);
 
   useEffect(() => {
     let cancelled = false;
     setVariantsLoaded(false);
-    void platformApi
-      .getServiceProviderVariants(tenantSlug, service.id)
-      .then((resp) => {
-        if (cancelled) return;
-        setVariants(resp.variants);
-        setSavedVariants(resp.variants);
-        setVariantsLoaded(true);
-      })
-      .catch(() => {
-        if (!cancelled) setVariantsLoaded(true);
-      });
+    void platformApi.getServiceProviderVariants(tenantSlug, service.id).then((resp) => {
+      if (cancelled) return;
+      setVariants(resp.variants);
+      setSavedVariants(resp.variants);
+      setVariantsLoaded(true);
+    }).catch(() => { if (!cancelled) setVariantsLoaded(true); });
     return () => { cancelled = true; };
   }, [tenantSlug, service.id]);
 
   useEffect(() => {
-    return () => {
-      if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
-    };
+    return () => { if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current); };
   }, []);
 
   const schedulingHref = `${storefrontBaseUrl}/${tenantSlug}?serviceId=${service.id}`;
 
   const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(schedulingHref);
-      setCopyHint("Link copied!");
-    } catch {
-      setCopyHint("Copy failed — select and copy manually.");
-    }
+    try { await navigator.clipboard.writeText(schedulingHref); setCopyHint("Link copied!"); }
+    catch { setCopyHint("Copy failed."); }
     if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
     copyTimerRef.current = window.setTimeout(() => setCopyHint(null), 2000);
   };
@@ -745,20 +652,14 @@ function ServiceCard({
     const priceCents = parseMoneyInput(form.priceAmount);
     const depositCents = parseMoneyInput(form.depositAmount);
     if (!Number.isInteger(durationMinutes) || durationMinutes < 15 || priceCents === null || depositCents === null) {
-      onSaved("Enter a valid duration, price, and deposit.");
-      return;
+      onSaved("Enter a valid duration, price, and deposit."); return;
     }
-    if (form.locationIds.length === 0) {
-      onSaved("Select at least one location.");
-      return;
-    }
+    if (form.locationIds.length === 0) { onSaved("Select at least one location."); return; }
     const body: UpdateServiceRequest = {
-      name,
-      durationMinutes,
+      name, durationMinutes,
       setupBufferMinutes: Number(form.setupBufferMinutes) || 0,
       cleanupBufferMinutes: Number(form.cleanupBufferMinutes) || 0,
-      priceCents,
-      depositCents,
+      priceCents, depositCents,
       locationIds: form.locationIds,
       isActive: form.isActive,
     };
@@ -768,12 +669,9 @@ function ServiceCard({
     if (form.categoryId) body.categoryId = form.categoryId;
     else if (service.categoryId) body.clearCategory = true;
     setSaving(true);
-    try {
-      await platformApi.updateService(tenantSlug, service.id, body);
-      onSaved(`"${name}" saved.`);
-    } catch (error) {
-      onSaved(readErrorMessage(error, "Unable to save service."));
-    } finally { setSaving(false); }
+    try { await platformApi.updateService(tenantSlug, service.id, body); onSaved(`"${name}" saved.`); }
+    catch (error) { onSaved(readErrorMessage(error, "Unable to save service.")); }
+    finally { setSaving(false); }
   };
 
   // Variants
@@ -786,69 +684,23 @@ function ServiceCard({
   const updateVariant = (providerId: string, patch: Partial<ProviderServiceVariantEntry>) => {
     setVariants((current) => {
       const existing = current.find((v) => v.providerId === providerId);
-      if (!existing) {
-        return [
-          ...current,
-          {
-            providerId,
-            priceCents: null,
-            durationMinutes: null,
-            depositCents: null,
-            commissionFlatCents: null,
-            commissionBasisPoints: null,
-            ...patch,
-          },
-        ];
-      }
+      if (!existing) return [...current, { providerId, priceCents: null, durationMinutes: null, depositCents: null, commissionFlatCents: null, commissionBasisPoints: null, ...patch }];
       return current.map((v) => v.providerId === providerId ? { ...v, ...patch } : v);
     });
-  };
-
-  const removeVariantOverrides = (providerId: string) => {
-    setVariants((current) =>
-      current.map((v) =>
-        v.providerId === providerId
-          ? {
-              providerId,
-              priceCents: null,
-              durationMinutes: null,
-              depositCents: null,
-              commissionFlatCents: null,
-              commissionBasisPoints: null,
-            }
-          : v,
-      ),
-    );
   };
 
   const handleSaveVariants = async () => {
     if (!canManage) return;
     const payload: ProviderServiceVariantEntry[] = variants
-      .filter(
-        (v) =>
-          v.priceCents != null ||
-          v.durationMinutes != null ||
-          v.depositCents != null ||
-          v.commissionFlatCents != null ||
-          v.commissionBasisPoints != null,
-      )
-      .map((v) => ({
-        providerId: v.providerId,
-        priceCents: v.priceCents ?? null,
-        durationMinutes: v.durationMinutes ?? null,
-        depositCents: v.depositCents ?? null,
-        commissionFlatCents: v.commissionFlatCents ?? null,
-        commissionBasisPoints: v.commissionBasisPoints ?? null,
-      }));
+      .filter((v) => v.priceCents != null || v.durationMinutes != null || v.depositCents != null || v.commissionFlatCents != null || v.commissionBasisPoints != null)
+      .map((v) => ({ providerId: v.providerId, priceCents: v.priceCents ?? null, durationMinutes: v.durationMinutes ?? null, depositCents: v.depositCents ?? null, commissionFlatCents: v.commissionFlatCents ?? null, commissionBasisPoints: v.commissionBasisPoints ?? null }));
     setVariantsSaving(true);
     try {
       const resp = await platformApi.replaceServiceProviderVariants(tenantSlug, service.id, { variants: payload });
-      setVariants(resp.variants);
-      setSavedVariants(resp.variants);
+      setVariants(resp.variants); setSavedVariants(resp.variants);
       onSaved("Per-provider pricing saved.");
-    } catch (error) {
-      onSaved(readErrorMessage(error, "Unable to save variants."));
-    } finally { setVariantsSaving(false); }
+    } catch (error) { onSaved(readErrorMessage(error, "Unable to save variants.")); }
+    finally { setVariantsSaving(false); }
   };
 
   const eligibleProviders = useMemo(
@@ -860,18 +712,15 @@ function ServiceCard({
     const normalize = (entries: ProviderServiceVariantEntry[]) => {
       const map = new Map<string, string>();
       for (const entry of entries) {
-        const p = entry.priceCents ?? null;
-        const d = entry.durationMinutes ?? null;
-        const dp = entry.depositCents ?? null;
-        const cf = entry.commissionFlatCents ?? null;
+        const p = entry.priceCents ?? null; const d = entry.durationMinutes ?? null;
+        const dp = entry.depositCents ?? null; const cf = entry.commissionFlatCents ?? null;
         const cb = entry.commissionBasisPoints ?? null;
         if (p == null && d == null && dp == null && cf == null && cb == null) continue;
         map.set(entry.providerId, `${p}|${d}|${dp}|${cf}|${cb}`);
       }
       return map;
     };
-    const current = normalize(variants);
-    const saved = normalize(savedVariants);
+    const current = normalize(variants); const saved = normalize(savedVariants);
     if (current.size !== saved.size) return true;
     for (const [pid, sig] of current) { if (saved.get(pid) !== sig) return true; }
     return false;
@@ -884,561 +733,336 @@ function ServiceCard({
   const baseFormDeposit = parseMoneyInput(form.depositAmount);
   const baseDepositCents = baseFormDeposit != null && baseFormDeposit >= 0 ? baseFormDeposit : service.depositCents;
 
+  const tabs: Array<{ key: ServiceTabKey; label: string }> = [
+    { key: "details", label: "Details" },
+    { key: "staff", label: "Staff" },
+    { key: "resources", label: "Resources" },
+    { key: "customizations", label: "Customizations" },
+    { key: "onlineBooking", label: "Online Booking" },
+  ];
+
   return (
-    <article className={`service-card${form.isActive ? "" : " is-disabled"}`}>
-      <form className="service-card__form" onSubmit={handleSave}>
-        <fieldset disabled={!canManage || saving}>
-          <div className="service-card__top">
-            <label className="service-card__toggle" title={form.isActive ? "Enabled" : "Disabled"}>
-              <input
-                type="checkbox"
-                checked={form.isActive}
-                onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.checked }))}
-              />
-              <span className="service-card__toggle-track" aria-hidden="true">
-                <span className="service-card__toggle-thumb" />
-              </span>
-            </label>
-            <div className="service-card__title-block">
-              <input
-                className="service-card__name"
-                value={form.name}
-                onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))}
-                placeholder="Service name"
-                required
-              />
-              <textarea
-                className="service-card__desc"
-                rows={2}
-                value={form.description}
-                onChange={(e) => setForm((c) => ({ ...c, description: e.target.value }))}
-                placeholder="Add a description customers will see."
-              />
-            </div>
-          </div>
-
-          <div className="service-card__rows">
-            <div className="service-card__row">
-              <span className="service-card__row-label">Duration</span>
-              <div className="service-card__row-value">
-                <div className="service-card__field-inline">
-                  <input
-                    type="number"
-                    min={15}
-                    step={15}
-                    value={form.durationMinutes}
-                    onChange={(e) => setForm((c) => ({ ...c, durationMinutes: e.target.value }))}
-                    required
-                  />
-                  <span className="service-card__field-suffix">min</span>
-                </div>
-                <span className="service-card__row-preview">
-                  {formatDurationMinutes(Number(form.durationMinutes) || service.durationMinutes)}
-                </span>
-              </div>
-            </div>
-
-            <div className="service-card__row">
-              <span className="service-card__row-label">Price</span>
-              <div className="service-card__row-value">
-                <div className="service-card__field-inline">
-                  <span className="service-card__field-prefix">$</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={form.priceAmount}
-                    onChange={(e) => setForm((c) => ({ ...c, priceAmount: e.target.value }))}
-                    required
-                  />
-                </div>
-                {Number(form.priceAmount) !== service.priceCents / 100 && canManage ? (
-                  <button
-                    type="button"
-                    className="service-card__row-reset"
-                    onClick={() =>
-                      setForm((c) => ({ ...c, priceAmount: (service.priceCents / 100).toFixed(2) }))
-                    }
-                  >
-                    Reset to default
-                  </button>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="service-card__row">
-              <span className="service-card__row-label">Deposit</span>
-              <div className="service-card__row-value">
-                <div className="service-card__field-inline">
-                  <span className="service-card__field-prefix">$</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={form.depositAmount}
-                    onChange={(e) => setForm((c) => ({ ...c, depositAmount: e.target.value }))}
-                    required
-                  />
-                </div>
-                {Number(form.depositAmount) !== service.depositCents / 100 && canManage ? (
-                  <button
-                    type="button"
-                    className="service-card__row-reset"
-                    onClick={() =>
-                      setForm((c) => ({ ...c, depositAmount: (service.depositCents / 100).toFixed(2) }))
-                    }
-                  >
-                    Reset to default
-                  </button>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="service-card__row">
-              <span className="service-card__row-label">Enable in online booking</span>
-              <div className="service-card__row-value">
-                <label className="service-card__toggle service-card__toggle--inline">
-                  <input
-                    type="checkbox"
-                    checked={form.isActive}
-                    onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.checked }))}
-                  />
-                  <span className="service-card__toggle-track" aria-hidden="true">
-                    <span className="service-card__toggle-thumb" />
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            <div className="service-card__row">
-              <span className="service-card__row-label">Online booking</span>
-              <div className="service-card__row-value">
-                <a
-                  href={schedulingHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="service-card__link-action"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    void handleCopyLink();
-                    window.open(schedulingHref, "_blank", "noopener,noreferrer");
-                  }}
-                >
-                  Direct link
-                </a>
-              </div>
-            </div>
-          </div>
-
-          <details className="service-card__more">
-            <summary>More options</summary>
-            <div className="service-card__more-body">
-              <div className="service-card__row">
-                <span className="service-card__row-label">Category</span>
-                <div className="service-card__row-value">
-                  <select
-                    value={form.categoryId}
-                    onChange={(e) => setForm((c) => ({ ...c, categoryId: e.target.value }))}
-                  >
-                    <option value="">Uncategorized</option>
-                    {categories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>{cat.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="service-card__row">
-                <span className="service-card__row-label">Setup buffer</span>
-                <div className="service-card__row-value">
-                  <div className="service-card__field-inline">
-                    <input
-                      type="number"
-                      min={0}
-                      step={5}
-                      value={form.setupBufferMinutes}
-                      onChange={(e) => setForm((c) => ({ ...c, setupBufferMinutes: e.target.value }))}
-                    />
-                    <span className="service-card__field-suffix">min</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="service-card__row">
-                <span className="service-card__row-label">Cleanup buffer</span>
-                <div className="service-card__row-value">
-                  <div className="service-card__field-inline">
-                    <input
-                      type="number"
-                      min={0}
-                      step={5}
-                      value={form.cleanupBufferMinutes}
-                      onChange={(e) => setForm((c) => ({ ...c, cleanupBufferMinutes: e.target.value }))}
-                    />
-                    <span className="service-card__field-suffix">min</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="service-card__row">
-                <span className="service-card__row-label">Locations</span>
-                <div className="service-card__row-value">
-                  <div className="service-card__chips">
-                    {locations.map((loc) => {
-                      const checked = form.locationIds.includes(loc.id);
-                      return (
-                        <label key={loc.id} className={`service-card__chip${checked ? " is-active" : ""}`}>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              const next = e.target.checked;
-                              setForm((c) => ({
-                                ...c,
-                                locationIds: next
-                                  ? [...c.locationIds, loc.id]
-                                  : c.locationIds.filter((id) => id !== loc.id),
-                              }));
-                            }}
-                          />
-                          <span>{loc.name}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              <div className="service-card__copy-row">
-                <span className="service-card__row-label">Booking link</span>
-                <input
-                  type="text"
-                  readOnly
-                  value={schedulingHref}
-                  onFocus={(e) => e.currentTarget.select()}
-                />
-                <button type="button" className="secondary-action" onClick={handleCopyLink}>
-                  Copy
-                </button>
-              </div>
-            </div>
-          </details>
-        </fieldset>
-
-        <div className="service-card__actions">
-          <div className="service-card__actions-left">
-            {canManage ? (
-              <button type="button" className="ghost-action" onClick={() => onDuplicate(service)}>
-                Duplicate
-              </button>
-            ) : null}
-          </div>
-          <div className="service-card__actions-right">
-            {canManage ? (
-              <button type="submit" className="primary-action" disabled={saving}>
-                {saving ? "Saving…" : "Save"}
-              </button>
-            ) : null}
-          </div>
+    <div className="staff-detail-inner">
+      <header className="staff-detail-header">
+        <div>
+          <p className="eyebrow">{service.categoryId ? categories.find((c) => c.id === service.categoryId)?.name ?? "Service" : "Service"}</p>
+          <h4>{service.name}</h4>
+          <p className="settings-form-help">
+            {formatDurationMinutes(service.durationMinutes)} · {formatMoney(service.priceCents)}
+            {service.depositCents > 0 ? ` · Deposit ${formatMoney(service.depositCents)}` : ""}
+            {!service.isActive ? " · Inactive" : ""}
+          </p>
         </div>
-      </form>
-
-      {copyHint ? <p className="service-card__copy-hint">{copyHint}</p> : null}
-
-      {eligibleProviders.length > 0 ? (
-        <div className="service-card__providers">
-          <div className="service-card__providers-header">
-            <span className="eyebrow">Per-provider overrides</span>
-            {canManage && isVariantsDirty ? (
-              <button type="button" className="primary-action" onClick={handleSaveVariants}
-                disabled={variantsSaving}>
-                {variantsSaving ? "Saving…" : "Save overrides"}
-              </button>
-            ) : null}
-          </div>
-          {!variantsLoaded ? (
-            <div className="calendar-state">Loading…</div>
-          ) : (
-            <div className="service-card__provider-list">
-              {eligibleProviders.map((provider) => {
-                const entry = variantByProvider.get(provider.id) ?? {
-                  providerId: provider.id,
-                  priceCents: null,
-                  durationMinutes: null,
-                  depositCents: null,
-                  commissionFlatCents: null,
-                  commissionBasisPoints: null,
-                };
-                const hasAnyOverride =
-                  entry.priceCents != null ||
-                  entry.durationMinutes != null ||
-                  entry.depositCents != null ||
-                  entry.commissionFlatCents != null ||
-                  entry.commissionBasisPoints != null;
-                const commissionMode: "flat" | "percent" =
-                  entry.commissionFlatCents != null ? "flat" : "percent";
-                const providerLink = `${storefrontBaseUrl}/${tenantSlug}?serviceId=${service.id}&staffId=${provider.id}`;
-                return (
-                  <div key={provider.id} className={`service-card__provider${hasAnyOverride ? " is-customized" : ""}`}>
-                    <div className="service-card__provider-header">
-                      <strong>{provider.name}</strong>
-                      {hasAnyOverride ? (
-                        <span className="service-card__provider-badge">Custom</span>
-                      ) : null}
-                    </div>
-                    <div className="service-card__rows">
-                      <div className="service-card__row">
-                        <span className="service-card__row-label">Duration</span>
-                        <div className="service-card__row-value">
-                          <div className="service-card__field-inline">
-                            <input type="number" min={15} max={480} step={15} disabled={!canManage}
-                              placeholder={String(baseDurationMinutes)} value={entry.durationMinutes ?? ""}
-                              onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { durationMinutes: null }); return; } const n = Number(raw); updateVariant(provider.id, { durationMinutes: Number.isFinite(n) ? n : null }); }} />
-                            <span className="service-card__field-suffix">min</span>
-                          </div>
-                          {entry.durationMinutes != null && canManage ? (
-                            <button type="button" className="service-card__row-reset"
-                              onClick={() => updateVariant(provider.id, { durationMinutes: null })}>
-                              Reset to default
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="service-card__row">
-                        <span className="service-card__row-label">Price</span>
-                        <div className="service-card__row-value">
-                          <div className="service-card__field-inline">
-                            <span className="service-card__field-prefix">$</span>
-                            <input type="number" min={0} step="0.01" disabled={!canManage}
-                              placeholder={(basePriceCents / 100).toFixed(2)}
-                              value={entry.priceCents == null ? "" : (entry.priceCents / 100).toFixed(2)}
-                              onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { priceCents: null }); return; } const cents = parseMoneyInput(raw); updateVariant(provider.id, { priceCents: cents }); }} />
-                          </div>
-                          {entry.priceCents != null && canManage ? (
-                            <button type="button" className="service-card__row-reset"
-                              onClick={() => updateVariant(provider.id, { priceCents: null })}>
-                              Reset to default
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="service-card__row">
-                        <span className="service-card__row-label">Deposit</span>
-                        <div className="service-card__row-value">
-                          <div className="service-card__field-inline">
-                            <span className="service-card__field-prefix">$</span>
-                            <input type="number" min={0} step="0.01" disabled={!canManage}
-                              placeholder={(baseDepositCents / 100).toFixed(2)}
-                              value={entry.depositCents == null ? "" : (entry.depositCents / 100).toFixed(2)}
-                              onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { depositCents: null }); return; } const cents = parseMoneyInput(raw); updateVariant(provider.id, { depositCents: cents }); }} />
-                          </div>
-                          {entry.depositCents != null && canManage ? (
-                            <button type="button" className="service-card__row-reset"
-                              onClick={() => updateVariant(provider.id, { depositCents: null })}>
-                              Reset to default
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="service-card__row">
-                        <span className="service-card__row-label">Commission</span>
-                        <div className="service-card__row-value service-card__row-value--commission">
-                          <div className="service-card__commission">
-                            <div className="service-card__pill-toggle" role="group" aria-label="Commission type">
-                              <button
-                                type="button"
-                                className={`service-card__pill${commissionMode === "flat" ? " is-active" : ""}`}
-                                disabled={!canManage}
-                                onClick={() => {
-                                  if (commissionMode === "flat") return;
-                                  updateVariant(provider.id, {
-                                    commissionBasisPoints: null,
-                                    commissionFlatCents: entry.commissionFlatCents ?? 0,
-                                  });
-                                }}
-                              >
-                                $
-                              </button>
-                              <button
-                                type="button"
-                                className={`service-card__pill${commissionMode === "percent" ? " is-active" : ""}`}
-                                disabled={!canManage}
-                                onClick={() => {
-                                  if (commissionMode === "percent") return;
-                                  updateVariant(provider.id, {
-                                    commissionFlatCents: null,
-                                    commissionBasisPoints: entry.commissionBasisPoints ?? 0,
-                                  });
-                                }}
-                              >
-                                %
-                              </button>
-                            </div>
-                            {commissionMode === "flat" ? (
-                              <div className="service-card__field-inline">
-                                <span className="service-card__field-prefix">$</span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  step="0.01"
-                                  disabled={!canManage}
-                                  placeholder="0.00"
-                                  value={
-                                    entry.commissionFlatCents == null
-                                      ? ""
-                                      : (entry.commissionFlatCents / 100).toFixed(2)
-                                  }
-                                  onChange={(e) => {
-                                    const raw = e.target.value;
-                                    if (!raw) {
-                                      updateVariant(provider.id, { commissionFlatCents: null });
-                                      return;
-                                    }
-                                    const cents = parseMoneyInput(raw);
-                                    updateVariant(provider.id, {
-                                      commissionFlatCents: cents,
-                                      commissionBasisPoints: null,
-                                    });
-                                  }}
-                                />
-                              </div>
-                            ) : (
-                              <div className="service-card__field-inline">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  max={100}
-                                  step="0.1"
-                                  disabled={!canManage}
-                                  placeholder="0"
-                                  value={
-                                    entry.commissionBasisPoints == null
-                                      ? ""
-                                      : (entry.commissionBasisPoints / 100).toString()
-                                  }
-                                  onChange={(e) => {
-                                    const raw = e.target.value;
-                                    if (!raw) {
-                                      updateVariant(provider.id, { commissionBasisPoints: null });
-                                      return;
-                                    }
-                                    const pct = Number(raw);
-                                    if (!Number.isFinite(pct)) return;
-                                    const bp = Math.round(pct * 100);
-                                    updateVariant(provider.id, {
-                                      commissionBasisPoints: Math.max(0, Math.min(10_000, bp)),
-                                      commissionFlatCents: null,
-                                    });
-                                  }}
-                                />
-                                <span className="service-card__field-suffix">%</span>
-                              </div>
-                            )}
-                          </div>
-                          {(entry.commissionFlatCents != null || entry.commissionBasisPoints != null) && canManage ? (
-                            <button
-                              type="button"
-                              className="service-card__row-reset"
-                              onClick={() =>
-                                updateVariant(provider.id, {
-                                  commissionFlatCents: null,
-                                  commissionBasisPoints: null,
-                                })
-                              }
-                            >
-                              Clear
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="service-card__row">
-                        <span className="service-card__row-label">Online booking</span>
-                        <div className="service-card__row-value">
-                          <a
-                            href={providerLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="service-card__link-action"
-                            onClick={async (e) => {
-                              e.preventDefault();
-                              try { await navigator.clipboard.writeText(providerLink); setCopyHint("Link copied!"); }
-                              catch { setCopyHint("Copy failed."); }
-                              if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
-                              copyTimerRef.current = window.setTimeout(() => setCopyHint(null), 2000);
-                              window.open(providerLink, "_blank", "noopener,noreferrer");
-                            }}
-                          >
-                            Direct link
-                          </a>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+        <div className="staff-detail-actions">
+          {canManage ? (
+            <button type="button" className="ghost-action" onClick={() => onDuplicate(service)}>Duplicate</button>
+          ) : null}
         </div>
+      </header>
+
+      <nav className="staff-detail-tabs" role="tablist" aria-label="Service sections">
+        {tabs.map((tab) => (
+          <button key={tab.key} type="button" role="tab" aria-selected={activeTab === tab.key}
+            className={`staff-detail-tab${activeTab === tab.key ? " is-active" : ""}`}
+            onClick={() => onTabChange(tab.key)}>
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      {activeTab === "details" ? (
+        <ServiceDetailsTab form={form} setForm={setForm} service={service} categories={categories}
+          locations={locations} canManage={canManage} saving={saving} schedulingHref={schedulingHref}
+          handleCopyLink={handleCopyLink} copyHint={copyHint} handleSave={handleSave} />
       ) : null}
-    </article>
+      {activeTab === "staff" ? (
+        <ServiceStaffTab service={service} eligibleProviders={eligibleProviders}
+          variantByProvider={variantByProvider} updateVariant={updateVariant}
+          canManage={canManage} variantsLoaded={variantsLoaded}
+          isVariantsDirty={isVariantsDirty} variantsSaving={variantsSaving}
+          handleSaveVariants={handleSaveVariants}
+          baseDurationMinutes={baseDurationMinutes} basePriceCents={basePriceCents}
+          baseDepositCents={baseDepositCents} tenantSlug={tenantSlug}
+          storefrontBaseUrl={storefrontBaseUrl} />
+      ) : null}
+      {activeTab === "resources" ? (
+        <div className="staff-detail-form"><p className="settings-form-help">Resources and attachments coming soon.</p></div>
+      ) : null}
+      {activeTab === "customizations" ? (
+        <div className="staff-detail-form"><p className="settings-form-help">Customizations coming soon.</p></div>
+      ) : null}
+      {activeTab === "onlineBooking" ? (
+        <ServiceOnlineBookingTab form={form} setForm={setForm} canManage={canManage}
+          schedulingHref={schedulingHref} handleCopyLink={handleCopyLink} copyHint={copyHint} />
+      ) : null}
+    </div>
   );
 }
 
-function renderServiceList({
-  orderedCategories,
-  servicesByCategory,
-  selection,
-  selectedServiceId,
-  onSelect,
-}: {
-  orderedCategories: ServiceCategorySummary[];
-  servicesByCategory: Map<string, ServiceSummary[]>;
-  selection: SelectionState;
-  selectedServiceId: string | null;
-  onSelect: (serviceId: string) => void;
-}) {
-  const groupsToShow: Array<{ key: string; label: string; list: ServiceSummary[] }> = [];
-  if (selection.kind === "category") {
-    const key = selection.categoryId;
-    const label = key === UNCATEGORIZED_KEY ? "Uncategorized" : orderedCategories.find((c) => c.id === key)?.name ?? "Category";
-    groupsToShow.push({ key, label, list: servicesByCategory.get(key) ?? [] });
-  } else {
-    for (const category of orderedCategories) {
-      groupsToShow.push({ key: category.id, label: category.name, list: servicesByCategory.get(category.id) ?? [] });
-    }
-    groupsToShow.push({ key: UNCATEGORIZED_KEY, label: "Uncategorized", list: servicesByCategory.get(UNCATEGORIZED_KEY) ?? [] });
-  }
+// ===========================================================================
+// Tab components
+// ===========================================================================
 
+function ServiceDetailsTab({
+  form, setForm, service, categories, locations, canManage, saving,
+  schedulingHref, handleCopyLink, copyHint, handleSave,
+}: {
+  form: ServiceCardState;
+  setForm: React.Dispatch<React.SetStateAction<ServiceCardState>>;
+  service: ServiceSummary;
+  categories: ServiceCategorySummary[];
+  locations: LocationSummary[];
+  canManage: boolean;
+  saving: boolean;
+  schedulingHref: string;
+  handleCopyLink: () => Promise<void>;
+  copyHint: string | null;
+  handleSave: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+}) {
   return (
-    <div className="services-list-groups">
-      {groupsToShow.map((group) => (
-        <div key={group.key} className="services-list-group">
-          <div className="services-list-group-header">
-            <span>{group.label}</span>
-            <span className="services-category-count">{group.list.length}</span>
+    <form className="staff-detail-form" onSubmit={handleSave}>
+      <fieldset disabled={!canManage || saving}>
+        <div className="staff-detail-grid">
+          <div className="staff-detail-grid-wide">
+            <label className="settings-label">Name</label>
+            <input className="settings-input" value={form.name}
+              onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))}
+              placeholder="Service name" required />
           </div>
-          {group.list.length === 0 ? (
-            <p className="services-list-empty">No services yet.</p>
-          ) : (
-            <ul className="services-list">
-              {group.list.map((service) => (
-                <li key={service.id}>
-                  <button
-                    type="button"
-                    className={`services-list-item${selectedServiceId === service.id ? " is-active" : ""}`}
-                    onClick={() => onSelect(service.id)}
-                  >
-                    <span className="services-list-item__name">{service.name}</span>
-                    <span className="services-list-item__meta">
-                      {formatDurationMinutes(service.durationMinutes)} · {formatMoney(service.priceCents)}
-                    </span>
-                  </button>
-                </li>
+          <div className="staff-detail-grid-wide">
+            <label className="settings-label">Description</label>
+            <textarea className="settings-input" rows={3} value={form.description}
+              onChange={(e) => setForm((c) => ({ ...c, description: e.target.value }))}
+              placeholder="What customers see when they pick this service." />
+          </div>
+          <div>
+            <label className="settings-label">Duration (minutes)</label>
+            <input className="settings-input" type="number" min={15} step={15}
+              value={form.durationMinutes}
+              onChange={(e) => setForm((c) => ({ ...c, durationMinutes: e.target.value }))} required />
+          </div>
+          <div>
+            <label className="settings-label">Price ($)</label>
+            <input className="settings-input" type="number" min={0} step="0.01"
+              value={form.priceAmount}
+              onChange={(e) => setForm((c) => ({ ...c, priceAmount: e.target.value }))} required />
+          </div>
+          <div>
+            <label className="settings-label">Deposit ($)</label>
+            <input className="settings-input" type="number" min={0} step="0.01"
+              value={form.depositAmount}
+              onChange={(e) => setForm((c) => ({ ...c, depositAmount: e.target.value }))} required />
+          </div>
+          <div>
+            <label className="settings-label">Setup buffer (min)</label>
+            <input className="settings-input" type="number" min={0} step={5}
+              value={form.setupBufferMinutes}
+              onChange={(e) => setForm((c) => ({ ...c, setupBufferMinutes: e.target.value }))} />
+          </div>
+          <div>
+            <label className="settings-label">Cleanup buffer (min)</label>
+            <input className="settings-input" type="number" min={0} step={5}
+              value={form.cleanupBufferMinutes}
+              onChange={(e) => setForm((c) => ({ ...c, cleanupBufferMinutes: e.target.value }))} />
+          </div>
+          <div>
+            <label className="settings-label">Category</label>
+            <select className="settings-input" value={form.categoryId}
+              onChange={(e) => setForm((c) => ({ ...c, categoryId: e.target.value }))}>
+              <option value="">Uncategorized</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
-            </ul>
-          )}
+            </select>
+          </div>
+          <div>
+            <label className="settings-label">Active</label>
+            <label className="settings-toggle">
+              <input type="checkbox" checked={form.isActive}
+                onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.checked }))} />
+              <span>Enable in online booking</span>
+            </label>
+          </div>
+          <div className="staff-detail-grid-wide">
+            <label className="settings-label">Locations</label>
+            <div className="service-card__chips">
+              {locations.map((loc) => {
+                const checked = form.locationIds.includes(loc.id);
+                return (
+                  <label key={loc.id} className={`service-card__chip${checked ? " is-active" : ""}`}>
+                    <input type="checkbox" checked={checked}
+                      onChange={(e) => {
+                        const next = e.target.checked;
+                        setForm((c) => ({ ...c, locationIds: next ? [...c.locationIds, loc.id] : c.locationIds.filter((id) => id !== loc.id) }));
+                      }} />
+                    <span>{loc.name}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+          <div className="staff-detail-grid-wide">
+            <label className="settings-label">Booking link</label>
+            <div style={{ display: "flex", gap: "0.4rem" }}>
+              <input className="settings-input" type="text" readOnly value={schedulingHref}
+                onFocus={(e) => e.currentTarget.select()} style={{ flex: 1 }} />
+              <button type="button" className="secondary-action" onClick={handleCopyLink}>Copy</button>
+            </div>
+            {copyHint ? <p className="settings-form-help" style={{ color: "var(--ui-success, #2d6a4f)" }}>{copyHint}</p> : null}
+          </div>
         </div>
-      ))}
+      </fieldset>
+      <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: "0.5rem" }}>
+        {canManage ? (
+          <button type="submit" className="primary-action" disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+        ) : null}
+      </div>
+    </form>
+  );
+}
+
+function ServiceStaffTab({
+  service, eligibleProviders, variantByProvider, updateVariant, canManage,
+  variantsLoaded, isVariantsDirty, variantsSaving, handleSaveVariants,
+  baseDurationMinutes, basePriceCents, baseDepositCents, tenantSlug, storefrontBaseUrl,
+}: {
+  service: ServiceSummary;
+  eligibleProviders: ProviderSummary[];
+  variantByProvider: Map<string, ProviderServiceVariantEntry>;
+  updateVariant: (providerId: string, patch: Partial<ProviderServiceVariantEntry>) => void;
+  canManage: boolean;
+  variantsLoaded: boolean;
+  isVariantsDirty: boolean;
+  variantsSaving: boolean;
+  handleSaveVariants: () => Promise<void>;
+  baseDurationMinutes: number;
+  basePriceCents: number;
+  baseDepositCents: number;
+  tenantSlug: string;
+  storefrontBaseUrl: string;
+}) {
+  if (eligibleProviders.length === 0) {
+    return <div className="staff-detail-form"><p className="settings-form-help">No providers offer this service yet.</p></div>;
+  }
+  return (
+    <div className="staff-detail-form">
+      {canManage && isVariantsDirty ? (
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button type="button" className="primary-action" onClick={handleSaveVariants} disabled={variantsSaving}>
+            {variantsSaving ? "Saving…" : "Save overrides"}
+          </button>
+        </div>
+      ) : null}
+      {!variantsLoaded ? (
+        <p className="settings-form-help">Loading…</p>
+      ) : (
+        <div className="staff-detail-grid">
+          {eligibleProviders.map((provider) => {
+            const entry = variantByProvider.get(provider.id) ?? {
+              providerId: provider.id, priceCents: null, durationMinutes: null,
+              depositCents: null, commissionFlatCents: null, commissionBasisPoints: null,
+            };
+            const hasAnyOverride = entry.priceCents != null || entry.durationMinutes != null ||
+              entry.depositCents != null || entry.commissionFlatCents != null || entry.commissionBasisPoints != null;
+            const commissionMode: "flat" | "percent" = entry.commissionFlatCents != null ? "flat" : "percent";
+            const providerLink = `${storefrontBaseUrl}/${tenantSlug}?serviceId=${service.id}&staffId=${provider.id}`;
+            return (
+              <div key={provider.id} className="staff-fieldset" style={hasAnyOverride ? { background: "rgba(255,250,243,0.5)" } : undefined}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                  <strong>{provider.name}</strong>
+                  {hasAnyOverride ? <span className="service-card__provider-badge">Custom</span> : null}
+                </div>
+                <div className="staff-detail-grid">
+                  <div>
+                    <label className="settings-label">Duration (min)</label>
+                    <input className="settings-input" type="number" min={15} max={480} step={15} disabled={!canManage}
+                      placeholder={String(baseDurationMinutes)} value={entry.durationMinutes ?? ""}
+                      onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { durationMinutes: null }); return; } const n = Number(raw); updateVariant(provider.id, { durationMinutes: Number.isFinite(n) ? n : null }); }} />
+                  </div>
+                  <div>
+                    <label className="settings-label">Price ($)</label>
+                    <input className="settings-input" type="number" min={0} step="0.01" disabled={!canManage}
+                      placeholder={(basePriceCents / 100).toFixed(2)}
+                      value={entry.priceCents == null ? "" : (entry.priceCents / 100).toFixed(2)}
+                      onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { priceCents: null }); return; } const cents = parseMoneyInput(raw); updateVariant(provider.id, { priceCents: cents }); }} />
+                  </div>
+                  <div>
+                    <label className="settings-label">Deposit ($)</label>
+                    <input className="settings-input" type="number" min={0} step="0.01" disabled={!canManage}
+                      placeholder={(baseDepositCents / 100).toFixed(2)}
+                      value={entry.depositCents == null ? "" : (entry.depositCents / 100).toFixed(2)}
+                      onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { depositCents: null }); return; } const cents = parseMoneyInput(raw); updateVariant(provider.id, { depositCents: cents }); }} />
+                  </div>
+                  <div>
+                    <label className="settings-label">Commission</label>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      <div className="service-card__pill-toggle" role="group" aria-label="Commission type">
+                        <button type="button" className={`service-card__pill${commissionMode === "flat" ? " is-active" : ""}`} disabled={!canManage}
+                          onClick={() => { if (commissionMode === "flat") return; updateVariant(provider.id, { commissionBasisPoints: null, commissionFlatCents: entry.commissionFlatCents ?? 0 }); }}>$</button>
+                        <button type="button" className={`service-card__pill${commissionMode === "percent" ? " is-active" : ""}`} disabled={!canManage}
+                          onClick={() => { if (commissionMode === "percent") return; updateVariant(provider.id, { commissionFlatCents: null, commissionBasisPoints: entry.commissionBasisPoints ?? 0 }); }}>%</button>
+                      </div>
+                      {commissionMode === "flat" ? (
+                        <input className="settings-input" type="number" min={0} step="0.01" disabled={!canManage} placeholder="0.00" style={{ width: "6rem" }}
+                          value={entry.commissionFlatCents == null ? "" : (entry.commissionFlatCents / 100).toFixed(2)}
+                          onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { commissionFlatCents: null }); return; } const cents = parseMoneyInput(raw); updateVariant(provider.id, { commissionFlatCents: cents, commissionBasisPoints: null }); }} />
+                      ) : (
+                        <input className="settings-input" type="number" min={0} max={100} step="0.1" disabled={!canManage} placeholder="0" style={{ width: "5rem" }}
+                          value={entry.commissionBasisPoints == null ? "" : (entry.commissionBasisPoints / 100).toString()}
+                          onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { commissionBasisPoints: null }); return; } const pct = Number(raw); if (!Number.isFinite(pct)) return; const bp = Math.round(pct * 100); updateVariant(provider.id, { commissionBasisPoints: Math.max(0, Math.min(10_000, bp)), commissionFlatCents: null }); }} />
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="settings-label">Direct link</label>
+                    <a href={providerLink} target="_blank" rel="noopener noreferrer" className="service-card__link-action"
+                      onClick={async (e) => { e.preventDefault(); try { await navigator.clipboard.writeText(providerLink); } catch {} window.open(providerLink, "_blank", "noopener,noreferrer"); }}>
+                      Open booking page
+                    </a>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ServiceOnlineBookingTab({
+  form, setForm, canManage, schedulingHref, handleCopyLink, copyHint,
+}: {
+  form: ServiceCardState;
+  setForm: React.Dispatch<React.SetStateAction<ServiceCardState>>;
+  canManage: boolean;
+  schedulingHref: string;
+  handleCopyLink: () => Promise<void>;
+  copyHint: string | null;
+}) {
+  return (
+    <div className="staff-detail-form">
+      <div className="staff-detail-grid">
+        <div className="staff-detail-grid-wide">
+          <label className="settings-label">Enable in online booking</label>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={form.isActive} disabled={!canManage}
+              onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.checked }))} />
+            <span>{form.isActive ? "Service is bookable online" : "Service is hidden from online booking"}</span>
+          </label>
+        </div>
+        <div className="staff-detail-grid-wide">
+          <label className="settings-label">Direct booking link</label>
+          <div style={{ display: "flex", gap: "0.4rem" }}>
+            <input className="settings-input" type="text" readOnly value={schedulingHref}
+              onFocus={(e) => e.currentTarget.select()} style={{ flex: 1 }} />
+            <button type="button" className="secondary-action" onClick={handleCopyLink}>Copy</button>
+          </div>
+          {copyHint ? <p className="settings-form-help" style={{ color: "var(--ui-success, #2d6a4f)" }}>{copyHint}</p> : null}
+        </div>
+      </div>
     </div>
   );
 }
