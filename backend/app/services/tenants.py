@@ -1949,6 +1949,8 @@ async def list_tenant_service_provider_variants(
                 price_cents=row.price_cents_override,
                 duration_minutes=row.duration_minutes_override,
                 deposit_cents=row.deposit_cents_override,
+                commission_flat_cents=row.commission_flat_cents,
+                commission_basis_points=row.commission_basis_points,
             )
             for row in rows
         ],
@@ -2012,9 +2014,17 @@ async def replace_tenant_service_provider_variants(
                     code="invalid_deposit",
                     message="Variant deposit cannot exceed the effective price.",
                 )
+        if entry.commission_flat_cents is not None and entry.commission_basis_points is not None:
+            raise api_exception(
+                status_code=422,
+                code="invalid_commission",
+                message="Provide either a flat commission or a percent commission, not both.",
+            )
         row.price_cents_override = entry.price_cents
         row.duration_minutes_override = entry.duration_minutes
         row.deposit_cents_override = entry.deposit_cents
+        row.commission_flat_cents = entry.commission_flat_cents
+        row.commission_basis_points = entry.commission_basis_points
 
     # For provider variants not in payload, clear overrides (preserve link).
     for provider_id, row in by_provider.items():
@@ -2022,6 +2032,8 @@ async def replace_tenant_service_provider_variants(
             row.price_cents_override = None
             row.duration_minutes_override = None
             row.deposit_cents_override = None
+            row.commission_flat_cents = None
+            row.commission_basis_points = None
 
     await session.commit()
     return await list_tenant_service_provider_variants(session, tenant_slug, service_id)

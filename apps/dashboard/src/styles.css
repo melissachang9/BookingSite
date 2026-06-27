@@ -5297,6 +5297,46 @@ body {
   text-decoration: underline;
 }
 
+/* Commission $/% pill toggle */
+.service-card__row-value--commission {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+.service-card__commission {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.service-card__pill-toggle {
+  display: inline-flex;
+  border: 1px solid var(--ui-border, #d1d5db);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f3f4f6;
+}
+.service-card__pill {
+  border: 0;
+  background: transparent;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ui-muted, #6b7280);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.service-card__pill:not(:last-child) {
+  border-right: 1px solid var(--ui-border, #d1d5db);
+}
+.service-card__pill.is-active {
+  background: #4f46e5;
+  color: #fff;
+}
+.service-card__pill:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 /* More options collapsible */
 .service-card__more {
   border-top: 1px solid var(--ui-border, #f3f4f6);

@@ -573,6 +573,8 @@ class ProviderServiceVariantEntry(CamelModel):
     price_cents: int | None = Field(default=None, ge=0, le=500_000)
     duration_minutes: int | None = Field(default=None, ge=15, le=480)
     deposit_cents: int | None = Field(default=None, ge=0, le=500_000)
+    commission_flat_cents: int | None = Field(default=None, ge=0, le=500_000)
+    commission_basis_points: int | None = Field(default=None, ge=0, le=10_000)
 
 
 class ProviderServiceVariantListResponse(CamelModel):

@@ -771,7 +771,18 @@ function ServiceCard({
     setVariants((current) => {
       const existing = current.find((v) => v.providerId === providerId);
       if (!existing) {
-        return [...current, { providerId, priceCents: null, durationMinutes: null, depositCents: null, ...patch }];
+        return [
+          ...current,
+          {
+            providerId,
+            priceCents: null,
+            durationMinutes: null,
+            depositCents: null,
+            commissionFlatCents: null,
+            commissionBasisPoints: null,
+            ...patch,
+          },
+        ];
       }
       return current.map((v) => v.providerId === providerId ? { ...v, ...patch } : v);
     });
@@ -781,7 +792,14 @@ function ServiceCard({
     setVariants((current) =>
       current.map((v) =>
         v.providerId === providerId
-          ? { providerId, priceCents: null, durationMinutes: null, depositCents: null }
+          ? {
+              providerId,
+              priceCents: null,
+              durationMinutes: null,
+              depositCents: null,
+              commissionFlatCents: null,
+              commissionBasisPoints: null,
+            }
           : v,
       ),
     );
@@ -790,8 +808,22 @@ function ServiceCard({
   const handleSaveVariants = async () => {
     if (!canManage) return;
     const payload: ProviderServiceVariantEntry[] = variants
-      .filter((v) => v.priceCents != null || v.durationMinutes != null || v.depositCents != null)
-      .map((v) => ({ providerId: v.providerId, priceCents: v.priceCents ?? null, durationMinutes: v.durationMinutes ?? null, depositCents: v.depositCents ?? null }));
+      .filter(
+        (v) =>
+          v.priceCents != null ||
+          v.durationMinutes != null ||
+          v.depositCents != null ||
+          v.commissionFlatCents != null ||
+          v.commissionBasisPoints != null,
+      )
+      .map((v) => ({
+        providerId: v.providerId,
+        priceCents: v.priceCents ?? null,
+        durationMinutes: v.durationMinutes ?? null,
+        depositCents: v.depositCents ?? null,
+        commissionFlatCents: v.commissionFlatCents ?? null,
+        commissionBasisPoints: v.commissionBasisPoints ?? null,
+      }));
     setVariantsSaving(true);
     try {
       const resp = await platformApi.replaceServiceProviderVariants(tenantSlug, service.id, { variants: payload });
@@ -815,8 +847,10 @@ function ServiceCard({
         const p = entry.priceCents ?? null;
         const d = entry.durationMinutes ?? null;
         const dp = entry.depositCents ?? null;
-        if (p == null && d == null && dp == null) continue;
-        map.set(entry.providerId, `${p}|${d}|${dp}`);
+        const cf = entry.commissionFlatCents ?? null;
+        const cb = entry.commissionBasisPoints ?? null;
+        if (p == null && d == null && dp == null && cf == null && cb == null) continue;
+        map.set(entry.providerId, `${p}|${d}|${dp}|${cf}|${cb}`);
       }
       return map;
     };
@@ -1111,8 +1145,22 @@ function ServiceCard({
           ) : (
             <div className="service-card__provider-list">
               {eligibleProviders.map((provider) => {
-                const entry = variantByProvider.get(provider.id) ?? { providerId: provider.id, priceCents: null, durationMinutes: null, depositCents: null };
-                const hasAnyOverride = entry.priceCents != null || entry.durationMinutes != null || entry.depositCents != null;
+                const entry = variantByProvider.get(provider.id) ?? {
+                  providerId: provider.id,
+                  priceCents: null,
+                  durationMinutes: null,
+                  depositCents: null,
+                  commissionFlatCents: null,
+                  commissionBasisPoints: null,
+                };
+                const hasAnyOverride =
+                  entry.priceCents != null ||
+                  entry.durationMinutes != null ||
+                  entry.depositCents != null ||
+                  entry.commissionFlatCents != null ||
+                  entry.commissionBasisPoints != null;
+                const commissionMode: "flat" | "percent" =
+                  entry.commissionFlatCents != null ? "flat" : "percent";
                 const providerLink = `${storefrontBaseUrl}/${tenantSlug}?serviceId=${service.id}&staffId=${provider.id}`;
                 return (
                   <div key={provider.id} className={`service-card__provider${hasAnyOverride ? " is-customized" : ""}`}>
@@ -1172,6 +1220,117 @@ function ServiceCard({
                             <button type="button" className="service-card__row-reset"
                               onClick={() => updateVariant(provider.id, { depositCents: null })}>
                               Reset to default
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="service-card__row">
+                        <span className="service-card__row-label">Commission</span>
+                        <div className="service-card__row-value service-card__row-value--commission">
+                          <div className="service-card__commission">
+                            <div className="service-card__pill-toggle" role="group" aria-label="Commission type">
+                              <button
+                                type="button"
+                                className={`service-card__pill${commissionMode === "flat" ? " is-active" : ""}`}
+                                disabled={!canManage}
+                                onClick={() => {
+                                  if (commissionMode === "flat") return;
+                                  updateVariant(provider.id, {
+                                    commissionBasisPoints: null,
+                                    commissionFlatCents: entry.commissionFlatCents ?? 0,
+                                  });
+                                }}
+                              >
+                                $
+                              </button>
+                              <button
+                                type="button"
+                                className={`service-card__pill${commissionMode === "percent" ? " is-active" : ""}`}
+                                disabled={!canManage}
+                                onClick={() => {
+                                  if (commissionMode === "percent") return;
+                                  updateVariant(provider.id, {
+                                    commissionFlatCents: null,
+                                    commissionBasisPoints: entry.commissionBasisPoints ?? 0,
+                                  });
+                                }}
+                              >
+                                %
+                              </button>
+                            </div>
+                            {commissionMode === "flat" ? (
+                              <div className="service-card__field-inline">
+                                <span className="service-card__field-prefix">$</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step="0.01"
+                                  disabled={!canManage}
+                                  placeholder="0.00"
+                                  value={
+                                    entry.commissionFlatCents == null
+                                      ? ""
+                                      : (entry.commissionFlatCents / 100).toFixed(2)
+                                  }
+                                  onChange={(e) => {
+                                    const raw = e.target.value;
+                                    if (!raw) {
+                                      updateVariant(provider.id, { commissionFlatCents: null });
+                                      return;
+                                    }
+                                    const cents = parseMoneyInput(raw);
+                                    updateVariant(provider.id, {
+                                      commissionFlatCents: cents,
+                                      commissionBasisPoints: null,
+                                    });
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <div className="service-card__field-inline">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  step="0.1"
+                                  disabled={!canManage}
+                                  placeholder="0"
+                                  value={
+                                    entry.commissionBasisPoints == null
+                                      ? ""
+                                      : (entry.commissionBasisPoints / 100).toString()
+                                  }
+                                  onChange={(e) => {
+                                    const raw = e.target.value;
+                                    if (!raw) {
+                                      updateVariant(provider.id, { commissionBasisPoints: null });
+                                      return;
+                                    }
+                                    const pct = Number(raw);
+                                    if (!Number.isFinite(pct)) return;
+                                    const bp = Math.round(pct * 100);
+                                    updateVariant(provider.id, {
+                                      commissionBasisPoints: Math.max(0, Math.min(10_000, bp)),
+                                      commissionFlatCents: null,
+                                    });
+                                  }}
+                                />
+                                <span className="service-card__field-suffix">%</span>
+                              </div>
+                            )}
+                          </div>
+                          {(entry.commissionFlatCents != null || entry.commissionBasisPoints != null) && canManage ? (
+                            <button
+                              type="button"
+                              className="service-card__row-reset"
+                              onClick={() =>
+                                updateVariant(provider.id, {
+                                  commissionFlatCents: null,
+                                  commissionBasisPoints: null,
+                                })
+                              }
+                            >
+                              Clear
                             </button>
                           ) : null}
                         </div>

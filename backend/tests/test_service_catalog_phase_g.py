@@ -325,6 +325,95 @@ def test_replace_provider_variants_clears_omitted_overrides(client) -> None:
         assert v["depositCents"] is None
 
 
+def test_replace_provider_variants_sets_percent_commission(client) -> None:
+    headers = _auth_headers(client)
+    service = _create_service(client, headers, "Variants Service G5 Commission Percent")
+    provider_id = _first_provider_id(client, headers)
+    response = client.put(
+        f"/api/v1/tenants/brow-beauty-lab/services/{service['id']}/provider-variants",
+        headers=headers,
+        json={
+            "variants": [
+                {
+                    "providerId": provider_id,
+                    "commissionBasisPoints": 6000,
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200, response.json()
+    entry = response.json()["variants"][0]
+    assert entry["commissionBasisPoints"] == 6000
+    assert entry["commissionFlatCents"] is None
+
+
+def test_replace_provider_variants_sets_flat_commission(client) -> None:
+    headers = _auth_headers(client)
+    service = _create_service(client, headers, "Variants Service G6 Commission Flat")
+    provider_id = _first_provider_id(client, headers)
+    response = client.put(
+        f"/api/v1/tenants/brow-beauty-lab/services/{service['id']}/provider-variants",
+        headers=headers,
+        json={
+            "variants": [
+                {
+                    "providerId": provider_id,
+                    "commissionFlatCents": 2500,
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200, response.json()
+    entry = response.json()["variants"][0]
+    assert entry["commissionFlatCents"] == 2500
+    assert entry["commissionBasisPoints"] is None
+
+
+def test_replace_provider_variants_rejects_both_commission_types(client) -> None:
+    headers = _auth_headers(client)
+    service = _create_service(client, headers, "Variants Service G7 Commission Conflict")
+    provider_id = _first_provider_id(client, headers)
+    response = client.put(
+        f"/api/v1/tenants/brow-beauty-lab/services/{service['id']}/provider-variants",
+        headers=headers,
+        json={
+            "variants": [
+                {
+                    "providerId": provider_id,
+                    "commissionFlatCents": 1000,
+                    "commissionBasisPoints": 5000,
+                }
+            ]
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_commission"
+
+
+def test_replace_provider_variants_clears_commission_when_omitted(client) -> None:
+    headers = _auth_headers(client)
+    service = _create_service(client, headers, "Variants Service G8 Commission Clear")
+    provider_id = _first_provider_id(client, headers)
+    client.put(
+        f"/api/v1/tenants/brow-beauty-lab/services/{service['id']}/provider-variants",
+        headers=headers,
+        json={
+            "variants": [
+                {"providerId": provider_id, "commissionBasisPoints": 4500}
+            ]
+        },
+    )
+    response = client.put(
+        f"/api/v1/tenants/brow-beauty-lab/services/{service['id']}/provider-variants",
+        headers=headers,
+        json={"variants": []},
+    )
+    assert response.status_code == 200
+    for v in response.json()["variants"]:
+        assert v["commissionFlatCents"] is None
+        assert v["commissionBasisPoints"] is None
+
+
 def test_permission_gates_block_service_manage_for_unprivileged(client) -> None:
     owner_headers = _auth_headers(client)
     # Create a staff user and a category to attempt to mutate.

@@ -174,6 +174,8 @@ export type ProviderServiceVariantEntry = {
   priceCents?: number | null;
   durationMinutes?: number | null;
   depositCents?: number | null;
+  commissionFlatCents?: number | null;
+  commissionBasisPoints?: number | null;
 };
 
 export type ProviderServiceVariantListResponse = {

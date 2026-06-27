@@ -171,6 +171,20 @@ async def _ensure_postgres_schema_compatibility() -> None:
                     text(f"ALTER TABLE provider_services ADD COLUMN {override_column} INTEGER")
                 )
 
+        for commission_column in ("commission_flat_cents", "commission_basis_points"):
+            exists = await connection.scalar(
+                text(
+                    f"""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = 'provider_services' AND column_name = '{commission_column}'
+                    """
+                )
+            )
+            if not exists:
+                await connection.execute(
+                    text(f"ALTER TABLE provider_services ADD COLUMN {commission_column} INTEGER")
+                )
+
         # Phase I: service category merchandising columns
         category_columns = {
             "slug": "VARCHAR(255)",
