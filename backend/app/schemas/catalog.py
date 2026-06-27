@@ -400,6 +400,11 @@ class ServiceSummaryResponse(CamelModel):
     after_image_url: str | None = None
     after_image_alt: str | None = None
     meta_description: str | None = None
+    online_booking_description: str | None = None
+    require_card_on_file: bool = False
+    booking_payment_mode: str | None = None
+    booking_payment_value_cents: int | None = None
+    booking_payment_percent: int | None = None
 
 
 class CreateServiceRequest(CamelModel):
@@ -414,6 +419,11 @@ class CreateServiceRequest(CamelModel):
     is_active: bool = True
     category_id: str | None = None
     slug: str | None = Field(default=None, max_length=255)
+    online_booking_description: str | None = Field(default=None, max_length=2000)
+    require_card_on_file: bool = False
+    booking_payment_mode: str | None = Field(default=None, max_length=32)
+    booking_payment_value_cents: int | None = Field(default=None, ge=0, le=500_000)
+    booking_payment_percent: int | None = Field(default=None, ge=0, le=100)
 
     @model_validator(mode="after")
     def validate_deposit(self) -> "CreateServiceRequest":
@@ -453,6 +463,12 @@ class UpdateServiceRequest(CamelModel):
     after_image_alt: str | None = Field(default=None, max_length=255)
     meta_description: str | None = Field(default=None, max_length=320)
     clear_slug: bool = False
+    online_booking_description: str | None = Field(default=None, max_length=2000)
+    clear_online_booking_description: bool = False
+    require_card_on_file: bool | None = None
+    booking_payment_mode: str | None = Field(default=None, max_length=32)
+    booking_payment_value_cents: int | None = Field(default=None, ge=0, le=500_000)
+    booking_payment_percent: int | None = Field(default=None, ge=0, le=100)
     clear_outcome_headline: bool = False
     clear_subheadline: bool = False
     clear_compare_at_price: bool = False

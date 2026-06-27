@@ -473,6 +473,11 @@ async def create_tenant_service(
         deposit_cents=payload.deposit_cents,
         is_active=payload.is_active,
         category_id=payload.category_id,
+        online_booking_description=payload.online_booking_description.strip() if isinstance(payload.online_booking_description, str) and payload.online_booking_description.strip() else None,
+        require_card_on_file=payload.require_card_on_file if payload.require_card_on_file is not None else False,
+        booking_payment_mode=payload.booking_payment_mode,
+        booking_payment_value_cents=payload.booking_payment_value_cents,
+        booking_payment_percent=payload.booking_payment_percent,
     )
     service.location_links = [
         ServiceLocation(tenant_id=tenant.id, location_id=location_id)
@@ -1895,6 +1900,21 @@ async def update_tenant_service(
         service.social_proof = None
     elif getattr(payload, "social_proof", None) is not None:
         service.social_proof = payload.social_proof.model_dump(by_alias=False)
+
+    # Online booking fields
+    if getattr(payload, "clear_online_booking_description", False):
+        service.online_booking_description = None
+    elif getattr(payload, "online_booking_description", None) is not None:
+        cleaned = payload.online_booking_description.strip()
+        service.online_booking_description = cleaned or None
+    if getattr(payload, "require_card_on_file", None) is not None:
+        service.require_card_on_file = payload.require_card_on_file
+    if getattr(payload, "booking_payment_mode", None) is not None:
+        service.booking_payment_mode = payload.booking_payment_mode or None
+    if getattr(payload, "booking_payment_value_cents", None) is not None:
+        service.booking_payment_value_cents = payload.booking_payment_value_cents
+    if getattr(payload, "booking_payment_percent", None) is not None:
+        service.booking_payment_percent = payload.booking_payment_percent
 
     await session.commit()
     service = await _load_service_for_tenant(session, tenant.id, service.id)

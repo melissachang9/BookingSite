@@ -339,8 +339,6 @@ export function ServicesPage({
 
   return (
     <main className="ops-page-stack">
-      <h3>{definition.title}</h3>
-
       {status ? (
         <div className="message-banner" role="status">
           {status}
@@ -567,6 +565,11 @@ type ServiceCardState = {
   categoryId: string;
   locationIds: string[];
   isActive: boolean;
+  onlineBookingDescription: string;
+  requireCardOnFile: boolean;
+  bookingPaymentMode: string; // '', 'partial_percent', 'partial_flat', 'full'
+  bookingPaymentValueAmount: string; // dollar amount for partial_flat
+  bookingPaymentPercent: string; // percentage for partial_percent
 };
 
 function toCardState(service: ServiceSummary): ServiceCardState {
@@ -581,6 +584,11 @@ function toCardState(service: ServiceSummary): ServiceCardState {
     categoryId: service.categoryId ?? "",
     locationIds: [...service.locationIds],
     isActive: service.isActive,
+    onlineBookingDescription: service.onlineBookingDescription ?? "",
+    requireCardOnFile: service.requireCardOnFile ?? false,
+    bookingPaymentMode: service.bookingPaymentMode ?? "",
+    bookingPaymentValueAmount: service.bookingPaymentValueCents != null ? (service.bookingPaymentValueCents / 100).toFixed(2) : "",
+    bookingPaymentPercent: service.bookingPaymentPercent != null ? String(service.bookingPaymentPercent) : "",
   };
 }
 
@@ -662,12 +670,27 @@ function ServiceDetail({
       priceCents, depositCents,
       locationIds: form.locationIds,
       isActive: form.isActive,
+      requireCardOnFile: form.requireCardOnFile,
+      bookingPaymentMode: form.bookingPaymentMode || null,
     };
     const desc = form.description.trim();
     if (desc) body.description = desc;
     else if (service.description) body.clearDescription = true;
     if (form.categoryId) body.categoryId = form.categoryId;
     else if (service.categoryId) body.clearCategory = true;
+    // Online booking description
+    const obDesc = form.onlineBookingDescription.trim();
+    if (obDesc) body.onlineBookingDescription = obDesc;
+    else if (service.onlineBookingDescription) body.clearOnlineBookingDescription = true;
+    // Payment value/percent
+    if (form.bookingPaymentMode === "partial_flat") {
+      const val = parseMoneyInput(form.bookingPaymentValueAmount);
+      if (val != null) body.bookingPaymentValueCents = val;
+    }
+    if (form.bookingPaymentMode === "partial_percent") {
+      const pct = Number(form.bookingPaymentPercent);
+      if (Number.isFinite(pct) && pct >= 0 && pct <= 100) body.bookingPaymentPercent = pct;
+    }
     setSaving(true);
     try { await platformApi.updateService(tenantSlug, service.id, body); onSaved(`"${name}" saved.`); }
     catch (error) { onSaved(readErrorMessage(error, "Unable to save service.")); }
@@ -1252,11 +1275,93 @@ function ServiceOnlineBookingTab({
               style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
           </label>
         </div>
+
         <div className="svc-card__row" style={{ paddingTop: "10px", borderTop: "0.5px dashed #D9CBB1" }}>
           <div style={{ fontSize: "12px", color: "#4A3D30" }}>Direct booking link</div>
           <span className="svc-reset-link" onClick={handleCopyLink}>Copy link</span>
         </div>
         {copyHint ? <div className="svc-helper" style={{ color: "#2d6a4f" }}>{copyHint}</div> : null}
+      </div>
+
+      <div className="svc-card">
+        <span className="svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Customer-facing description</span>
+        <label className="svc-field-label" style={{ marginBottom: "4px" }}>Online booking description</label>
+        <textarea
+          className="svc-input"
+          value={form.onlineBookingDescription}
+          onChange={(e) => setForm((c) => ({ ...c, onlineBookingDescription: e.target.value }))}
+          disabled={!canManage}
+          rows={3}
+          maxLength={2000}
+          placeholder="Describe this service for customers browsing online…"
+          style={{ width: "100%", resize: "vertical" }}
+        />
+        <div className="svc-helper" style={{ marginTop: "4px" }}>Shown to customers on the online booking page.</div>
+      </div>
+
+      <div className="svc-card">
+        <span className="svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Payment requirements</span>
+        <div className="svc-card__row" style={{ marginBottom: "10px" }}>
+          <div>
+            <div style={{ fontSize: "13px", color: "#1F1612", fontWeight: 500 }}>Require a credit card on file to book</div>
+            <div className="svc-helper" style={{ marginTop: "2px" }}>Clients must have a saved payment method before booking.</div>
+          </div>
+          <label className={`svc-toggle${form.requireCardOnFile ? "" : " svc-toggle--off"}`} aria-label="Require card on file toggle">
+            <input type="checkbox" checked={form.requireCardOnFile} disabled={!canManage}
+              onChange={(e) => setForm((c) => ({ ...c, requireCardOnFile: e.target.checked }))}
+              style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
+          </label>
+        </div>
+
+        <div style={{ paddingTop: "10px", borderTop: "0.5px dashed #D9CBB1" }}>
+          <div style={{ fontSize: "13px", color: "#1F1612", fontWeight: 500, marginBottom: "8px" }}>Require payment at time of booking</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <label className="svc-selection-opt" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+              <input type="radio" name="bookingPaymentMode" value=""
+                checked={form.bookingPaymentMode === ""}
+                onChange={() => setForm((c) => ({ ...c, bookingPaymentMode: "" }))}
+                disabled={!canManage} />
+              <span>No payment required at booking</span>
+            </label>
+            <label className="svc-selection-opt" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+              <input type="radio" name="bookingPaymentMode" value="full"
+                checked={form.bookingPaymentMode === "full"}
+                onChange={() => setForm((c) => ({ ...c, bookingPaymentMode: "full" }))}
+                disabled={!canManage} />
+              <span>Full payment</span>
+            </label>
+            <label className="svc-selection-opt" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+              <input type="radio" name="bookingPaymentMode" value="partial_percent"
+                checked={form.bookingPaymentMode === "partial_percent"}
+                onChange={() => setForm((c) => ({ ...c, bookingPaymentMode: "partial_percent" }))}
+                disabled={!canManage} />
+              <span>Partial payment —</span>
+              <input type="number" className="svc-input" min="0" max="100"
+                value={form.bookingPaymentPercent}
+                onChange={(e) => setForm((c) => ({ ...c, bookingPaymentPercent: e.target.value, bookingPaymentMode: "partial_percent" }))}
+                disabled={!canManage || form.bookingPaymentMode !== "partial_percent"}
+                style={{ width: "60px", textAlign: "center" }}
+                onFocus={() => { if (form.bookingPaymentMode !== "partial_percent") setForm((c) => ({ ...c, bookingPaymentMode: "partial_percent" })); }}
+              />
+              <span>%</span>
+            </label>
+            <label className="svc-selection-opt" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+              <input type="radio" name="bookingPaymentMode" value="partial_flat"
+                checked={form.bookingPaymentMode === "partial_flat"}
+                onChange={() => setForm((c) => ({ ...c, bookingPaymentMode: "partial_flat" }))}
+                disabled={!canManage} />
+              <span>Partial payment — $</span>
+              <input type="text" className="svc-input"
+                value={form.bookingPaymentValueAmount}
+                onChange={(e) => setForm((c) => ({ ...c, bookingPaymentValueAmount: e.target.value, bookingPaymentMode: "partial_flat" }))}
+                disabled={!canManage || form.bookingPaymentMode !== "partial_flat"}
+                style={{ width: "80px" }}
+                placeholder="0.00"
+                onFocus={() => { if (form.bookingPaymentMode !== "partial_flat") setForm((c) => ({ ...c, bookingPaymentMode: "partial_flat" })); }}
+              />
+            </label>
+          </div>
+        </div>
       </div>
     </div>
   );

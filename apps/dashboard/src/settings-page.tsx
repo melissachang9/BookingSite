@@ -1374,7 +1374,7 @@ function LocationForm({
   const disabled = saveState.kind === "submitting";
   return (
     <form className="settings-form" onSubmit={onSubmit}>
-      <label>
+      <label className="settings-field">
         <span>Location name</span>
         <input
           type="text"
@@ -1384,18 +1384,21 @@ function LocationForm({
           required
         />
       </label>
-      <label>
-        <span>Time zone (IANA)</span>
-        <input
-          type="text"
+      <label className="settings-field">
+        <span>Time zone</span>
+        <select
           value={draft.timeZone}
           onChange={(event) => setDraft({ ...draft, timeZone: event.target.value })}
-          placeholder="America/Los_Angeles"
           disabled={disabled}
           required
-        />
+        >
+          <option value="">Select a time zone…</option>
+          {Intl.supportedValuesOf("timeZone").map((tz) => (
+            <option key={tz} value={tz}>{tz}</option>
+          ))}
+        </select>
       </label>
-      <label>
+      <label className="settings-field">
         <span>Address</span>
         <input
           type="text"
@@ -1404,7 +1407,7 @@ function LocationForm({
           disabled={disabled}
         />
       </label>
-      <label>
+      <label className="settings-field">
         <span>City</span>
         <input
           type="text"
@@ -1413,7 +1416,7 @@ function LocationForm({
           disabled={disabled}
         />
       </label>
-      <label>
+      <label className="settings-field">
         <span>State / region</span>
         <input
           type="text"
@@ -1422,7 +1425,7 @@ function LocationForm({
           disabled={disabled}
         />
       </label>
-      <label>
+      <label className="settings-field">
         <span>Postal code</span>
         <input
           type="text"
@@ -1431,7 +1434,7 @@ function LocationForm({
           disabled={disabled}
         />
       </label>
-      <label>
+      <label className="settings-field">
         <span>Phone</span>
         <input
           type="tel"
@@ -1716,97 +1719,99 @@ function BrandingSection({
         </span>
       </label>
 
-      <div className="settings-form-row">
-        <label className="settings-field">
-          <span>Marketing headline</span>
-          <input
-            type="text"
-            value={bookingAdHeadline}
-            onChange={(event) => setBookingAdHeadline(event.target.value)}
-            disabled={disabled}
-            maxLength={512}
-            placeholder="Quiet booking, clear next steps."
-          />
-        </label>
-        <label className="settings-field">
-          <span>Marketing image</span>
-          <div className="marketing-image-upload">
-            {bookingAdImageUrl ? (
-              <div className="marketing-image-upload__preview">
-                <img src={bookingAdImageUrl} alt="Marketing preview" />
-              </div>
-            ) : null}
-            <div className="marketing-image-upload__controls">
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
-                onChange={(event) => {
-                  const file = event.target.files?.[0] ?? null;
-                  if (file) {
-                    setMarketingCropFile(file);
-                  }
-                  event.target.value = "";
-                }}
-                disabled={disabled || marketingImageUploading}
-              />
+      <fieldset className="settings-fieldset">
+        <legend>Marketing panel</legend>
+        <p className="settings-fieldset-help">Customize the marketing panel shown on the Begin booking screen.</p>
+        <div className="settings-form-row">
+          <label className="settings-field">
+            <span>Marketing headline</span>
+            <input
+              type="text"
+              value={bookingAdHeadline}
+              onChange={(event) => setBookingAdHeadline(event.target.value)}
+              disabled={disabled}
+              maxLength={512}
+              placeholder="Quiet booking, clear next steps."
+            />
+          </label>
+          <label className="settings-field">
+            <span>Marketing image</span>
+            <div className="marketing-image-upload">
               {bookingAdImageUrl ? (
-                <button
-                  type="button"
-                  className="ghost-action"
-                  onClick={() => setBookingAdImageUrl("")}
+                <div className="marketing-image-upload__preview">
+                  <img src={bookingAdImageUrl} alt="Marketing preview" />
+                </div>
+              ) : null}
+              <div className="marketing-image-upload__controls">
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    if (file) {
+                      setMarketingCropFile(file);
+                    }
+                    event.target.value = "";
+                  }}
                   disabled={disabled || marketingImageUploading}
-                >
-                  Remove
-                </button>
-              ) : null}
-              {marketingImageUploading ? <small className="settings-form-help">Uploading…</small> : null}
-              {marketingImageError ? (
-                <small role="alert" className="settings-error">{marketingImageError}</small>
-              ) : null}
+                />
+                {bookingAdImageUrl ? (
+                  <button
+                    type="button"
+                    className="ghost-action"
+                    onClick={() => setBookingAdImageUrl("")}
+                    disabled={disabled || marketingImageUploading}
+                  >
+                    Remove
+                  </button>
+                ) : null}
+                {marketingImageUploading ? <small className="settings-form-help">Uploading…</small> : null}
+                {marketingImageError ? (
+                  <small role="alert" className="settings-error">{marketingImageError}</small>
+                ) : null}
+              </div>
             </div>
-          </div>
-          <span className="settings-field-help">Upload a photo or paste a URL below.</span>
-        </label>
-      </div>
-
-      <div className="settings-form-row">
-        <label className="settings-field">
-          <span>Marketing image URL</span>
-          <input
-            type="url"
-            value={bookingAdImageUrl}
-            onChange={(event) => setBookingAdImageUrl(event.target.value)}
-            disabled={disabled}
-            maxLength={2048}
-            placeholder="https://cdn.example.com/booking-hero.jpg"
-          />
-        </label>
-      </div>
-
-      <div className="settings-form-row">
-        <label className="settings-field">
-          <span>Marketing body</span>
-          <textarea
-            value={bookingAdBody}
-            onChange={(event) => setBookingAdBody(event.target.value)}
-            disabled={disabled}
-            rows={3}
-            maxLength={512}
-            placeholder="Choose the visit type, location, provider preference, and time without losing context."
-          />
-        </label>
-        <label className="settings-field">
-          <span>Marketing image alt text</span>
-          <input
-            type="text"
-            value={bookingAdImageAltText}
-            onChange={(event) => setBookingAdImageAltText(event.target.value)}
-            disabled={disabled}
-            maxLength={512}
-            placeholder="Studio reception area"
-          />
-        </label>
-      </div>
+            <span className="settings-field-help">Upload a photo or paste a URL below.</span>
+          </label>
+        </div>
+        <div className="settings-form-row">
+          <label className="settings-field">
+            <span>Marketing image URL</span>
+            <input
+              type="url"
+              value={bookingAdImageUrl}
+              onChange={(event) => setBookingAdImageUrl(event.target.value)}
+              disabled={disabled}
+              maxLength={2048}
+              placeholder="https://cdn.example.com/booking-hero.jpg"
+            />
+          </label>
+        </div>
+        <div className="settings-form-row">
+          <label className="settings-field">
+            <span>Marketing body</span>
+            <textarea
+              value={bookingAdBody}
+              onChange={(event) => setBookingAdBody(event.target.value)}
+              disabled={disabled}
+              rows={3}
+              maxLength={512}
+              placeholder="Choose the visit type, location, provider preference, and time without losing context."
+            />
+          </label>
+          <label className="settings-field">
+            <span>Marketing image alt text</span>
+            <input
+              type="text"
+              value={bookingAdImageAltText}
+              onChange={(event) => setBookingAdImageAltText(event.target.value)}
+              disabled={disabled}
+              maxLength={512}
+              placeholder="Studio reception area"
+            />
+          </label>
+        </div>
+      </fieldset>
 
       <fieldset className="settings-fieldset">
         <legend>Select service screen</legend>
@@ -1900,23 +1905,6 @@ function BrandingSection({
           </label>
         </div>
       </fieldset>
-
-      <div className="branding-preview" aria-label="Brand preview">
-        <span className="branding-preview__label">Preview</span>
-        <span
-          className="branding-preview__swatch"
-          style={{ backgroundColor: HEX_COLOR_RE.test(primaryColor.trim()) ? primaryColor.trim() : "transparent" }}
-          aria-label="Primary color swatch"
-        />
-        <span
-          className="branding-preview__swatch"
-          style={{ backgroundColor: HEX_COLOR_RE.test(accentColor.trim()) ? accentColor.trim() : "transparent" }}
-          aria-label="Accent color swatch"
-        />
-        {parsedPhotos.length > 0 ? (
-          <span className="branding-preview__count">{parsedPhotos.length} gallery photo{parsedPhotos.length === 1 ? "" : "s"}</span>
-        ) : null}
-      </div>
 
       {validationMessage ? <p role="alert" className="settings-error">{validationMessage}</p> : null}
       {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}

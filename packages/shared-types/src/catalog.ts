@@ -52,6 +52,11 @@ export type ServiceSummary = AuditFields &
     formIds: UUID[];
     categoryId?: string | null;
     sortOrder: number;
+    onlineBookingDescription?: string | null;
+    requireCardOnFile: boolean;
+    bookingPaymentMode?: string | null;
+    bookingPaymentValueCents?: number | null;
+    bookingPaymentPercent?: number | null;
   };
 
 export type CreateServiceRequest = {
@@ -65,6 +70,11 @@ export type CreateServiceRequest = {
   locationIds: UUID[];
   isActive?: boolean;
   categoryId?: string | null;
+  onlineBookingDescription?: string;
+  requireCardOnFile?: boolean;
+  bookingPaymentMode?: string | null;
+  bookingPaymentValueCents?: number | null;
+  bookingPaymentPercent?: number | null;
 };
 
 export type UpdateServiceRequest = {
@@ -80,6 +90,12 @@ export type UpdateServiceRequest = {
   categoryId?: string | null;
   clearCategory?: boolean;
   clearDescription?: boolean;
+  onlineBookingDescription?: string | null;
+  clearOnlineBookingDescription?: boolean;
+  requireCardOnFile?: boolean;
+  bookingPaymentMode?: string | null;
+  bookingPaymentValueCents?: number | null;
+  bookingPaymentPercent?: number | null;
 };
 
 export type ValueStackItem = {

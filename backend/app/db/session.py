@@ -284,6 +284,11 @@ async def _ensure_postgres_schema_compatibility() -> None:
             "after_image_url": "TEXT",
             "after_image_alt": "VARCHAR(255)",
             "meta_description": "TEXT",
+            "online_booking_description": "TEXT",
+            "require_card_on_file": "BOOLEAN NOT NULL DEFAULT FALSE",
+            "booking_payment_mode": "VARCHAR(32)",
+            "booking_payment_value_cents": "INTEGER",
+            "booking_payment_percent": "INTEGER",
         }
         for column_name, column_type in service_columns.items():
             exists = await connection.scalar(

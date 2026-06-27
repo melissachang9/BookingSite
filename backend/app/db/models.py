@@ -129,6 +129,11 @@ class Service(Base, IdMixin, TimestampMixin):
     after_image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     after_image_alt: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     meta_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    online_booking_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    require_card_on_file: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    booking_payment_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # none, partial_percent, partial_flat, full
+    booking_payment_value_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    booking_payment_percent: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 0-100
 
     tenant: Mapped[Tenant] = relationship(back_populates="services")
     category: Mapped[Optional["ServiceCategory"]] = relationship(back_populates="services")

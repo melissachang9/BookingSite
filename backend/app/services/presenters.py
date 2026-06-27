@@ -194,6 +194,11 @@ def service_to_summary(service: Service, tenant: Tenant | None = None) -> Servic
         after_image_url=service.after_image_url,
         after_image_alt=service.after_image_alt,
         meta_description=service.meta_description,
+        online_booking_description=service.online_booking_description,
+        require_card_on_file=service.require_card_on_file,
+        booking_payment_mode=service.booking_payment_mode,
+        booking_payment_value_cents=service.booking_payment_value_cents,
+        booking_payment_percent=service.booking_payment_percent,
     )
 
 
