@@ -534,20 +534,51 @@ export function ServicesPage({
             ) : null}
           </div>
 
-          {renderServiceCards({
-            orderedCategories,
-            servicesByCategory,
-            selection,
-            canManage,
-            tenantSlug,
-            locations,
-            providers,
-            onSaved: async (msg) => {
-              await refreshServices();
-              if (msg) setStatus(msg);
-            },
-            onDuplicate: handleDuplicateService,
-          })}
+          <div className="services-master-detail">
+            <div className="services-list-panel">
+              {renderServiceList({
+                orderedCategories,
+                servicesByCategory,
+                selection,
+                selectedServiceId: selection.kind === "service" ? selection.serviceId : null,
+                onSelect: (serviceId) => setSelection({ kind: "service", serviceId }),
+              })}
+            </div>
+            <div className="services-detail-panel">
+              {selection.kind === "service" ? (
+                (() => {
+                  const selectedService = services.find((s) => s.id === selection.serviceId);
+                  if (!selectedService) {
+                    return (
+                      <div className="services-detail-empty">
+                        <p>Service not found.</p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <ServiceCard
+                      key={selectedService.id}
+                      service={selectedService}
+                      categories={orderedCategories}
+                      locations={locations}
+                      providers={providers}
+                      canManage={canManage}
+                      tenantSlug={tenantSlug}
+                      onSaved={async (msg) => {
+                        await refreshServices();
+                        if (msg) setStatus(msg);
+                      }}
+                      onDuplicate={handleDuplicateService}
+                    />
+                  );
+                })()
+              ) : (
+                <div className="services-detail-empty">
+                  <p>Select a service to edit its details.</p>
+                </div>
+              )}
+            </div>
+          </div>
         </section>
       </section>
 
@@ -1368,26 +1399,18 @@ function ServiceCard({
   );
 }
 
-function renderServiceCards({
+function renderServiceList({
   orderedCategories,
   servicesByCategory,
   selection,
-  canManage,
-  tenantSlug,
-  locations,
-  providers,
-  onSaved,
-  onDuplicate,
+  selectedServiceId,
+  onSelect,
 }: {
   orderedCategories: ServiceCategorySummary[];
   servicesByCategory: Map<string, ServiceSummary[]>;
   selection: SelectionState;
-  canManage: boolean;
-  tenantSlug: string;
-  locations: LocationSummary[];
-  providers: ProviderSummary[];
-  onSaved: (msg?: string) => void;
-  onDuplicate: (service: ServiceSummary) => void;
+  selectedServiceId: string | null;
+  onSelect: (serviceId: string) => void;
 }) {
   const groupsToShow: Array<{ key: string; label: string; list: ServiceSummary[] }> = [];
   if (selection.kind === "category") {
@@ -1402,33 +1425,34 @@ function renderServiceCards({
   }
 
   return (
-    <div className="services-groups">
+    <div className="services-list-groups">
       {groupsToShow.map((group) => (
-        <section key={group.key} className="services-group">
-          <header className="services-group-header">
-            <h5>{group.label}</h5>
+        <div key={group.key} className="services-list-group">
+          <div className="services-list-group-header">
+            <span>{group.label}</span>
             <span className="services-category-count">{group.list.length}</span>
-          </header>
+          </div>
           {group.list.length === 0 ? (
-            <p className="services-group-empty">No services yet.</p>
+            <p className="services-list-empty">No services yet.</p>
           ) : (
-            <div className="service-card-grid">
+            <ul className="services-list">
               {group.list.map((service) => (
-                <ServiceCard
-                  key={service.id}
-                  service={service}
-                  categories={orderedCategories}
-                  locations={locations}
-                  providers={providers}
-                  canManage={canManage}
-                  tenantSlug={tenantSlug}
-                  onSaved={onSaved}
-                  onDuplicate={onDuplicate}
-                />
+                <li key={service.id}>
+                  <button
+                    type="button"
+                    className={`services-list-item${selectedServiceId === service.id ? " is-active" : ""}`}
+                    onClick={() => onSelect(service.id)}
+                  >
+                    <span className="services-list-item__name">{service.name}</span>
+                    <span className="services-list-item__meta">
+                      {formatDurationMinutes(service.durationMinutes)} · {formatMoney(service.priceCents)}
+                    </span>
+                  </button>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
-        </section>
+        </div>
       ))}
     </div>
   );

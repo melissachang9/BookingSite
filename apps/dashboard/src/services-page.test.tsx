@@ -248,18 +248,24 @@ describe("ServicesPage", () => {
     render(<ServicesPage definition={definition} currentUser={ownerUser} />);
 
     await waitFor(() =>
-      expect(screen.getByDisplayValue("Brow Shape")).toBeInTheDocument(),
+      expect(screen.getByText("Brow Shape")).toBeInTheDocument(),
     );
 
     fireEvent.click(screen.getByRole("button", { name: /^Brows/ }));
 
-    expect(screen.getByDisplayValue("Brow Shape")).toBeInTheDocument();
-    expect(screen.queryByDisplayValue("Signature Facial")).toBeNull();
+    expect(screen.getByText("Brow Shape")).toBeInTheDocument();
+    expect(screen.queryByText("Signature Facial")).toBeNull();
   });
 
   it("shows the direct scheduling link on each service card", async () => {
     mockLoaders();
     render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    // Click a service in the list to open its detail panel
+    await waitFor(() =>
+      expect(screen.getByText("Brow Shape")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByText("Brow Shape"));
 
     const linkInput = (await screen.findByDisplayValue(
       /\?serviceId=svc-shape$/,
@@ -270,6 +276,12 @@ describe("ServicesPage", () => {
   it("copies the scheduling link to the clipboard", async () => {
     mockLoaders();
     render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    // Click a service in the list to open its detail panel
+    await waitFor(() =>
+      expect(screen.getByText("Brow Shape")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByText("Brow Shape"));
 
     await screen.findByDisplayValue(/\?serviceId=svc-shape$/);
 
@@ -306,7 +318,12 @@ describe("ServicesPage", () => {
     } as any);
 
     render(<ServicesPage definition={definition} currentUser={ownerUser} />);
-    await screen.findByDisplayValue("Brow Shape");
+
+    // Click a service in the list to open its detail panel
+    await waitFor(() =>
+      expect(screen.getByText("Brow Shape")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByText("Brow Shape"));
 
     const dupButtons = screen.getAllByRole("button", { name: "Duplicate" });
     fireEvent.click(dupButtons[0]);
@@ -328,7 +345,11 @@ describe("ServicesPage", () => {
     };
     render(<ServicesPage definition={definition} currentUser={viewOnly} />);
 
-    await screen.findByDisplayValue("Brow Shape");
+    // Click a service in the list to open its detail panel
+    await waitFor(() =>
+      expect(screen.getByText("Brow Shape")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByText("Brow Shape"));
 
     expect(screen.queryByRole("button", { name: /\+ Add category/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /\+ Add service/ })).toBeNull();
