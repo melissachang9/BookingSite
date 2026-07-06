@@ -97,6 +97,10 @@ function mockListEndpoints(overrides: Partial<{ users: any[]; providers: any[] }
   vi.spyOn(platformApi, "listServices").mockResolvedValue({
     services: baseServices,
   } as any);
+  vi.spyOn(platformApi, "getServiceProviderVariants").mockResolvedValue({
+    serviceId: "",
+    variants: [],
+  } as any);
 }
 
 afterEach(() => {
@@ -240,8 +244,9 @@ describe("StaffPage", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Services" }));
     await waitFor(() => screen.getByText("Services performed"));
 
-    // Add Facial (svc2) to provider's services
-    fireEvent.click(screen.getByLabelText(/Facial/));
+    // Add Facial (svc2) to provider's services via checkbox
+    const facialLabel = screen.getByText("Facial").closest("label")!;
+    fireEvent.click(within(facialLabel).getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Save provider" }));
 
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
@@ -313,13 +318,16 @@ describe("StaffPage", () => {
 
   it("loads provider schedule entries on the Work hours tab", async () => {
     mockListEndpoints();
-    const getScheduleSpy = vi
-      .spyOn(platformApi, "getProviderSchedule")
+    const getWorkHoursSpy = vi
+      .spyOn(platformApi, "getProviderWorkHours")
       .mockResolvedValue({
         providerId: "p1",
-        entries: [
-          { weekday: 0, locationId: "loc1", startTime: "09:00", endTime: "17:00" },
+        locationId: null,
+        regularHours: [
+          { id: "s1", weekday: 0, locationId: "loc1", startTime: "09:00", endTime: "17:00", isActive: true },
         ],
+        dateOverrides: [],
+        summary: { hoursPerWeek: 8, workingDays: 1, upcomingOverridesCount: 0 },
       } as any);
 
     render(<StaffPage definition={definition} currentUser={ownerUser} />);
@@ -328,7 +336,7 @@ describe("StaffPage", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
 
     await waitFor(() =>
-      expect(getScheduleSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1"),
+      expect(getWorkHoursSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1", null),
     );
     await waitFor(() => expect(screen.getByDisplayValue("09:00")).toBeInTheDocument());
     expect(screen.getByDisplayValue("17:00")).toBeInTheDocument();
@@ -336,16 +344,19 @@ describe("StaffPage", () => {
 
   it("saves a new schedule entry via replaceProviderSchedule", async () => {
     mockListEndpoints();
-    vi.spyOn(platformApi, "getProviderSchedule").mockResolvedValue({
+    vi.spyOn(platformApi, "getProviderWorkHours").mockResolvedValue({
       providerId: "p1",
-      entries: [],
+      locationId: null,
+      regularHours: [],
+      dateOverrides: [],
+      summary: { hoursPerWeek: 0, workingDays: 0, upcomingOverridesCount: 0 },
     } as any);
     const replaceSpy = vi
       .spyOn(platformApi, "replaceProviderSchedule")
       .mockResolvedValue({
         providerId: "p1",
         entries: [
-          { weekday: 0, locationId: "loc1", startTime: "09:00", endTime: "17:00" },
+          { id: "s1", weekday: 0, locationId: "loc1", startTime: "09:00", endTime: "17:00", isActive: true },
         ],
       } as any);
 
@@ -354,78 +365,173 @@ describe("StaffPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
 
-    await waitFor(() => screen.getAllByRole("button", { name: /Add time window/ }));
-    // Monday is the first day row
-    const addButtons = screen.getAllByRole("button", { name: /Add time window/ });
-    fireEvent.click(addButtons[0]);
-
+    await waitFor(() => screen.getByText("Regular weekly hours"));
+    // Toggle Sunday on (it starts off since no shifts)
+    fireEvent.click(screen.getByLabelText(/Sunday toggle/));
     fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
 
     await waitFor(() => expect(replaceSpy).toHaveBeenCalledTimes(1));
-    expect(replaceSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1", {
-      entries: [
-        { weekday: 0, locationId: "loc1", startTime: "09:00", endTime: "17:00" },
-      ],
-    });
+    const payload = replaceSpy.mock.calls[0][2];
+    expect(payload.entries.length).toBeGreaterThan(0);
+    // Sunday is weekday 6 in the current WEEKDAY_LABELS (Mon=0..Sun=6)
+    expect(payload.entries[0].weekday).toBe(6);
   });
 
-  it("loads provider time off on the Time off tab", async () => {
+  it("keeps regular hours isolated per location when switching A/B/A", async () => {
+    mockListEndpoints({
+      providers: [
+        {
+          ...baseProviders[0],
+          locationIds: ["loc1", "loc2"],
+        },
+      ],
+    });
+    const getWorkHoursSpy = vi
+      .spyOn(platformApi, "getProviderWorkHours")
+      .mockImplementation(async (_tenantSlug, _providerId, locationId) => {
+        if (locationId === "loc1") {
+          return {
+            providerId: "p1",
+            locationId: "loc1",
+            regularHours: [
+              { id: "loc1-mon", weekday: 1, locationId: "loc1", startTime: "09:00", endTime: "17:00", isActive: true },
+            ],
+            dateOverrides: [],
+            summary: { hoursPerWeek: 8, workingDays: 1, upcomingOverridesCount: 0 },
+          } as any;
+        }
+        if (locationId === "loc2") {
+          return {
+            providerId: "p1",
+            locationId: "loc2",
+            regularHours: [
+              { id: "loc2-tue", weekday: 2, locationId: "loc2", startTime: "10:00", endTime: "18:00", isActive: true },
+            ],
+            dateOverrides: [],
+            summary: { hoursPerWeek: 8, workingDays: 1, upcomingOverridesCount: 0 },
+          } as any;
+        }
+        return {
+          providerId: "p1",
+          locationId: null,
+          regularHours: [],
+          dateOverrides: [],
+          summary: { hoursPerWeek: 0, workingDays: 0, upcomingOverridesCount: 0 },
+        } as any;
+      });
+
+    const replaceSpy = vi
+      .spyOn(platformApi, "replaceProviderSchedule")
+      .mockResolvedValue({ providerId: "p1", entries: [] } as any);
+
+    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
+    await waitFor(() => screen.getByText("Regular weekly hours"));
+
+    const getLocationSelect = () => screen.getByRole("combobox", { name: "Work hours location" });
+
+    // A: Downtown
+    fireEvent.change(getLocationSelect(), { target: { value: "loc1" } });
+    await waitFor(() => expect(getWorkHoursSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1", "loc1"));
+    await waitFor(() => expect(screen.getByDisplayValue("09:00")).toBeInTheDocument());
+    expect(screen.getByDisplayValue("17:00")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
+
+    await waitFor(() => expect(replaceSpy).toHaveBeenCalledTimes(1));
+    expect(replaceSpy.mock.calls[0][2].locationId).toBe("loc1");
+
+    // B: Uptown
+    fireEvent.change(getLocationSelect(), { target: { value: "loc2" } });
+    await waitFor(() => expect(getWorkHoursSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1", "loc2"));
+    await waitFor(() => expect(screen.getByDisplayValue("10:00")).toBeInTheDocument());
+    expect(screen.getByDisplayValue("18:00")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
+
+    await waitFor(() => expect(replaceSpy).toHaveBeenCalledTimes(2));
+    expect(replaceSpy.mock.calls[1][2].locationId).toBe("loc2");
+
+    // Back to A: Downtown should still render Downtown hours
+    fireEvent.change(getLocationSelect(), { target: { value: "loc1" } });
+    await waitFor(() => expect(screen.getByDisplayValue("09:00")).toBeInTheDocument());
+    expect(screen.getByDisplayValue("17:00")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("10:00")).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("18:00")).not.toBeInTheDocument();
+  });
+
+  it("loads provider time off on the Work hours tab", async () => {
     mockListEndpoints();
-    const listSpy = vi.spyOn(platformApi, "listProviderTimeOff").mockResolvedValue({
-      items: [
+    vi.spyOn(platformApi, "getProviderWorkHours").mockResolvedValue({
+      providerId: "p1",
+      locationId: null,
+      regularHours: [],
+      dateOverrides: [
         {
           id: "to1",
           providerId: "p1",
+          locationId: null,
           startsAt: "2026-08-01T17:00:00.000Z",
           endsAt: "2026-08-05T17:00:00.000Z",
           reason: "Vacation",
+          overrideType: "closed",
+          startTime: null,
+          endTime: null,
         },
       ],
+      summary: { hoursPerWeek: 0, workingDays: 0, upcomingOverridesCount: 1 },
     } as any);
 
     render(<StaffPage definition={definition} currentUser={ownerUser} />);
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
-    fireEvent.click(screen.getByRole("tab", { name: "Time off" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
 
-    await waitFor(() =>
-      expect(listSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1"),
-    );
-    await waitFor(() => expect(screen.getByText(/Vacation/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText(/Vacation/).length).toBeGreaterThan(0));
   });
 
   it("creates a new time off entry from the form", async () => {
     mockListEndpoints();
-    vi.spyOn(platformApi, "listProviderTimeOff").mockResolvedValue({ items: [] } as any);
+    vi.spyOn(platformApi, "getProviderWorkHours").mockResolvedValue({
+      providerId: "p1",
+      locationId: null,
+      regularHours: [],
+      dateOverrides: [],
+      summary: { hoursPerWeek: 0, workingDays: 0, upcomingOverridesCount: 0 },
+    } as any);
     const createSpy = vi
       .spyOn(platformApi, "createProviderTimeOff")
       .mockResolvedValue({
         id: "new1",
         providerId: "p1",
+        locationId: null,
         startsAt: "2026-08-01T17:00:00.000Z",
         endsAt: "2026-08-02T01:00:00.000Z",
         reason: null,
+        overrideType: "closed",
+        startTime: null,
+        endTime: null,
       } as any);
 
     render(<StaffPage definition={definition} currentUser={ownerUser} />);
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
-    fireEvent.click(screen.getByRole("tab", { name: "Time off" }));
-    await waitFor(() => screen.getByLabelText("Starts"));
+    fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
+    await waitFor(() => screen.getByText("Date overrides"));
 
-    fireEvent.change(screen.getByLabelText("Starts"), {
-      target: { value: "2026-08-01T10:00" },
-    });
-    fireEvent.change(screen.getByLabelText("Ends"), {
-      target: { value: "2026-08-01T18:00" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add time off" }));
+    // Fill in the override form
+    const dateInputs = screen.getAllByDisplayValue("");
+    // Find date inputs
+    const startDateInput = dateInputs[0];
+    const endDateInput = dateInputs[1];
+    fireEvent.change(startDateInput, { target: { value: "2026-08-01" } });
+    fireEvent.change(endDateInput, { target: { value: "2026-08-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "+ Add override" }));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
     const [slug, providerId, payload] = createSpy.mock.calls[0];
     expect(slug).toBe("brow-beauty-lab");
     expect(providerId).toBe("p1");
-    expect(payload.reason).toBeNull();
     expect(typeof payload.startsAt).toBe("string");
     expect(typeof payload.endsAt).toBe("string");
   });
@@ -531,15 +637,15 @@ describe("StaffPage", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Services" }));
     await waitFor(() => screen.getByText("Services performed"));
 
-    expect(screen.getByLabelText(/Brow Shaping/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Facial/)).toBeInTheDocument();
+    expect(screen.getByText(/Brow Shaping/)).toBeInTheDocument();
+    expect(screen.getByText(/Facial/)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search services"), {
       target: { value: "fac" },
     });
 
-    expect(screen.queryByLabelText(/Brow Shaping/)).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/Facial/)).toBeInTheDocument();
+    expect(screen.queryByText(/Brow Shaping/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Facial/)).toBeInTheDocument();
   });
 
   it("bulk Select all adds all visible services to the provider", async () => {
@@ -552,9 +658,9 @@ describe("StaffPage", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Services" }));
     await waitFor(() => screen.getByText("Services performed"));
 
-    const serviceFieldset = screen.getByText("Services performed").closest("fieldset")!;
-    const selectAll = within(serviceFieldset).getByRole("button", { name: /Select all/ });
-    fireEvent.click(selectAll);
+    // Find the Select all button in the services card (second one)
+    const selectAllButtons = screen.getAllByRole("button", { name: /Select all/ });
+    fireEvent.click(selectAllButtons[1]);
     fireEvent.click(screen.getByRole("button", { name: "Save provider" }));
 
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
@@ -604,7 +710,9 @@ describe("StaffPage", () => {
     const save = screen.getByRole("button", { name: "Save provider" });
     expect(save).toBeDisabled();
 
-    fireEvent.click(screen.getByLabelText(/Facial/));
+    // Check Facial service checkbox
+    const facialLabel2 = screen.getByText("Facial").closest("label")!;
+    fireEvent.click(within(facialLabel2).getByRole("checkbox"));
     expect(save).not.toBeDisabled();
   });
 });

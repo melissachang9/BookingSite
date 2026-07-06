@@ -345,6 +345,51 @@ async def _ensure_postgres_schema_compatibility() -> None:
                 text("ALTER TABLE customers ADD COLUMN wallet_balance_cents INTEGER NOT NULL DEFAULT 0")
             )
 
+        # Work hours: provider_schedules nullable location_id + is_active
+        for col_name, col_type in [
+            ("is_active", "BOOLEAN NOT NULL DEFAULT TRUE"),
+        ]:
+            exists = await connection.scalar(
+                text(
+                    f"SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'provider_schedules' AND column_name = '{col_name}'"
+                )
+            )
+            if not exists:
+                await connection.execute(text(f"ALTER TABLE provider_schedules ADD COLUMN {col_name} {col_type}"))
+
+        # Make location_id nullable
+        await connection.execute(
+            text("ALTER TABLE provider_schedules ALTER COLUMN location_id DROP NOT NULL")
+        )
+
+        # Work hours: provider_time_off new columns
+        for col_name, col_type in [
+            ("location_id", "VARCHAR(36)"),
+            ("override_type", "VARCHAR(32) NOT NULL DEFAULT 'closed'"),
+            ("start_time", "TIME"),
+            ("end_time", "TIME"),
+            ("blocked_service_ids", "JSON"),
+        ]:
+            exists = await connection.scalar(
+                text(
+                    f"SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'provider_time_off' AND column_name = '{col_name}'"
+                )
+            )
+            if not exists:
+                await connection.execute(text(f"ALTER TABLE provider_time_off ADD COLUMN {col_name} {col_type}"))
+
+        # Work hours: provider_schedules blocked_service_ids
+        for col_name, col_type in [
+            ("blocked_service_ids", "JSON"),
+        ]:
+            exists = await connection.scalar(
+                text(
+                    f"SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'provider_schedules' AND column_name = '{col_name}'"
+                )
+            )
+            if not exists:
+                await connection.execute(text(f"ALTER TABLE provider_schedules ADD COLUMN {col_name} {col_type}"))
+
 
 async def initialize_database() -> None:
     async with get_engine().begin() as connection:

@@ -42,6 +42,7 @@ import type {
   CreateProviderRequest,
   UpdateProviderRequest,
   CreateProviderTimeOffRequest,
+  CopyDayRequest,
   CreateStaffRequest,
   CreateStaffResponse,
   PermissionCatalogResponse,
@@ -70,10 +71,12 @@ import type {
   SubmitFormRequirementRequest,
   SubmitFormResponseRequest,
   TenantSummary,
+  WorkHoursResponse,
   UpdateBookingRequest,
   UpdateBookingStatusRequest,
   UpdateBookingDraftRequest,
   UpdateLocationRequest,
+  UpdateProviderTimeOffRequest,
   UpdateResourceRequest,
   UpdateServiceCategoryRequest,
   UpdateServiceRequest,
@@ -243,6 +246,29 @@ export const createPlatformApi = (client: ApiClient) => ({
   ) =>
     client.delete<void>(
       `tenants/${tenantSlug}/providers/${providerId}/time-off/${timeOffId}`,
+    ),
+  updateProviderTimeOff: (
+    tenantSlug: string,
+    providerId: string,
+    timeOffId: string,
+    body: UpdateProviderTimeOffRequest,
+  ) =>
+    client.patch<ProviderTimeOffEntry, UpdateProviderTimeOffRequest>(
+      `tenants/${tenantSlug}/providers/${providerId}/time-off/${timeOffId}`,
+      body,
+    ),
+  getProviderWorkHours: (tenantSlug: string, providerId: string, locationId?: string | null) => {
+    const params = locationId ? `?location_id=${encodeURIComponent(locationId)}` : "";
+    return client.get<WorkHoursResponse>(`tenants/${tenantSlug}/providers/${providerId}/work-hours${params}`);
+  },
+  copyProviderDay: (
+    tenantSlug: string,
+    providerId: string,
+    body: CopyDayRequest,
+  ) =>
+    client.post<WorkHoursResponse, CopyDayRequest>(
+      `tenants/${tenantSlug}/providers/${providerId}/work-hours/copy-day`,
+      body,
     ),
   createTenantStaff: (tenantSlug: string, body: CreateStaffRequest) =>
     client.post<CreateStaffResponse, CreateStaffRequest>(`tenants/${tenantSlug}/staff`, body),

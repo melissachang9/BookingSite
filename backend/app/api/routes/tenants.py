@@ -626,6 +626,66 @@ async def delete_provider_time_off(
     return Response(status_code=204)
 
 
+# === Work hours (Phase H): unified work hours + overrides ===
+
+from app.schemas.catalog import (
+    CopyDayRequest,
+    UpdateProviderTimeOffRequest,
+    WorkHoursResponse,
+)
+from app.services.tenants import (
+    copy_provider_day,
+    get_tenant_work_hours,
+    update_tenant_provider_time_off,
+)
+
+
+@router.get(
+    "/{tenant_slug}/providers/{provider_id}/work-hours",
+    response_model=WorkHoursResponse,
+    summary="Get a provider's work hours with summary stats",
+)
+async def get_provider_work_hours(
+    tenant_slug: str,
+    provider_id: str,
+    location_id: str | None = Query(default=None),
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> WorkHoursResponse:
+    return await get_tenant_work_hours(session, tenant_slug, provider_id, location_id)
+
+
+@router.post(
+    "/{tenant_slug}/providers/{provider_id}/work-hours/copy-day",
+    response_model=WorkHoursResponse,
+    summary="Copy shifts from one day to other days",
+)
+async def post_copy_day(
+    tenant_slug: str,
+    provider_id: str,
+    payload: CopyDayRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> WorkHoursResponse:
+    return await copy_provider_day(session, tenant_slug, provider_id, payload)
+
+
+@router.patch(
+    "/{tenant_slug}/providers/{provider_id}/time-off/{time_off_id}",
+    response_model=ProviderTimeOffResponse,
+    summary="Update a provider time off entry",
+)
+async def patch_provider_time_off(
+    tenant_slug: str,
+    provider_id: str,
+    time_off_id: str,
+    payload: UpdateProviderTimeOffRequest,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ProviderTimeOffResponse:
+    return await update_tenant_provider_time_off(session, tenant_slug, provider_id, time_off_id, payload)
+
+
 # === Phase E: Per-user permission overrides ===
 
 from app.schemas.auth import (

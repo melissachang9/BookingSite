@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from copy import deepcopy
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,6 +52,9 @@ from app.schemas.catalog import (
     CreateStaffRequest,
     CreateStaffResponse,
     ProviderSummaryResponse,
+    WorkHoursResponse,
+    WorkHoursSummary,
+    CopyDayRequest,
 )
 from app.services.presenters import location_to_summary, provider_to_summary, service_to_summary, tenant_to_summary
 
@@ -1051,6 +1055,64 @@ def _parse_time(value: str) -> _time:
     return _time(hour=int(hour), minute=int(minute))
 
 
+def _time_to_minutes(value: _time) -> int:
+    return value.hour * 60 + value.minute
+_WEEKDAY_KEYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
+
+def _build_schedule_conflict_warnings(
+    tenant, schedule_rows
+):
+    """Generate conflict warnings when provider schedules fall outside business hours."""
+    settings = tenant.settings_json or {}
+    business_hours_enabled = settings.get("businessHoursEnabled", False)
+    restrict = settings.get("restrictProvidersToBusinessHours", False)
+    business_hours = settings.get("businessHours", {})
+
+    if not business_hours_enabled:
+        return []
+
+    warnings = []
+    active_rows = [r for r in schedule_rows if r.is_active]
+
+    for row in active_rows:
+        day_key = _WEEKDAY_KEYS[row.weekday] if 0 <= row.weekday <= 6 else None
+        if day_key is None:
+            continue
+
+        day_config = business_hours.get(day_key, {})
+        if not isinstance(day_config, dict):
+            continue
+
+        if day_config.get("closed", False):
+            warnings.append({
+                "type": "day_closed",
+                "weekday": row.weekday,
+                "message": f"Business is closed on {day_key.capitalize()} but provider has active hours.",
+            })
+            continue
+
+        open_str = str(day_config.get("open", "00:00"))
+        close_str = str(day_config.get("close", "23:59"))
+        try:
+            bh_open = _parse_time(open_str)
+            bh_close = _parse_time(close_str)
+        except (ValueError, TypeError):
+            continue
+
+        if restrict:
+            if row.start_time < bh_open or row.end_time > bh_close:
+                warnings.append({
+                    "type": "outside_business_hours",
+                    "weekday": row.weekday,
+                    "message": (
+                        f"Provider hours ({_format_time(row.start_time)}-{_format_time(row.end_time)}) "
+                        f"fall outside business hours ({_format_time(bh_open)}-{_format_time(bh_close)}) "
+                        f"on {day_key.capitalize()}."
+                    ),
+                })
+
+    return warnings
 async def _load_provider_schedule(
     session: AsyncSession, provider_id: str, tenant_id: str
 ) -> list[ProviderSchedule]:
@@ -1070,10 +1132,13 @@ def _schedule_to_response(provider_id: str, rows: list[ProviderSchedule]) -> Pro
         provider_id=provider_id,
         entries=[
             ProviderScheduleEntryResponse(
+                id=row.id,
                 weekday=row.weekday,
                 location_id=row.location_id,
                 start_time=_format_time(row.start_time),
                 end_time=_format_time(row.end_time),
+                is_active=row.is_active,
+                blocked_service_ids=row.blocked_service_ids,
             )
             for row in rows
         ],
@@ -1098,8 +1163,7 @@ async def replace_tenant_provider_schedule(
     tenant = await get_tenant_by_slug(session, tenant_slug)
     provider = await _load_provider_with_links(session, provider_id, tenant.id)
 
-    # Validate each entry's location is one of the tenant's locations AND linked
-    # to this provider. Use a single round-trip to fetch valid tenant location ids.
+    # Validate each entry's location if provided
     if payload.entries:
         tenant_location_ids = set(
             (await session.scalars(
@@ -1108,23 +1172,26 @@ async def replace_tenant_provider_schedule(
         )
         provider_location_ids = {link.location_id for link in provider.location_links}
         for entry in payload.entries:
-            if entry.location_id not in tenant_location_ids:
-                raise api_exception(
-                    422,
-                    "invalid_location",
-                    f"Location {entry.location_id} does not belong to this tenant.",
-                )
-            if entry.location_id not in provider_location_ids:
-                raise api_exception(
-                    422,
-                    "invalid_location",
-                    "Provider is not assigned to that location. Add the location on the Services tab first.",
-                )
+            if entry.location_id is not None:
+                if entry.location_id not in tenant_location_ids:
+                    raise api_exception(
+                        422,
+                        "invalid_location",
+                        f"Location {entry.location_id} does not belong to this tenant.",
+                    )
+                if entry.location_id not in provider_location_ids:
+                    raise api_exception(
+                        422,
+                        "invalid_location",
+                        "Provider is not assigned to that location.",
+                    )
 
-    # Replace semantics: delete existing rows, insert new set, all in one txn.
+    # Replace semantics: delete existing rows for the same location scope, insert new set
+    scope_location_id = payload.location_id if payload.location_id is not None else (payload.entries[0].location_id if payload.entries else None)
     existing = await _load_provider_schedule(session, provider.id, tenant.id)
     for row in existing:
-        await session.delete(row)
+        if row.location_id == scope_location_id:
+            await session.delete(row)
     await session.flush()
     for entry in payload.entries:
         session.add(
@@ -1135,12 +1202,137 @@ async def replace_tenant_provider_schedule(
                 weekday=entry.weekday,
                 start_time=_parse_time(entry.start_time),
                 end_time=_parse_time(entry.end_time),
+                is_active=entry.is_active,
+                blocked_service_ids=entry.blocked_service_ids,
             )
         )
     await session.commit()
 
     rows = await _load_provider_schedule(session, provider.id, tenant.id)
     return _schedule_to_response(provider.id, rows)
+
+
+async def get_tenant_work_hours(
+    session: AsyncSession, tenant_slug: str, provider_id: str, location_id: str | None = None
+) -> WorkHoursResponse:
+    """Get full work hours config with summary stats."""
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    provider = await _load_provider_with_links(session, provider_id, tenant.id)
+
+    # Regular hours — filter by exact location scope
+    schedule_query = select(ProviderSchedule).where(
+        ProviderSchedule.provider_id == provider.id,
+        ProviderSchedule.tenant_id == tenant.id,
+    )
+    if location_id is not None:
+        schedule_query = schedule_query.where(ProviderSchedule.location_id == location_id)
+    else:
+        schedule_query = schedule_query.where(ProviderSchedule.location_id.is_(None))
+    schedule_rows = (await session.scalars(schedule_query.order_by(ProviderSchedule.weekday, ProviderSchedule.start_time))).all()
+
+    # Date overrides
+    today = datetime.now(timezone.utc).date()
+    overrides_query = select(ProviderTimeOff).where(
+        ProviderTimeOff.provider_id == provider.id,
+        ProviderTimeOff.tenant_id == tenant.id,
+    )
+    if location_id is not None:
+        overrides_query = overrides_query.where(ProviderTimeOff.location_id == location_id)
+    else:
+        overrides_query = overrides_query.where(ProviderTimeOff.location_id.is_(None))
+    override_rows = (await session.scalars(overrides_query.order_by(ProviderTimeOff.starts_at.asc()))).all()
+
+    # Summary
+    active_rows = [r for r in schedule_rows if r.is_active]
+    hours_per_week = sum(
+        (_time_to_minutes(r.end_time) - _time_to_minutes(r.start_time)) / 60.0
+        for r in active_rows
+    )
+    working_days = len({r.weekday for r in active_rows})
+    upcoming_overrides_count = sum(1 for r in override_rows if r.ends_at.date() >= today)
+
+    # Conflict warnings: check schedule entries against business hours
+    warnings = _build_schedule_conflict_warnings(tenant, schedule_rows)
+
+    return WorkHoursResponse(
+        provider_id=provider.id,
+        location_id=location_id,
+        regular_hours=[
+            ProviderScheduleEntryResponse(
+                id=r.id,
+                weekday=r.weekday,
+                location_id=r.location_id,
+                start_time=_format_time(r.start_time),
+                end_time=_format_time(r.end_time),
+                is_active=r.is_active,
+                blocked_service_ids=r.blocked_service_ids,
+            )
+            for r in schedule_rows
+        ],
+        date_overrides=[_time_off_to_response(r) for r in override_rows],
+        summary=WorkHoursSummary(
+            hours_per_week=round(hours_per_week, 1),
+            working_days=working_days,
+            upcoming_overrides_count=upcoming_overrides_count,
+        ),
+        warnings=warnings,
+    )
+
+
+async def copy_provider_day(
+    session: AsyncSession, tenant_slug: str, provider_id: str, payload: CopyDayRequest
+) -> WorkHoursResponse:
+    """Copy shifts from source day to target days."""
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    provider = await _load_provider_with_links(session, provider_id, tenant.id)
+
+    # Get source day shifts
+    source_query = select(ProviderSchedule).where(
+        ProviderSchedule.provider_id == provider.id,
+        ProviderSchedule.tenant_id == tenant.id,
+        ProviderSchedule.weekday == payload.source_day,
+    )
+    if payload.location_id is not None:
+        source_query = source_query.where(ProviderSchedule.location_id == payload.location_id)
+    else:
+        source_query = source_query.where(ProviderSchedule.location_id.is_(None))
+    source_rows = (await session.scalars(source_query)).all()
+
+    # Delete existing target day shifts
+    for target_day in payload.target_days:
+        target_query = select(ProviderSchedule).where(
+            ProviderSchedule.provider_id == provider.id,
+            ProviderSchedule.tenant_id == tenant.id,
+            ProviderSchedule.weekday == target_day,
+        )
+        if payload.location_id is not None:
+            target_query = target_query.where(ProviderSchedule.location_id == payload.location_id)
+        else:
+            target_query = target_query.where(ProviderSchedule.location_id.is_(None))
+        target_rows = (await session.scalars(target_query)).all()
+        for row in target_rows:
+            await session.delete(row)
+
+    await session.flush()
+
+    # Insert copies
+    for target_day in payload.target_days:
+        for src in source_rows:
+            session.add(
+                ProviderSchedule(
+                    tenant_id=tenant.id,
+                    provider_id=provider.id,
+                    location_id=src.location_id,
+                    weekday=target_day,
+                    start_time=src.start_time,
+                    end_time=src.end_time,
+                    is_active=src.is_active,
+                    blocked_service_ids=src.blocked_service_ids,
+                )
+            )
+
+    await session.commit()
+    return await get_tenant_work_hours(session, tenant_slug, provider_id, payload.location_id)
 
 
 # ---------------------------------------------------------------------------
@@ -1158,9 +1350,14 @@ def _time_off_to_response(row: ProviderTimeOff) -> ProviderTimeOffResponse:
     return ProviderTimeOffResponse(
         id=row.id,
         provider_id=row.provider_id,
+        location_id=row.location_id,
         starts_at=row.starts_at,
         ends_at=row.ends_at,
         reason=row.reason,
+        override_type=row.override_type,
+        start_time=_format_time(row.start_time) if row.start_time else None,
+        end_time=_format_time(row.end_time) if row.end_time else None,
+        blocked_service_ids=row.blocked_service_ids,
     )
 
 
@@ -1193,11 +1390,55 @@ async def create_tenant_provider_time_off(
     row = ProviderTimeOff(
         tenant_id=tenant.id,
         provider_id=provider.id,
+        location_id=payload.location_id,
         starts_at=payload.starts_at,
         ends_at=payload.ends_at,
         reason=payload.reason,
+        override_type=payload.override_type,
+        start_time=_parse_time(payload.start_time) if payload.start_time else None,
+        end_time=_parse_time(payload.end_time) if payload.end_time else None,
+        blocked_service_ids=payload.blocked_service_ids,
     )
     session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return _time_off_to_response(row)
+
+
+async def update_tenant_provider_time_off(
+    session: AsyncSession,
+    tenant_slug: str,
+    provider_id: str,
+    time_off_id: str,
+    payload: UpdateProviderTimeOffRequest,
+) -> ProviderTimeOffResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    provider = await _load_provider_with_links(session, provider_id, tenant.id)
+    row = await session.scalar(
+        select(ProviderTimeOff).where(
+            ProviderTimeOff.id == time_off_id,
+            ProviderTimeOff.tenant_id == tenant.id,
+            ProviderTimeOff.provider_id == provider.id,
+        )
+    )
+    if row is None:
+        raise api_exception(404, "not_found", "Time off entry was not found.")
+    if payload.starts_at is not None:
+        row.starts_at = payload.starts_at
+    if payload.ends_at is not None:
+        row.ends_at = payload.ends_at
+    if payload.reason is not None:
+        row.reason = payload.reason
+    if payload.override_type is not None:
+        row.override_type = payload.override_type
+    if payload.start_time is not None:
+        row.start_time = _parse_time(payload.start_time)
+    if payload.end_time is not None:
+        row.end_time = _parse_time(payload.end_time)
+    if payload.location_id is not None:
+        row.location_id = payload.location_id
+    if payload.blocked_service_ids is not None:
+        row.blocked_service_ids = payload.blocked_service_ids
     await session.commit()
     await session.refresh(row)
     return _time_off_to_response(row)
@@ -2079,3 +2320,68 @@ async def replace_tenant_service_provider_variants(
 
     await session.commit()
     return await list_tenant_service_provider_variants(session, tenant_slug, service_id)
+
+
+async def list_tenant_provider_service_variants(
+    session: AsyncSession, tenant_slug: str, provider_id: str
+):
+    """List all services for a provider with their variant overrides."""
+    from app.schemas.catalog import (
+        ProviderServiceVariantEntry,
+        ProviderServiceVariantListResponse,
+    )
+
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    provider = (
+        await session.scalars(
+            select(Provider).where(
+                Provider.id == provider_id, Provider.tenant_id == tenant.id
+            )
+        )
+    ).one_or_none()
+    if provider is None:
+        raise api_exception(404, "not_found", "Provider not found.")
+
+    rows = (
+        await session.scalars(
+            select(ProviderService)
+            .where(ProviderService.provider_id == provider.id, ProviderService.tenant_id == tenant.id)
+            .order_by(ProviderService.created_at.asc())
+        )
+    ).all()
+
+    # Build a map of service_id -> variant entry
+    variant_map: dict[str, ProviderServiceVariantEntry] = {}
+    for row in rows:
+        variant_map[row.service_id] = ProviderServiceVariantEntry(
+            provider_id=row.provider_id,
+            price_cents=row.price_cents_override,
+            duration_minutes=row.duration_minutes_override,
+            deposit_cents=row.deposit_cents_override,
+            commission_flat_cents=row.commission_flat_cents,
+            commission_basis_points=row.commission_basis_points,
+        )
+
+    # Get all services for this provider
+    services = (
+        await session.scalars(
+            select(Service)
+            .where(Service.tenant_id == tenant.id, Service.id.in_(provider.service_ids))
+            .order_by(Service.name.asc())
+        )
+    ).all()
+
+    return ProviderServiceVariantListResponse(
+        service_id="",  # not applicable for provider-centric view
+        variants=[
+            variant_map.get(svc.id, ProviderServiceVariantEntry(
+                provider_id=provider.id,
+                price_cents=None,
+                duration_minutes=None,
+                deposit_cents=None,
+                commission_flat_cents=None,
+                commission_basis_points=None,
+            ))
+            for svc in services
+        ],
+    )

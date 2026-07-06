@@ -148,6 +148,7 @@ async def list_availability(
             select(ProviderSchedule).where(
                 ProviderSchedule.tenant_id == tenant.id,
                 ProviderSchedule.provider_id.in_(provider_ids),
+                ProviderSchedule.is_active.is_(True),
             )
         )
     ).all()
@@ -190,14 +191,25 @@ async def list_availability(
         schedule_map[(schedule.provider_id, schedule.location_id, schedule.weekday)].append(schedule)
 
     blocked_map: dict[str, list[tuple[datetime, datetime]]] = defaultdict(list)
+    # Per-service blocked map for time off entries that only block specific services
+    # Keyed by (provider_id, location_id) for location isolation
+    service_blocked_map: dict[tuple[str, str | None], dict[str, list[tuple[datetime, datetime]]]] = defaultdict(lambda: defaultdict(list))
     for hold in holds:
         blocked_map[hold.provider_id].append((_ensure_aware(hold.starts_at), _ensure_aware(hold.ends_at)))
     for booking in bookings:
         blocked_map[booking.provider_id].append((_ensure_aware(booking.starts_at), _ensure_aware(booking.ends_at)))
     for time_off in time_off_rows:
-        blocked_map[time_off.provider_id].append(
-            (_ensure_aware(time_off.starts_at), _ensure_aware(time_off.ends_at))
-        )
+        if time_off.blocked_service_ids:
+            # Only block the specified services, scoped to location
+            for svc_id in time_off.blocked_service_ids:
+                service_blocked_map[(time_off.provider_id, time_off.location_id)][svc_id].append(
+                    (_ensure_aware(time_off.starts_at), _ensure_aware(time_off.ends_at))
+                )
+        else:
+            # Block all services (full day off), scoped to location
+            blocked_map[(time_off.provider_id, time_off.location_id)].append(
+                (_ensure_aware(time_off.starts_at), _ensure_aware(time_off.ends_at))
+            )
 
     all_slots_by_day: list[list[SlotAvailabilityResponse]] = []
     earliest_slot: SlotAvailabilityResponse | None = None
@@ -246,7 +258,16 @@ async def list_availability(
                         if slot_start < min_start or slot_start > max_start:
                             cursor += timedelta(minutes=30)
                             continue
-                        if _overlaps(block_start, block_end, blocked_map.get(context.provider.id, [])):
+                        if _overlaps(block_start, block_end, blocked_map.get((context.provider.id, resolved_location_id), [])) or _overlaps(block_start, block_end, blocked_map.get((context.provider.id, None), [])):
+                            cursor += timedelta(minutes=30)
+                            continue
+                        # Check service-specific blocks from time off
+                        svc_blocks = service_blocked_map.get((context.provider.id, resolved_location_id), {}).get(service.id, []) + service_blocked_map.get((context.provider.id, None), {}).get(service.id, [])
+                        if _overlaps(block_start, block_end, svc_blocks):
+                            cursor += timedelta(minutes=30)
+                            continue
+                        # Check if this schedule entry blocks this service
+                        if schedule.blocked_service_ids and service.id in schedule.blocked_service_ids:
                             cursor += timedelta(minutes=30)
                             continue
                         response = SlotAvailabilityResponse(

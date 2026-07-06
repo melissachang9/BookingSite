@@ -238,10 +238,12 @@ class ProviderSchedule(Base, IdMixin, TimestampMixin):
 
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
     provider_id: Mapped[str] = mapped_column(String(36), ForeignKey("providers.id"), index=True, nullable=False)
-    location_id: Mapped[str] = mapped_column(String(36), ForeignKey("locations.id"), index=True, nullable=False)
+    location_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("locations.id"), index=True, nullable=True)
     weekday: Mapped[int] = mapped_column(Integer, nullable=False)
     start_time: Mapped[time] = mapped_column(Time, nullable=False)
     end_time: Mapped[time] = mapped_column(Time, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    blocked_service_ids: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
 
     provider: Mapped[Provider] = relationship(back_populates="schedules")
     location: Mapped[Location] = relationship(back_populates="schedules")
@@ -252,9 +254,14 @@ class ProviderTimeOff(Base, IdMixin, TimestampMixin):
 
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
     provider_id: Mapped[str] = mapped_column(String(36), ForeignKey("providers.id"), index=True, nullable=False)
+    location_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("locations.id"), index=True, nullable=True)
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    override_type: Mapped[str] = mapped_column(String(32), nullable=False, default="closed", server_default="closed")
+    start_time: Mapped[Optional[time]] = mapped_column(Time, nullable=True)
+    end_time: Mapped[Optional[time]] = mapped_column(Time, nullable=True)
+    blocked_service_ids: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
 
 
 class Booking(Base, IdMixin, TimestampMixin):

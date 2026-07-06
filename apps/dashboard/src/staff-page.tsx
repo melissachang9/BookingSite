@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AuthenticatedUser,
   CreateProviderRequest,
@@ -17,6 +17,7 @@ import type {
   ServiceSummary,
   TenantUserSummary,
   UpdateProviderRequest,
+  WorkHoursSummary,
   UpdateTenantUserRequest,
   UserPermissionOverrideEntry,
   UserPermissionsResponse,
@@ -41,7 +42,7 @@ type ModalState =
   | { kind: "password"; user: TenantUserSummary }
   | { kind: "addProviderFor"; user: TenantUserSummary };
 
-type TabKey = "details" | "services" | "schedule" | "timeOff" | "permissions" | "compensation";
+type TabKey = "details" | "services" | "workHours" | "permissions" | "compensation";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Owner",
@@ -658,8 +659,7 @@ function StaffDetail({
   const tabs: Array<{ key: TabKey; label: string; disabled?: boolean }> = [
     { key: "details", label: "Details" },
     { key: "services", label: "Services", disabled: !provider },
-    { key: "schedule", label: "Work hours", disabled: !provider },
-    { key: "timeOff", label: "Time off", disabled: !provider },
+    { key: "workHours", label: "Work hours", disabled: !provider },
     { key: "compensation", label: "Compensation", disabled: !provider },
     { key: "permissions", label: "Permissions" },
   ];
@@ -725,11 +725,8 @@ function StaffDetail({
           onSaved={onSaved}
         />
       ) : null}
-      {activeTab === "schedule" && provider ? (
-        <ScheduleTab tenantSlug={tenantSlug} provider={provider} locations={locations} />
-      ) : null}
-      {activeTab === "timeOff" && provider ? (
-        <TimeOffTab tenantSlug={tenantSlug} provider={provider} />
+      {activeTab === "workHours" && provider ? (
+        <WorkHoursTab tenantSlug={tenantSlug} provider={provider} locations={locations} services={services} />
       ) : null}
       {activeTab === "compensation" && provider ? (
         <CompensationTab tenantSlug={tenantSlug} provider={provider} onSaved={onSaved} />
@@ -1161,196 +1158,551 @@ function formatPriceCents(cents: number): string {
 
 const WEEKDAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
-type ScheduleTabProps = {
+
+// ===========================================================================
+// Work Hours tab (unified schedule + time off)
+// ===========================================================================
+
+type WorkHoursTabProps = {
   tenantSlug: string;
   provider: ProviderSummary;
   locations: LocationSummary[];
 };
 
-function ScheduleTab({ tenantSlug, provider, locations }: ScheduleTabProps) {
+function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTabProps & { services: ServiceSummary[] }) {
   const providerLocations = useMemo(
     () => locations.filter((loc) => provider.locationIds.includes(loc.id)),
     [locations, provider.locationIds],
   );
 
-  const [entries, setEntries] = useState<ProviderScheduleEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  const [shifts, setShifts] = useState<Map<number, ProviderScheduleEntry[]>>(new Map());
+  const [overrides, setOverrides] = useState<ProviderTimeOffEntry[]>([]);
+  const [summary, setSummary] = useState<WorkHoursSummary>({ hoursPerWeek: 0, workingDays: 0, upcomingOverridesCount: 0 });
+  const [warnings, setWarnings] = useState<Array<{ type: string; weekday: number; message: string }>>([]);
+
+  const [newOverride, setNewOverride] = useState<{
+    startDate: string; endDate: string; reason: string;
+    overrideType: "closed" | "custom_hours"; startTime: string; endTime: string;
+  }>({ startDate: "", endDate: "", reason: "", overrideType: "closed", startTime: "09:00", endTime: "17:00" });
+  const [blockedServiceIds, setBlockedServiceIds] = useState<string[]>([]);
+  const [dayBlockedServices, setDayBlockedServices] = useState<Map<number, string[]>>(new Map());
+
+  const [editingOverrideId, setEditingOverrideId] = useState<string | null>(null);
+  const [editOverride, setEditOverride] = useState<{
+    startDate: string; endDate: string; reason: string;
+    overrideType: "closed" | "custom_hours"; startTime: string; endTime: string;
+  }>({ startDate: "", endDate: "", reason: "", overrideType: "closed", startTime: "09:00", endTime: "17:00" });
+  const [editBlockedServiceIds, setEditBlockedServiceIds] = useState<string[]>([]);
+
+  const latestLocationRef = useRef(selectedLocationId);
+  latestLocationRef.current = selectedLocationId;
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setStatus(null);
-    platformApi
-      .getProviderSchedule(tenantSlug, provider.id)
-      .then((schedule: ProviderSchedule) => {
-        if (!cancelled) {
-          setEntries(schedule.entries);
+    const locId = selectedLocationId;
+    setShifts(new Map());
+    setOverrides([]);
+    const doLoad = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const resp = await platformApi.getProviderWorkHours(tenantSlug, provider.id, locId);
+        if (cancelled || latestLocationRef.current !== locId) return;
+        const byDay = new Map<number, ProviderScheduleEntry[]>();
+        for (const entry of resp.regularHours) {
+          const list = byDay.get(entry.weekday) || [];
+          list.push(entry);
+          byDay.set(entry.weekday, list);
         }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load schedule");
+        setShifts(byDay);
+        setOverrides(resp.dateOverrides);
+        setSummary(resp.summary);
+        setWarnings(resp.warnings || []);
+        // Load per-day blocked services from schedule entries
+        const dayBlocks = new Map<number, string[]>();
+        for (const entry of resp.regularHours) {
+          if (entry.blockedServiceIds && entry.blockedServiceIds.length > 0) {
+            dayBlocks.set(entry.weekday, entry.blockedServiceIds);
+          }
         }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
+        setDayBlockedServices(dayBlocks);
+      } catch (err) {
+        if (cancelled || latestLocationRef.current !== locId) return;
+        setError(err instanceof Error ? err.message : "Failed to load work hours");
+      } finally {
+        if (!cancelled && latestLocationRef.current === locId) setLoading(false);
+      }
     };
-  }, [tenantSlug, provider.id]);
+    void doLoad();
+    return () => { cancelled = true; };
+  }, [tenantSlug, provider.id, selectedLocationId, reloadKey]);
 
-  function updateEntry(index: number, patch: Partial<ProviderScheduleEntry>) {
-    setEntries((current) =>
-      current.map((entry, idx) => (idx === index ? { ...entry, ...patch } : entry)),
-    );
-  }
+  const toggleDayBlockedService = (weekday: number, serviceId: string) => {
+    setDayBlockedServices((prev) => {
+      const next = new Map(prev);
+      const current = next.get(weekday) || [];
+      if (current.includes(serviceId)) {
+        next.set(weekday, current.filter((id) => id !== serviceId));
+      } else {
+        next.set(weekday, [...current, serviceId]);
+      }
+      return next;
+    });
+  };
 
-  function removeEntry(index: number) {
-    setEntries((current) => current.filter((_, idx) => idx !== index));
-  }
+  const toggleDay = (weekday: number) => {
+    setShifts((prev) => {
+      const next = new Map(prev);
+      const existing = next.get(weekday) || [];
+      if (existing.length > 0 && existing[0].isActive) {
+        next.set(weekday, existing.map((s) => ({ ...s, isActive: false })));
+      } else if (existing.length > 0) {
+        next.set(weekday, existing.map((s) => ({ ...s, isActive: true })));
+      } else {
+        const locId = selectedLocationId || null;
+        next.set(weekday, [{
+          id: "", weekday, locationId: locId, startTime: "09:00", endTime: "17:00", isActive: true,
+        }]);
+      }
+      return next;
+    });
+  };
 
-  function addEntry(weekday: number) {
-    const defaultLocationId = providerLocations[0]?.id;
-    if (!defaultLocationId) {
-      return;
-    }
-    setEntries((current) => [
-      ...current,
-      { weekday, locationId: defaultLocationId, startTime: "09:00", endTime: "17:00" },
-    ]);
-  }
+  const updateShift = (weekday: number, shiftIndex: number, patch: Partial<ProviderScheduleEntry>) => {
+    setShifts((prev) => {
+      const next = new Map(prev);
+      const list = [...(next.get(weekday) || [])];
+      list[shiftIndex] = { ...list[shiftIndex], ...patch };
+      next.set(weekday, list);
+      return next;
+    });
+  };
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const addShift = (weekday: number) => {
+    setShifts((prev) => {
+      const next = new Map(prev);
+      const list = [...(next.get(weekday) || [])];
+      const locId = selectedLocationId || null;
+      list.push({ id: "", weekday, locationId: locId, startTime: "09:00", endTime: "17:00", isActive: true });
+      next.set(weekday, list);
+      return next;
+    });
+  };
+
+  const removeShift = (weekday: number, shiftIndex: number) => {
+    setShifts((prev) => {
+      const next = new Map(prev);
+      const list = [...(next.get(weekday) || [])];
+      list.splice(shiftIndex, 1);
+      if (list.length === 0) next.delete(weekday);
+      else next.set(weekday, list);
+      return next;
+    });
+  };
+
+  const handleSave = async () => {
     setSubmitting(true);
     setError(null);
     setStatus(null);
     try {
-      const payload: ReplaceProviderScheduleRequest = { entries };
-      const result = await platformApi.replaceProviderSchedule(tenantSlug, provider.id, payload);
-      setEntries(result.entries);
+      const entries: ProviderScheduleEntry[] = [];
+      for (const [weekday, dayShifts] of shifts) {
+        for (const s of dayShifts) {
+          entries.push({
+            id: s.id || "",
+            weekday,
+            locationId: s.locationId,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            isActive: s.isActive,
+            blockedServiceIds: dayBlockedServices.get(weekday) || null,
+          });
+        }
+      }
+      await platformApi.replaceProviderSchedule(tenantSlug, provider.id, { entries, locationId: selectedLocationId });
       setStatus("Schedule saved");
+      setReloadKey((k) => k + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save schedule");
     } finally {
       setSubmitting(false);
     }
-  }
+  };
+
+  const handleCopyMonday = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await platformApi.copyProviderDay(tenantSlug, provider.id, {
+        sourceDay: 1, targetDays: [2, 3, 4, 5], locationId: selectedLocationId,
+      });
+      setStatus("Copied Monday to Tue-Fri");
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to copy");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAddOverride = async () => {
+    if (!newOverride.startDate || !newOverride.endDate) {
+      setError("Select start and end dates");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await platformApi.createProviderTimeOff(tenantSlug, provider.id, {
+        startsAt: new Date(newOverride.startDate).toISOString(),
+        endsAt: new Date(newOverride.endDate + "T23:59:59").toISOString(),
+        reason: newOverride.reason.trim() || null,
+        overrideType: newOverride.overrideType,
+        startTime: newOverride.overrideType === "custom_hours" ? newOverride.startTime : null,
+        endTime: newOverride.overrideType === "custom_hours" ? newOverride.endTime : null,
+        locationId: selectedLocationId,
+        blockedServiceIds: blockedServiceIds.length > 0 ? blockedServiceIds : null,
+      });
+      setNewOverride({ startDate: "", endDate: "", reason: "", overrideType: "closed", startTime: "09:00", endTime: "17:00" });
+      setBlockedServiceIds([]);
+      setStatus("Override added");
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add override");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleStartEditOverride = (ov: ProviderTimeOffEntry) => {
+    setEditingOverrideId(ov.id);
+    setEditOverride({
+      startDate: new Date(ov.startsAt).toISOString().split("T")[0],
+      endDate: new Date(ov.endsAt).toISOString().split("T")[0],
+      reason: ov.reason || "",
+      overrideType: (ov.overrideType as "closed" | "custom_hours") || "closed",
+      startTime: ov.startTime || "09:00",
+      endTime: ov.endTime || "17:00",
+    });
+    setEditBlockedServiceIds(ov.blockedServiceIds || []);
+  };
+
+  const handleCancelEditOverride = () => {
+    setEditingOverrideId(null);
+  };
+
+  const handleSaveEditOverride = async () => {
+    if (!editingOverrideId) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await platformApi.updateProviderTimeOff(tenantSlug, provider.id, editingOverrideId, {
+        startsAt: new Date(editOverride.startDate).toISOString(),
+        endsAt: new Date(editOverride.endDate + "T23:59:59").toISOString(),
+        reason: editOverride.reason.trim() || null,
+        overrideType: editOverride.overrideType,
+        startTime: editOverride.overrideType === "custom_hours" ? editOverride.startTime : null,
+        endTime: editOverride.overrideType === "custom_hours" ? editOverride.endTime : null,
+        locationId: selectedLocationId,
+        blockedServiceIds: editBlockedServiceIds.length > 0 ? editBlockedServiceIds : null,
+      });
+      setEditingOverrideId(null);
+      setStatus("Override updated");
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update override");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteOverride = async (overrideId: string) => {
+    try {
+      await platformApi.deleteProviderTimeOff(tenantSlug, provider.id, overrideId);
+      setStatus("Override removed");
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove override");
+    }
+  };
 
   if (loading) {
-    return (
-      <div className="staff-detail-form">
-        <p className="settings-form-help">Loading schedule…</p>
-      </div>
-    );
+    return <div className="staff-detail-form"><p className="settings-form-help">Loading work hours...</p></div>;
   }
 
   if (providerLocations.length === 0) {
-    return (
-      <div className="staff-detail-form">
-        <p className="settings-form-help">
-          Assign this provider to at least one location before setting work hours.
-        </p>
-      </div>
-    );
+    return <div className="staff-detail-form"><p className="settings-form-help">Assign this provider to at least one location first.</p></div>;
   }
 
   return (
-    <form className="staff-detail-form schedule-week" onSubmit={handleSubmit}>
-      {WEEKDAY_LABELS.map((label, weekday) => {
-        const dayEntries = entries
-          .map((entry, index) => ({ entry, index }))
-          .filter(({ entry }) => entry.weekday === weekday);
-        return (
-          <div key={weekday} className="schedule-day-row">
-            <div className="schedule-day-header">
-              <h4>{label}</h4>
-              <button
-                type="button"
-                className="link-button"
-                onClick={() => addEntry(weekday)}
-              >
-                + Add time window
-              </button>
-            </div>
-            {dayEntries.length === 0 ? (
-              <p className="settings-form-help schedule-day-empty">No hours.</p>
-            ) : (
-              <ul className="schedule-entry-list">
-                {dayEntries.map(({ entry, index }) => (
-                  <li key={index} className="schedule-entry">
-                    <label className="schedule-entry-field">
-                      <span>Location</span>
-                      <select
-                        value={entry.locationId}
-                        onChange={(event) =>
-                          updateEntry(index, { locationId: event.target.value })
-                        }
-                      >
-                        {providerLocations.map((loc) => (
-                          <option key={loc.id} value={loc.id}>
-                            {loc.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="schedule-entry-field">
-                      <span>Start</span>
-                      <input
-                        type="time"
-                        value={entry.startTime}
-                        onChange={(event) =>
-                          updateEntry(index, { startTime: event.target.value })
-                        }
-                      />
-                    </label>
-                    <label className="schedule-entry-field">
-                      <span>End</span>
-                      <input
-                        type="time"
-                        value={entry.endTime}
-                        onChange={(event) =>
-                          updateEntry(index, { endTime: event.target.value })
-                        }
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="link-button schedule-entry-remove"
-                      onClick={() => removeEntry(index)}
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        );
-      })}
-
-      {error ? (
-        <p role="alert" className="settings-error">
-          {error}
-        </p>
-      ) : null}
-      {status ? <p className="settings-form-help">{status}</p> : null}
-
-      <div className="modal-actions">
-        <button type="submit" className="primary-action" disabled={submitting}>
-          {submitting ? "Saving…" : "Save schedule"}
-        </button>
+    <div className="staff-detail-form">
+      <div style={{ display: "flex", gap: "10px", marginBottom: "12px" }}>
+        <div className="svc-card" style={{ flex: 1, padding: "10px 14px" }}>
+          <div className="eyebrow">Hours per week</div>
+          <div className="serif" style={{ fontSize: "18px", fontWeight: 500, marginTop: "2px" }}>{summary.hoursPerWeek} hrs</div>
+        </div>
+        <div className="svc-card" style={{ flex: 1, padding: "10px 14px" }}>
+          <div className="eyebrow">Working days</div>
+          <div className="serif" style={{ fontSize: "18px", fontWeight: 500, marginTop: "2px" }}>{summary.workingDays} of 7</div>
+        </div>
+        <div className="svc-card" style={{ flex: 1, padding: "10px 14px" }}>
+          <div className="eyebrow">Upcoming overrides</div>
+          <div className="serif" style={{ fontSize: "18px", fontWeight: 500, marginTop: "2px" }}>{summary.upcomingOverridesCount}</div>
+        </div>
       </div>
-    </form>
+
+      {warnings.length > 0 ? (
+        <div style={{ marginBottom: "12px" }}>
+          {warnings.map((w, i) => (
+            <div key={i} style={{
+              background: "#FFF8E7", border: "1px solid #E5D7BB",
+              borderRadius: "6px", padding: "8px 12px", marginBottom: "6px",
+              fontSize: "12px", color: "#6B5A47", display: "flex", alignItems: "center", gap: "8px"
+            }}>
+              <span style={{ fontSize: "14px" }}>&#9888;</span>
+              <span>{w.message}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="svc-card" style={{ marginBottom: "12px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
+          <div>
+            <span className="svc-card__eyebrow">Regular weekly hours</span>
+            <div style={{ fontSize: "11px", color: "#8B7960", marginTop: "4px" }}>Applies every week unless overridden below.</div>
+          </div>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            {providerLocations.length > 1 ? (
+              <select className="svc-input" style={{ padding: "5px 9px", fontSize: "12px" }}
+                aria-label="Work hours location"
+                value={selectedLocationId || ""}
+                onChange={(e) => setSelectedLocationId(e.target.value || null)}>
+                <option value="">Both locations</option>
+                {providerLocations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                ))}
+              </select>
+            ) : null}
+            <button type="button" className="svc-duplicate-btn" onClick={handleCopyMonday} disabled={submitting}>
+              Copy Mon to weekdays
+            </button>
+          </div>
+        </div>
+
+        {WEEKDAY_LABELS.map((label, weekday) => {
+          const dayShifts = shifts.get(weekday) || [];
+          const isActive = dayShifts.length > 0 && dayShifts[0].isActive;
+          return (
+            <div key={weekday} className="svc-override-row" style={{ opacity: isActive ? 1 : 0.55 }}>
+              <div style={{ width: "64px", flexShrink: 0 }}>
+                <div style={{ fontSize: "13px", fontWeight: 500, color: "#1F1612" }}>{label}</div>
+                <div style={{ fontSize: "10px", color: "#8B7960", marginTop: "1px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  {isActive ? "Open" : "Closed"}
+                </div>
+              </div>
+              <label className={`svc-toggle${isActive ? "" : " svc-toggle--off"}`} aria-label={`${label} toggle`}>
+                <input type="checkbox" checked={isActive}
+                  onChange={() => toggleDay(weekday)}
+                  style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
+              </label>
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
+                {!isActive ? (
+                  <div style={{ fontSize: "12px", color: "#8B7960", fontStyle: "italic" }}>Not working</div>
+                ) : dayShifts.length === 0 ? (
+                  <div style={{ fontSize: "12px", color: "#8B7960", fontStyle: "italic" }}>No shifts</div>
+                ) : (
+                  dayShifts.map((shift, idx) => (
+                    <div key={idx} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <input className="svc-input" type="text" style={{ width: "80px", textAlign: "center", padding: "6px 9px" }}
+                        value={shift.startTime}
+                        onChange={(e) => updateShift(weekday, idx, { startTime: e.target.value })}
+                        placeholder="9:00 AM" />
+                      <span style={{ color: "#8B7960", fontSize: "12px" }}>→</span>
+                      <input className="svc-input" type="text" style={{ width: "80px", textAlign: "center", padding: "6px 9px" }}
+                        value={shift.endTime}
+                        onChange={(e) => updateShift(weekday, idx, { endTime: e.target.value })}
+                        placeholder="5:00 PM" />
+                      {dayShifts.length > 1 ? (
+                        <button type="button" className="svc-text-btn" style={{ marginLeft: "4px" }}
+                          onClick={() => removeShift(weekday, idx)}>×</button>
+                      ) : null}
+                    </div>
+                  ))
+                )}
+                {isActive ? (
+                  <button type="button" className="svc-text-btn" style={{ textDecoration: "underline" }}
+                    onClick={() => addShift(weekday)}>+ Add shift</button>
+                ) : null}
+                {isActive ? (
+                  <div style={{ marginTop: "6px" }}>
+                    <div style={{ fontSize: "10px", color: "#8B7960", marginBottom: "3px" }}>Block services this day:</div>
+                    <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                      {services.map((svc) => {
+                        const dayBlocked = dayBlockedServices.get(weekday) || [];
+                        const isBlocked = dayBlocked.includes(svc.id);
+                        return (
+                          <label key={svc.id} style={{
+                            display: "flex", alignItems: "center", gap: "3px",
+                            fontSize: "10px", cursor: "pointer",
+                            padding: "2px 6px", borderRadius: "3px",
+                            background: isBlocked ? "#F5E6D3" : "transparent",
+                            border: `1px solid ${isBlocked ? "#D4A574" : "#D9CBB1"}`,
+                          }}>
+                            <input type="checkbox" checked={isBlocked}
+                              onChange={() => toggleDayBlockedService(weekday, svc.id)}
+                              style={{ width: "10px", height: "10px" }} />
+                            {svc.name}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+
+        <div style={{ marginTop: "12px" }}>
+          <button type="button" className="svc-save-btn" onClick={handleSave} disabled={submitting}>
+            {submitting ? "Saving..." : "Save schedule"}
+          </button>
+        </div>
+      </div>
+
+      <div className="svc-card" style={{ marginBottom: 0 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px" }}>
+          <div>
+            <span className="svc-card__eyebrow">Date overrides</span>
+            <div style={{ fontSize: "11px", color: "#8B7960", marginTop: "4px" }}>Vacations, holidays, and one-off schedule changes.</div>
+          </div>
+        </div>
+
+        {overrides.map((ov) => {
+          const startDate = new Date(ov.startsAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+          const endDate = new Date(ov.endsAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+          const isClosed = ov.overrideType === "closed";
+          return (
+            <React.Fragment key={ov.id}>
+            <div className="svc-override-row">
+              <div style={{ width: "90px", flexShrink: 0 }}>
+                <div style={{ fontSize: "12px", fontWeight: 500, color: "#1F1612" }}>{startDate} - {endDate}</div>
+                <div style={{ fontSize: "10px", color: "#8B7960", marginTop: "1px" }}>
+                  {Math.ceil((new Date(ov.endsAt).getTime() - new Date(ov.startsAt).getTime()) / 86400000) + 1} days
+                </div>
+              </div>
+              <div style={{ fontSize: "12px", color: "#4A3D30", flex: 1 }}>{ov.reason || "No reason"}</div>
+              <span className="svc-pill" style={{ background: isClosed ? "#E5D7BB" : "#1F1612", color: isClosed ? "#6B5A47" : "#F7F0DE", padding: "2px 7px", borderRadius: "4px", fontSize: "10px", fontWeight: 500 }}>
+                {isClosed ? "Closed" : `${ov.startTime || ""} - ${ov.endTime || ""}`}
+              </span>
+              <button type="button" className="svc-text-btn" style={{ marginRight: "4px" }}
+                  onClick={() => handleStartEditOverride(ov)}>&#9998;</button>
+              <button type="button" className="svc-text-btn" onClick={() => handleDeleteOverride(ov.id)}>×</button>
+            </div>
+            {editingOverrideId === ov.id ? (
+              <div style={{ marginTop: "8px", padding: "8px", background: "#FDF8F0", borderRadius: "6px", border: "1px solid #E5D7BB" }}>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", marginBottom: "6px" }}>
+                  <input type="date" className="svc-input" style={{ width: "130px" }}
+                    value={editOverride.startDate}
+                    onChange={(e) => setEditOverride((p) => ({ ...p, startDate: e.target.value }))} />
+                  <span style={{ color: "#8B7960", fontSize: "12px" }}>to</span>
+                  <input type="date" className="svc-input" style={{ width: "130px" }}
+                    value={editOverride.endDate}
+                    onChange={(e) => setEditOverride((p) => ({ ...p, endDate: e.target.value }))} />
+                  <input type="text" className="svc-input" placeholder="Reason" style={{ flex: 1, minWidth: "120px" }}
+                    value={editOverride.reason}
+                    onChange={(e) => setEditOverride((p) => ({ ...p, reason: e.target.value }))} />
+                </div>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <button type="button" className="svc-save-btn" onClick={handleSaveEditOverride} disabled={submitting}
+                    style={{ fontSize: "11px", padding: "4px 10px" }}>
+                    {submitting ? "Saving..." : "Save"}
+                  </button>
+                  <button type="button" className="svc-text-btn" onClick={handleCancelEditOverride}>Cancel</button>
+                </div>
+              </div>
+            ) : null}
+            </React.Fragment>
+          );
+        })}
+
+        <div style={{ marginTop: "10px", padding: "10px 0", borderTop: "0.5px dashed #D9CBB1" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", marginBottom: "8px" }}>
+            <input type="date" className="svc-input" style={{ width: "130px" }}
+              value={newOverride.startDate}
+              onChange={(e) => setNewOverride((p) => ({ ...p, startDate: e.target.value }))} />
+            <span style={{ color: "#8B7960", fontSize: "12px" }}>to</span>
+            <input type="date" className="svc-input" style={{ width: "130px" }}
+              value={newOverride.endDate}
+              onChange={(e) => setNewOverride((p) => ({ ...p, endDate: e.target.value }))} />
+            <input type="text" className="svc-input" placeholder="Reason (optional)" style={{ flex: 1, minWidth: "150px" }}
+              value={newOverride.reason}
+              onChange={(e) => setNewOverride((p) => ({ ...p, reason: e.target.value }))} />
+          </div>
+          <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "12px", cursor: "pointer" }}>
+              <input type="radio" name="overrideType" checked={newOverride.overrideType === "closed"}
+                onChange={() => setNewOverride((p) => ({ ...p, overrideType: "closed" }))} />
+              Closed
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "12px", cursor: "pointer" }}>
+              <input type="radio" name="overrideType" checked={newOverride.overrideType === "custom_hours"}
+                onChange={() => setNewOverride((p) => ({ ...p, overrideType: "custom_hours" }))} />
+              Custom hours
+            </label>
+            {newOverride.overrideType === "custom_hours" ? (
+              <>
+                <input type="text" className="svc-input" style={{ width: "70px", textAlign: "center" }}
+                  value={newOverride.startTime}
+                  onChange={(e) => setNewOverride((p) => ({ ...p, startTime: e.target.value }))} />
+                <span style={{ color: "#8B7960", fontSize: "12px" }}>to</span>
+                <input type="text" className="svc-input" style={{ width: "70px", textAlign: "center" }}
+                  value={newOverride.endTime}
+                  onChange={(e) => setNewOverride((p) => ({ ...p, endTime: e.target.value }))} />
+              </>
+            ) : null}
+            <button type="button" className="svc-save-btn" onClick={handleAddOverride} disabled={submitting}
+              style={{ fontSize: "11px", padding: "4px 10px" }}>
+              {submitting ? "Adding..." : "+ Add override"}
+            </button>
+          </div>
+          <div style={{ marginTop: "8px" }}>
+            <div style={{ fontSize: "11px", color: "#8B7960", marginBottom: "4px" }}>Block specific services (optional)</div>
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              {services.map((svc) => {
+                const isBlocked = blockedServiceIds.includes(svc.id);
+                return (
+                  <label key={svc.id} style={{
+                    display: "flex", alignItems: "center", gap: "4px",
+                    fontSize: "11px", cursor: "pointer",
+                    padding: "3px 8px", borderRadius: "4px",
+                    background: isBlocked ? "#F5E6D3" : "transparent",
+                    border: `1px solid ${isBlocked ? "#D4A574" : "#D9CBB1"}`,
+                  }}>
+                    <input type="checkbox" checked={isBlocked}
+                      onChange={() => setBlockedServiceIds((prev) =>
+                        prev.includes(svc.id) ? prev.filter((id) => id !== svc.id) : [...prev, svc.id]
+                      )}
+                      style={{ width: "12px", height: "12px" }} />
+                    {svc.name}
+                  </label>
+                );
+              })}</div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
+
 
 function ModalShell({
   title,
@@ -1758,197 +2110,6 @@ function ResetPasswordModal({
   );
 }
 
-type TimeOffTabProps = {
-  tenantSlug: string;
-  provider: ProviderSummary;
-};
-
-function _toInputValue(iso: string): string {
-  // ISO -> YYYY-MM-DDTHH:MM for datetime-local input
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function _fromInputValue(value: string): string {
-  // datetime-local (local time, no tz) -> ISO with local offset preserved
-  if (!value) return value;
-  return new Date(value).toISOString();
-}
-
-function _formatRange(startIso: string, endIso: string): string {
-  const start = new Date(startIso);
-  const end = new Date(endIso);
-  const opts: Intl.DateTimeFormatOptions = {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  };
-  return `${start.toLocaleString(undefined, opts)} → ${end.toLocaleString(undefined, opts)}`;
-}
-
-function TimeOffTab({ tenantSlug, provider }: TimeOffTabProps) {
-  const [items, setItems] = useState<ProviderTimeOffEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [startsAt, setStartsAt] = useState("");
-  const [endsAt, setEndsAt] = useState("");
-  const [reason, setReason] = useState("");
-
-  function refresh() {
-    setLoading(true);
-    setError(null);
-    return platformApi
-      .listProviderTimeOff(tenantSlug, provider.id)
-      .then((list) => setItems(list.items))
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Failed to load time off"),
-      )
-      .finally(() => setLoading(false));
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    setStatus(null);
-    setError(null);
-    setLoading(true);
-    platformApi
-      .listProviderTimeOff(tenantSlug, provider.id)
-      .then((list) => {
-        if (!cancelled) setItems(list.items);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load time off");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tenantSlug, provider.id]);
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!startsAt || !endsAt) {
-      setError("Pick a start and end time");
-      return;
-    }
-    setSubmitting(true);
-    setError(null);
-    setStatus(null);
-    try {
-      const payload: CreateProviderTimeOffRequest = {
-        startsAt: _fromInputValue(startsAt),
-        endsAt: _fromInputValue(endsAt),
-        reason: reason.trim() || null,
-      };
-      await platformApi.createProviderTimeOff(tenantSlug, provider.id, payload);
-      setStartsAt("");
-      setEndsAt("");
-      setReason("");
-      setStatus("Time off added");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add time off");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleDelete(entry: ProviderTimeOffEntry) {
-    setError(null);
-    setStatus(null);
-    try {
-      await platformApi.deleteProviderTimeOff(tenantSlug, provider.id, entry.id);
-      setStatus("Time off removed");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to remove time off");
-    }
-  }
-
-  return (
-    <div className="staff-detail-form time-off-tab">
-      <section className="time-off-list">
-        <h4>Scheduled time off</h4>
-        {loading ? (
-          <p className="settings-form-help">Loading…</p>
-        ) : items.length === 0 ? (
-          <p className="settings-form-help">No time off scheduled.</p>
-        ) : (
-          <ul className="time-off-entries">
-            {items.map((entry) => (
-              <li key={entry.id} className="time-off-entry">
-                <div>
-                  <strong>{_formatRange(entry.startsAt, entry.endsAt)}</strong>
-                  {entry.reason ? <span className="time-off-reason"> — {entry.reason}</span> : null}
-                </div>
-                <button
-                  type="button"
-                  className="link-button time-off-remove"
-                  onClick={() => handleDelete(entry)}
-                >
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <form className="time-off-form" onSubmit={handleSubmit}>
-        <h4>Add time off</h4>
-        <div className="time-off-form-row">
-          <label>
-            <span>Starts</span>
-            <input
-              type="datetime-local"
-              value={startsAt}
-              onChange={(e) => setStartsAt(e.target.value)}
-              required
-            />
-          </label>
-          <label>
-            <span>Ends</span>
-            <input
-              type="datetime-local"
-              value={endsAt}
-              onChange={(e) => setEndsAt(e.target.value)}
-              required
-            />
-          </label>
-        </div>
-        <label className="time-off-reason-field">
-          <span>Reason (optional)</span>
-          <input
-            type="text"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            maxLength={500}
-            placeholder="Vacation, training, etc."
-          />
-        </label>
-        {error ? (
-          <p role="alert" className="settings-error">
-            {error}
-          </p>
-        ) : null}
-        {status ? <p className="settings-form-help">{status}</p> : null}
-        <div className="modal-actions">
-          <button type="submit" className="primary-action" disabled={submitting}>
-            {submitting ? "Saving…" : "Add time off"}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Permissions tab (Phase E)
 // ---------------------------------------------------------------------------
 

@@ -593,13 +593,31 @@ class ProviderServiceVariantEntry(CamelModel):
     commission_basis_points: int | None = Field(default=None, ge=0, le=10_000)
 
 
+class ProviderServiceVariantWithService(CamelModel):
+    service_id: str
+    price_cents: int | None = Field(default=None, ge=0, le=500_000)
+    duration_minutes: int | None = Field(default=None, ge=15, le=480)
+    deposit_cents: int | None = Field(default=None, ge=0, le=500_000)
+    commission_flat_cents: int | None = Field(default=None, ge=0, le=500_000)
+    commission_basis_points: int | None = Field(default=None, ge=0, le=10_000)
+
+
 class ProviderServiceVariantListResponse(CamelModel):
     service_id: str
     variants: list[ProviderServiceVariantEntry]
 
 
+class ProviderServiceVariantWithServiceListResponse(CamelModel):
+    provider_id: str
+    variants: list[ProviderServiceVariantWithService]
+
+
 class ReplaceProviderServiceVariantsRequest(CamelModel):
     variants: list[ProviderServiceVariantEntry]
+
+
+class ReplaceProviderServiceVariantsWithServiceRequest(CamelModel):
+    variants: list[ProviderServiceVariantWithService]
 
 
 class ProviderSummaryResponse(CamelModel):
@@ -824,9 +842,11 @@ def _validate_time_string(value: str, field: str) -> str:
 
 class ProviderScheduleEntryRequest(CamelModel):
     weekday: int = Field(ge=0, le=6)
-    location_id: str = Field(min_length=1)
+    location_id: str | None = None
     start_time: str
     end_time: str
+    is_active: bool = True
+    blocked_service_ids: list[str] | None = None
 
     @model_validator(mode="after")
     def _validate(self) -> "ProviderScheduleEntryRequest":
@@ -838,10 +858,13 @@ class ProviderScheduleEntryRequest(CamelModel):
 
 
 class ProviderScheduleEntryResponse(CamelModel):
+    id: str
     weekday: int
-    location_id: str
+    location_id: str | None = None
     start_time: str
     end_time: str
+    is_active: bool = True
+    blocked_service_ids: list[str] | None = None
 
 
 class ProviderScheduleResponse(CamelModel):
@@ -849,8 +872,37 @@ class ProviderScheduleResponse(CamelModel):
     entries: list[ProviderScheduleEntryResponse]
 
 
+class WorkHoursSummary(CamelModel):
+    hours_per_week: float = 0
+    working_days: int = 0
+    upcoming_overrides_count: int = 0
+
+
+class ScheduleConflictWarning(CamelModel):
+    type: str  # "outside_business_hours" | "business_hours_disabled" | "day_closed"
+    weekday: int
+    message: str
+
+
+class WorkHoursResponse(CamelModel):
+    provider_id: str
+    location_id: str | None = None
+    regular_hours: list[ProviderScheduleEntryResponse]
+    date_overrides: list["ProviderTimeOffResponse"]
+    summary: WorkHoursSummary
+    warnings: list[ScheduleConflictWarning] = Field(default_factory=list)
+
+
 class ReplaceProviderScheduleRequest(CamelModel):
     entries: list[ProviderScheduleEntryRequest] = Field(default_factory=list)
+    location_id: str | None = None  # scope: null = "Both locations", specific id = that location only
+
+
+class CopyDayRequest(CamelModel):
+    source_day: int = Field(ge=0, le=6)
+    target_days: list[int] = Field(default_factory=list)
+    location_id: str | None = None
+    blocked_service_ids: list[str] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -861,9 +913,14 @@ class ReplaceProviderScheduleRequest(CamelModel):
 class ProviderTimeOffResponse(CamelModel):
     id: str
     provider_id: str
+    location_id: str | None = None
     starts_at: datetime
     ends_at: datetime
     reason: str | None = None
+    override_type: str = "closed"
+    start_time: str | None = None
+    end_time: str | None = None
+    blocked_service_ids: list[str] | None = None
 
 
 class ProviderTimeOffListResponse(CamelModel):
@@ -874,9 +931,31 @@ class CreateProviderTimeOffRequest(CamelModel):
     starts_at: datetime
     ends_at: datetime
     reason: str | None = Field(default=None, max_length=500)
+    override_type: str = "closed"
+    start_time: str | None = None
+    end_time: str | None = None
+    location_id: str | None = None
+    blocked_service_ids: list[str] | None = None
 
     @model_validator(mode="after")
     def _validate(self) -> "CreateProviderTimeOffRequest":
         if self.ends_at <= self.starts_at:
             raise ValueError("endsAt must be after startsAt")
+        if self.override_type == "custom_hours":
+            if not self.start_time or not self.end_time:
+                raise ValueError("startTime and endTime required for custom_hours")
+            self.start_time = _validate_time_string(self.start_time, "startTime")
+            self.end_time = _validate_time_string(self.end_time, "endTime")
+            if self.end_time <= self.start_time:
+                raise ValueError("endTime must be after startTime")
         return self
+
+
+class UpdateProviderTimeOffRequest(CamelModel):
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    reason: str | None = Field(default=None, max_length=500)
+    override_type: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    location_id: str | None = None

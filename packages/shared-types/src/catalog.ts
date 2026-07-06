@@ -324,10 +324,13 @@ export type CreateStaffResponse = {
   provider: ProviderSummary | null;
 };
 export type ProviderScheduleEntry = {
+  id: string;
   weekday: number;
-  locationId: string;
+  locationId: string | null;
   startTime: string;
   endTime: string;
+  isActive: boolean;
+  blockedServiceIds?: string[] | null;
 };
 
 export type ProviderSchedule = {
@@ -337,14 +340,47 @@ export type ProviderSchedule = {
 
 export type ReplaceProviderScheduleRequest = {
   entries: ProviderScheduleEntry[];
+  locationId?: string | null;
+};
+
+export type WorkHoursSummary = {
+  hoursPerWeek: number;
+  workingDays: number;
+  upcomingOverridesCount: number;
+};
+
+export type WorkHoursResponse = {
+  providerId: string;
+  locationId: string | null;
+  regularHours: ProviderScheduleEntry[];
+  dateOverrides: ProviderTimeOffEntry[];
+  summary: WorkHoursSummary;
+  warnings: ScheduleConflictWarning[];
+};
+
+export type ScheduleConflictWarning = {
+  type: "outside_business_hours" | "business_hours_disabled" | "day_closed";
+  weekday: number;
+  message: string;
+};
+
+export type CopyDayRequest = {
+  sourceDay: number;
+  targetDays: number[];
+  locationId?: string | null;
 };
 
 export type ProviderTimeOffEntry = {
   id: string;
   providerId: string;
+  locationId: string | null;
   startsAt: string;
   endsAt: string;
   reason?: string | null;
+  overrideType: string;
+  startTime?: string | null;
+  endTime?: string | null;
+  blockedServiceIds?: string[] | null;
 };
 
 export type ProviderTimeOffList = {
@@ -355,4 +391,19 @@ export type CreateProviderTimeOffRequest = {
   startsAt: string;
   endsAt: string;
   reason?: string | null;
+  overrideType?: string;
+  startTime?: string | null;
+  endTime?: string | null;
+  locationId?: string | null;
+  blockedServiceIds?: string[] | null;
+};
+
+export type UpdateProviderTimeOffRequest = {
+  startsAt?: string | null;
+  endsAt?: string | null;
+  reason?: string | null;
+  overrideType?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  locationId?: string | null;
 };
