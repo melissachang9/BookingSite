@@ -959,3 +959,4 @@ class UpdateProviderTimeOffRequest(CamelModel):
     start_time: str | None = None
     end_time: str | None = None
     location_id: str | None = None
+    blocked_service_ids: list[str] | None = None

@@ -1158,6 +1158,33 @@ function formatPriceCents(cents: number): string {
 
 const WEEKDAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
+/** Normalize a time string to HH:MM format (e.g. "9" → "09:00", "9:30" → "09:30", "14" → "14:00"). */
+function normalizeTime(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "09:00";
+  // Already HH:MM
+  if (/^\d{1,2}:\d{2}$/.test(trimmed)) {
+    const [h, m] = trimmed.split(":");
+    return `${h.padStart(2, "0")}:${m}`;
+  }
+  // Just an hour number, e.g. "9" or "14"
+  if (/^\d{1,2}$/.test(trimmed)) {
+    return `${trimmed.padStart(2, "0")}:00`;
+  }
+  // AM/PM format, e.g. "9am", "2:30pm"
+  const ampm = trimmed.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/i);
+  if (ampm) {
+    let h = parseInt(ampm[1], 10);
+    const m = ampm[2] || "00";
+    const period = ampm[3].toLowerCase();
+    if (period === "pm" && h < 12) h += 12;
+    if (period === "am" && h === 12) h = 0;
+    return `${String(h).padStart(2, "0")}:${m}`;
+  }
+  // Fallback: return as-is
+  return trimmed;
+}
+
 
 // ===========================================================================
 // Work Hours tab (unified schedule + time off)
@@ -1218,6 +1245,12 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
 
   // Regular hours drawer (opens from "Set regular hours" button — bulk 7-day template)
   const [regularHoursOpen, setRegularHoursOpen] = useState(false);
+
+  // Sub-tab within Work Hours: "regular" | "overrides"
+  const [workHoursSubTab, setWorkHoursSubTab] = useState<"regular" | "overrides">("regular");
+
+  // Week offset for regular hours date labels (0 = this week, +1 = next, -1 = previous)
+  const [regularHoursWeekOffset, setRegularHoursWeekOffset] = useState(0);
 
   const latestLocationRef = useRef(selectedLocationId);
   latestLocationRef.current = selectedLocationId;
@@ -1498,12 +1531,12 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
     setStatus(null);
     try {
       const body: CreateProviderTimeOffRequest = {
-        startsAt: new Date(dateStr + "T00:00:00").toISOString(),
-        endsAt: new Date(dateStr + "T23:59:59").toISOString(),
+        startsAt: `${dateStr}T00:00:00.000Z`,
+        endsAt: `${dateStr}T23:59:59.000Z`,
         reason: null,
         overrideType: payload.closedAllDay ? "closed" : "custom_hours",
-        startTime: payload.closedAllDay ? null : payload.startTime,
-        endTime: payload.closedAllDay ? null : payload.endTime,
+        startTime: payload.closedAllDay ? null : normalizeTime(payload.startTime),
+        endTime: payload.closedAllDay ? null : normalizeTime(payload.endTime),
         locationId: selectedLocationId,
         blockedServiceIds: payload.blockedServiceIds.length > 0 ? payload.blockedServiceIds : null,
       };
@@ -1534,9 +1567,25 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
     setError(null);
     setStatus(null);
     try {
-      const nextShifts = new Map(shifts);
+      // Reload from the API to get ground-truth schedule, then modify only the target weekday.
+      const fresh = await platformApi.getProviderWorkHours(tenantSlug, provider.id, selectedLocationId);
+      const nextShifts = new Map<number, ProviderScheduleEntry[]>();
+      for (const entry of fresh.regularHours) {
+        const list = nextShifts.get(entry.weekday) || [];
+        list.push(entry);
+        nextShifts.set(entry.weekday, list);
+      }
+      const nextBlocked = new Map(dayBlockedServices);
+      for (const entry of fresh.regularHours) {
+        if (entry.blockedServiceIds && entry.blockedServiceIds.length > 0) {
+          nextBlocked.set(entry.weekday, entry.blockedServiceIds);
+        }
+      }
+
+      // Apply the change for the target weekday
       if (payload.shifts.length === 0) {
         nextShifts.delete(weekday);
+        nextBlocked.delete(weekday);
       } else {
         nextShifts.set(
           weekday,
@@ -1544,17 +1593,16 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
             id: "",
             weekday,
             locationId: selectedLocationId || null,
-            startTime: s.startTime,
-            endTime: s.endTime,
+            startTime: normalizeTime(s.startTime),
+            endTime: normalizeTime(s.endTime),
             isActive: s.isActive,
           })),
         );
-      }
-      const nextBlocked = new Map(dayBlockedServices);
-      if (payload.blockedServiceIds.length > 0) {
-        nextBlocked.set(weekday, payload.blockedServiceIds);
-      } else {
-        nextBlocked.delete(weekday);
+        if (payload.blockedServiceIds.length > 0) {
+          nextBlocked.set(weekday, payload.blockedServiceIds);
+        } else {
+          nextBlocked.delete(weekday);
+        }
       }
 
       const entries: ProviderScheduleEntry[] = [];
@@ -1575,8 +1623,6 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
         entries,
         locationId: selectedLocationId,
       });
-      setShifts(nextShifts);
-      setDayBlockedServices(nextBlocked);
       setStatus(`Updated every ${WEEKDAY_LABELS[weekday]}`);
       setReloadKey((k) => k + 1);
     } catch (err) {
@@ -1603,8 +1649,8 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
             id: "",
             weekday: wd,
             locationId: selectedLocationId || null,
-            startTime: s.startTime,
-            endTime: s.endTime,
+            startTime: normalizeTime(s.startTime),
+            endTime: normalizeTime(s.endTime),
             isActive: s.isActive,
             blockedServiceIds: nextBlocked.get(wd) || null,
           });
@@ -1637,8 +1683,8 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
     setStatus(null);
     try {
       await platformApi.createProviderTimeOff(tenantSlug, provider.id, {
-        startsAt: new Date(payload.startDate + "T00:00:00").toISOString(),
-        endsAt: new Date(payload.endDate + "T23:59:59").toISOString(),
+        startsAt: `${payload.startDate}T00:00:00.000Z`,
+        endsAt: `${payload.endDate}T23:59:59.000Z`,
         reason: payload.reason.trim() || null,
         overrideType: "closed",
         startTime: null,
@@ -1698,12 +1744,27 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
       ) : null}
 
       <div className="svc-card" style={{ marginBottom: "12px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
-          <div>
-            <span className="svc-card__eyebrow">Schedule</span>
-            <div style={{ fontSize: "11px", color: "#8B7960", marginTop: "4px" }}>Tap any day to edit shifts, block services, or set custom hours.</div>
-          </div>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+        {/* Sub-tab bar */}
+        <div style={{
+          display: "flex", gap: "0", marginBottom: "16px",
+          borderBottom: "1px solid #E5D7BB",
+        }}>
+          <button type="button" onClick={() => setWorkHoursSubTab("regular")} style={{
+            padding: "8px 16px", fontSize: "13px", fontWeight: 600,
+            background: "transparent", border: "none",
+            borderBottom: workHoursSubTab === "regular" ? "2px solid #D4A574" : "2px solid transparent",
+            color: workHoursSubTab === "regular" ? "#1F1612" : "#8B7960",
+            cursor: "pointer",
+          }}>Regular hours</button>
+          <button type="button" onClick={() => setWorkHoursSubTab("overrides")} style={{
+            padding: "8px 16px", fontSize: "13px", fontWeight: 600,
+            background: "transparent", border: "none",
+            borderBottom: workHoursSubTab === "overrides" ? "2px solid #D4A574" : "2px solid transparent",
+            color: workHoursSubTab === "overrides" ? "#1F1612" : "#8B7960",
+            cursor: "pointer",
+          }}>Overrides &amp; time off</button>
+          <div style={{ flex: 1 }} />
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", paddingRight: "4px" }}>
             {providerLocations.length > 1 ? (
               <select className="svc-input" style={{ padding: "5px 9px", fontSize: "12px" }}
                 aria-label="Work hours location"
@@ -1715,276 +1776,371 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
                 ))}
               </select>
             ) : null}
-            <button type="button" className="svc-duplicate-btn"
-              onClick={() => setTimeOffOpen(true)} disabled={submitting}>
-              Block time off
-            </button>
-            <button type="button" className="svc-duplicate-btn"
-              onClick={() => setRegularHoursOpen(true)} disabled={submitting}>
-              Set regular hours
-            </button>
           </div>
         </div>
 
-        {shifts.size === 0 ? (
-          <div style={{
-            padding: "18px", marginBottom: "14px",
-            background: "#FDF8F0",
-            border: "1px dashed #D4A574",
-            borderRadius: "8px",
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            gap: "16px", flexWrap: "wrap",
-          }}>
-            <div>
-              <div style={{ fontSize: "14px", fontWeight: 600, color: "#1F1612", marginBottom: "4px" }}>
-                No regular hours set yet
-              </div>
-              <div style={{ fontSize: "12px", color: "#6B5A47" }}>
-                Set the recurring weekly hours in one step, then adjust individual days as needed.
-              </div>
-            </div>
-            <button type="button" className="svc-save-btn"
-              onClick={() => setRegularHoursOpen(true)}
-              style={{ padding: "8px 16px" }}>
-              Set regular hours
-            </button>
-          </div>
-        ) : null}
-
-        <div style={{ marginBottom: "12px" }}>
-          {(() => {
-            // Compute week start (Monday) based on weekOffset
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const jsDay = today.getDay(); // 0=Sun..6=Sat
-            const daysSinceMonday = (jsDay + 6) % 7; // Monday-first offset
-            const weekStart = new Date(today);
-            weekStart.setDate(today.getDate() - daysSinceMonday + weekOffset * 7);
-            const weekEnd = new Date(weekStart);
-            weekEnd.setDate(weekStart.getDate() + 6);
-
-            const fmtRange = (d: Date) =>
-              `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
-            const todayStr = today.toISOString().split("T")[0];
-
-            type DayItem = {
-              dateStr: string;
-              weekday: number;
-              label: string;
-              shortLabel: string;
-              monthDay: string;
-              isToday: boolean;
-              recurringActive: boolean;
-              dateOverride: ProviderTimeOffEntry | null;
-              isCustomOverride: boolean;
-              isClosedOverride: boolean;
-              isMultiDayVacation: boolean;
-              displayLabel: string;
-              blockedServiceNames: string[];
-            };
-            const days: DayItem[] = [];
-            for (let i = 0; i < 7; i++) {
-              const d = new Date(weekStart);
-              d.setDate(weekStart.getDate() + i);
-              const dateStr = d.toISOString().split("T")[0];
-              const weekday = i; // 0=Mon..6=Sun (matches WEEKDAY_LABELS)
-              const label = WEEKDAY_LABELS[weekday];
-              const dayShifts = (shifts.get(weekday) || []).filter((s) => s.isActive);
-              const dateOverride = overrides.find((ov) => {
-                const ovStart = new Date(ov.startsAt).toISOString().split("T")[0];
-                const ovEnd = new Date(ov.endsAt).toISOString().split("T")[0];
-                return dateStr >= ovStart && dateStr <= ovEnd;
-              }) || null;
-              const isCustomOverride = dateOverride?.overrideType === "custom_hours";
-              const isClosedOverride = dateOverride?.overrideType === "closed";
-              const isMultiDayVacation = isClosedOverride && (() => {
-                const s = new Date(dateOverride!.startsAt).toISOString().split("T")[0];
-                const e = new Date(dateOverride!.endsAt).toISOString().split("T")[0];
-                return s !== e;
-              })();
-
-              const displayLabel = isCustomOverride
-                ? `${dateOverride!.startTime || ""} – ${dateOverride!.endTime || ""}`
-                : isClosedOverride
-                  ? "Time off"
-                  : dayShifts.length > 0
-                    ? dayShifts.map((s) => `${s.startTime} – ${s.endTime}`).join("  ·  ")
-                    : "No shifts";
-
-              const blockedIds = dateOverride?.blockedServiceIds && dateOverride.blockedServiceIds.length > 0
-                ? dateOverride.blockedServiceIds
-                : (dayBlockedServices.get(weekday) || []);
-              const blockedServiceNames = services.filter((s) => blockedIds.includes(s.id)).map((s) => s.name);
-
-              days.push({
-                dateStr,
-                weekday,
-                label,
-                shortLabel: label.slice(0, 3),
-                monthDay: `${d.getMonth() + 1}/${d.getDate()}`,
-                isToday: dateStr === todayStr,
-                recurringActive: dayShifts.length > 0,
-                dateOverride,
-                isCustomOverride,
-                isClosedOverride,
-                isMultiDayVacation,
-                displayLabel,
-                blockedServiceNames,
-              });
-            }
-
-            return (
-              <>
-                <div style={{
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                  padding: "8px 0", marginBottom: "12px",
-                  borderTop: "0.5px solid #E5D7BB", borderBottom: "0.5px solid #E5D7BB",
-                }}>
-                  <button type="button" className="svc-text-btn"
-                    onClick={() => setWeekOffset((v) => v - 1)}
-                    style={{ fontSize: "18px", padding: "4px 12px" }}
-                    aria-label="Previous week">‹</button>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
-                    <div style={{ fontSize: "13px", fontWeight: 600, color: "#1F1612" }}>
-                      {fmtRange(weekStart)} – {fmtRange(weekEnd)}, {weekEnd.getFullYear()}
-                    </div>
-                    {weekOffset !== 0 ? (
-                      <button type="button" className="svc-text-btn"
-                        onClick={() => setWeekOffset(0)}
-                        style={{ fontSize: "10px", textDecoration: "underline", color: "#8B7960" }}>
-                        Jump to today
-                      </button>
-                    ) : (
-                      <div style={{ fontSize: "10px", color: "#8B7960" }}>This week</div>
-                    )}
+        {workHoursSubTab === "regular" ? (
+          /* ===== REGULAR HOURS SUB-TAB ===== */
+          <>
+            {shifts.size === 0 ? (
+              <div style={{
+                padding: "18px", marginBottom: "14px",
+                background: "#FDF8F0",
+                border: "1px dashed #D4A574",
+                borderRadius: "8px",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                gap: "16px", flexWrap: "wrap",
+              }}>
+                <div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: "#1F1612", marginBottom: "4px" }}>
+                    No regular hours set yet
                   </div>
-                  <button type="button" className="svc-text-btn"
-                    onClick={() => setWeekOffset((v) => v + 1)}
-                    style={{ fontSize: "18px", padding: "4px 12px" }}
-                    aria-label="Next week">›</button>
+                  <div style={{ fontSize: "12px", color: "#6B5A47" }}>
+                    Set the recurring weekly hours in one step, then adjust individual days as needed.
+                  </div>
                 </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  {days.map((day) => {
-                    const cardBg = day.isClosedOverride ? "#F5EFE0"
-                      : day.isCustomOverride ? "#E8F0FE"
-                      : "#FFFFFF";
-                    const cardBorderColor = day.isCustomOverride ? "#4A90D9"
-                      : day.isClosedOverride ? "#B8A88C"
-                      : day.isToday ? "#D4A574"
-                      : "#E5D7BB";
-                    return (
-                      <button key={day.dateStr} type="button"
-                        onClick={() => setDayEditor({ dateStr: day.dateStr, weekday: day.weekday })}
-                        aria-label={`Edit ${day.label} ${day.monthDay}`}
-                        style={{
-                          display: "flex", alignItems: "center",
-                          background: cardBg,
-                          border: `1px solid ${cardBorderColor}`,
-                          borderLeft: day.isToday ? `4px solid #D4A574` : `1px solid ${cardBorderColor}`,
-                          borderRadius: "8px",
-                          padding: "12px 14px",
-                          cursor: "pointer",
-                          gap: "12px",
-                          textAlign: "left", width: "100%",
-                          font: "inherit", color: "inherit",
-                        }}>
-                        <div style={{ width: "62px", flexShrink: 0 }}>
-                          <div style={{
-                            fontSize: "13px",
-                            fontWeight: day.isToday ? 700 : 600,
-                            color: day.isToday ? "#1F1612" : "#4A3D30",
-                          }}>{day.shortLabel}</div>
-                          <div style={{
-                            fontSize: "11px",
-                            color: day.isToday ? "#4A3D30" : "#8B7960",
-                            marginTop: "1px",
-                          }}>{day.monthDay}</div>
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{
-                            fontSize: "13px",
-                            color: day.displayLabel === "No shifts" ? "#8B7960" : "#1F1612",
-                            fontStyle: day.displayLabel === "No shifts" ? "italic" : "normal",
-                          }}>{day.displayLabel}</div>
-                          {day.blockedServiceNames.length > 0 && !day.isClosedOverride ? (
-                            <div style={{
-                              fontSize: "10px", color: "#8B7960", marginTop: "3px",
-                            }} title={day.blockedServiceNames.join(", ")}>
-                              {day.blockedServiceNames.length} service{day.blockedServiceNames.length > 1 ? "s" : ""} limited
-                            </div>
-                          ) : null}
-                        </div>
-                        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                          {day.isCustomOverride ? (
-                            <span style={{
-                              background: "#4A90D9", color: "#FFFFFF",
-                              padding: "2px 8px", borderRadius: "4px",
-                              fontSize: "10px", fontWeight: 600, letterSpacing: "0.5px",
-                            }}>OVERRIDE</span>
-                          ) : day.isMultiDayVacation ? (
-                            <span style={{
-                              background: "#8B7960", color: "#FFFFFF",
-                              padding: "2px 8px", borderRadius: "4px",
-                              fontSize: "10px", fontWeight: 600, letterSpacing: "0.5px",
-                            }}>VACATION</span>
-                          ) : day.isClosedOverride ? (
-                            <span style={{
-                              background: "#B8A88C", color: "#FFFFFF",
-                              padding: "2px 8px", borderRadius: "4px",
-                              fontSize: "10px", fontWeight: 600, letterSpacing: "0.5px",
-                            }}>TIME OFF</span>
-                          ) : null}
-                          <span style={{ fontSize: "16px", color: "#8B7960" }} aria-hidden>›</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            );
-          })()}
-        </div>
-        {/* Upcoming multi-day time off (vacations) */}
-        {(() => {
-          const now = new Date();
-          now.setHours(0, 0, 0, 0);
-          const upcoming = overrides
-            .filter((ov) => ov.overrideType === "closed" && new Date(ov.endsAt) >= now)
-            .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
-          if (upcoming.length === 0) return null;
-          const fmtD = (d: Date) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-          return (
-            <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: "0.5px solid #E5D7BB" }}>
-              <div style={{ fontSize: "11px", color: "#8B7960", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Upcoming time off</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                {upcoming.map((ov) => {
-                  const startD = new Date(ov.startsAt);
-                  const endD = new Date(ov.endsAt);
-                  const sameDay = startD.toISOString().split("T")[0] === endD.toISOString().split("T")[0];
-                  return (
-                    <div key={ov.id} style={{
-                      display: "flex", alignItems: "center", gap: "10px",
-                      padding: "8px 10px", background: "#FDF8F0", borderRadius: "6px",
-                      border: "1px solid #E5D7BB",
-                    }}>
-                      <div style={{ fontSize: "12px", fontWeight: 500, color: "#1F1612", minWidth: "120px" }}>
-                        {sameDay ? fmtD(startD) : `${fmtD(startD)} – ${fmtD(endD)}`}
-                      </div>
-                      <div style={{ flex: 1, fontSize: "12px", color: "#4A3D30" }}>
-                        {ov.reason || "Time off"}
-                      </div>
-                      <button type="button" className="svc-text-btn"
-                        onClick={() => handleDeleteOverride(ov.id)}
-                        aria-label={`Remove time off ${fmtD(startD)}`}
-                        style={{ fontSize: "14px" }}>×</button>
-                    </div>
-                  );
-                })}
+                <button type="button" className="svc-save-btn"
+                  onClick={() => setRegularHoursOpen(true)}
+                  style={{ padding: "8px 16px" }}>
+                  Set regular hours
+                </button>
               </div>
+            ) : (
+              <>
+                {/* Week navigation + 7-day template summary */}
+                {(() => {
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const jsDay = today.getDay();
+                  const daysSinceMonday = (jsDay + 6) % 7;
+                  const weekStart = new Date(today);
+                  weekStart.setDate(today.getDate() - daysSinceMonday + regularHoursWeekOffset * 7);
+                  const weekEnd = new Date(weekStart);
+                  weekEnd.setDate(weekStart.getDate() + 6);
+                  const fmtRange = (d: Date) =>
+                    `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+
+                  return (
+                    <>
+                      <div style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "6px 0", marginBottom: "10px",
+                        borderTop: "0.5px solid #E5D7BB", borderBottom: "0.5px solid #E5D7BB",
+                      }}>
+                        <button type="button" className="svc-text-btn"
+                          onClick={() => setRegularHoursWeekOffset((v) => v - 1)}
+                          style={{ fontSize: "18px", padding: "4px 12px" }}
+                          aria-label="Previous week">‹</button>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
+                          <div style={{ fontSize: "13px", fontWeight: 600, color: "#1F1612" }}>
+                            {fmtRange(weekStart)} – {fmtRange(weekEnd)}, {weekEnd.getFullYear()}
+                          </div>
+                          {regularHoursWeekOffset !== 0 ? (
+                            <button type="button" className="svc-text-btn"
+                              onClick={() => setRegularHoursWeekOffset(0)}
+                              style={{ fontSize: "10px", textDecoration: "underline", color: "#8B7960" }}>
+                              Jump to this week
+                            </button>
+                          ) : (
+                            <div style={{ fontSize: "10px", color: "#8B7960" }}>This week</div>
+                          )}
+                        </div>
+                        <button type="button" className="svc-text-btn"
+                          onClick={() => setRegularHoursWeekOffset((v) => v + 1)}
+                          style={{ fontSize: "18px", padding: "4px 12px" }}
+                          aria-label="Next week">›</button>
+                      </div>
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "14px" }}>
+                        {WEEKDAY_LABELS.map((label, wd) => {
+                          const dayShifts = (shifts.get(wd) || []).filter((s) => s.isActive);
+                          const blocked = dayBlockedServices.get(wd) || [];
+                          const blockedNames = services.filter((s) => blocked.includes(s.id)).map((s) => s.name);
+                          // Compute date for this weekday in the selected week
+                          const d = new Date(weekStart);
+                          d.setDate(weekStart.getDate() + wd);
+                          const dateStr = d.toISOString().split("T")[0];
+                          const isToday = dateStr === today.toISOString().split("T")[0];
+                          // Check for date-specific override on this date
+                          const dateOverride = overrides.find((ov) => {
+                            const ovStart = new Date(ov.startsAt).toISOString().split("T")[0];
+                            const ovEnd = new Date(ov.endsAt).toISOString().split("T")[0];
+                            return dateStr >= ovStart && dateStr <= ovEnd;
+                          }) || null;
+                          const isCustomOverride = dateOverride?.overrideType === "custom_hours";
+                          const isClosedOverride = dateOverride?.overrideType === "closed";
+                          const cardBg = isClosedOverride ? "#F5EFE0"
+                            : isCustomOverride ? "#E8F0FE"
+                            : dayShifts.length > 0 ? "#FDF8F0"
+                            : "#FFFFFF";
+                          const cardBorderColor = isCustomOverride ? "#4A90D9"
+                            : isClosedOverride ? "#B8A88C"
+                            : isToday ? "#D4A574"
+                            : dayShifts.length > 0 ? "#D4A574"
+                            : "#E5D7BB";
+                          return (
+                            <button key={wd} type="button"
+                              onClick={() => setDayEditor({ dateStr, weekday: wd })}
+                              aria-label={`Edit ${label} hours`}
+                              style={{
+                                display: "flex", alignItems: "center", gap: "12px",
+                                padding: "10px 14px",
+                                background: cardBg,
+                                border: `1px solid ${cardBorderColor}`,
+                                borderLeft: isToday ? "4px solid #D4A574" : `1px solid ${cardBorderColor}`,
+                                borderRadius: "8px",
+                                cursor: "pointer",
+                                textAlign: "left", width: "100%",
+                                font: "inherit", color: "inherit",
+                              }}>
+                              <div style={{ width: "110px", flexShrink: 0 }}>
+                                <div style={{ fontSize: "13px", fontWeight: isToday ? 700 : 600, color: dayShifts.length > 0 || dateOverride ? "#1F1612" : "#8B7960" }}>
+                                  {label}
+                                </div>
+                                <div style={{ fontSize: "10px", color: isToday ? "#4A3D30" : "#8B7960", marginTop: "1px" }}>
+                                  {d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                                </div>
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                {isCustomOverride ? (
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                    <div style={{ fontSize: "13px", color: "#4A90D9", fontWeight: 500 }}>
+                                      {dateOverride!.startTime || ""} – {dateOverride!.endTime || ""}
+                                    </div>
+                                    <div style={{ fontSize: "10px", color: "#4A90D9", fontStyle: "italic" }}>
+                                      Override shift
+                                    </div>
+                                  </div>
+                                ) : isClosedOverride ? (
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                    <div style={{ fontSize: "13px", color: "#8B7960", fontStyle: "italic" }}>
+                                      Time off
+                                    </div>
+                                    <div style={{ fontSize: "10px", color: "#8B7960" }}>
+                                      {dateOverride!.reason || "Closed"}
+                                    </div>
+                                  </div>
+                                ) : dayShifts.length > 0 ? (
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                    {dayShifts.map((s, i) => (
+                                      <div key={i} style={{ fontSize: "13px", color: "#1F1612" }}>
+                                        {s.startTime} – {s.endTime}
+                                      </div>
+                                    ))}
+                                    {blockedNames.length > 0 ? (
+                                      <div style={{ fontSize: "10px", color: "#8B7960", marginTop: "2px" }}>
+                                        {blockedNames.length} service{blockedNames.length > 1 ? "s" : ""} blocked: {blockedNames.join(", ")}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                ) : (
+                                  <div style={{ fontSize: "12px", color: "#8B7960", fontStyle: "italic" }}>Closed</div>
+                                )}
+                              </div>
+                              {isCustomOverride ? (
+                                <span style={{
+                                  background: "#4A90D9", color: "#FFFFFF",
+                                  padding: "2px 8px", borderRadius: "4px",
+                                  fontSize: "10px", fontWeight: 600, letterSpacing: "0.5px",
+                                  flexShrink: 0,
+                                }}>OVERRIDE</span>
+                              ) : isClosedOverride ? (
+                                <span style={{
+                                  background: "#8B7960", color: "#FFFFFF",
+                                  padding: "2px 8px", borderRadius: "4px",
+                                  fontSize: "10px", fontWeight: 600, letterSpacing: "0.5px",
+                                  flexShrink: 0,
+                                }}>TIME OFF</span>
+                              ) : null}
+                              <span style={{ fontSize: "16px", color: "#8B7960", flexShrink: 0 }} aria-hidden>›</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  );
+                })()}
+                <button type="button" className="svc-duplicate-btn"
+                  onClick={() => setRegularHoursOpen(true)} disabled={submitting}
+                  style={{ alignSelf: "flex-start" }}>
+                  Edit regular hours
+                </button>
+              </>
+            )}
+          </>
+        ) : (
+          /* ===== OVERRIDES & TIME OFF SUB-TAB ===== */
+          <>
+            {/* Mini calendar heatmap — next 4 weeks */}
+            {(() => {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const jsDay = today.getDay();
+              const daysSinceMonday = (jsDay + 6) % 7;
+              const weekStart = new Date(today);
+              weekStart.setDate(today.getDate() - daysSinceMonday);
+
+              const weeks: Array<Array<{ dateStr: string; dayNum: number; isToday: boolean; status: "none" | "regular" | "override" | "timeoff" }>> = [];
+              for (let w = 0; w < 4; w++) {
+                const week: typeof weeks[0] = [];
+                for (let d = 0; d < 7; d++) {
+                  const date = new Date(weekStart);
+                  date.setDate(weekStart.getDate() + w * 7 + d);
+                  const dateStr = date.toISOString().split("T")[0];
+                  const dayNum = date.getDate();
+                  const isToday = dateStr === today.toISOString().split("T")[0];
+
+                  const dayShifts = (shifts.get(d) || []).filter((s) => s.isActive);
+                  const dateOverride = overrides.find((ov) => {
+                    const ovStart = new Date(ov.startsAt).toISOString().split("T")[0];
+                    const ovEnd = new Date(ov.endsAt).toISOString().split("T")[0];
+                    return dateStr >= ovStart && dateStr <= ovEnd;
+                  });
+
+                  let status: "none" | "regular" | "override" | "timeoff" = "none";
+                  if (dateOverride) {
+                    status = dateOverride.overrideType === "custom_hours" ? "override" : "timeoff";
+                  } else if (dayShifts.length > 0) {
+                    status = "regular";
+                  }
+                  week.push({ dateStr, dayNum, isToday, status });
+                }
+                weeks.push(week);
+              }
+
+              const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+              const dayHeaders = ["M", "T", "W", "T", "F", "S", "S"];
+
+              return (
+                <div style={{ marginBottom: "16px" }}>
+                  <div style={{ fontSize: "11px", color: "#8B7960", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Upcoming weeks</div>
+                  <div style={{ display: "flex", gap: "12px" }}>
+                    {weeks.map((week, wi) => {
+                      const firstDate = new Date(week[0].dateStr + "T00:00:00");
+                      const lastDate = new Date(week[6].dateStr + "T00:00:00");
+                      const label = `${monthNames[firstDate.getMonth()]} ${firstDate.getDate()}–${lastDate.getDate()}`;
+                      return (
+                        <div key={wi} style={{ flex: 1 }}>
+                          <div style={{ fontSize: "9px", color: "#8B7960", textAlign: "center", marginBottom: "4px" }}>{label}</div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "3px" }}>
+                            {week.map((day, di) => {
+                              const bg = day.status === "override" ? "#4A90D9"
+                                : day.status === "timeoff" ? "#8B7960"
+                                : day.status === "regular" ? "#D4A574"
+                                : "#F5EFE0";
+                              const textColor = day.status !== "none" ? "#FFFFFF" : "#8B7960";
+                              return (
+                                <div key={di} title={`${dayHeaders[di]} ${day.dateStr}: ${day.status}`} style={{
+                                  width: "100%", aspectRatio: "1",
+                                  background: bg,
+                                  borderRadius: "3px",
+                                  display: "flex", alignItems: "center", justifyContent: "center",
+                                  fontSize: "10px", fontWeight: day.isToday ? 700 : 400,
+                                  color: textColor,
+                                  border: day.isToday ? "2px solid #1F1612" : "none",
+                                  cursor: "default",
+                                }}>
+                                  {day.dayNum}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: "flex", gap: "12px", marginTop: "8px", fontSize: "10px", color: "#8B7960" }}>
+                    <span><span style={{ display: "inline-block", width: "10px", height: "10px", background: "#D4A574", borderRadius: "2px", marginRight: "4px" }} /> Regular</span>
+                    <span><span style={{ display: "inline-block", width: "10px", height: "10px", background: "#4A90D9", borderRadius: "2px", marginRight: "4px" }} /> Override</span>
+                    <span><span style={{ display: "inline-block", width: "10px", height: "10px", background: "#8B7960", borderRadius: "2px", marginRight: "4px" }} /> Time off</span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* All overrides list */}
+            <div style={{ marginBottom: "14px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <div style={{ fontSize: "11px", color: "#8B7960", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  All overrides &amp; time off
+                </div>
+                <button type="button" className="svc-duplicate-btn"
+                  onClick={() => setTimeOffOpen(true)} disabled={submitting}
+                  style={{ fontSize: "11px", padding: "4px 10px" }}>
+                  + Block time off
+                </button>
+              </div>
+              {overrides.length === 0 ? (
+                <div style={{
+                  padding: "14px", background: "#FDF8F0", borderRadius: "6px",
+                  border: "1px dashed #D9CBB1", textAlign: "center",
+                  fontSize: "12px", color: "#8B7960",
+                }}>
+                  No overrides or time off scheduled.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {overrides
+                    .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
+                    .map((ov) => {
+                      const startD = new Date(ov.startsAt);
+                      const endD = new Date(ov.endsAt);
+                      const sameDay = startD.toISOString().split("T")[0] === endD.toISOString().split("T")[0];
+                      const fmtD = (d: Date) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+                      const isCustom = ov.overrideType === "custom_hours";
+                      const isPast = endD < new Date();
+                      return (
+                        <div key={ov.id} style={{
+                          display: "flex", alignItems: "center", gap: "10px",
+                          padding: "10px 12px",
+                          background: isPast ? "#FAF7F2" : isCustom ? "#E8F0FE" : "#FDF8F0",
+                          borderRadius: "8px",
+                          border: `1px solid ${isCustom ? "#4A90D9" : "#E5D7BB"}`,
+                          opacity: isPast ? 0.6 : 1,
+                        }}>
+                          <div style={{ minWidth: "110px", flexShrink: 0 }}>
+                            <div style={{ fontSize: "12px", fontWeight: 500, color: "#1F1612" }}>
+                              {sameDay ? fmtD(startD) : `${fmtD(startD)} – ${fmtD(endD)}`}
+                            </div>
+                            <div style={{ fontSize: "10px", color: "#8B7960", marginTop: "1px" }}>
+                              {sameDay ? "1 day" : `${Math.ceil((endD.getTime() - startD.getTime()) / 86400000) + 1} days`}
+                            </div>
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: "12px", color: "#4A3D30" }}>
+                              {ov.reason || (isCustom ? "Custom hours" : "Time off")}
+                            </div>
+                            {isCustom && ov.startTime ? (
+                              <div style={{ fontSize: "11px", color: "#4A90D9", marginTop: "2px" }}>
+                                {ov.startTime} – {ov.endTime}
+                              </div>
+                            ) : null}
+                            {ov.blockedServiceIds && ov.blockedServiceIds.length > 0 ? (
+                              <div style={{ fontSize: "10px", color: "#8B7960", marginTop: "2px" }}>
+                                {ov.blockedServiceIds.length} service{ov.blockedServiceIds.length > 1 ? "s" : ""} blocked
+                              </div>
+                            ) : null}
+                          </div>
+                          <span style={{
+                            padding: "2px 7px", borderRadius: "4px",
+                            fontSize: "10px", fontWeight: 600,
+                            background: isCustom ? "#4A90D9" : "#8B7960",
+                            color: "#FFFFFF",
+                          }}>
+                            {isCustom ? "OVERRIDE" : "TIME OFF"}
+                          </span>
+                          <button type="button" className="svc-text-btn"
+                            onClick={() => handleDeleteOverride(ov.id)}
+                            aria-label={`Remove ${isCustom ? "override" : "time off"} ${fmtD(startD)}`}
+                            style={{ fontSize: "14px" }}>×</button>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
-          );
-        })()}
+          </>
+        )}
       </div>
 
       {dayEditor ? (

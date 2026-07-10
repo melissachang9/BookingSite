@@ -338,7 +338,7 @@ describe("StaffPage", () => {
     await waitFor(() =>
       expect(getWorkHoursSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1", null),
     );
-    // Monday shift renders as "09:00 – 17:00" text in the day card (weekday 0 = Monday).
+    // Monday shift renders as "09:00 – 17:00" text in the regular hours template (weekday 0 = Monday).
     await waitFor(() => expect(screen.getByText(/09:00\s+–\s+17:00/)).toBeInTheDocument());
   });
 
@@ -365,18 +365,17 @@ describe("StaffPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
 
-    await waitFor(() => screen.getByText("Schedule"));
-    // Open the Sunday day card drawer (aria-label starts with "Edit Sunday")
-    const sundayCard = screen.getByRole("button", { name: /Edit Sunday/ });
-    fireEvent.click(sundayCard);
-    // Switch scope to recurring, then click "+ Add shift" to add a default 09:00-17:00 shift
-    await waitFor(() => screen.getByLabelText(/Every Sunday/));
-    fireEvent.click(screen.getByLabelText(/Every Sunday/));
-    const drawer = screen.getByRole("dialog", { name: /Edit Sunday/ });
-    fireEvent.click(within(drawer).getByRole("button", { name: /\+ Add shift/ }));
-    // Save (drawer's Save button)
-    const saveBtn = within(drawer).getByRole("button", { name: /^Save$/ });
-    fireEvent.click(saveBtn);
+    // Empty state appears since no regular hours
+    await waitFor(() => screen.getByText("No regular hours set yet"));
+    // Open the regular hours drawer
+    fireEvent.click(screen.getByRole("button", { name: "Set regular hours" }));
+    await waitFor(() => screen.getByRole("dialog", { name: "Set regular hours" }));
+
+    // Check Sunday (weekday 6) and set its time
+    const sundayCheckbox = screen.getByLabelText(/Sunday active/);
+    fireEvent.click(sundayCheckbox);
+    // Save
+    fireEvent.click(screen.getByRole("button", { name: "Save regular hours" }));
 
     await waitFor(() => expect(replaceSpy).toHaveBeenCalledTimes(1));
     const payload = replaceSpy.mock.calls[0][2];
@@ -435,11 +434,11 @@ describe("StaffPage", () => {
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
-    await waitFor(() => screen.getByText("Schedule"));
+    await waitFor(() => screen.getByText("Regular hours"));
 
     const getLocationSelect = () => screen.getByRole("combobox", { name: "Work hours location" });
 
-    // A: Downtown — 09:00–17:00 should render in the day cards
+    // A: Downtown — 09:00–17:00 should render in the regular hours template
     fireEvent.change(getLocationSelect(), { target: { value: "loc1" } });
     await waitFor(() => expect(getWorkHoursSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1", "loc1"));
     await waitFor(() => expect(screen.getByText(/09:00\s+–\s+17:00/)).toBeInTheDocument());
@@ -483,6 +482,9 @@ describe("StaffPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
 
+    // Wait for the sub-tab to appear (loading finishes)
+    await waitFor(() => screen.getByRole("button", { name: /Overrides/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Overrides/ }));
     await waitFor(() => expect(screen.getAllByText(/Vacation/).length).toBeGreaterThan(0));
   });
 
@@ -513,10 +515,14 @@ describe("StaffPage", () => {
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
-    await waitFor(() => screen.getByText("Schedule"));
 
-    // Open the time-off drawer via "Block time off" button
-    fireEvent.click(screen.getByRole("button", { name: "Block time off" }));
+    // Wait for the sub-tab to appear, then switch to Overrides
+    await waitFor(() => screen.getByRole("button", { name: /Overrides/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Overrides/ }));
+    await waitFor(() => screen.getByText(/All overrides/));
+
+    // Open the time-off drawer via "+ Block time off" button
+    fireEvent.click(screen.getByRole("button", { name: /Block time off/ }));
     await waitFor(() => screen.getByRole("dialog", { name: "Block time off" }));
 
     fireEvent.change(screen.getByLabelText("Time off start date"), { target: { value: "2026-08-01" } });
