@@ -414,6 +414,42 @@ async def refund_payment(
     return booking_to_summary(updated_booking)
 
 
+async def _deliver_post_visit_forms(session: AsyncSession, booking: Booking) -> None:
+    """Create post-visit form requirements on a completed booking."""
+    from app.db.models import BookingDraftFormRequirement, ServiceFormAttachment
+    from sqlalchemy.orm import selectinload
+
+    attachments = (
+        await session.scalars(
+            select(ServiceFormAttachment)
+            .options(selectinload(ServiceFormAttachment.form), selectinload(ServiceFormAttachment.form_version))
+            .where(
+                ServiceFormAttachment.tenant_id == booking.tenant_id,
+                ServiceFormAttachment.service_id == booking.service_id,
+                ServiceFormAttachment.customer_prompt_timing == "post_visit",
+            )
+        )
+    ).all()
+
+    for attachment in attachments:
+        scope = attachment.form.scope if attachment.form is not None else "customer"
+        session.add(
+            BookingDraftFormRequirement(
+                tenant_id=booking.tenant_id,
+                booking_draft_id=None,
+                booking_id=booking.id,
+                form_id=attachment.form_id,
+                form_version_id=attachment.form_version_id,
+                scope=scope,
+                customer_prompt_timing="post_visit",
+                status="pending",
+            )
+        )
+
+    if attachments:
+        await session.commit()
+
+
 async def update_booking_status(
     session: AsyncSession,
     tenant_slug: str,
@@ -485,6 +521,10 @@ async def update_booking_status(
         await session.commit()
         session.expire_all()
         updated_booking = await _load_booking(session, reload_booking_id, tenant_id)
+
+        # Trigger post-visit form requirements
+        await _deliver_post_visit_forms(session, updated_booking)
+
         return booking_to_summary(updated_booking)
 
     if booking.status == "no_show":

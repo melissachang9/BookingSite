@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
 from app.db.models import Booking, Customer, Payment, Tenant
-from app.schemas.customers import CustomerBookingEntry, CustomerListResponse, CustomerLookupResponse, CustomerProfileResponse, UpdateCustomerRequest
+from app.schemas.customers import CustomerBookingEntry, CustomerListResponse, CustomerLookupResponse, CustomerPaymentEntry, CustomerProfileResponse, UpdateCustomerRequest
 from app.schemas.bookings import PaginationMetaResponse
 from app.services.presenters import booking_amount_paid_cents, booking_balance_due_cents, customer_to_summary
 from app.services.tenants import get_tenant_by_slug
@@ -37,9 +37,23 @@ def _build_customer_profile(customer: Customer, bookings: list[Booking]) -> Cust
     outstanding = sum(
         booking_balance_due_cents(b) for b in bookings if b.status in {"confirmed", "completed"}
     )
+    payment_entries = [
+        CustomerPaymentEntry(
+            id=payment.id,
+            booking_id=payment.booking_id,
+            amount_cents=payment.amount_cents,
+            payment_method_type=payment.payment_method_type or "unknown",
+            status=payment.status,
+            recorded_at=payment.created_at,
+            notes=payment.notes,
+        )
+        for booking in bookings
+        for payment in (booking.payments or [])
+    ]
     return CustomerProfileResponse(
         customer=customer_to_summary(customer),
         bookings=booking_entries,
+        payments=payment_entries,
         lifetime_spend_cents=lifetime_spend,
         outstanding_balance_cents=outstanding,
         wallet_balance_cents=customer.wallet_balance_cents,

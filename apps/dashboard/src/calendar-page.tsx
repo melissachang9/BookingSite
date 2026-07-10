@@ -337,6 +337,10 @@ function formatDuration(minutes: number): string {
   return remainder === 0 ? hourLabel : `${hourLabel} ${remainder} min`;
 }
 
+function formatPriceCents(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
 function timeRangesOverlap(leftStartAt: string, leftEndAt: string, rightStartAt: string, rightEndAt: string): boolean {
   return new Date(leftStartAt).getTime() < new Date(rightEndAt).getTime() && new Date(rightStartAt).getTime() < new Date(leftEndAt).getTime();
 }
@@ -2575,6 +2579,12 @@ function SlotActionDrawer({
                 <strong>{selectedService?.name ?? "Choose an appointment type"}</strong>
                 <span>{formatTimeRange(selectedSlot.startAt, appointmentEndAt)}</span>
               </div>
+              {selectedService ? (
+                <p style={{ fontSize: "13px", color: "#4A3D30", marginTop: "4px" }}>
+                  {formatPriceCents(selectedService.priceCents)}
+                  {selectedService.depositCents > 0 ? ` · $${(selectedService.depositCents / 100).toFixed(2)} deposit` : " · No deposit"}
+                </p>
+              ) : null}
               <p>{customer.name || "Client required"}</p>
             </div>
             {draftCreationState.kind === "error" ? (

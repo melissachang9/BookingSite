@@ -198,8 +198,21 @@ async def list_availability(
         blocked_map[hold.provider_id].append((_ensure_aware(hold.starts_at), _ensure_aware(hold.ends_at)))
     for booking in bookings:
         blocked_map[booking.provider_id].append((_ensure_aware(booking.starts_at), _ensure_aware(booking.ends_at)))
+    # Build date-specific custom hours map: (provider_id, location_id, date) -> (start_time, end_time)
+    custom_hours_map: dict[tuple[str, str | None, date], tuple[time, time]] = {}
     for time_off in time_off_rows:
-        if time_off.blocked_service_ids:
+        if time_off.override_type == "custom_hours" and time_off.start_time and time_off.end_time:
+            current = time_off.starts_at.astimezone(tenant_timezone).date()
+            end_date = time_off.ends_at.astimezone(tenant_timezone).date()
+            while current <= end_date:
+                custom_hours_map[(time_off.provider_id, time_off.location_id, current)] = (time_off.start_time, time_off.end_time)
+                current += timedelta(days=1)
+
+    for time_off in time_off_rows:
+        if time_off.override_type == "custom_hours":
+            # Already handled above - skip
+            continue
+        elif time_off.blocked_service_ids:
             # Only block the specified services, scoped to location
             for svc_id in time_off.blocked_service_ids:
                 service_blocked_map[(time_off.provider_id, time_off.location_id)][svc_id].append(
@@ -237,7 +250,30 @@ async def list_availability(
                     (context.provider.id, resolved_location_id, current_date.weekday()),
                     [],
                 )
-                for schedule in day_schedules:
+                # Also include null-location schedules (applies to all locations)
+                null_loc_schedules = schedule_map.get(
+                    (context.provider.id, None, current_date.weekday()),
+                    [],
+                )
+                all_day_schedules = day_schedules + null_loc_schedules
+                # Check for date-specific custom_hours override
+                custom_hours = custom_hours_map.get((context.provider.id, resolved_location_id, current_date))
+                if custom_hours is not None:
+                    # Use custom hours for this specific date
+                    schedules_to_use = [
+                        ProviderSchedule(
+                            tenant_id=context.provider.tenant_id,
+                            provider_id=context.provider.id,
+                            location_id=resolved_location_id,
+                            weekday=current_date.weekday(),
+                            start_time=custom_hours[0],
+                            end_time=custom_hours[1],
+                            is_active=True,
+                        )
+                    ]
+                else:
+                    schedules_to_use = all_day_schedules
+                for schedule in schedules_to_use:
                     effective_start = schedule.start_time
                     effective_end = schedule.end_time
                     if business_window is not None:

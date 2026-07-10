@@ -30,9 +30,20 @@ class CustomerBookingEntry(CamelModel):
     balance_due_cents: int
 
 
+class CustomerPaymentEntry(CamelModel):
+    id: str
+    booking_id: str
+    amount_cents: int
+    payment_method_type: str
+    status: str
+    recorded_at: datetime
+    notes: str | None = None
+
+
 class CustomerProfileResponse(CamelModel):
     customer: CustomerSummaryResponse
     bookings: list[CustomerBookingEntry]
+    payments: list[CustomerPaymentEntry] = []
     lifetime_spend_cents: int = 0
     outstanding_balance_cents: int = 0
     wallet_balance_cents: int = 0

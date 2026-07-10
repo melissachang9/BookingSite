@@ -23,7 +23,7 @@ import type {
   UserPermissionsResponse,
 } from "@booking/shared-types";
 
-import { apiBaseUrl, platformApi } from "./platform-api";
+import { apiBaseUrl, ensureActiveStoredSession, platformApi } from "./platform-api";
 
 type RouteDefinitionLike = {
   title: string;
@@ -1201,6 +1201,24 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
   }>({ startDate: "", endDate: "", reason: "", overrideType: "closed", startTime: "09:00", endTime: "17:00" });
   const [editBlockedServiceIds, setEditBlockedServiceIds] = useState<string[]>([]);
 
+  // Add shift modal
+  const [addShiftModal, setAddShiftModal] = useState<{ weekday: number } | null>(null);
+  const [addShiftDate, setAddShiftDate] = useState("");
+  const [addShiftStart, setAddShiftStart] = useState("09:00");
+  const [addShiftEnd, setAddShiftEnd] = useState("17:00");
+
+  // Week navigation for vertical calendar (0 = current week, +1 next, -1 previous)
+  const [weekOffset, setWeekOffset] = useState(0);
+
+  // Day editor drawer (opens when tapping a day card)
+  const [dayEditor, setDayEditor] = useState<{ dateStr: string; weekday: number } | null>(null);
+
+  // Time-off drawer (opens from "Block time off" button)
+  const [timeOffOpen, setTimeOffOpen] = useState(false);
+
+  // Regular hours drawer (opens from "Set regular hours" button — bulk 7-day template)
+  const [regularHoursOpen, setRegularHoursOpen] = useState(false);
+
   const latestLocationRef = useRef(selectedLocationId);
   latestLocationRef.current = selectedLocationId;
 
@@ -1352,6 +1370,37 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
     }
   };
 
+  const handleAddShiftAsOverride = async () => {
+    if (!addShiftModal || !addShiftDate) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await platformApi.createProviderTimeOff(tenantSlug, provider.id, {
+        startsAt: new Date(addShiftDate).toISOString(),
+        endsAt: new Date(addShiftDate + "T23:59:59").toISOString(),
+        reason: null,
+        overrideType: "custom_hours",
+        startTime: addShiftStart,
+        endTime: addShiftEnd,
+        locationId: selectedLocationId,
+      });
+      setAddShiftModal(null);
+      setAddShiftDate("");
+      setStatus("Override added for " + new Date(addShiftDate).toLocaleDateString());
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add override");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAddShiftAsRepeating = () => {
+    if (!addShiftModal) return;
+    addShift(addShiftModal.weekday);
+    setAddShiftModal(null);
+  };
+
   const handleAddOverride = async () => {
     if (!newOverride.startDate || !newOverride.endDate) {
       setError("Select start and end dates");
@@ -1433,6 +1482,181 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
     }
   };
 
+  // Save a date-specific override (custom_hours or closed) for a single date.
+  const handleSaveDateOverride = async (
+    dateStr: string,
+    payload: {
+      closedAllDay: boolean;
+      startTime: string;
+      endTime: string;
+      blockedServiceIds: string[];
+      existingOverrideId: string | null;
+    },
+  ) => {
+    setSubmitting(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const body: CreateProviderTimeOffRequest = {
+        startsAt: new Date(dateStr + "T00:00:00").toISOString(),
+        endsAt: new Date(dateStr + "T23:59:59").toISOString(),
+        reason: null,
+        overrideType: payload.closedAllDay ? "closed" : "custom_hours",
+        startTime: payload.closedAllDay ? null : payload.startTime,
+        endTime: payload.closedAllDay ? null : payload.endTime,
+        locationId: selectedLocationId,
+        blockedServiceIds: payload.blockedServiceIds.length > 0 ? payload.blockedServiceIds : null,
+      };
+      if (payload.existingOverrideId) {
+        await platformApi.updateProviderTimeOff(tenantSlug, provider.id, payload.existingOverrideId, body);
+      } else {
+        await platformApi.createProviderTimeOff(tenantSlug, provider.id, body);
+      }
+      setStatus("Saved override for " + new Date(dateStr + "T00:00:00").toLocaleDateString());
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save override");
+      throw err;
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Update recurring hours for a single weekday, then replace the schedule.
+  const handleSaveRecurringDay = async (
+    weekday: number,
+    payload: {
+      shifts: Array<{ startTime: string; endTime: string; isActive: boolean }>;
+      blockedServiceIds: string[];
+    },
+  ) => {
+    setSubmitting(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const nextShifts = new Map(shifts);
+      if (payload.shifts.length === 0) {
+        nextShifts.delete(weekday);
+      } else {
+        nextShifts.set(
+          weekday,
+          payload.shifts.map((s) => ({
+            id: "",
+            weekday,
+            locationId: selectedLocationId || null,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            isActive: s.isActive,
+          })),
+        );
+      }
+      const nextBlocked = new Map(dayBlockedServices);
+      if (payload.blockedServiceIds.length > 0) {
+        nextBlocked.set(weekday, payload.blockedServiceIds);
+      } else {
+        nextBlocked.delete(weekday);
+      }
+
+      const entries: ProviderScheduleEntry[] = [];
+      for (const [wd, dayShifts] of nextShifts) {
+        for (const s of dayShifts) {
+          entries.push({
+            id: s.id || "",
+            weekday: wd,
+            locationId: s.locationId,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            isActive: s.isActive,
+            blockedServiceIds: nextBlocked.get(wd) || null,
+          });
+        }
+      }
+      await platformApi.replaceProviderSchedule(tenantSlug, provider.id, {
+        entries,
+        locationId: selectedLocationId,
+      });
+      setShifts(nextShifts);
+      setDayBlockedServices(nextBlocked);
+      setStatus(`Updated every ${WEEKDAY_LABELS[weekday]}`);
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save recurring hours");
+      throw err;
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Bulk replace the full 7-day recurring schedule (used by RegularHoursDrawer).
+  const handleSaveBulkRecurring = async (
+    nextShifts: Map<number, Array<{ startTime: string; endTime: string; isActive: boolean }>>,
+    nextBlocked: Map<number, string[]>,
+  ) => {
+    setSubmitting(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const entries: ProviderScheduleEntry[] = [];
+      for (const [wd, dayShifts] of nextShifts) {
+        for (const s of dayShifts) {
+          entries.push({
+            id: "",
+            weekday: wd,
+            locationId: selectedLocationId || null,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            isActive: s.isActive,
+            blockedServiceIds: nextBlocked.get(wd) || null,
+          });
+        }
+      }
+      await platformApi.replaceProviderSchedule(tenantSlug, provider.id, {
+        entries,
+        locationId: selectedLocationId,
+      });
+      setStatus("Regular hours saved");
+      setRegularHoursOpen(false);
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save regular hours");
+      throw err;
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Save a multi-day closed time-off block (vacation).
+  const handleSaveTimeOff = async (payload: {
+    startDate: string;
+    endDate: string;
+    reason: string;
+    blockedServiceIds: string[];
+  }) => {
+    setSubmitting(true);
+    setError(null);
+    setStatus(null);
+    try {
+      await platformApi.createProviderTimeOff(tenantSlug, provider.id, {
+        startsAt: new Date(payload.startDate + "T00:00:00").toISOString(),
+        endsAt: new Date(payload.endDate + "T23:59:59").toISOString(),
+        reason: payload.reason.trim() || null,
+        overrideType: "closed",
+        startTime: null,
+        endTime: null,
+        locationId: selectedLocationId,
+        blockedServiceIds: payload.blockedServiceIds.length > 0 ? payload.blockedServiceIds : null,
+      });
+      setStatus("Time off added");
+      setTimeOffOpen(false);
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save time off");
+      throw err;
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (loading) {
     return <div className="staff-detail-form"><p className="settings-form-help">Loading work hours...</p></div>;
   }
@@ -1474,12 +1698,12 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
       ) : null}
 
       <div className="svc-card" style={{ marginBottom: "12px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
           <div>
-            <span className="svc-card__eyebrow">Regular weekly hours</span>
-            <div style={{ fontSize: "11px", color: "#8B7960", marginTop: "4px" }}>Applies every week unless overridden below.</div>
+            <span className="svc-card__eyebrow">Schedule</span>
+            <div style={{ fontSize: "11px", color: "#8B7960", marginTop: "4px" }}>Tap any day to edit shifts, block services, or set custom hours.</div>
           </div>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
             {providerLocations.length > 1 ? (
               <select className="svc-input" style={{ padding: "5px 9px", fontSize: "12px" }}
                 aria-label="Work hours location"
@@ -1491,213 +1715,1044 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
                 ))}
               </select>
             ) : null}
-            <button type="button" className="svc-duplicate-btn" onClick={handleCopyMonday} disabled={submitting}>
-              Copy Mon to weekdays
+            <button type="button" className="svc-duplicate-btn"
+              onClick={() => setTimeOffOpen(true)} disabled={submitting}>
+              Block time off
+            </button>
+            <button type="button" className="svc-duplicate-btn"
+              onClick={() => setRegularHoursOpen(true)} disabled={submitting}>
+              Set regular hours
             </button>
           </div>
         </div>
 
-        {WEEKDAY_LABELS.map((label, weekday) => {
-          const dayShifts = shifts.get(weekday) || [];
-          const isActive = dayShifts.length > 0 && dayShifts[0].isActive;
-          return (
-            <div key={weekday} className="svc-override-row" style={{ opacity: isActive ? 1 : 0.55 }}>
-              <div style={{ width: "64px", flexShrink: 0 }}>
-                <div style={{ fontSize: "13px", fontWeight: 500, color: "#1F1612" }}>{label}</div>
-                <div style={{ fontSize: "10px", color: "#8B7960", marginTop: "1px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                  {isActive ? "Open" : "Closed"}
-                </div>
+        {shifts.size === 0 ? (
+          <div style={{
+            padding: "18px", marginBottom: "14px",
+            background: "#FDF8F0",
+            border: "1px dashed #D4A574",
+            borderRadius: "8px",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            gap: "16px", flexWrap: "wrap",
+          }}>
+            <div>
+              <div style={{ fontSize: "14px", fontWeight: 600, color: "#1F1612", marginBottom: "4px" }}>
+                No regular hours set yet
               </div>
-              <label className={`svc-toggle${isActive ? "" : " svc-toggle--off"}`} aria-label={`${label} toggle`}>
-                <input type="checkbox" checked={isActive}
-                  onChange={() => toggleDay(weekday)}
-                  style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
-              </label>
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
-                {!isActive ? (
-                  <div style={{ fontSize: "12px", color: "#8B7960", fontStyle: "italic" }}>Not working</div>
-                ) : dayShifts.length === 0 ? (
-                  <div style={{ fontSize: "12px", color: "#8B7960", fontStyle: "italic" }}>No shifts</div>
-                ) : (
-                  dayShifts.map((shift, idx) => (
-                    <div key={idx} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <input className="svc-input" type="text" style={{ width: "80px", textAlign: "center", padding: "6px 9px" }}
-                        value={shift.startTime}
-                        onChange={(e) => updateShift(weekday, idx, { startTime: e.target.value })}
-                        placeholder="9:00 AM" />
-                      <span style={{ color: "#8B7960", fontSize: "12px" }}>→</span>
-                      <input className="svc-input" type="text" style={{ width: "80px", textAlign: "center", padding: "6px 9px" }}
-                        value={shift.endTime}
-                        onChange={(e) => updateShift(weekday, idx, { endTime: e.target.value })}
-                        placeholder="5:00 PM" />
-                      {dayShifts.length > 1 ? (
-                        <button type="button" className="svc-text-btn" style={{ marginLeft: "4px" }}
-                          onClick={() => removeShift(weekday, idx)}>×</button>
-                      ) : null}
+              <div style={{ fontSize: "12px", color: "#6B5A47" }}>
+                Set the recurring weekly hours in one step, then adjust individual days as needed.
+              </div>
+            </div>
+            <button type="button" className="svc-save-btn"
+              onClick={() => setRegularHoursOpen(true)}
+              style={{ padding: "8px 16px" }}>
+              Set regular hours
+            </button>
+          </div>
+        ) : null}
+
+        <div style={{ marginBottom: "12px" }}>
+          {(() => {
+            // Compute week start (Monday) based on weekOffset
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const jsDay = today.getDay(); // 0=Sun..6=Sat
+            const daysSinceMonday = (jsDay + 6) % 7; // Monday-first offset
+            const weekStart = new Date(today);
+            weekStart.setDate(today.getDate() - daysSinceMonday + weekOffset * 7);
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekStart.getDate() + 6);
+
+            const fmtRange = (d: Date) =>
+              `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+            const todayStr = today.toISOString().split("T")[0];
+
+            type DayItem = {
+              dateStr: string;
+              weekday: number;
+              label: string;
+              shortLabel: string;
+              monthDay: string;
+              isToday: boolean;
+              recurringActive: boolean;
+              dateOverride: ProviderTimeOffEntry | null;
+              isCustomOverride: boolean;
+              isClosedOverride: boolean;
+              isMultiDayVacation: boolean;
+              displayLabel: string;
+              blockedServiceNames: string[];
+            };
+            const days: DayItem[] = [];
+            for (let i = 0; i < 7; i++) {
+              const d = new Date(weekStart);
+              d.setDate(weekStart.getDate() + i);
+              const dateStr = d.toISOString().split("T")[0];
+              const weekday = i; // 0=Mon..6=Sun (matches WEEKDAY_LABELS)
+              const label = WEEKDAY_LABELS[weekday];
+              const dayShifts = (shifts.get(weekday) || []).filter((s) => s.isActive);
+              const dateOverride = overrides.find((ov) => {
+                const ovStart = new Date(ov.startsAt).toISOString().split("T")[0];
+                const ovEnd = new Date(ov.endsAt).toISOString().split("T")[0];
+                return dateStr >= ovStart && dateStr <= ovEnd;
+              }) || null;
+              const isCustomOverride = dateOverride?.overrideType === "custom_hours";
+              const isClosedOverride = dateOverride?.overrideType === "closed";
+              const isMultiDayVacation = isClosedOverride && (() => {
+                const s = new Date(dateOverride!.startsAt).toISOString().split("T")[0];
+                const e = new Date(dateOverride!.endsAt).toISOString().split("T")[0];
+                return s !== e;
+              })();
+
+              const displayLabel = isCustomOverride
+                ? `${dateOverride!.startTime || ""} – ${dateOverride!.endTime || ""}`
+                : isClosedOverride
+                  ? "Time off"
+                  : dayShifts.length > 0
+                    ? dayShifts.map((s) => `${s.startTime} – ${s.endTime}`).join("  ·  ")
+                    : "No shifts";
+
+              const blockedIds = dateOverride?.blockedServiceIds && dateOverride.blockedServiceIds.length > 0
+                ? dateOverride.blockedServiceIds
+                : (dayBlockedServices.get(weekday) || []);
+              const blockedServiceNames = services.filter((s) => blockedIds.includes(s.id)).map((s) => s.name);
+
+              days.push({
+                dateStr,
+                weekday,
+                label,
+                shortLabel: label.slice(0, 3),
+                monthDay: `${d.getMonth() + 1}/${d.getDate()}`,
+                isToday: dateStr === todayStr,
+                recurringActive: dayShifts.length > 0,
+                dateOverride,
+                isCustomOverride,
+                isClosedOverride,
+                isMultiDayVacation,
+                displayLabel,
+                blockedServiceNames,
+              });
+            }
+
+            return (
+              <>
+                <div style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "8px 0", marginBottom: "12px",
+                  borderTop: "0.5px solid #E5D7BB", borderBottom: "0.5px solid #E5D7BB",
+                }}>
+                  <button type="button" className="svc-text-btn"
+                    onClick={() => setWeekOffset((v) => v - 1)}
+                    style={{ fontSize: "18px", padding: "4px 12px" }}
+                    aria-label="Previous week">‹</button>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
+                    <div style={{ fontSize: "13px", fontWeight: 600, color: "#1F1612" }}>
+                      {fmtRange(weekStart)} – {fmtRange(weekEnd)}, {weekEnd.getFullYear()}
                     </div>
-                  ))
-                )}
-                {isActive ? (
-                  <button type="button" className="svc-text-btn" style={{ textDecoration: "underline" }}
-                    onClick={() => addShift(weekday)}>+ Add shift</button>
-                ) : null}
-                {isActive ? (
-                  <div style={{ marginTop: "6px" }}>
-                    <div style={{ fontSize: "10px", color: "#8B7960", marginBottom: "3px" }}>Block services this day:</div>
-                    <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-                      {services.map((svc) => {
-                        const dayBlocked = dayBlockedServices.get(weekday) || [];
-                        const isBlocked = dayBlocked.includes(svc.id);
-                        return (
-                          <label key={svc.id} style={{
-                            display: "flex", alignItems: "center", gap: "3px",
-                            fontSize: "10px", cursor: "pointer",
-                            padding: "2px 6px", borderRadius: "3px",
-                            background: isBlocked ? "#F5E6D3" : "transparent",
-                            border: `1px solid ${isBlocked ? "#D4A574" : "#D9CBB1"}`,
-                          }}>
-                            <input type="checkbox" checked={isBlocked}
-                              onChange={() => toggleDayBlockedService(weekday, svc.id)}
-                              style={{ width: "10px", height: "10px" }} />
-                            {svc.name}
-                          </label>
-                        );
-                      })}
-                    </div>
+                    {weekOffset !== 0 ? (
+                      <button type="button" className="svc-text-btn"
+                        onClick={() => setWeekOffset(0)}
+                        style={{ fontSize: "10px", textDecoration: "underline", color: "#8B7960" }}>
+                        Jump to today
+                      </button>
+                    ) : (
+                      <div style={{ fontSize: "10px", color: "#8B7960" }}>This week</div>
+                    )}
                   </div>
-                ) : null}
+                  <button type="button" className="svc-text-btn"
+                    onClick={() => setWeekOffset((v) => v + 1)}
+                    style={{ fontSize: "18px", padding: "4px 12px" }}
+                    aria-label="Next week">›</button>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {days.map((day) => {
+                    const cardBg = day.isClosedOverride ? "#F5EFE0"
+                      : day.isCustomOverride ? "#E8F0FE"
+                      : "#FFFFFF";
+                    const cardBorderColor = day.isCustomOverride ? "#4A90D9"
+                      : day.isClosedOverride ? "#B8A88C"
+                      : day.isToday ? "#D4A574"
+                      : "#E5D7BB";
+                    return (
+                      <button key={day.dateStr} type="button"
+                        onClick={() => setDayEditor({ dateStr: day.dateStr, weekday: day.weekday })}
+                        aria-label={`Edit ${day.label} ${day.monthDay}`}
+                        style={{
+                          display: "flex", alignItems: "center",
+                          background: cardBg,
+                          border: `1px solid ${cardBorderColor}`,
+                          borderLeft: day.isToday ? `4px solid #D4A574` : `1px solid ${cardBorderColor}`,
+                          borderRadius: "8px",
+                          padding: "12px 14px",
+                          cursor: "pointer",
+                          gap: "12px",
+                          textAlign: "left", width: "100%",
+                          font: "inherit", color: "inherit",
+                        }}>
+                        <div style={{ width: "62px", flexShrink: 0 }}>
+                          <div style={{
+                            fontSize: "13px",
+                            fontWeight: day.isToday ? 700 : 600,
+                            color: day.isToday ? "#1F1612" : "#4A3D30",
+                          }}>{day.shortLabel}</div>
+                          <div style={{
+                            fontSize: "11px",
+                            color: day.isToday ? "#4A3D30" : "#8B7960",
+                            marginTop: "1px",
+                          }}>{day.monthDay}</div>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{
+                            fontSize: "13px",
+                            color: day.displayLabel === "No shifts" ? "#8B7960" : "#1F1612",
+                            fontStyle: day.displayLabel === "No shifts" ? "italic" : "normal",
+                          }}>{day.displayLabel}</div>
+                          {day.blockedServiceNames.length > 0 && !day.isClosedOverride ? (
+                            <div style={{
+                              fontSize: "10px", color: "#8B7960", marginTop: "3px",
+                            }} title={day.blockedServiceNames.join(", ")}>
+                              {day.blockedServiceNames.length} service{day.blockedServiceNames.length > 1 ? "s" : ""} limited
+                            </div>
+                          ) : null}
+                        </div>
+                        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                          {day.isCustomOverride ? (
+                            <span style={{
+                              background: "#4A90D9", color: "#FFFFFF",
+                              padding: "2px 8px", borderRadius: "4px",
+                              fontSize: "10px", fontWeight: 600, letterSpacing: "0.5px",
+                            }}>OVERRIDE</span>
+                          ) : day.isMultiDayVacation ? (
+                            <span style={{
+                              background: "#8B7960", color: "#FFFFFF",
+                              padding: "2px 8px", borderRadius: "4px",
+                              fontSize: "10px", fontWeight: 600, letterSpacing: "0.5px",
+                            }}>VACATION</span>
+                          ) : day.isClosedOverride ? (
+                            <span style={{
+                              background: "#B8A88C", color: "#FFFFFF",
+                              padding: "2px 8px", borderRadius: "4px",
+                              fontSize: "10px", fontWeight: 600, letterSpacing: "0.5px",
+                            }}>TIME OFF</span>
+                          ) : null}
+                          <span style={{ fontSize: "16px", color: "#8B7960" }} aria-hidden>›</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })()}
+        </div>
+        {/* Upcoming multi-day time off (vacations) */}
+        {(() => {
+          const now = new Date();
+          now.setHours(0, 0, 0, 0);
+          const upcoming = overrides
+            .filter((ov) => ov.overrideType === "closed" && new Date(ov.endsAt) >= now)
+            .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+          if (upcoming.length === 0) return null;
+          const fmtD = (d: Date) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+          return (
+            <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: "0.5px solid #E5D7BB" }}>
+              <div style={{ fontSize: "11px", color: "#8B7960", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Upcoming time off</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {upcoming.map((ov) => {
+                  const startD = new Date(ov.startsAt);
+                  const endD = new Date(ov.endsAt);
+                  const sameDay = startD.toISOString().split("T")[0] === endD.toISOString().split("T")[0];
+                  return (
+                    <div key={ov.id} style={{
+                      display: "flex", alignItems: "center", gap: "10px",
+                      padding: "8px 10px", background: "#FDF8F0", borderRadius: "6px",
+                      border: "1px solid #E5D7BB",
+                    }}>
+                      <div style={{ fontSize: "12px", fontWeight: 500, color: "#1F1612", minWidth: "120px" }}>
+                        {sameDay ? fmtD(startD) : `${fmtD(startD)} – ${fmtD(endD)}`}
+                      </div>
+                      <div style={{ flex: 1, fontSize: "12px", color: "#4A3D30" }}>
+                        {ov.reason || "Time off"}
+                      </div>
+                      <button type="button" className="svc-text-btn"
+                        onClick={() => handleDeleteOverride(ov.id)}
+                        aria-label={`Remove time off ${fmtD(startD)}`}
+                        style={{ fontSize: "14px" }}>×</button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );
-        })}
-
-        <div style={{ marginTop: "12px" }}>
-          <button type="button" className="svc-save-btn" onClick={handleSave} disabled={submitting}>
-            {submitting ? "Saving..." : "Save schedule"}
-          </button>
-        </div>
+        })()}
       </div>
 
-      <div className="svc-card" style={{ marginBottom: 0 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px" }}>
+      {dayEditor ? (
+        <DayEditorDrawer
+          dateStr={dayEditor.dateStr}
+          weekday={dayEditor.weekday}
+          services={services}
+          recurringShifts={shifts.get(dayEditor.weekday) || []}
+          recurringBlockedServices={dayBlockedServices.get(dayEditor.weekday) || []}
+          dateOverride={overrides.find((ov) => {
+            const s = new Date(ov.startsAt).toISOString().split("T")[0];
+            const e = new Date(ov.endsAt).toISOString().split("T")[0];
+            return dayEditor.dateStr >= s && dayEditor.dateStr <= e;
+          }) || null}
+          submitting={submitting}
+          onClose={() => setDayEditor(null)}
+          onSaveOverride={async (payload) => {
+            await handleSaveDateOverride(dayEditor.dateStr, payload);
+            setDayEditor(null);
+          }}
+          onSaveRecurring={async (payload) => {
+            await handleSaveRecurringDay(dayEditor.weekday, payload);
+            setDayEditor(null);
+          }}
+          onClearOverride={async (id) => {
+            await handleDeleteOverride(id);
+            setDayEditor(null);
+          }}
+        />
+      ) : null}
+
+      {timeOffOpen ? (
+        <TimeOffDrawer
+          services={services}
+          submitting={submitting}
+          onClose={() => setTimeOffOpen(false)}
+          onSave={handleSaveTimeOff}
+        />
+      ) : null}
+
+      {regularHoursOpen ? (
+        <RegularHoursDrawer
+          currentShifts={shifts}
+          currentBlocked={dayBlockedServices}
+          submitting={submitting}
+          onClose={() => setRegularHoursOpen(false)}
+          onSave={handleSaveBulkRecurring}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+
+// ===========================================================================
+// Day editor drawer — edit a single date's shifts/services with recurring vs one-off scope
+// ===========================================================================
+
+function DayEditorDrawer({
+  dateStr,
+  weekday,
+  services,
+  recurringShifts,
+  recurringBlockedServices,
+  dateOverride,
+  submitting,
+  onClose,
+  onSaveOverride,
+  onSaveRecurring,
+  onClearOverride,
+}: {
+  dateStr: string;
+  weekday: number;
+  services: ServiceSummary[];
+  recurringShifts: ProviderScheduleEntry[];
+  recurringBlockedServices: string[];
+  dateOverride: ProviderTimeOffEntry | null;
+  submitting: boolean;
+  onClose: () => void;
+  onSaveOverride: (payload: {
+    closedAllDay: boolean;
+    startTime: string;
+    endTime: string;
+    blockedServiceIds: string[];
+    existingOverrideId: string | null;
+  }) => Promise<void>;
+  onSaveRecurring: (payload: {
+    shifts: Array<{ startTime: string; endTime: string; isActive: boolean }>;
+    blockedServiceIds: string[];
+  }) => Promise<void>;
+  onClearOverride: (overrideId: string) => Promise<void>;
+}) {
+  const [scope, setScope] = useState<"date" | "recurring">("date");
+  const [localShifts, setLocalShifts] = useState<Array<{ startTime: string; endTime: string }>>([]);
+  const [blockedIds, setBlockedIds] = useState<string[]>([]);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Track which mode we initialized for so we can seed from the correct source when scope changes.
+  const initializedForRef = useRef<string>("");
+  useEffect(() => {
+    const key = `${dateStr}:${scope}:${dateOverride?.id || ""}`;
+    if (initializedForRef.current === key) return;
+    initializedForRef.current = key;
+
+    if (scope === "date" && dateOverride) {
+      if (dateOverride.overrideType === "closed") {
+        setLocalShifts([]);
+      } else {
+        setLocalShifts([{
+          startTime: dateOverride.startTime || "09:00",
+          endTime: dateOverride.endTime || "17:00",
+        }]);
+      }
+      setBlockedIds(dateOverride.blockedServiceIds || []);
+    } else {
+      const active = recurringShifts.filter((s) => s.isActive);
+      setLocalShifts(active.map((s) => ({ startTime: s.startTime, endTime: s.endTime })));
+      setBlockedIds(recurringBlockedServices);
+    }
+  }, [dateStr, scope, dateOverride, recurringShifts, recurringBlockedServices]);
+
+  const dayName = WEEKDAY_LABELS[weekday];
+  const displayDate = new Date(dateStr + "T00:00:00");
+  const dateLabel = displayDate.toLocaleDateString(undefined, {
+    weekday: "long", month: "long", day: "numeric",
+  });
+  const shortDate = displayDate.toLocaleDateString(undefined, {
+    month: "short", day: "numeric",
+  });
+
+  const addLocalShift = () => setLocalShifts((p) => [...p, { startTime: "09:00", endTime: "17:00" }]);
+  const removeLocalShift = (i: number) => setLocalShifts((p) => p.filter((_, idx) => idx !== i));
+  const updateLocalShift = (i: number, patch: Partial<{ startTime: string; endTime: string }>) =>
+    setLocalShifts((p) => p.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+  const toggleService = (id: string) =>
+    setBlockedIds((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+
+  const handleSave = async () => {
+    setSaveError(null);
+    const closedAllDay = localShifts.length === 0;
+    try {
+      if (scope === "date") {
+        await onSaveOverride({
+          closedAllDay,
+          startTime: localShifts[0]?.startTime || "09:00",
+          endTime: localShifts[0]?.endTime || "17:00",
+          blockedServiceIds: blockedIds,
+          existingOverrideId: dateOverride?.id || null,
+        });
+      } else {
+        await onSaveRecurring({
+          shifts: localShifts.map((s) => ({ ...s, isActive: true })),
+          blockedServiceIds: blockedIds,
+        });
+      }
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save");
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-label={`Edit ${dateLabel}`} onClick={onClose}>
+      <div style={{
+        position: "fixed", top: 0, right: 0, height: "100vh",
+        width: "min(440px, 100vw)",
+        background: "#FFFFFF",
+        boxShadow: "-2px 0 12px rgba(31,22,18,0.15)",
+        display: "flex", flexDirection: "column",
+      }} onClick={(e) => e.stopPropagation()}>
+        <header style={{
+          padding: "16px 18px", borderBottom: "1px solid #E5D7BB",
+          display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+        }}>
           <div>
-            <span className="svc-card__eyebrow">Date overrides</span>
-            <div style={{ fontSize: "11px", color: "#8B7960", marginTop: "4px" }}>Vacations, holidays, and one-off schedule changes.</div>
+            <div style={{ fontSize: "11px", color: "#8B7960", textTransform: "uppercase", letterSpacing: "0.5px" }}>Edit day</div>
+            <div style={{ fontSize: "16px", fontWeight: 600, color: "#1F1612", marginTop: "2px" }}>{dateLabel}</div>
           </div>
+          <button type="button" className="ghost-action" onClick={onClose} aria-label="Close">×</button>
+        </header>
+
+        <div style={{ flex: 1, overflowY: "auto", padding: "18px" }}>
+          <div style={{ marginBottom: "20px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+              <div style={{ fontSize: "12px", fontWeight: 600, color: "#1F1612", textTransform: "uppercase", letterSpacing: "0.5px" }}>Shifts</div>
+              {localShifts.length > 0 ? (
+                <button type="button" className="svc-text-btn"
+                  style={{ fontSize: "11px", color: "#8A2E1E" }}
+                  onClick={() => setLocalShifts([])}>Clear all (closed)</button>
+              ) : null}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {localShifts.length === 0 ? (
+                <div style={{
+                  padding: "12px", background: "#FDF8F0", borderRadius: "6px",
+                  border: "1px dashed #D9CBB1", textAlign: "center",
+                  fontSize: "12px", color: "#8B7960",
+                }}>
+                  No shifts scheduled. This day is closed.
+                </div>
+              ) : (
+                localShifts.map((s, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <input type="text" className="svc-input"
+                      style={{ width: "88px", textAlign: "center" }}
+                      value={s.startTime} placeholder="09:00"
+                      aria-label={`Shift ${i + 1} start`}
+                      onChange={(e) => updateLocalShift(i, { startTime: e.target.value })} />
+                    <span style={{ color: "#8B7960", fontSize: "12px" }}>→</span>
+                    <input type="text" className="svc-input"
+                      style={{ width: "88px", textAlign: "center" }}
+                      value={s.endTime} placeholder="17:00"
+                      aria-label={`Shift ${i + 1} end`}
+                      onChange={(e) => updateLocalShift(i, { endTime: e.target.value })} />
+                    <button type="button" className="svc-text-btn"
+                      onClick={() => removeLocalShift(i)}
+                      aria-label={`Remove shift ${i + 1}`}>×</button>
+                  </div>
+                ))
+              )}
+              <button type="button"
+                onClick={addLocalShift}
+                style={{
+                  alignSelf: "flex-start",
+                  fontSize: "12px",
+                  padding: "6px 12px",
+                  background: "#F5E6D3",
+                  color: "#4A3D30",
+                  border: "1px solid #D4A574",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: 500,
+                }}>+ Add shift</button>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: "20px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 600, color: "#1F1612", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>Block services</div>
+            <div style={{ fontSize: "11px", color: "#8B7960", marginBottom: "8px" }}>
+              Select services that should NOT be bookable on this day.
+            </div>
+            {services.length === 0 ? (
+              <div style={{ fontSize: "12px", color: "#8B7960", fontStyle: "italic" }}>
+                No services assigned to this provider.
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {services.map((svc) => {
+                  const isBlocked = blockedIds.includes(svc.id);
+                  return (
+                    <label key={svc.id} style={{
+                      display: "flex", alignItems: "center", gap: "5px",
+                      fontSize: "11px", cursor: "pointer",
+                      padding: "4px 9px", borderRadius: "4px",
+                      background: isBlocked ? "#F5E6D3" : "transparent",
+                      border: `1px solid ${isBlocked ? "#D4A574" : "#D9CBB1"}`,
+                      color: isBlocked ? "#4A3D30" : "#6B5A47",
+                    }}>
+                      <input type="checkbox" checked={isBlocked}
+                        onChange={() => toggleService(svc.id)}
+                        style={{ width: "12px", height: "12px" }} />
+                      {svc.name}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {saveError ? (
+            <div role="alert" style={{
+              padding: "8px 10px", background: "#FDE7E1", borderRadius: "6px",
+              fontSize: "12px", color: "#8A2E1E",
+            }}>{saveError}</div>
+          ) : null}
         </div>
 
-        {overrides.map((ov) => {
-          const startDate = new Date(ov.startsAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-          const endDate = new Date(ov.endsAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-          const isClosed = ov.overrideType === "closed";
-          return (
-            <React.Fragment key={ov.id}>
-            <div className="svc-override-row">
-              <div style={{ width: "90px", flexShrink: 0 }}>
-                <div style={{ fontSize: "12px", fontWeight: 500, color: "#1F1612" }}>{startDate} - {endDate}</div>
-                <div style={{ fontSize: "10px", color: "#8B7960", marginTop: "1px" }}>
-                  {Math.ceil((new Date(ov.endsAt).getTime() - new Date(ov.startsAt).getTime()) / 86400000) + 1} days
-                </div>
-              </div>
-              <div style={{ fontSize: "12px", color: "#4A3D30", flex: 1 }}>{ov.reason || "No reason"}</div>
-              <span className="svc-pill" style={{ background: isClosed ? "#E5D7BB" : "#1F1612", color: isClosed ? "#6B5A47" : "#F7F0DE", padding: "2px 7px", borderRadius: "4px", fontSize: "10px", fontWeight: 500 }}>
-                {isClosed ? "Closed" : `${ov.startTime || ""} - ${ov.endTime || ""}`}
-              </span>
-              <button type="button" className="svc-text-btn" style={{ marginRight: "4px" }}
-                  onClick={() => handleStartEditOverride(ov)}>&#9998;</button>
-              <button type="button" className="svc-text-btn" onClick={() => handleDeleteOverride(ov.id)}>×</button>
-            </div>
-            {editingOverrideId === ov.id ? (
-              <div style={{ marginTop: "8px", padding: "8px", background: "#FDF8F0", borderRadius: "6px", border: "1px solid #E5D7BB" }}>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", marginBottom: "6px" }}>
-                  <input type="date" className="svc-input" style={{ width: "130px" }}
-                    value={editOverride.startDate}
-                    onChange={(e) => setEditOverride((p) => ({ ...p, startDate: e.target.value }))} />
-                  <span style={{ color: "#8B7960", fontSize: "12px" }}>to</span>
-                  <input type="date" className="svc-input" style={{ width: "130px" }}
-                    value={editOverride.endDate}
-                    onChange={(e) => setEditOverride((p) => ({ ...p, endDate: e.target.value }))} />
-                  <input type="text" className="svc-input" placeholder="Reason" style={{ flex: 1, minWidth: "120px" }}
-                    value={editOverride.reason}
-                    onChange={(e) => setEditOverride((p) => ({ ...p, reason: e.target.value }))} />
-                </div>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <button type="button" className="svc-save-btn" onClick={handleSaveEditOverride} disabled={submitting}
-                    style={{ fontSize: "11px", padding: "4px 10px" }}>
-                    {submitting ? "Saving..." : "Save"}
-                  </button>
-                  <button type="button" className="svc-text-btn" onClick={handleCancelEditOverride}>Cancel</button>
-                </div>
-              </div>
-            ) : null}
-            </React.Fragment>
-          );
-        })}
-
-        <div style={{ marginTop: "10px", padding: "10px 0", borderTop: "0.5px dashed #D9CBB1" }}>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", marginBottom: "8px" }}>
-            <input type="date" className="svc-input" style={{ width: "130px" }}
-              value={newOverride.startDate}
-              onChange={(e) => setNewOverride((p) => ({ ...p, startDate: e.target.value }))} />
-            <span style={{ color: "#8B7960", fontSize: "12px" }}>to</span>
-            <input type="date" className="svc-input" style={{ width: "130px" }}
-              value={newOverride.endDate}
-              onChange={(e) => setNewOverride((p) => ({ ...p, endDate: e.target.value }))} />
-            <input type="text" className="svc-input" placeholder="Reason (optional)" style={{ flex: 1, minWidth: "150px" }}
-              value={newOverride.reason}
-              onChange={(e) => setNewOverride((p) => ({ ...p, reason: e.target.value }))} />
+        <footer style={{
+          padding: "14px 18px", borderTop: "1px solid #E5D7BB", background: "#FDF8F0",
+        }}>
+          <div style={{ fontSize: "11px", color: "#8B7960", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Apply to</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "12px" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#1F1612", cursor: "pointer" }}>
+              <input type="radio" name={`scope-${dateStr}`} value="date"
+                checked={scope === "date"}
+                onChange={() => setScope("date")} />
+              Just this {dayName} ({shortDate})
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#1F1612", cursor: "pointer" }}>
+              <input type="radio" name={`scope-${dateStr}`} value="recurring"
+                checked={scope === "recurring"}
+                onChange={() => setScope("recurring")} />
+              Every {dayName}
+            </label>
           </div>
-          <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "12px", cursor: "pointer" }}>
-              <input type="radio" name="overrideType" checked={newOverride.overrideType === "closed"}
-                onChange={() => setNewOverride((p) => ({ ...p, overrideType: "closed" }))} />
-              Closed
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "12px", cursor: "pointer" }}>
-              <input type="radio" name="overrideType" checked={newOverride.overrideType === "custom_hours"}
-                onChange={() => setNewOverride((p) => ({ ...p, overrideType: "custom_hours" }))} />
-              Custom hours
-            </label>
-            {newOverride.overrideType === "custom_hours" ? (
-              <>
-                <input type="text" className="svc-input" style={{ width: "70px", textAlign: "center" }}
-                  value={newOverride.startTime}
-                  onChange={(e) => setNewOverride((p) => ({ ...p, startTime: e.target.value }))} />
-                <span style={{ color: "#8B7960", fontSize: "12px" }}>to</span>
-                <input type="text" className="svc-input" style={{ width: "70px", textAlign: "center" }}
-                  value={newOverride.endTime}
-                  onChange={(e) => setNewOverride((p) => ({ ...p, endTime: e.target.value }))} />
-              </>
+          <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+            {dateOverride && scope === "date" ? (
+              <button type="button" className="svc-text-btn"
+                onClick={() => { void onClearOverride(dateOverride.id); }}
+                style={{ marginRight: "auto", color: "#8A2E1E" }}
+                disabled={submitting}>Clear override</button>
             ) : null}
-            <button type="button" className="svc-save-btn" onClick={handleAddOverride} disabled={submitting}
-              style={{ fontSize: "11px", padding: "4px 10px" }}>
-              {submitting ? "Adding..." : "+ Add override"}
+            <button type="button" className="ghost-action" onClick={onClose}>Cancel</button>
+            <button type="button" className="svc-save-btn"
+              onClick={handleSave} disabled={submitting}>
+              {submitting ? "Saving..." : "Save"}
             </button>
           </div>
-          <div style={{ marginTop: "8px" }}>
-            <div style={{ fontSize: "11px", color: "#8B7960", marginBottom: "4px" }}>Block specific services (optional)</div>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+
+// ===========================================================================
+// Time-off drawer — multi-day vacation / closure block
+// ===========================================================================
+
+function TimeOffDrawer({
+  services,
+  submitting,
+  onClose,
+  onSave,
+}: {
+  services: ServiceSummary[];
+  submitting: boolean;
+  onClose: () => void;
+  onSave: (payload: {
+    startDate: string;
+    endDate: string;
+    reason: string;
+    blockedServiceIds: string[];
+  }) => Promise<void>;
+}) {
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [reason, setReason] = useState("");
+  const [blockedIds, setBlockedIds] = useState<string[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    setErr(null);
+    if (!startDate || !endDate) {
+      setErr("Select start and end dates");
+      return;
+    }
+    try {
+      await onSave({ startDate, endDate, reason, blockedServiceIds: blockedIds });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to save");
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-label="Block time off" onClick={onClose}>
+      <div style={{
+        position: "fixed", top: 0, right: 0, height: "100vh",
+        width: "min(440px, 100vw)",
+        background: "#FFFFFF",
+        boxShadow: "-2px 0 12px rgba(31,22,18,0.15)",
+        display: "flex", flexDirection: "column",
+      }} onClick={(e) => e.stopPropagation()}>
+        <header style={{
+          padding: "16px 18px", borderBottom: "1px solid #E5D7BB",
+          display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+        }}>
+          <div>
+            <div style={{ fontSize: "11px", color: "#8B7960", textTransform: "uppercase", letterSpacing: "0.5px" }}>New time off</div>
+            <div style={{ fontSize: "16px", fontWeight: 600, color: "#1F1612", marginTop: "2px" }}>Block dates</div>
+          </div>
+          <button type="button" className="ghost-action" onClick={onClose} aria-label="Close">×</button>
+        </header>
+
+        <div style={{ flex: 1, overflowY: "auto", padding: "18px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <label style={{ fontSize: "12px", color: "#4A3D30" }}>
+              Start date
+              <input type="date" className="svc-input"
+                style={{ width: "100%", marginTop: "4px" }}
+                value={startDate}
+                aria-label="Time off start date"
+                onChange={(e) => setStartDate(e.target.value)} />
+            </label>
+            <label style={{ fontSize: "12px", color: "#4A3D30" }}>
+              End date
+              <input type="date" className="svc-input"
+                style={{ width: "100%", marginTop: "4px" }}
+                value={endDate}
+                aria-label="Time off end date"
+                onChange={(e) => setEndDate(e.target.value)} />
+            </label>
+            <label style={{ fontSize: "12px", color: "#4A3D30" }}>
+              Reason (optional)
+              <input type="text" className="svc-input"
+                style={{ width: "100%", marginTop: "4px" }}
+                value={reason} placeholder="e.g. Vacation"
+                onChange={(e) => setReason(e.target.value)} />
+            </label>
+
+            {services.length > 0 ? (
+              <div>
+                <div style={{ fontSize: "12px", color: "#4A3D30", marginBottom: "6px" }}>
+                  Block specific services only (optional)
+                </div>
+                <div style={{ fontSize: "10px", color: "#8B7960", marginBottom: "8px" }}>
+                  Leave empty to close all bookings.
+                </div>
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                  {services.map((svc) => {
+                    const isBlocked = blockedIds.includes(svc.id);
+                    return (
+                      <label key={svc.id} style={{
+                        display: "flex", alignItems: "center", gap: "5px",
+                        fontSize: "11px", cursor: "pointer",
+                        padding: "4px 9px", borderRadius: "4px",
+                        background: isBlocked ? "#F5E6D3" : "transparent",
+                        border: `1px solid ${isBlocked ? "#D4A574" : "#D9CBB1"}`,
+                      }}>
+                        <input type="checkbox" checked={isBlocked}
+                          onChange={() => setBlockedIds((p) => (p.includes(svc.id) ? p.filter((x) => x !== svc.id) : [...p, svc.id]))}
+                          style={{ width: "12px", height: "12px" }} />
+                        {svc.name}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {err ? (
+            <div role="alert" style={{
+              marginTop: "12px",
+              padding: "8px 10px", background: "#FDE7E1", borderRadius: "6px",
+              fontSize: "12px", color: "#8A2E1E",
+            }}>{err}</div>
+          ) : null}
+        </div>
+
+        <footer style={{
+          padding: "14px 18px", borderTop: "1px solid #E5D7BB", background: "#FDF8F0",
+          display: "flex", gap: "8px", justifyContent: "flex-end",
+        }}>
+          <button type="button" className="ghost-action" onClick={onClose}>Cancel</button>
+          <button type="button" className="svc-save-btn"
+            onClick={handleSave} disabled={submitting}>
+            {submitting ? "Saving..." : "Block dates"}
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+
+// ===========================================================================
+// Regular hours drawer — bulk edit all 7 weekdays at once with presets
+// ===========================================================================
+
+type RegularHoursRow = {
+  weekday: number;
+  isActive: boolean;
+  shifts: Array<{ startTime: string; endTime: string }>;
+};
+
+function RegularHoursDrawer({
+  currentShifts,
+  currentBlocked,
+  submitting,
+  onClose,
+  onSave,
+}: {
+  currentShifts: Map<number, ProviderScheduleEntry[]>;
+  currentBlocked: Map<number, string[]>;
+  submitting: boolean;
+  onClose: () => void;
+  onSave: (
+    nextShifts: Map<number, Array<{ startTime: string; endTime: string; isActive: boolean }>>,
+    nextBlocked: Map<number, string[]>,
+  ) => Promise<void>;
+}) {
+  const [rows, setRows] = useState<RegularHoursRow[]>(() =>
+    WEEKDAY_LABELS.map((_, wd) => {
+      const active = (currentShifts.get(wd) || []).filter((s) => s.isActive);
+      return {
+        weekday: wd,
+        isActive: active.length > 0,
+        shifts: active.length > 0
+          ? active.map((s) => ({ startTime: s.startTime, endTime: s.endTime }))
+          : [{ startTime: "09:00", endTime: "17:00" }],
+      };
+    }),
+  );
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const patchRow = (wd: number, patch: Partial<RegularHoursRow>) =>
+    setRows((r) => r.map((row) => (row.weekday === wd ? { ...row, ...patch } : row)));
+
+  const toggleActive = (wd: number) =>
+    setRows((r) => r.map((row) => (row.weekday === wd ? { ...row, isActive: !row.isActive } : row)));
+
+  const setShiftTime = (wd: number, idx: number, patch: Partial<{ startTime: string; endTime: string }>) =>
+    patchRow(wd, {
+      shifts: rows.find((r) => r.weekday === wd)!.shifts.map((s, i) => (i === idx ? { ...s, ...patch } : s)),
+    });
+
+  const addShift = (wd: number) => {
+    const row = rows.find((r) => r.weekday === wd)!;
+    patchRow(wd, {
+      isActive: true,
+      shifts: [...row.shifts, { startTime: "09:00", endTime: "17:00" }],
+    });
+  };
+
+  const removeShift = (wd: number, idx: number) => {
+    const row = rows.find((r) => r.weekday === wd)!;
+    const nextShifts = row.shifts.filter((_, i) => i !== idx);
+    patchRow(wd, {
+      shifts: nextShifts.length > 0 ? nextShifts : [{ startTime: "09:00", endTime: "17:00" }],
+      isActive: nextShifts.length > 0 ? row.isActive : false,
+    });
+  };
+
+  const copyToAll = (wd: number) => {
+    const source = rows.find((r) => r.weekday === wd)!;
+    setRows((r) =>
+      r.map((row) =>
+        row.weekday === wd
+          ? row
+          : { ...row, isActive: true, shifts: source.shifts.map((s) => ({ ...s })) },
+      ),
+    );
+  };
+
+  const copyToWeekdays = (wd: number) => {
+    const source = rows.find((r) => r.weekday === wd)!;
+    setRows((r) =>
+      r.map((row) =>
+        row.weekday !== wd && row.weekday <= 4
+          ? { ...row, isActive: true, shifts: source.shifts.map((s) => ({ ...s })) }
+          : row,
+      ),
+    );
+  };
+
+  type Preset = "weekdays9to5" | "weekdays10to6" | "everyday10to6" | "clear";
+  const applyPreset = (preset: Preset) => {
+    if (preset === "weekdays9to5") {
+      setRows((r) =>
+        r.map((row) => ({
+          ...row,
+          isActive: row.weekday <= 4,
+          shifts: [{ startTime: "09:00", endTime: "17:00" }],
+        })),
+      );
+    } else if (preset === "weekdays10to6") {
+      setRows((r) =>
+        r.map((row) => ({
+          ...row,
+          isActive: row.weekday <= 4,
+          shifts: [{ startTime: "10:00", endTime: "18:00" }],
+        })),
+      );
+    } else if (preset === "everyday10to6") {
+      setRows((r) =>
+        r.map((row) => ({
+          ...row,
+          isActive: true,
+          shifts: [{ startTime: "10:00", endTime: "18:00" }],
+        })),
+      );
+    } else if (preset === "clear") {
+      setRows((r) => r.map((row) => ({ ...row, isActive: false })));
+    }
+  };
+
+  const activeCount = rows.filter((r) => r.isActive).length;
+  const totalHours = rows.reduce((total, row) => {
+    if (!row.isActive) return total;
+    return (
+      total +
+      row.shifts.reduce((h, s) => {
+        const [sh, sm] = s.startTime.split(":").map(Number);
+        const [eh, em] = s.endTime.split(":").map(Number);
+        const mins = (eh * 60 + (em || 0)) - (sh * 60 + (sm || 0));
+        return mins > 0 ? h + mins / 60 : h;
+      }, 0)
+    );
+  }, 0);
+
+  const handleSave = async () => {
+    setSaveError(null);
+    const nextShifts = new Map<number, Array<{ startTime: string; endTime: string; isActive: boolean }>>();
+    const nextBlocked = new Map<number, string[]>();
+    for (const row of rows) {
+      if (row.isActive && row.shifts.length > 0) {
+        nextShifts.set(
+          row.weekday,
+          row.shifts.map((s) => ({ ...s, isActive: true })),
+        );
+        const existingBlocked = currentBlocked.get(row.weekday);
+        if (existingBlocked && existingBlocked.length > 0) {
+          nextBlocked.set(row.weekday, existingBlocked);
+        }
+      }
+    }
+    try {
+      await onSave(nextShifts, nextBlocked);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save");
+    }
+  };
+
+  const presetBtnStyle: React.CSSProperties = {
+    padding: "6px 12px",
+    fontSize: "12px",
+    background: "#FFFFFF",
+    color: "#4A3D30",
+    border: "1px solid #D4A574",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontWeight: 500,
+  };
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-label="Set regular hours" onClick={onClose}>
+      <div style={{
+        position: "fixed", top: 0, right: 0, height: "100vh",
+        width: "min(560px, 100vw)",
+        background: "#FFFFFF",
+        boxShadow: "-2px 0 12px rgba(31,22,18,0.15)",
+        display: "flex", flexDirection: "column",
+      }} onClick={(e) => e.stopPropagation()}>
+        <header style={{
+          padding: "16px 18px", borderBottom: "1px solid #E5D7BB",
+          display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+        }}>
+          <div>
+            <div style={{ fontSize: "11px", color: "#8B7960", textTransform: "uppercase", letterSpacing: "0.5px" }}>Recurring template</div>
+            <div style={{ fontSize: "16px", fontWeight: 600, color: "#1F1612", marginTop: "2px" }}>Set regular hours</div>
+            <div style={{ fontSize: "11px", color: "#8B7960", marginTop: "4px" }}>
+              {activeCount} of 7 days · {totalHours.toFixed(1)} hrs / week
+            </div>
+          </div>
+          <button type="button" className="ghost-action" onClick={onClose} aria-label="Close">×</button>
+        </header>
+
+        <div style={{ flex: 1, overflowY: "auto", padding: "18px" }}>
+          {/* Presets */}
+          <div style={{ marginBottom: "16px" }}>
+            <div style={{ fontSize: "11px", color: "#8B7960", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Quick start</div>
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-              {services.map((svc) => {
-                const isBlocked = blockedServiceIds.includes(svc.id);
-                return (
-                  <label key={svc.id} style={{
-                    display: "flex", alignItems: "center", gap: "4px",
-                    fontSize: "11px", cursor: "pointer",
-                    padding: "3px 8px", borderRadius: "4px",
-                    background: isBlocked ? "#F5E6D3" : "transparent",
-                    border: `1px solid ${isBlocked ? "#D4A574" : "#D9CBB1"}`,
-                  }}>
-                    <input type="checkbox" checked={isBlocked}
-                      onChange={() => setBlockedServiceIds((prev) =>
-                        prev.includes(svc.id) ? prev.filter((id) => id !== svc.id) : [...prev, svc.id]
+              <button type="button" style={presetBtnStyle}
+                onClick={() => applyPreset("weekdays9to5")}>Weekdays 9–5</button>
+              <button type="button" style={presetBtnStyle}
+                onClick={() => applyPreset("weekdays10to6")}>Weekdays 10–6</button>
+              <button type="button" style={presetBtnStyle}
+                onClick={() => applyPreset("everyday10to6")}>Every day 10–6</button>
+              <button type="button" style={{ ...presetBtnStyle, color: "#8A2E1E", borderColor: "#D9CBB1" }}
+                onClick={() => applyPreset("clear")}>Clear all</button>
+            </div>
+          </div>
+
+          {/* 7-day table */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {rows.map((row) => {
+              const label = WEEKDAY_LABELS[row.weekday];
+              return (
+                <div key={row.weekday} style={{
+                  padding: "10px 12px",
+                  background: row.isActive ? "#FDF8F0" : "#FFFFFF",
+                  border: `1px solid ${row.isActive ? "#D4A574" : "#E5D7BB"}`,
+                  borderRadius: "8px",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <label style={{
+                      display: "flex", alignItems: "center", gap: "8px",
+                      width: "110px", flexShrink: 0, cursor: "pointer",
+                    }}>
+                      <input type="checkbox" checked={row.isActive}
+                        onChange={() => toggleActive(row.weekday)}
+                        aria-label={`${label} active`}
+                        style={{ width: "16px", height: "16px" }} />
+                      <span style={{
+                        fontSize: "13px", fontWeight: 600,
+                        color: row.isActive ? "#1F1612" : "#8B7960",
+                      }}>{label}</span>
+                    </label>
+                    <div style={{ flex: 1 }}>
+                      {row.isActive ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                          {row.shifts.map((s, i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                              <input type="text" className="svc-input"
+                                style={{ width: "78px", textAlign: "center", padding: "5px 8px" }}
+                                value={s.startTime} placeholder="09:00"
+                                aria-label={`${label} shift ${i + 1} start`}
+                                onChange={(e) => setShiftTime(row.weekday, i, { startTime: e.target.value })} />
+                              <span style={{ color: "#8B7960", fontSize: "12px" }}>→</span>
+                              <input type="text" className="svc-input"
+                                style={{ width: "78px", textAlign: "center", padding: "5px 8px" }}
+                                value={s.endTime} placeholder="17:00"
+                                aria-label={`${label} shift ${i + 1} end`}
+                                onChange={(e) => setShiftTime(row.weekday, i, { endTime: e.target.value })} />
+                              <button type="button" className="svc-text-btn"
+                                onClick={() => removeShift(row.weekday, i)}
+                                aria-label={`Remove ${label} shift ${i + 1}`}
+                                style={{ fontSize: "14px", padding: "0 6px" }}>×</button>
+                              {i === row.shifts.length - 1 ? (
+                                <button type="button" className="svc-text-btn"
+                                  onClick={() => addShift(row.weekday)}
+                                  style={{ fontSize: "11px", textDecoration: "underline", marginLeft: "4px" }}>+ Add</button>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: "12px", color: "#8B7960", fontStyle: "italic" }}>Closed</div>
                       )}
-                      style={{ width: "12px", height: "12px" }} />
-                    {svc.name}
-                  </label>
-                );
-              })}</div>
+                    </div>
+                    {row.isActive ? (
+                      <div style={{ display: "flex", gap: "4px", alignItems: "center", flexShrink: 0 }}>
+                        {row.weekday <= 4 ? (
+                          <button type="button" className="svc-text-btn"
+                            onClick={() => copyToWeekdays(row.weekday)}
+                            title="Copy to Mon–Fri"
+                            style={{ fontSize: "10px", padding: "4px 6px" }}>→ weekdays</button>
+                        ) : null}
+                        <button type="button" className="svc-text-btn"
+                          onClick={() => copyToAll(row.weekday)}
+                          title="Copy to all 7 days"
+                          style={{ fontSize: "10px", padding: "4px 6px" }}>→ all</button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {saveError ? (
+            <div role="alert" style={{
+              marginTop: "12px",
+              padding: "8px 10px", background: "#FDE7E1", borderRadius: "6px",
+              fontSize: "12px", color: "#8A2E1E",
+            }}>{saveError}</div>
+          ) : null}
+
+          <div style={{
+            marginTop: "16px", padding: "10px 12px",
+            background: "#F5EFE0", borderRadius: "6px",
+            fontSize: "11px", color: "#6B5A47",
+          }}>
+            <strong>Note:</strong> Saving replaces the entire weekly template for the selected location.
+            One-off date overrides and time-off blocks are preserved.
           </div>
         </div>
+
+        <footer style={{
+          padding: "14px 18px", borderTop: "1px solid #E5D7BB", background: "#FDF8F0",
+          display: "flex", gap: "8px", justifyContent: "flex-end",
+        }}>
+          <button type="button" className="ghost-action" onClick={onClose}>Cancel</button>
+          <button type="button" className="svc-save-btn"
+            onClick={handleSave} disabled={submitting}>
+            {submitting ? "Saving..." : "Save regular hours"}
+          </button>
+        </footer>
       </div>
     </div>
   );
@@ -2196,10 +3251,16 @@ function CompensationTab({ tenantSlug, provider, onSaved }: CompensationTabProps
       if (mode === "sliding_scale") {
         body.compensationSlidingScale = slidingTiers.length > 0 ? slidingTiers : null;
       }
-      await platformApi.fetchJson(
+      const session = await ensureActiveStoredSession();
+      const token = session?.accessToken ?? "";
+      const resp = await fetch(
         `${apiBaseUrl}/tenants/${tenantSlug}/providers/${provider.id}/compensation`,
-        { method: "PATCH", body: JSON.stringify(body) },
+        { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) },
       );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ detail: "Request failed" }));
+        throw new Error(err.detail || `HTTP ${resp.status}`);
+      }
       setStatus("Compensation saved.");
       onSaved();
     } catch (error) {

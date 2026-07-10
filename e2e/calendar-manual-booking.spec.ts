@@ -31,23 +31,54 @@ test("staff navigates calendar and opens slot actions from schedule track", asyn
     .getByRole("link", { name: "Calendar" })
     .click();
 
-  // Calendar loads with week view showing the current week
   await expect(page.locator(".schedule-board")).toBeVisible({ timeout: 15000 });
 
-  // Switch to day view
-  await page.getByRole("button", { name: "Day" }).click();
+  await page.getByRole("button", { name: "Day", exact: true }).click();
   await expect(page.getByRole("button", { name: "Day" })).toHaveAttribute("aria-pressed", "true");
 
-  // Wait for schedule tracks to render
   await expect(page.locator(".schedule-day-track--interactive").first()).toBeVisible({ timeout: 10000 });
 
-  // Click the first interactive schedule track to open slot actions
   await page.locator(".schedule-day-track--interactive").first().click();
 
-  // Slot actions drawer opens
   await expect(page.getByRole("dialog", { name: "Calendar slot actions" })).toBeVisible();
 
-  // Default mode is appointment — toggle button offers switching to time block
   await expect(page.getByRole("button", { name: "Create time block" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Close", exact: true })).toBeVisible();
+});
+
+test("staff creates a booking draft from calendar slot", async ({ page }) => {
+  await signInAsDemoOwner(page);
+
+  await page
+    .getByRole("navigation", { name: "Dashboard sections" })
+    .getByRole("link", { name: "Calendar" })
+    .click();
+
+  await expect(page.locator(".schedule-board")).toBeVisible({ timeout: 15000 });
+
+  await page.getByRole("button", { name: "Day", exact: true }).click();
+
+  await expect(page.locator(".schedule-day-track--interactive").first()).toBeVisible({ timeout: 10000 });
+  await page.locator(".schedule-day-track--interactive").first().click();
+
+  await expect(page.getByRole("dialog", { name: "Calendar slot actions" })).toBeVisible();
+
+  // Select an appointment type
+  const serviceSelect = page.getByLabel("Appointment type");
+  await expect(serviceSelect).toBeVisible({ timeout: 5000 });
+  await serviceSelect.selectOption({ index: 0 });
+
+  // Fill in customer details
+  await page.getByLabel("Client name").fill("Test Customer");
+  await page.getByLabel("Phone number").fill("+1 555-555-1234");
+  await page.getByLabel("Email").fill("test@example.com");
+
+  // Book appointment
+  await page.getByRole("button", { name: "Book appointment" }).click();
+
+  // Should show success message
+  await expect(page.getByText("Booking draft created")).toBeVisible({ timeout: 10000 });
+
+  // Should show link to open draft in storefront
+  await expect(page.getByRole("link", { name: "Open draft in storefront" })).toBeVisible({ timeout: 5000 });
 });

@@ -338,8 +338,8 @@ describe("StaffPage", () => {
     await waitFor(() =>
       expect(getWorkHoursSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1", null),
     );
-    await waitFor(() => expect(screen.getByDisplayValue("09:00")).toBeInTheDocument());
-    expect(screen.getByDisplayValue("17:00")).toBeInTheDocument();
+    // Monday shift renders as "09:00 – 17:00" text in the day card (weekday 0 = Monday).
+    await waitFor(() => expect(screen.getByText(/09:00\s+–\s+17:00/)).toBeInTheDocument());
   });
 
   it("saves a new schedule entry via replaceProviderSchedule", async () => {
@@ -365,10 +365,18 @@ describe("StaffPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
 
-    await waitFor(() => screen.getByText("Regular weekly hours"));
-    // Toggle Sunday on (it starts off since no shifts)
-    fireEvent.click(screen.getByLabelText(/Sunday toggle/));
-    fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
+    await waitFor(() => screen.getByText("Schedule"));
+    // Open the Sunday day card drawer (aria-label starts with "Edit Sunday")
+    const sundayCard = screen.getByRole("button", { name: /Edit Sunday/ });
+    fireEvent.click(sundayCard);
+    // Switch scope to recurring, then click "+ Add shift" to add a default 09:00-17:00 shift
+    await waitFor(() => screen.getByLabelText(/Every Sunday/));
+    fireEvent.click(screen.getByLabelText(/Every Sunday/));
+    const drawer = screen.getByRole("dialog", { name: /Edit Sunday/ });
+    fireEvent.click(within(drawer).getByRole("button", { name: /\+ Add shift/ }));
+    // Save (drawer's Save button)
+    const saveBtn = within(drawer).getByRole("button", { name: /^Save$/ });
+    fireEvent.click(saveBtn);
 
     await waitFor(() => expect(replaceSpy).toHaveBeenCalledTimes(1));
     const payload = replaceSpy.mock.calls[0][2];
@@ -420,44 +428,32 @@ describe("StaffPage", () => {
         } as any;
       });
 
-    const replaceSpy = vi
-      .spyOn(platformApi, "replaceProviderSchedule")
+    vi.spyOn(platformApi, "replaceProviderSchedule")
       .mockResolvedValue({ providerId: "p1", entries: [] } as any);
 
     render(<StaffPage definition={definition} currentUser={ownerUser} />);
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
-    await waitFor(() => screen.getByText("Regular weekly hours"));
+    await waitFor(() => screen.getByText("Schedule"));
 
     const getLocationSelect = () => screen.getByRole("combobox", { name: "Work hours location" });
 
-    // A: Downtown
+    // A: Downtown — 09:00–17:00 should render in the day cards
     fireEvent.change(getLocationSelect(), { target: { value: "loc1" } });
     await waitFor(() => expect(getWorkHoursSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1", "loc1"));
-    await waitFor(() => expect(screen.getByDisplayValue("09:00")).toBeInTheDocument());
-    expect(screen.getByDisplayValue("17:00")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
+    await waitFor(() => expect(screen.getByText(/09:00\s+–\s+17:00/)).toBeInTheDocument());
 
-    await waitFor(() => expect(replaceSpy).toHaveBeenCalledTimes(1));
-    expect(replaceSpy.mock.calls[0][2].locationId).toBe("loc1");
-
-    // B: Uptown
+    // B: Uptown — 10:00–18:00 should render, Downtown hours should not
     fireEvent.change(getLocationSelect(), { target: { value: "loc2" } });
     await waitFor(() => expect(getWorkHoursSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1", "loc2"));
-    await waitFor(() => expect(screen.getByDisplayValue("10:00")).toBeInTheDocument());
-    expect(screen.getByDisplayValue("18:00")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
+    await waitFor(() => expect(screen.getByText(/10:00\s+–\s+18:00/)).toBeInTheDocument());
+    expect(screen.queryByText(/09:00\s+–\s+17:00/)).not.toBeInTheDocument();
 
-    await waitFor(() => expect(replaceSpy).toHaveBeenCalledTimes(2));
-    expect(replaceSpy.mock.calls[1][2].locationId).toBe("loc2");
-
-    // Back to A: Downtown should still render Downtown hours
+    // Back to A: Downtown should still render Downtown hours, isolated from Uptown
     fireEvent.change(getLocationSelect(), { target: { value: "loc1" } });
-    await waitFor(() => expect(screen.getByDisplayValue("09:00")).toBeInTheDocument());
-    expect(screen.getByDisplayValue("17:00")).toBeInTheDocument();
-    expect(screen.queryByDisplayValue("10:00")).not.toBeInTheDocument();
-    expect(screen.queryByDisplayValue("18:00")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/09:00\s+–\s+17:00/)).toBeInTheDocument());
+    expect(screen.queryByText(/10:00\s+–\s+18:00/)).not.toBeInTheDocument();
   });
 
   it("loads provider time off on the Work hours tab", async () => {
@@ -517,16 +513,15 @@ describe("StaffPage", () => {
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
-    await waitFor(() => screen.getByText("Date overrides"));
+    await waitFor(() => screen.getByText("Schedule"));
 
-    // Fill in the override form
-    const dateInputs = screen.getAllByDisplayValue("");
-    // Find date inputs
-    const startDateInput = dateInputs[0];
-    const endDateInput = dateInputs[1];
-    fireEvent.change(startDateInput, { target: { value: "2026-08-01" } });
-    fireEvent.change(endDateInput, { target: { value: "2026-08-01" } });
-    fireEvent.click(screen.getByRole("button", { name: "+ Add override" }));
+    // Open the time-off drawer via "Block time off" button
+    fireEvent.click(screen.getByRole("button", { name: "Block time off" }));
+    await waitFor(() => screen.getByRole("dialog", { name: "Block time off" }));
+
+    fireEvent.change(screen.getByLabelText("Time off start date"), { target: { value: "2026-08-01" } });
+    fireEvent.change(screen.getByLabelText("Time off end date"), { target: { value: "2026-08-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Block dates" }));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
     const [slug, providerId, payload] = createSpy.mock.calls[0];

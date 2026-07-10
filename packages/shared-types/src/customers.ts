@@ -38,9 +38,20 @@ export type CustomerBookingEntry = {
   balanceDueCents: number;
 };
 
+export type CustomerPaymentEntry = {
+  id: string;
+  bookingId: string;
+  amountCents: number;
+  paymentMethodType: string;
+  status: string;
+  recordedAt: string;
+  notes?: string | null;
+};
+
 export type CustomerProfileResponse = {
   customer: CustomerSummary;
   bookings: CustomerBookingEntry[];
+  payments: CustomerPaymentEntry[];
   lifetimeSpendCents: number;
   outstandingBalanceCents: number;
 };

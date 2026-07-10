@@ -1190,7 +1190,10 @@ async def replace_tenant_provider_schedule(
     scope_location_id = payload.location_id if payload.location_id is not None else (payload.entries[0].location_id if payload.entries else None)
     existing = await _load_provider_schedule(session, provider.id, tenant.id)
     for row in existing:
-        if row.location_id == scope_location_id:
+        if scope_location_id is None:
+            # "Both locations" selected: delete all rows for this provider
+            await session.delete(row)
+        elif row.location_id == scope_location_id:
             await session.delete(row)
     await session.flush()
     for entry in payload.entries:
