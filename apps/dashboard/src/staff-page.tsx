@@ -1515,7 +1515,7 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
     }
   };
 
-  // Save a date-specific override (custom_hours or closed) for a single date.
+  // Save a date-specific override (custom_hours or closed) for a single date or range.
   const handleSaveDateOverride = async (
     dateStr: string,
     payload: {
@@ -1524,16 +1524,21 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
       endTime: string;
       blockedServiceIds: string[];
       existingOverrideId: string | null;
+      startDate?: string;
+      endDate?: string;
+      reason?: string;
     },
   ) => {
     setSubmitting(true);
     setError(null);
     setStatus(null);
     try {
+      const start = payload.startDate || dateStr;
+      const end = payload.endDate || dateStr;
       const body: CreateProviderTimeOffRequest = {
-        startsAt: `${dateStr}T00:00:00.000Z`,
-        endsAt: `${dateStr}T23:59:59.000Z`,
-        reason: null,
+        startsAt: `${start}T00:00:00.000Z`,
+        endsAt: `${end}T23:59:59.000Z`,
+        reason: payload.reason?.trim() || null,
         overrideType: payload.closedAllDay ? "closed" : "custom_hours",
         startTime: payload.closedAllDay ? null : normalizeTime(payload.startTime),
         endTime: payload.closedAllDay ? null : normalizeTime(payload.endTime),
@@ -1545,7 +1550,7 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
       } else {
         await platformApi.createProviderTimeOff(tenantSlug, provider.id, body);
       }
-      setStatus("Saved override for " + new Date(dateStr + "T00:00:00").toLocaleDateString());
+      setStatus("Saved override for " + new Date(start + "T00:00:00").toLocaleDateString());
       setReloadKey((k) => k + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save override");
@@ -1914,7 +1919,7 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
                                 ) : isClosedOverride ? (
                                   <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                                     <div style={{ fontSize: "13px", color: "#8B7960", fontStyle: "italic" }}>
-                                      Time off
+                                      Blocked
                                     </div>
                                     <div style={{ fontSize: "10px", color: "#8B7960" }}>
                                       {dateOverride!.reason || "Closed"}
@@ -1950,7 +1955,7 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
                                   padding: "2px 8px", borderRadius: "4px",
                                   fontSize: "10px", fontWeight: 600, letterSpacing: "0.5px",
                                   flexShrink: 0,
-                                }}>TIME OFF</span>
+                                }}>BLOCKED</span>
                               ) : null}
                               <span style={{ fontSize: "16px", color: "#8B7960", flexShrink: 0 }} aria-hidden>›</span>
                             </button>
@@ -2127,7 +2132,7 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
                             background: isCustom ? "#4A90D9" : "#8B7960",
                             color: "#FFFFFF",
                           }}>
-                            {isCustom ? "OVERRIDE" : "TIME OFF"}
+                            {isCustom ? "OVERRIDE" : "BLOCKED"}
                           </span>
                           <button type="button" className="svc-text-btn"
                             onClick={() => handleDeleteOverride(ov.id)}
@@ -2226,6 +2231,9 @@ function DayEditorDrawer({
     endTime: string;
     blockedServiceIds: string[];
     existingOverrideId: string | null;
+    startDate?: string;
+    endDate?: string;
+    reason?: string;
   }) => Promise<void>;
   onSaveRecurring: (payload: {
     shifts: Array<{ startTime: string; endTime: string; isActive: boolean }>;
@@ -2237,6 +2245,15 @@ function DayEditorDrawer({
   const [localShifts, setLocalShifts] = useState<Array<{ startTime: string; endTime: string }>>([]);
   const [blockedIds, setBlockedIds] = useState<string[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Inline block-date form
+  const [showBlockForm, setShowBlockForm] = useState(false);
+  const [blockStartDate, setBlockStartDate] = useState(dateStr);
+  const [blockEndDate, setBlockEndDate] = useState(dateStr);
+  const [blockReason, setBlockReason] = useState("");
+  const [blockAllDay, setBlockAllDay] = useState(false);
+  const [blockTimeStart, setBlockTimeStart] = useState("09:00");
+  const [blockTimeEnd, setBlockTimeEnd] = useState("17:00");
 
   // Track which mode we initialized for so we can seed from the correct source when scope changes.
   const initializedForRef = useRef<string>("");
@@ -2360,20 +2377,113 @@ function DayEditorDrawer({
                   </div>
                 ))
               )}
-              <button type="button"
-                onClick={addLocalShift}
-                style={{
-                  alignSelf: "flex-start",
-                  fontSize: "12px",
-                  padding: "6px 12px",
-                  background: "#F5E6D3",
-                  color: "#4A3D30",
-                  border: "1px solid #D4A574",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  fontWeight: 500,
-                }}>+ Add shift</button>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <button type="button"
+                  onClick={addLocalShift}
+                  style={{
+                    fontSize: "12px",
+                    padding: "6px 12px",
+                    background: "#F5E6D3",
+                    color: "#4A3D30",
+                    border: "1px solid #D4A574",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontWeight: 500,
+                  }}>+ Add shift</button>
+                <button type="button"
+                  onClick={() => {
+                    setShowBlockForm(true);
+                    setBlockStartDate(dateStr);
+                    setBlockEndDate(dateStr);
+                    setBlockReason("");
+                  }}
+                  style={{
+                    fontSize: "12px",
+                    padding: "6px 12px",
+                    background: "#FDE7E1",
+                    color: "#8A2E1E",
+                    border: "1px solid #D9CBB1",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontWeight: 500,
+                  }}>Block date</button>
+              </div>
             </div>
+            {showBlockForm ? (
+              <div style={{
+                marginTop: "12px", padding: "12px",
+                background: "#FDF8F0", borderRadius: "8px",
+                border: "1px solid #E5D7BB",
+              }}>
+                <div style={{ fontSize: "12px", fontWeight: 600, color: "#1F1612", marginBottom: "8px" }}>
+                  Block dates as time off
+                </div>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px", flexWrap: "wrap" }}>
+                  <input type="date" className="svc-input" style={{ width: "140px" }}
+                    value={blockStartDate}
+                    aria-label="Block start date"
+                    onChange={(e) => setBlockStartDate(e.target.value)} />
+                  <span style={{ color: "#8B7960", fontSize: "12px" }}>to</span>
+                  <input type="date" className="svc-input" style={{ width: "140px" }}
+                    value={blockEndDate}
+                    aria-label="Block end date"
+                    onChange={(e) => setBlockEndDate(e.target.value)} />
+                </div>
+                <div style={{ marginBottom: "8px" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "#4A3D30", cursor: "pointer", marginBottom: "6px" }}>
+                    <input type="checkbox" checked={blockAllDay}
+                      onChange={(e) => setBlockAllDay(e.target.checked)} />
+                    Block all day
+                  </label>
+                  {!blockAllDay ? (
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <input type="text" className="svc-input"
+                        style={{ width: "80px", textAlign: "center" }}
+                        value={blockTimeStart} placeholder="09:00"
+                        aria-label="Block time start"
+                        onChange={(e) => setBlockTimeStart(e.target.value)} />
+                      <span style={{ color: "#8B7960", fontSize: "12px" }}>to</span>
+                      <input type="text" className="svc-input"
+                        style={{ width: "80px", textAlign: "center" }}
+                        value={blockTimeEnd} placeholder="17:00"
+                        aria-label="Block time end"
+                        onChange={(e) => setBlockTimeEnd(e.target.value)} />
+                    </div>
+                  ) : null}
+                </div>
+                <input type="text" className="svc-input"
+                  style={{ width: "100%", marginBottom: "8px" }}
+                  value={blockReason} placeholder="Reason (optional, e.g. Vacation)"
+                  onChange={(e) => setBlockReason(e.target.value)} />
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <button type="button" className="svc-save-btn"
+                    onClick={async () => {
+                      setSaveError(null);
+                      try {
+                        await onSaveOverride({
+                          closedAllDay: blockAllDay,
+                          startTime: blockTimeStart,
+                          endTime: blockTimeEnd,
+                          blockedServiceIds: blockedIds,
+                          existingOverrideId: dateOverride?.id || null,
+                          startDate: blockStartDate,
+                          endDate: blockEndDate,
+                          reason: blockReason,
+                        });
+                        setShowBlockForm(false);
+                      } catch (err) {
+                        setSaveError(err instanceof Error ? err.message : "Failed to block");
+                      }
+                    }}
+                    disabled={submitting}
+                    style={{ fontSize: "11px", padding: "4px 10px" }}>
+                    {submitting ? "Saving..." : "Confirm block"}
+                  </button>
+                  <button type="button" className="svc-text-btn"
+                    onClick={() => setShowBlockForm(false)}>Cancel</button>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div style={{ marginBottom: "20px" }}>

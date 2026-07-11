@@ -866,6 +866,29 @@ select:disabled {
   font-size: 0.68rem;
 }
 
+.schedule-board--day .schedule-day-tracks {
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--schedule-quarter-height) - 1px),
+      rgba(18, 42, 36, 0.04) calc(var(--schedule-quarter-height) - 1px),
+      rgba(18, 42, 36, 0.04) var(--schedule-quarter-height)
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--schedule-hour-height) - 1px),
+      rgba(18, 42, 36, 0.1) calc(var(--schedule-hour-height) - 1px),
+      rgba(18, 42, 36, 0.1) var(--schedule-hour-height)
+    );
+}
+
+.schedule-board--day .schedule-day-track {
+  max-width: 420px;
+  background: rgba(255, 255, 255, 0.97);
+}
+
 .schedule-event .schedule-event__intake {
   width: fit-content;
   max-width: 100%;
@@ -975,6 +998,21 @@ select:disabled {
   border-style: solid;
   border-color: rgba(111, 69, 25, 0.95);
   box-shadow: 0 0 0 2px rgba(170, 125, 65, 0.2), 0 10px 20px rgba(140, 101, 47, 0.22);
+}
+
+.schedule-time-block--timeoff {
+  border-style: solid;
+  border-color: rgba(120, 100, 80, 0.6);
+  background: rgba(235, 225, 210, 0.85);
+  cursor: pointer;
+}
+
+.schedule-time-block--timeoff strong {
+  color: #6B5A47;
+}
+
+.schedule-time-block--timeoff span {
+  color: #8B7960;
 }
 
 .calendar-state {

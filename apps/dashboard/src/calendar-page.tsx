@@ -20,6 +20,7 @@ import type {
   CustomerSummary,
   CustomPaymentMethod,
   ProviderListResponse,
+  ProviderTimeOffEntry,
   RecordManualPaymentRequest,
   SendFormReminderResponse,
   ServiceListResponse,
@@ -678,6 +679,9 @@ export function CalendarPage({
   const [timeBlocks, setTimeBlocks] = useState<CalendarTimeBlock[]>([]);
   const [selectedTimeBlockId, setSelectedTimeBlockId] = useState<string | null>(null);
   const [draftCreationState, setDraftCreationState] = useState<DraftCreationState>({ kind: "idle" });
+  // Loaded provider time-off entries (blocked dates / custom hours overrides)
+  const [providerTimeOffs, setProviderTimeOffs] = useState<ProviderTimeOffEntry[]>([]);
+  const [selectedTimeOffId, setSelectedTimeOffId] = useState<string | null>(null);
   const [completionState, setCompletionState] = useState<CompletionState>({ kind: "idle" });
   const [reloadKey, setReloadKey] = useState(0);
   const [formResponsesState, setFormResponsesState] = useState<FormResponsesState>({ kind: "idle" });
@@ -818,6 +822,18 @@ export function CalendarPage({
         const providers = getProviderOptionsFromProviderResponses(providerResults);
         const requestedDateSet = new Set(requestedDates);
         const appointmentsByDate = new Map(requestedDates.map((date) => [date, [] as CalendarAppointment[]]));
+
+        // Load time-off entries for all providers
+        const timeOffResults = await Promise.allSettled(
+          providers.map((p) => api.listProviderTimeOff(tenantSlug, p.id)),
+        );
+        const allTimeOffs: ProviderTimeOffEntry[] = [];
+        for (const result of timeOffResults) {
+          if (result.status === "fulfilled") {
+            allTimeOffs.push(...result.value.items);
+          }
+        }
+        setProviderTimeOffs(allTimeOffs);
 
         for (const booking of bookingsResult.value.items) {
           const date = getTenantDate(booking.startsAt);
@@ -1808,6 +1824,9 @@ export function CalendarPage({
             selectedTimeBlockId={selectedTimeBlockId}
             onSelectTimeBlock={handleSelectTimeBlock}
             onRequestCalendarSlot={handleRequestCalendarSlot}
+            providerTimeOffs={providerTimeOffs}
+            selectedTimeOffId={selectedTimeOffId}
+            onSelectTimeOff={setSelectedTimeOffId}
             displayStartHour={displayStartHour}
             displayEndHour={displayEndHour}
           />
@@ -1881,7 +1900,199 @@ export function CalendarPage({
           }
         }}
       />
+      <TimeOffDetailsDrawer
+        timeOff={selectedTimeOffId ? providerTimeOffs.find((t) => t.id === selectedTimeOffId) ?? null : null}
+        onClose={() => setSelectedTimeOffId(null)}
+        onSave={async (id, updates) => {
+          const to = providerTimeOffs.find((t) => t.id === id);
+          if (!to) return;
+          await platformApi.updateProviderTimeOff(tenantSlug, to.providerId, id, updates);
+          setSelectedTimeOffId(null);
+          setReloadKey((k) => k + 1);
+        }}
+        onDelete={async (id) => {
+          const to = providerTimeOffs.find((t) => t.id === id);
+          if (!to) return;
+          await platformApi.deleteProviderTimeOff(tenantSlug, to.providerId, id);
+          setSelectedTimeOffId(null);
+          setReloadKey((k) => k + 1);
+        }}
+      />
     </main>
+  );
+}
+
+// ===========================================================================
+// Time-off details drawer — read-only view of a blocked date / override
+// ===========================================================================
+
+function TimeOffDetailsDrawer({
+  timeOff,
+  onClose,
+  onSave,
+  onDelete,
+}: {
+  timeOff: ProviderTimeOffEntry | null;
+  onClose: () => void;
+  onSave: (id: string, updates: { startsAt: string; endsAt: string; reason: string | null; overrideType: string; startTime: string | null; endTime: string | null }) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+}) {
+  if (!timeOff) return null;
+
+  const startD = new Date(timeOff.startsAt);
+  const endD = new Date(timeOff.endsAt);
+  const sameDay = startD.toISOString().split("T")[0] === endD.toISOString().split("T")[0];
+  const fmtD = (d: Date) => d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  const isCustom = timeOff.overrideType === "custom_hours";
+
+  const [editing, setEditing] = useState(false);
+  const [startDate, setStartDate] = useState(startD.toISOString().split("T")[0]);
+  const [endDate, setEndDate] = useState(endD.toISOString().split("T")[0]);
+  const [reason, setReason] = useState(timeOff.reason || "");
+  const [allDay, setAllDay] = useState(timeOff.overrideType === "closed");
+  const [startTime, setStartTime] = useState(timeOff.startTime || "09:00");
+  const [endTime, setEndTime] = useState(timeOff.endTime || "17:00");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(timeOff.id, {
+        startsAt: `${startDate}T00:00:00.000Z`,
+        endsAt: `${endDate}T23:59:59.000Z`,
+        reason: reason.trim() || null,
+        overrideType: allDay ? "closed" : "custom_hours",
+        startTime: allDay ? null : normalizeTime(startTime),
+        endTime: allDay ? null : normalizeTime(endTime),
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setSaving(true);
+    try {
+      await onDelete(timeOff.id);
+    } catch {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <button type="button" className="appointment-drawer-backdrop" aria-label="Close time off details" onClick={onClose} />
+      <aside className="appointment-details-drawer" role="dialog" aria-label="Time off details">
+        <header className="appointment-details-drawer__header">
+          <span className="appointment-status-chip" style={{ background: "#F5EFE0", color: "#6B5A47" }}>
+            <span aria-hidden="true" />
+            {isCustom ? "Override shift" : "Blocked date"}
+          </span>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            {!editing ? (
+              <>
+                <button type="button" className="appointment-drawer-outline-action" onClick={() => setEditing(true)}>Edit</button>
+                <button type="button" className="appointment-drawer-outline-action" onClick={handleDelete} disabled={saving}
+                  style={{ color: "#8A2E1E", borderColor: "#D9CBB1" }}>Delete</button>
+              </>
+            ) : null}
+            <button type="button" className="ghost-action" onClick={onClose} aria-label="Close">×</button>
+          </div>
+        </header>
+        <div className="booking-rail__body" style={{ padding: "0 1rem 1rem" }}>
+          {editing ? (
+            <>
+              <section className="booking-rail-section">
+                <div className="booking-rail-section__label">Dates</div>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                  <input type="date" className="svc-input" style={{ width: "140px" }}
+                    value={startDate} aria-label="Start date"
+                    onChange={(e) => setStartDate(e.target.value)} />
+                  <span style={{ color: "#8B7960", fontSize: "12px" }}>to</span>
+                  <input type="date" className="svc-input" style={{ width: "140px" }}
+                    value={endDate} aria-label="End date"
+                    onChange={(e) => setEndDate(e.target.value)} />
+                </div>
+              </section>
+              <section className="booking-rail-section">
+                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "#4A3D30", cursor: "pointer" }}>
+                  <input type="checkbox" checked={allDay}
+                    onChange={(e) => setAllDay(e.target.checked)} />
+                  Block all day
+                </label>
+                {!allDay ? (
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "6px" }}>
+                    <input type="text" className="svc-input" style={{ width: "80px", textAlign: "center" }}
+                      value={startTime} placeholder="09:00" aria-label="Start time"
+                      onChange={(e) => setStartTime(e.target.value)} />
+                    <span style={{ color: "#8B7960", fontSize: "12px" }}>to</span>
+                    <input type="text" className="svc-input" style={{ width: "80px", textAlign: "center" }}
+                      value={endTime} placeholder="17:00" aria-label="End time"
+                      onChange={(e) => setEndTime(e.target.value)} />
+                  </div>
+                ) : null}
+              </section>
+              <section className="booking-rail-section">
+                <div className="booking-rail-section__label">Reason</div>
+                <input type="text" className="svc-input" style={{ width: "100%" }}
+                  value={reason} placeholder="e.g. Vacation"
+                  onChange={(e) => setReason(e.target.value)} />
+              </section>
+              {error ? (
+                <div role="alert" style={{ padding: "8px 10px", background: "#FDE7E1", borderRadius: "6px", fontSize: "12px", color: "#8A2E1E", marginTop: "8px" }}>
+                  {error}
+                </div>
+              ) : null}
+              <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+                <button type="button" className="svc-save-btn" onClick={handleSave} disabled={saving}>
+                  {saving ? "Saving..." : "Save"}
+                </button>
+                <button type="button" className="svc-text-btn" onClick={() => setEditing(false)}>Cancel</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <section className="booking-rail-section">
+                <div className="booking-rail-section__label">Type</div>
+                <div style={{ fontSize: "13px", color: "#1F1612" }}>
+                  {isCustom ? "Custom hours override" : "Full-day block"}
+                </div>
+              </section>
+              <section className="booking-rail-section">
+                <div className="booking-rail-section__label">Date</div>
+                <div style={{ fontSize: "13px", color: "#1F1612" }}>
+                  {sameDay ? fmtD(startD) : `${fmtD(startD)} – ${fmtD(endD)}`}
+                </div>
+              </section>
+              {isCustom && timeOff.startTime ? (
+                <section className="booking-rail-section">
+                  <div className="booking-rail-section__label">Time</div>
+                  <div style={{ fontSize: "13px", color: "#1F1612" }}>
+                    {timeOff.startTime} – {timeOff.endTime}
+                  </div>
+                </section>
+              ) : null}
+              {timeOff.reason ? (
+                <section className="booking-rail-section">
+                  <div className="booking-rail-section__label">Reason</div>
+                  <div style={{ fontSize: "13px", color: "#1F1612" }}>{timeOff.reason}</div>
+                </section>
+              ) : null}
+              <section className="booking-rail-section">
+                <div className="booking-rail-section__label">Duration</div>
+                <div style={{ fontSize: "13px", color: "#1F1612" }}>
+                  {sameDay ? "1 day" : `${Math.ceil((endD.getTime() - startD.getTime()) / 86400000) + 1} days`}
+                </div>
+              </section>
+            </>
+          )}
+        </div>
+      </aside>
+    </>
   );
 }
 
@@ -1995,6 +2206,9 @@ function CalendarBoard({
   selectedTimeBlockId,
   onSelectTimeBlock,
   onRequestCalendarSlot,
+  providerTimeOffs,
+  selectedTimeOffId,
+  onSelectTimeOff,
   displayStartHour,
   displayEndHour,
 }: {
@@ -2012,6 +2226,9 @@ function CalendarBoard({
   selectedTimeBlockId: string | null;
   onSelectTimeBlock: (blockId: string) => void;
   onRequestCalendarSlot: (slot: PendingCalendarSlot) => void;
+  providerTimeOffs: ProviderTimeOffEntry[];
+  selectedTimeOffId: string | null;
+  onSelectTimeOff: (id: string | null) => void;
   displayStartHour?: number;
   displayEndHour?: number;
 }) {
@@ -2218,6 +2435,11 @@ function CalendarBoard({
               if (!isInteractiveTrack) {
                 return;
               }
+              // Don't open the slot panel if the click landed on a time-off block
+              const target = event.target as HTMLElement;
+              if (target.closest(".schedule-time-block--timeoff")) {
+                return;
+              }
 
               const rect = event.currentTarget.getBoundingClientRect();
               const relativeY = rect.height > 0 ? event.clientY - rect.top : 0;
@@ -2327,6 +2549,46 @@ function CalendarBoard({
                           >
                             <strong>{formatTimeRange(block.startAt, block.endAt)}</strong>
                             <span>{`Time block · ${block.providerName}`}</span>
+                          </button>
+                        );
+                      })
+                  : null}
+                {/* Render provider time-off entries (blocked dates / custom hours overrides) */}
+                {column.providerId !== undefined
+                  ? providerTimeOffs
+                      .filter((to) => {
+                        const toDate = getTenantDate(to.startsAt);
+                        const toEndDate = getTenantDate(to.endsAt);
+                        return column.date >= toDate && column.date <= toEndDate;
+                      })
+                      .map((to) => {
+                        const isAllDay = to.overrideType === "closed";
+                        const startMinutes = isAllDay ? 0 : minutesInTenantDay(`${column.date}T${to.startTime || "00:00"}:00.000Z`);
+                        const endMinutes = isAllDay ? 24 * 60 : minutesInTenantDay(`${column.date}T${to.endTime || "23:59"}:00.000Z`);
+                        const startOffsetMinutes = Math.max(0, startMinutes - startHour * 60);
+                        const durationMinutes = Math.max(15, endMinutes - startMinutes);
+                        const rawTopPx = (startOffsetMinutes / 60) * SCHEDULE_HOUR_HEIGHT_PX;
+                        const maxTopPx = Math.max(0, scheduleHeightPx - SCHEDULE_MIN_EVENT_HEIGHT_PX);
+                        const topPx = Math.min(rawTopPx, maxTopPx);
+                        const rawHeightPx = Math.max(SCHEDULE_MIN_EVENT_HEIGHT_PX, (durationMinutes / 60) * SCHEDULE_HOUR_HEIGHT_PX);
+                        const heightPx = Math.max(SCHEDULE_MIN_EVENT_HEIGHT_PX, Math.min(rawHeightPx, scheduleHeightPx - topPx));
+                        const label = to.reason || (to.overrideType === "custom_hours" ? "Override" : "Blocked");
+                        const isSelected = to.id === selectedTimeOffId;
+                        return (
+                          <button
+                            key={`to-${to.id}`}
+                            type="button"
+                            className={`schedule-time-block schedule-time-block--timeoff${isSelected ? " schedule-time-block--selected" : ""}`}
+                            aria-label={`${label} ${isAllDay ? "all day" : `${to.startTime || ""} – ${to.endTime || ""}`}`}
+                            aria-pressed={isSelected}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onSelectTimeOff(isSelected ? null : to.id);
+                            }}
+                            style={{ top: `${topPx}px`, height: `${heightPx}px` }}
+                          >
+                            <strong>{isAllDay ? "Blocked" : `${to.startTime || ""} – ${to.endTime || ""}`}</strong>
+                            <span>{label}</span>
                           </button>
                         );
                       })
