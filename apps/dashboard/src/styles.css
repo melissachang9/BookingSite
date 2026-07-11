@@ -786,25 +786,6 @@ select:disabled {
   cursor: crosshair;
 }
 
-.schedule-day-track--interactive:hover {
-  background:
-    linear-gradient(rgba(253, 244, 225, 0.22), rgba(253, 244, 225, 0.22)),
-    repeating-linear-gradient(
-      to bottom,
-      rgba(255, 255, 255, 0.97) 0,
-      rgba(255, 255, 255, 0.97) calc(var(--schedule-quarter-height) - 1px),
-      rgba(18, 42, 36, 0.04) calc(var(--schedule-quarter-height) - 1px),
-      rgba(18, 42, 36, 0.04) var(--schedule-quarter-height)
-    ),
-    repeating-linear-gradient(
-      to bottom,
-      rgba(255, 255, 255, 0.97) 0,
-      rgba(255, 255, 255, 0.97) calc(var(--schedule-hour-height) - 1px),
-      rgba(18, 42, 36, 0.1) calc(var(--schedule-hour-height) - 1px),
-      rgba(18, 42, 36, 0.1) var(--schedule-hour-height)
-    );
-}
-
 .schedule-day-track:first-child {
   border-left: 0;
 }
@@ -886,7 +867,15 @@ select:disabled {
 
 .schedule-board--day .schedule-day-track {
   max-width: 420px;
-  background: rgba(255, 255, 255, 0.97);
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--schedule-hour-height) - 1px),
+      rgba(106, 87, 69, 0.2) calc(var(--schedule-hour-height) - 1px),
+      rgba(106, 87, 69, 0.2) var(--schedule-hour-height)
+    ),
+    linear-gradient(180deg, rgba(245, 239, 226, 0.72), rgba(245, 239, 226, 0.46));
 }
 
 .schedule-event .schedule-event__intake {
@@ -2170,19 +2159,6 @@ body {
       rgba(106, 87, 69, 0.2) var(--schedule-hour-height)
     ),
     linear-gradient(180deg, rgba(245, 239, 226, 0.72), rgba(245, 239, 226, 0.46));
-}
-
-.schedule-day-track--interactive:hover {
-  background:
-    linear-gradient(rgba(200, 153, 104, 0.14), rgba(200, 153, 104, 0.14)),
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent calc(var(--schedule-hour-height) - 1px),
-      rgba(106, 87, 69, 0.2) calc(var(--schedule-hour-height) - 1px),
-      rgba(106, 87, 69, 0.2) var(--schedule-hour-height)
-    ),
-    linear-gradient(180deg, rgba(245, 239, 226, 0.82), rgba(245, 239, 226, 0.52));
 }
 
 .schedule-event {
