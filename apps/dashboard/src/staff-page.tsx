@@ -1249,6 +1249,9 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
   // Sub-tab within Work Hours: "regular" | "overrides"
   const [workHoursSubTab, setWorkHoursSubTab] = useState<"regular" | "overrides">("regular");
 
+  // Expanded override in the overrides list
+  const [expandedOverrideId, setExpandedOverrideId] = useState<string | null>(null);
+
   // Week offset for regular hours date labels (0 = this week, +1 = next, -1 = previous)
   const [regularHoursWeekOffset, setRegularHoursWeekOffset] = useState(0);
 
@@ -2090,22 +2093,35 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
                     .map((ov) => {
                       const startD = new Date(ov.startsAt);
                       const endD = new Date(ov.endsAt);
-                      const sameDay = startD.toISOString().split("T")[0] === endD.toISOString().split("T")[0];
-                      const fmtD = (d: Date) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+                      const startDateStr = startD.toISOString().split("T")[0];
+                      const endDateStr = endD.toISOString().split("T")[0];
+                      const sameDay = startDateStr === endDateStr;
+                      const fmtDateStr = (ds: string) => {
+                        const [y, m, d] = ds.split("-").map(Number);
+                        const date = new Date(Date.UTC(y, m - 1, d));
+                        return date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+                      };
                       const isCustom = ov.overrideType === "custom_hours";
                       const isPast = endD < new Date();
+                      const isExpanded = expandedOverrideId === ov.id;
                       return (
-                        <div key={ov.id} style={{
-                          display: "flex", alignItems: "center", gap: "10px",
-                          padding: "10px 12px",
-                          background: isPast ? "#FAF7F2" : isCustom ? "#E8F0FE" : "#FDF8F0",
-                          borderRadius: "8px",
-                          border: `1px solid ${isCustom ? "#4A90D9" : "#E5D7BB"}`,
-                          opacity: isPast ? 0.6 : 1,
-                        }}>
+                        <React.Fragment key={ov.id}>
+                        <button type="button"
+                          onClick={() => setExpandedOverrideId(isExpanded ? null : ov.id)}
+                          style={{
+                            display: "flex", alignItems: "center", gap: "10px",
+                            padding: "10px 12px",
+                            background: isPast ? "#FAF7F2" : isCustom ? "#E8F0FE" : "#FDF8F0",
+                            borderRadius: "8px",
+                            border: `1px solid ${isCustom ? "#4A90D9" : "#E5D7BB"}`,
+                            opacity: isPast ? 0.6 : 1,
+                            cursor: "pointer",
+                            textAlign: "left", width: "100%",
+                            font: "inherit", color: "inherit",
+                          }}>
                           <div style={{ minWidth: "110px", flexShrink: 0 }}>
                             <div style={{ fontSize: "12px", fontWeight: 500, color: "#1F1612" }}>
-                              {sameDay ? fmtD(startD) : `${fmtD(startD)} – ${fmtD(endD)}`}
+                              {sameDay ? fmtDateStr(startDateStr) : `${fmtDateStr(startDateStr)} – ${fmtDateStr(endDateStr)}`}
                             </div>
                             <div style={{ fontSize: "10px", color: "#8B7960", marginTop: "1px" }}>
                               {sameDay ? "1 day" : `${Math.ceil((endD.getTime() - startD.getTime()) / 86400000) + 1} days`}
@@ -2135,10 +2151,59 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
                             {isCustom ? "OVERRIDE" : "BLOCKED"}
                           </span>
                           <button type="button" className="svc-text-btn"
-                            onClick={() => handleDeleteOverride(ov.id)}
-                            aria-label={`Remove ${isCustom ? "override" : "time off"} ${fmtD(startD)}`}
+                            onClick={(e) => { e.stopPropagation(); handleDeleteOverride(ov.id); }}
+                            aria-label={`Remove ${isCustom ? "override" : "time off"} ${fmtDateStr(startDateStr)}`}
                             style={{ fontSize: "14px" }}>×</button>
-                        </div>
+                        </button>
+                        {expandedOverrideId === ov.id ? (
+                          <div style={{
+                            marginTop: "-2px", padding: "12px 14px",
+                            background: "#FDF8F0", borderRadius: "0 0 8px 8px",
+                            border: "1px solid #E5D7BB", borderTop: "none",
+                            display: "flex", flexDirection: "column", gap: "8px",
+                          }}>
+                            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+                              <div>
+                                <div style={{ fontSize: "10px", color: "#8B7960", textTransform: "uppercase" }}>Type</div>
+                                <div style={{ fontSize: "12px", color: "#1F1612" }}>
+                                  {isCustom ? "Custom hours override" : "Full-day block"}
+                                </div>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: "10px", color: "#8B7960", textTransform: "uppercase" }}>Duration</div>
+                                <div style={{ fontSize: "12px", color: "#1F1612" }}>
+                                  {sameDay ? "1 day" : `${Math.ceil((endD.getTime() - startD.getTime()) / 86400000) + 1} days`}
+                                </div>
+                              </div>
+                              {isCustom && ov.startTime ? (
+                                <div>
+                                  <div style={{ fontSize: "10px", color: "#8B7960", textTransform: "uppercase" }}>Time</div>
+                                  <div style={{ fontSize: "12px", color: "#1F1612" }}>{ov.startTime} – {ov.endTime}</div>
+                                </div>
+                              ) : null}
+                            </div>
+                            {ov.reason ? (
+                              <div>
+                                <div style={{ fontSize: "10px", color: "#8B7960", textTransform: "uppercase" }}>Reason</div>
+                                <div style={{ fontSize: "12px", color: "#1F1612" }}>{ov.reason}</div>
+                              </div>
+                            ) : null}
+                            <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                              <button type="button" className="svc-text-btn"
+                                onClick={() => {
+                                  // Use UTC date from the override, not local time
+                                  const dateStr = startDateStr;
+                                  const weekday = startD.getUTCDay();
+                                  const wd = weekday === 0 ? 6 : weekday - 1;
+                                  setDayEditor({ dateStr, weekday: wd });
+                                }}
+                                style={{ fontSize: "11px", textDecoration: "underline" }}>
+                                Edit in day editor
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                        </React.Fragment>
                       );
                     })}
                 </div>
