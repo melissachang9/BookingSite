@@ -918,14 +918,7 @@ select:disabled {
   right: 0;
   z-index: 0;
   pointer-events: none;
-  background-color: rgba(15, 23, 42, 0.08);
-  background-image: repeating-linear-gradient(
-    135deg,
-    rgba(15, 23, 42, 0.04) 0,
-    rgba(15, 23, 42, 0.04) 6px,
-    rgba(15, 23, 42, 0.09) 6px,
-    rgba(15, 23, 42, 0.09) 12px
-  );
+  background-color: rgba(120, 100, 80, 0.08);
 }
 
 .schedule-day-heading__add-block {
@@ -990,18 +983,26 @@ select:disabled {
 }
 
 .schedule-time-block--timeoff {
-  border-style: solid;
-  border-color: rgba(120, 100, 80, 0.6);
-  background: rgba(235, 225, 210, 0.85);
+  border: 1px solid rgba(120, 100, 80, 0.35);
+  background-color: rgba(235, 225, 210, 0.6);
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0,
+    transparent 6px,
+    rgba(120, 100, 80, 0.12) 6px,
+    rgba(120, 100, 80, 0.12) 12px
+  );
   cursor: pointer;
 }
 
 .schedule-time-block--timeoff strong {
-  color: #6B5A47;
+  color: #4A3D30;
+  font-weight: 600;
 }
 
 .schedule-time-block--timeoff span {
-  color: #8B7960;
+  color: #6B5A47;
+  font-weight: 500;
 }
 
 .calendar-state {
@@ -2206,9 +2207,9 @@ body {
 }
 
 .schedule-unavailable {
-  background-color: #d6c8b0;
-  background-image: repeating-linear-gradient(135deg, #d6c8b0 0, #d6c8b0 6px, #c4b298 6px, #c4b298 12px);
-  opacity: 0.72;
+  background-color: rgba(120, 100, 80, 0.08);
+  background-image: none;
+  opacity: 1;
 }
 
 .schedule-time-block {

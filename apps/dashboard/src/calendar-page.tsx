@@ -1115,8 +1115,7 @@ export function CalendarPage({
 
   const moveFocus = (step: number) => {
     const focusDate = parseIsoDate(focusedDate);
-    const offset = viewMode === "day" ? step : step * 7;
-    focusDate.setUTCDate(focusDate.getUTCDate() + offset);
+    focusDate.setUTCDate(focusDate.getUTCDate() + step);
     setFocusedDate(toIsoDate(focusDate));
   };
 
@@ -2252,7 +2251,12 @@ function CalendarBoard({
 
   const totalHours = Math.max(1, endHour - startHour);
   const scheduleHeightPx = totalHours * SCHEDULE_HOUR_HEIGHT_PX;
-  const hourLabels = Array.from({ length: totalHours }, (_, index) => startHour + index);
+  // Generate half-hour labels: "9 AM", "9:30", "10 AM", "10:30", etc.
+  const halfHourLabels: string[] = [];
+  for (let h = startHour; h < endHour; h++) {
+    halfHourLabels.push(formatHourLabel(h));
+    halfHourLabels.push("");
+  }
   const scheduleColumns: ScheduleColumn[] =
     viewMode === "day"
       ? (() => {
@@ -2408,9 +2412,9 @@ function CalendarBoard({
 
       <div className="schedule-board__body">
         <div className="schedule-time-axis" style={{ height: `${scheduleHeightPx}px` }}>
-          {hourLabels.map((hour) => (
-            <div key={hour} className="schedule-time-axis__cell">
-              {formatHourLabel(hour)}
+          {halfHourLabels.map((label, i) => (
+            <div key={i} className="schedule-time-axis__cell" style={{ height: `${SCHEDULE_HOUR_HEIGHT_PX / 2}px` }}>
+              {label}
             </div>
           ))}
         </div>
@@ -2486,11 +2490,21 @@ function CalendarBoard({
                   heightPx: ((scheduleEndMinute - cursor) / 60) * SCHEDULE_HOUR_HEIGHT_PX,
                 });
               }
-            } else if (viewMode === "day" && column.openings.length === 0) {
-              unavailableSegments.push({
-                topPx: 0,
-                heightPx: scheduleHeightPx,
+            } else if (column.openings.length === 0) {
+              // Gray out the entire track when the provider has no working hours,
+              // unless there's a time-off block already covering the date (which shows its own visual).
+              const hasTimeOffBlocks = column.providerId !== undefined && providerTimeOffs.some((to) => {
+                // Use UTC date to match how overrides were stored (T00:00:00Z boundaries)
+                const toDate = to.startsAt.split("T")[0];
+                const toEndDate = to.endsAt.split("T")[0];
+                return column.date >= toDate && column.date <= toEndDate;
               });
+              if (!hasTimeOffBlocks) {
+                unavailableSegments.push({
+                  topPx: 0,
+                  heightPx: scheduleHeightPx,
+                });
+              }
             }
 
             return (
@@ -2553,12 +2567,14 @@ function CalendarBoard({
                         );
                       })
                   : null}
-                {/* Render provider time-off entries (blocked dates / custom hours overrides) */}
+                {/* Render only custom_hours overrides as visible blocks. Closed days are greyed out via unavailableSegments. */}
                 {column.providerId !== undefined
                   ? providerTimeOffs
                       .filter((to) => {
-                        const toDate = getTenantDate(to.startsAt);
-                        const toEndDate = getTenantDate(to.endsAt);
+                        if (to.overrideType !== "custom_hours") return false;
+                        // Use UTC date to match how overrides were stored (T00:00:00Z boundaries)
+                        const toDate = to.startsAt.split("T")[0];
+                        const toEndDate = to.endsAt.split("T")[0];
                         return column.date >= toDate && column.date <= toEndDate;
                       })
                       .map((to) => {

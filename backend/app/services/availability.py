@@ -210,7 +210,12 @@ async def list_availability(
 
     for time_off in time_off_rows:
         if time_off.override_type == "custom_hours":
-            # Already handled above - skip
+            # Custom hours overrides with blocked services still need service blocking
+            if time_off.blocked_service_ids:
+                for svc_id in time_off.blocked_service_ids:
+                    service_blocked_map[(time_off.provider_id, time_off.location_id)][svc_id].append(
+                        (_ensure_aware(time_off.starts_at), _ensure_aware(time_off.ends_at))
+                    )
             continue
         elif time_off.blocked_service_ids:
             # Only block the specified services, scoped to location
@@ -256,8 +261,8 @@ async def list_availability(
                     [],
                 )
                 all_day_schedules = day_schedules + null_loc_schedules
-                # Check for date-specific custom_hours override
-                custom_hours = custom_hours_map.get((context.provider.id, resolved_location_id, current_date))
+                # Check for date-specific custom_hours override (both location-specific and null-location)
+                custom_hours = custom_hours_map.get((context.provider.id, resolved_location_id, current_date)) or custom_hours_map.get((context.provider.id, None, current_date))
                 if custom_hours is not None:
                     # Use custom hours for this specific date
                     schedules_to_use = [
