@@ -2618,10 +2618,12 @@ function DayEditorDrawer({
                 disabled={submitting}>Clear override</button>
             ) : null}
             <button type="button" className="ghost-action" onClick={onClose}>Cancel</button>
-            <button type="button" className="svc-save-btn"
-              onClick={handleSave} disabled={submitting}>
-              {submitting ? "Saving..." : "Save"}
-            </button>
+            {!showBlockForm ? (
+              <button type="button" className="svc-save-btn"
+                onClick={handleSave} disabled={submitting}>
+                {submitting ? "Saving..." : "Save"}
+              </button>
+            ) : null}
           </div>
         </footer>
       </div>

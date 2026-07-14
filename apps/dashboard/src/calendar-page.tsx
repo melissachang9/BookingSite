@@ -1017,12 +1017,12 @@ export function CalendarPage({
       return;
     }
 
-    // Only auto-reset if focusedDate is strictly in the future and not in the loaded window.
-    // Today and past dates are valid — operators use them to view booking history.
+    // If focusedDate is in the future but outside the loaded window, reload
+    // instead of resetting to the first day (which jumps back to June).
     const today = toIsoDate(new Date());
     const hasFocusedDate = calendarState.days.some((day) => day.date === focusedDate);
     if (!hasFocusedDate && focusedDate > today) {
-      setFocusedDate(calendarState.days[0]?.date ?? getUpcomingDate(1));
+      setReloadKey((k) => k + 1);
     }
   }, [calendarState, focusedDate]);
 
