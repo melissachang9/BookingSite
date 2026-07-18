@@ -334,6 +334,7 @@ def booking_to_summary(booking: Booking) -> BookingSummaryResponse:
 
     amount_paid_cents = booking_amount_paid_cents(booking)
     balance_due_cents = booking_balance_due_cents(booking)
+    tax_cents = booking_tax_cents(booking)
 
     source_draft = booking.source_draft if isinstance(booking.source_draft, BookingDraft) else None
     customer_manage_token, _ = create_customer_manage_token(
@@ -378,6 +379,7 @@ def booking_to_summary(booking: Booking) -> BookingSummaryResponse:
         notes=booking.notes,
         amount_paid_cents=amount_paid_cents,
         balance_due_cents=balance_due_cents,
+        tax_cents=tax_cents,
         wallet_balance_cents=booking.customer.wallet_balance_cents,
         customer_manage_token=customer_manage_token,
         service=service_to_summary(booking.service, tenant),

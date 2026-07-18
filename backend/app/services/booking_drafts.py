@@ -22,6 +22,7 @@ from app.db.models import (
     Provider,
     Service,
     ServiceFormAttachment,
+    ServiceLocation,
     SlotHold,
     Tenant,
 )
@@ -208,7 +209,8 @@ async def _load_booking(
         select(Booking)
         .options(
             selectinload(Booking.tenant),
-            selectinload(Booking.service).selectinload(Service.location_links),
+            selectinload(Booking.service).selectinload(Service.location_links).selectinload(ServiceLocation.location),
+            selectinload(Booking.service).selectinload(Service.form_attachments),
             selectinload(Booking.provider).selectinload(Provider.location_links),
             selectinload(Booking.provider).selectinload(Provider.service_links),
             selectinload(Booking.customer),

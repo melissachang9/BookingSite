@@ -571,8 +571,22 @@ async def update_booking(
     tenant = await _load_tenant(session, tenant_slug)
     booking = await _load_booking(session, booking_id, tenant.id)
 
-    if booking.status != "confirmed":
-        raise api_exception(409, "conflict", "Only confirmed bookings can be updated.")
+    if booking.status not in ("confirmed", "completed"):
+        raise api_exception(409, "conflict", "Only confirmed or completed bookings can be updated.")
+
+    # Completed bookings can only have notes updated
+    if booking.status == "completed":
+        if payload.starts_at is not None or payload.provider_id is not None or payload.service_id is not None:
+            raise api_exception(409, "conflict", "Completed bookings can only have notes updated.")
+        if payload.notes is not None:
+            booking.notes = _clean_notes(payload.notes)
+            reload_id = booking.id
+            reload_tenant_id = tenant.id
+            await session.commit()
+            session.expire_all()
+            updated_booking = await _load_booking(session, reload_id, reload_tenant_id)
+            return booking_to_summary(updated_booking)
+        return booking_to_summary(booking)
 
     changed = False
     old_starts_at = booking.starts_at
