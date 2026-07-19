@@ -2007,7 +2007,10 @@ function ClientOwnershipSection({
         <input
           type="checkbox"
           checked={clientOwnershipEnabled}
-          onChange={(event) => setClientOwnershipEnabled(event.target.checked)}
+          onChange={(event) => {
+            setClientOwnershipEnabled(event.target.checked);
+            if (!event.target.checked) setOnlineAssignEnabled(false);
+          }}
           disabled={disabled}
         />
         <span>
@@ -2015,18 +2018,19 @@ function ClientOwnershipSection({
           <small>Scope the customer list for non-manager roles to clients they own.</small>
         </span>
       </label>
-      <label className="settings-toggle-field">
+      <label className={`settings-toggle-field${!clientOwnershipEnabled ? " settings-toggle-field--disabled" : ""}`}>
         <input
           type="checkbox"
           checked={onlineAssignEnabled}
           onChange={(event) => setOnlineAssignEnabled(event.target.checked)}
-          disabled={disabled}
+          disabled={disabled || !clientOwnershipEnabled}
         />
         <span>
           <strong>Assign owner on online bookings</strong>
           <small>
-            When a new customer books online, set their owner to the booked provider's user
-            account. Existing customers are never reassigned.
+            {clientOwnershipEnabled
+              ? "When a new customer books online, set their owner to the booked provider's user account. Existing customers are never reassigned."
+              : "Enable client ownership above to use this feature."}
           </small>
         </span>
       </label>

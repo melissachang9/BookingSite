@@ -4108,6 +4108,7 @@ body {
 .settings-toggle-field input[type="checkbox"] { margin-top: 0.25rem; }
 .settings-toggle-field span { display: flex; flex-direction: column; gap: 0.15rem; }
 .settings-toggle-field small { color: var(--color-muted, #6b7280); font-size: 0.85em; }
+.settings-toggle-field--disabled { opacity: 0.5; pointer-events: none; }
 
 /* Staff roster (Phase A) */
 .staff-roster-panel { display: flex; flex-direction: column; gap: 1rem; }

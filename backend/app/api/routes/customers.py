@@ -9,9 +9,11 @@ from app.db.models import User
 from app.db.session import get_db_session
 from app.schemas.customers import CustomerListResponse, CustomerLookupResponse, CustomerProfileResponse, UpdateCustomerRequest
 from app.schemas.forms import BookingFormResponseListResponse
+from app.schemas.catalog import TenantUserListResponse
 from app.services.auth import ROLE_PERMISSION_ALLOWLIST
 from app.services.booking_forms import list_customer_form_responses
 from app.services.customers import get_customer_profile, list_tenant_customers, lookup_tenant_customers, update_customer
+from app.services.tenants import list_tenant_users
 
 
 router = APIRouter(tags=["customers"])
@@ -55,6 +57,19 @@ async def list_customers(
     session: AsyncSession = Depends(get_db_session),
 ) -> CustomerListResponse:
     return await list_tenant_customers(session, tenant_slug, search=search, limit=limit, offset=offset)
+
+
+@router.get(
+    "/tenants/{tenant_slug}/customers/owner-candidates",
+    response_model=TenantUserListResponse,
+    summary="List tenant users available for customer owner assignment",
+)
+async def list_owner_candidates(
+    tenant_slug: str,
+    _: object = Depends(require_tenant_permission("customers.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> TenantUserListResponse:
+    return await list_tenant_users(session, tenant_slug)
 
 
 @router.get(

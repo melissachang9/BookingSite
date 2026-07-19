@@ -9,6 +9,7 @@ export type CustomerSummary = AuditFields &
     acquiredAt?: ISODateString | null;
     sourceChannel?: string | null;
     ownerUserId?: UUID | null;
+    ownerName?: string | null;
   };
 
 export type CustomerProfile = CustomerSummary & {

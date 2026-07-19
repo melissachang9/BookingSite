@@ -94,6 +94,7 @@ async def lookup_tenant_customers(
     customers = (
         await session.scalars(
             select(Customer)
+            .options(selectinload(Customer.owner))
             .where(*filters)
             .order_by(Customer.name.asc(), Customer.created_at.desc())
             .limit(limit)
@@ -128,6 +129,7 @@ async def list_tenant_customers(
     customers = (
         await session.scalars(
             select(Customer)
+            .options(selectinload(Customer.owner))
             .where(*filters)
             .order_by(Customer.name.asc(), Customer.created_at.desc())
             .limit(limit)
@@ -147,7 +149,9 @@ async def get_customer_profile(
 ) -> CustomerProfileResponse:
     tenant = await get_tenant_by_slug(session, tenant_slug)
     customer = await session.scalar(
-        select(Customer).where(Customer.tenant_id == tenant.id, Customer.id == customer_id)
+        select(Customer)
+        .options(selectinload(Customer.owner))
+        .where(Customer.tenant_id == tenant.id, Customer.id == customer_id)
     )
     if customer is None:
         raise api_exception(404, "not_found", "Customer was not found for this tenant.")
@@ -171,7 +175,9 @@ async def update_customer(
 ) -> CustomerProfileResponse:
     tenant = await get_tenant_by_slug(session, tenant_slug)
     customer = await session.scalar(
-        select(Customer).where(Customer.tenant_id == tenant.id, Customer.id == customer_id)
+        select(Customer)
+        .options(selectinload(Customer.owner))
+        .where(Customer.tenant_id == tenant.id, Customer.id == customer_id)
     )
     if customer is None:
         raise api_exception(404, "not_found", "Customer was not found for this tenant.")

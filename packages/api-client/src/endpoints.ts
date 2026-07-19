@@ -191,6 +191,8 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.get<LocationListResponse>(`tenants/${tenantSlug}/locations/manage`),
   listTenantUsers: (tenantSlug: string) =>
     client.get<TenantUserListResponse>(`tenants/${tenantSlug}/users`),
+  listOwnerCandidates: (tenantSlug: string) =>
+    client.get<TenantUserListResponse>(`tenants/${tenantSlug}/customers/owner-candidates`),
   createTenantUser: (tenantSlug: string, body: CreateTenantUserRequest) =>
     client.post<TenantUserSummary, CreateTenantUserRequest>(`tenants/${tenantSlug}/users`, body),
   updateTenantUser: (tenantSlug: string, userId: string, body: UpdateTenantUserRequest) =>

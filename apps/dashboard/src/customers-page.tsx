@@ -7,6 +7,7 @@ import type {
   CustomerListResponse,
   CustomerProfileResponse,
   CustomerSummary,
+  TenantUserSummary,
   UpdateCustomerRequest,
 } from "@booking/shared-types";
 
@@ -123,6 +124,14 @@ export function CustomersPage({
   const [formResponsesState, setFormResponsesState] = useState<FormResponsesState>({
     kind: "idle",
   });
+  const [clientOwnershipEnabled, setClientOwnershipEnabled] = useState(false);
+
+  useEffect(() => {
+    if (!tenantSlug) return;
+    platformApi.getTenantBySlug(tenantSlug).then((t) => {
+      setClientOwnershipEnabled(Boolean(t.settings?.clientOwnershipEnabled));
+    }).catch(() => {});
+  }, [tenantSlug]);
 
   const loadCustomers = async (searchQuery?: string) => {
     try {
@@ -335,6 +344,7 @@ export function CustomersPage({
                 profileState={profileState}
                 formResponsesState={formResponsesState}
                 tenantSlug={tenantSlug}
+                clientOwnershipEnabled={clientOwnershipEnabled}
                 onCustomerUpdated={async () => {
                   await loadCustomers();
                   // Re-fetch the profile to get updated notes
@@ -369,12 +379,14 @@ function CustomerProfilePanel({
   profileState,
   formResponsesState,
   tenantSlug,
+  clientOwnershipEnabled,
   onCustomerUpdated,
 }: {
   customer: CustomerSummary;
   profileState: ProfileState;
   formResponsesState: FormResponsesState;
   tenantSlug: string;
+  clientOwnershipEnabled: boolean;
   onCustomerUpdated?: () => Promise<void>;
 }) {
   const [expandedFormIds, setExpandedFormIds] = useState<Set<string>>(new Set());
@@ -395,6 +407,43 @@ function CustomerProfilePanel({
   const [walletNote, setWalletNote] = useState("");
   const [walletSaveState, setWalletSaveState] = useState<"idle" | "submitting" | "error">("idle");
   const [walletError, setWalletError] = useState("");
+  const [ownerCandidates, setOwnerCandidates] = useState<TenantUserSummary[]>([]);
+  const [ownerCandidatesLoaded, setOwnerCandidatesLoaded] = useState(false);
+  const [selectedOwnerId, setSelectedOwnerId] = useState(customer.ownerUserId ?? "");
+  const [ownerSaveState, setOwnerSaveState] = useState<"idle" | "submitting" | "error">("idle");
+  const [ownerError, setOwnerError] = useState("");
+
+  useEffect(() => {
+    if (ownerCandidatesLoaded) return;
+    let cancelled = false;
+    platformApi.listOwnerCandidates(tenantSlug).then((res) => {
+      if (cancelled) return;
+      setOwnerCandidates(res.users);
+      setOwnerCandidatesLoaded(true);
+    }).catch(() => {
+      if (cancelled) return;
+      setOwnerCandidatesLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, [tenantSlug, ownerCandidatesLoaded]);
+
+  const handleOwnerChange = async (userId: string) => {
+    setSelectedOwnerId(userId);
+    setOwnerSaveState("submitting");
+    setOwnerError("");
+    try {
+      const body: UpdateCustomerRequest = { ownerUserId: userId || null };
+      await platformApi.updateCustomer(customer.tenantId, customer.id, body);
+      setOwnerSaveState("idle");
+      if (onCustomerUpdated) {
+        await onCustomerUpdated();
+      }
+    } catch (err) {
+      setOwnerSaveState("error");
+      setOwnerError(err instanceof Error ? err.message : "Unable to assign owner.");
+      setSelectedOwnerId(customer.ownerUserId ?? "");
+    }
+  };
 
   const toggleFormExpand = (id: string) => {
     setExpandedFormIds((prev) => {
@@ -496,6 +545,27 @@ function CustomerProfilePanel({
           </p>
         </div>
       </header>
+
+      {clientOwnershipEnabled ? (
+      <section className="customer-profile-section">
+        <p className="rail-section-kicker">Owner</p>
+        <div className="customer-owner-row">
+          <select
+            value={selectedOwnerId}
+            onChange={(e) => { void handleOwnerChange(e.target.value); }}
+            disabled={ownerSaveState === "submitting" || !ownerCandidatesLoaded}
+            className="customer-owner-select"
+          >
+            <option value="">Unassigned</option>
+            {ownerCandidates.map((u) => (
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </select>
+          {ownerSaveState === "submitting" ? <span className="customer-owner-saving">Saving…</span> : null}
+        </div>
+        {ownerSaveState === "error" ? <p role="alert" className="settings-error">{ownerError}</p> : null}
+      </section>
+      ) : null}
 
       <section className="customer-profile-section customer-profile-money">
         <p className="rail-section-kicker">Money</p>

@@ -240,6 +240,13 @@ def provider_to_summary(provider: Provider, tenant: Tenant | None = None) -> Pro
 
 
 def customer_to_summary(customer: Customer) -> CustomerSummaryResponse:
+    owner_name: str | None = None
+    try:
+        owner = customer.owner
+    except Exception:
+        owner = None
+    if owner is not None:
+        owner_name = owner.name
     return CustomerSummaryResponse(
         id=customer.id,
         tenant_id=customer.tenant_id,
@@ -250,6 +257,7 @@ def customer_to_summary(customer: Customer) -> CustomerSummaryResponse:
         phone=customer.phone,
         notes=customer.notes,
         owner_user_id=customer.owner_user_id,
+        owner_name=owner_name,
         acquired_at=customer.acquired_at,
         source_channel=customer.source_channel,
     )

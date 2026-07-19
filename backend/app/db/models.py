@@ -74,6 +74,7 @@ class Customer(Base, IdMixin, TimestampMixin):
     notes_history: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="customers")
+    owner: Mapped[Optional["User"]] = relationship(foreign_keys=[owner_user_id])
     bookings: Mapped[list[Booking]] = relationship(back_populates="customer")
     booking_drafts: Mapped[list[BookingDraft]] = relationship(back_populates="customer")
     payments: Mapped[list[Payment]] = relationship(back_populates="customer")
