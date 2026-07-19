@@ -69,6 +69,9 @@ class Customer(Base, IdMixin, TimestampMixin):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     owner_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True, index=True)
     wallet_balance_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    acquired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_channel: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    notes_history: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="customers")
     bookings: Mapped[list[Booking]] = relationship(back_populates="customer")

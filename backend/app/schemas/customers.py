@@ -55,3 +55,5 @@ class UpdateCustomerRequest(CamelModel):
     phone: str | None = None
     notes: str | None = None
     owner_user_id: str | None = None
+    wallet_adjustment_cents: int | None = None
+    wallet_adjustment_note: str | None = None

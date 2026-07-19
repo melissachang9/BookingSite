@@ -199,6 +199,7 @@ export type BookingFormRequirementSummary = {
   customerPromptTiming?: CustomerPromptTiming | null;
   status: FormRequirementStatus;
   schema?: FormSchema | null;
+  prefillAnswers?: Record<string, unknown> | null;
 };
 
 export type BookingFormRequirementEntry = {

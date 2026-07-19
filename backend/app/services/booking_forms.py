@@ -338,10 +338,29 @@ async def list_booking_form_requirements_by_token(
     ).all()
 
     result: list[dict[str, object]] = []
+    # Fetch customer's last response for each form for pre-fill
+    form_ids = list({req.form_id for req in requirements})
+    last_responses: dict[str, dict[str, object]] = {}
+    if form_ids and booking.customer_id:
+        for form_id in form_ids:
+            last_response = await session.scalar(
+                select(FormResponse)
+                .where(
+                    FormResponse.tenant_id == tenant.id,
+                    FormResponse.customer_id == booking.customer_id,
+                    FormResponse.form_id == form_id,
+                )
+                .order_by(FormResponse.submitted_at.desc())
+                .limit(1)
+            )
+            if last_response is not None and isinstance(last_response.answers_json, dict):
+                last_responses[form_id] = last_response.answers_json
+
     for req in requirements:
         version = req.form_version
         form = version.form if version is not None else None
         schema = version.schema_json if version is not None and isinstance(version.schema_json, dict) else None
+        prefill = last_responses.get(req.form_id)
         result.append({
             "id": req.id,
             "formId": req.form_id,
@@ -351,6 +370,7 @@ async def list_booking_form_requirements_by_token(
             "customerPromptTiming": req.customer_prompt_timing,
             "status": req.status,
             "schema": schema,
+            "prefillAnswers": prefill,
         })
 
     return result

@@ -617,9 +617,9 @@ function parseIsoDate(value: string): Date {
 }
 
 function toIsoDate(date: Date): string {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(date.getUTCDate()).padStart(2, "0");
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
@@ -3998,6 +3998,8 @@ function CheckoutPanel({
   const [isReadOnly, setIsReadOnly] = useState(appointment.status === "completed");
   const [wasReopened, setWasReopened] = useState(false);
   const [paymentStep, setPaymentStep] = useState<"methods" | "register">("methods");
+  const [showWalletPopup, setShowWalletPopup] = useState(false);
+  const [walletApplyText, setWalletApplyText] = useState("");
 
   const builtinMethods = [
     { id: "cash", label: "Cash" },
@@ -4089,17 +4091,19 @@ function CheckoutPanel({
   };
 
   const handleApplyWallet = async () => {
+    const applyCents = Math.round(parseFloat(walletApplyText) * 100);
+    if (isNaN(applyCents) || applyCents <= 0 || applyCents > Math.min(appointment.walletBalanceCents, remainingBalance)) return;
     setState("submitting");
     setErrorMessage("");
     try {
-      const applyAmount = Math.min(appointment.walletBalanceCents, remainingBalance);
-      const updated = await api.applyWalletCredit(tenantSlug, appointment.id, { amountCents: applyAmount });
+      const updated = await api.applyWalletCredit(tenantSlug, appointment.id, { amountCents: applyCents });
       const updatedPayments = (updated.payments ?? []).filter(
         (p) => p.status === "succeeded" && p.amountCents > 0,
       );
       setPayments(updatedPayments);
       const newRemaining = Math.max(total - updatedPayments.reduce((s, p) => s + p.amountCents, 0), 0);
       setState(newRemaining <= 0 ? "success" : "idle");
+      setShowWalletPopup(false);
     } catch (error) {
       setState("error");
       setErrorMessage(error instanceof Error ? error.message : "Failed to apply wallet credit.");
@@ -4390,11 +4394,81 @@ function CheckoutPanel({
             <button
               type="button"
               className="checkout-panel__wallet-apply"
-              onClick={handleApplyWallet}
+              onClick={() => {
+                const cap = Math.min(appointment.walletBalanceCents, remainingBalance);
+                setWalletApplyText((cap / 100).toFixed(2));
+                setShowWalletPopup(true);
+              }}
               disabled={state === "submitting"}
             >
               Apply credit
             </button>
+          </section>
+        ) : null}
+
+        {showWalletPopup ? (
+          <section className="checkout-panel__wallet-popup">
+            <div className="checkout-panel__wallet-popup-header">
+              <h3>Apply Wallet Credit</h3>
+              <button
+                type="button"
+                className="checkout-panel__wallet-popup-close"
+                onClick={() => setShowWalletPopup(false)}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="checkout-panel__wallet-popup-balances">
+              <div className="checkout-panel__wallet-popup-balance-row">
+                <span>Wallet balance</span>
+                <strong>{formatMoney(appointment.walletBalanceCents)}</strong>
+              </div>
+              <div className="checkout-panel__wallet-popup-balance-row">
+                <span>Remaining after apply</span>
+                <strong>{formatMoney(Math.max(0, appointment.walletBalanceCents - Math.round(parseFloat(walletApplyText || "0") * 100)))}</strong>
+              </div>
+            </div>
+            <label className="checkout-panel__wallet-popup-amount">
+              <span>Amount to apply</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={walletApplyText}
+                onChange={(e) => setWalletApplyText(e.target.value)}
+                disabled={state === "submitting"}
+                autoFocus
+              />
+            </label>
+            {state === "error" ? (
+              <p className="checkout-panel__error">{errorMessage}</p>
+            ) : null}
+            <div className="checkout-panel__wallet-popup-actions">
+              <button
+                type="button"
+                className="checkout-panel__wallet-popup-cancel"
+                onClick={() => setShowWalletPopup(false)}
+                disabled={state === "submitting"}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary-action"
+                onClick={() => void handleApplyWallet()}
+                disabled={
+                  state === "submitting" ||
+                  (() => {
+                    const c = Math.round(parseFloat(walletApplyText) * 100);
+                    return isNaN(c) || c <= 0 || c > Math.min(appointment.walletBalanceCents, remainingBalance);
+                  })()
+                }
+              >
+                {state === "submitting"
+                  ? "Applying..."
+                  : `Apply ${formatMoney(Math.round(parseFloat(walletApplyText || "0") * 100))}`}
+              </button>
+            </div>
           </section>
         ) : null}
 

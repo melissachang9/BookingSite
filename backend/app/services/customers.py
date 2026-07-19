@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -181,9 +183,22 @@ async def update_customer(
     if payload.phone is not None:
         customer.phone = payload.phone.strip() or None
     if payload.notes is not None:
+        # Track notes history for audit
+        history = customer.notes_history or {}
+        if isinstance(history, dict):
+            timestamp = datetime.now(timezone.utc).isoformat()
+            history[timestamp] = {
+                "previous": customer.notes,
+                "new": payload.notes.strip() or None,
+            }
+            customer.notes_history = history
         customer.notes = payload.notes.strip() or None
     if payload.owner_user_id is not None:
         customer.owner_user_id = payload.owner_user_id if payload.owner_user_id.strip() else None
+    if payload.wallet_adjustment_cents is not None and payload.wallet_adjustment_cents != 0:
+        customer.wallet_balance_cents += payload.wallet_adjustment_cents
+        if customer.wallet_balance_cents < 0:
+            customer.wallet_balance_cents = 0
 
     await session.commit()
     await session.refresh(customer)

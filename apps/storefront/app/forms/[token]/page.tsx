@@ -22,7 +22,8 @@ const isNextNavigationSignal = (error: unknown): error is { digest: string } =>
   typeof error.digest === "string" &&
   (error.digest.startsWith("NEXT_REDIRECT") || error.digest.startsWith("NEXT_HTTP_ERROR_FALLBACK"));
 
-function renderRequirementField(field: FormField) {
+function renderRequirementField(field: FormField, defaultValue?: unknown) {
+  const defVal = defaultValue !== undefined && defaultValue !== null ? String(defaultValue) : undefined;
   if (field.type === "section") {
     return (
       <div key={field.id} className="requirement-copy-block">
@@ -41,6 +42,7 @@ function renderRequirementField(field: FormField) {
   }
 
   if (field.type === "yes_no") {
+    const defValStr = defVal === "true" ? "true" : defVal === "false" ? "false" : undefined;
     return (
       <fieldset key={field.id} className="requirement-choice-fieldset">
         <legend>
@@ -50,11 +52,11 @@ function renderRequirementField(field: FormField) {
         {field.helpText ? <small>{field.helpText}</small> : null}
         <div className="requirement-choice-row">
           <label className="requirement-choice-option">
-            <input type="radio" name={field.id} value="true" required={field.required} />
+            <input type="radio" name={field.id} value="true" required={field.required} defaultChecked={defValStr === "true"} />
             <span>Yes</span>
           </label>
           <label className="requirement-choice-option">
-            <input type="radio" name={field.id} value="false" required={field.required} />
+            <input type="radio" name={field.id} value="false" required={field.required} defaultChecked={defValStr === "false"} />
             <span>No</span>
           </label>
         </div>
@@ -65,7 +67,7 @@ function renderRequirementField(field: FormField) {
   if (field.type === "checkbox") {
     return (
       <label key={field.id} className="requirement-checkbox-field">
-        <input type="checkbox" name={field.id} required={field.required} />
+        <input type="checkbox" name={field.id} required={field.required} defaultChecked={defVal === "true"} />
         <span>{field.label}</span>
       </label>
     );
@@ -79,7 +81,7 @@ function renderRequirementField(field: FormField) {
           {field.required ? " *" : ""}
         </span>
         {field.helpText ? <small>{field.helpText}</small> : null}
-        <textarea name={field.id} rows={4} placeholder={field.placeholder} required={field.required} />
+        <textarea name={field.id} rows={4} placeholder={field.placeholder} required={field.required} defaultValue={defVal} />
       </label>
     );
   }
@@ -92,7 +94,7 @@ function renderRequirementField(field: FormField) {
           {field.required ? " *" : ""}
         </span>
         {field.helpText ? <small>{field.helpText}</small> : null}
-        <select name={field.id} required={field.required} defaultValue="">
+        <select name={field.id} required={field.required} defaultValue={defVal ?? ""}>
           <option value="" disabled>
             Choose an option
           </option>
@@ -106,6 +108,27 @@ function renderRequirementField(field: FormField) {
     );
   }
 
+  if (field.type === "multi_select" && Array.isArray(field.options) && field.options.length > 0) {
+    const selectedValues: string[] = Array.isArray(defaultValue) ? defaultValue.map(String) : [];
+    return (
+      <fieldset key={field.id} className="requirement-choice-fieldset">
+        <legend>
+          {field.label}
+          {field.required ? " *" : ""}
+        </legend>
+        {field.helpText ? <small>{field.helpText}</small> : null}
+        <div className="requirement-choice-grid">
+          {field.options.map((option) => (
+            <label key={option.value} className="requirement-choice-option">
+              <input type="checkbox" name={field.id} value={option.value} defaultChecked={selectedValues.includes(option.value)} />
+              <span>{option.label}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+    );
+  }
+
   if (field.type === "date") {
     return (
       <label key={field.id} className="requirement-form-field">
@@ -114,7 +137,7 @@ function renderRequirementField(field: FormField) {
           {field.required ? " *" : ""}
         </span>
         {field.helpText ? <small>{field.helpText}</small> : null}
-        <DateFieldInput name={field.id} required={field.required} />
+        <DateFieldInput name={field.id} required={field.required} defaultValue={defVal} />
       </label>
     );
   }
@@ -127,7 +150,7 @@ function renderRequirementField(field: FormField) {
           {field.required ? " *" : ""}
         </span>
         {field.helpText ? <small>{field.helpText}</small> : null}
-        <input name={field.id} type="number" placeholder={field.placeholder} required={field.required} />
+        <input name={field.id} type="number" placeholder={field.placeholder} required={field.required} defaultValue={defVal} />
       </label>
     );
   }
@@ -152,7 +175,7 @@ function renderRequirementField(field: FormField) {
         {field.required ? " *" : ""}
       </span>
       {field.helpText ? <small>{field.helpText}</small> : null}
-      <input name={field.id} type="text" placeholder={field.placeholder} required={field.required} />
+      <input name={field.id} type="text" placeholder={field.placeholder} required={field.required} defaultValue={defVal} />
     </label>
   );
 }
@@ -182,7 +205,10 @@ function renderRequirementPanel(token: string, requirement: BookingFormRequireme
         <input type="hidden" name="requirementId" value={requirement.id} />
         <input type="hidden" name="tenantId" value={tenantId} />
         <input type="hidden" name="schemaJson" value={JSON.stringify(requirement.schema)} />
-        {requirement.schema.fields.map((field) => renderRequirementField(field))}
+        {requirement.schema.fields.map((field) => {
+          const prefill = requirement.prefillAnswers as Record<string, unknown> | null | undefined;
+          return renderRequirementField(field, prefill?.[field.id]);
+        })}
         <button type="submit" className="store-button">
           Submit form
         </button>
@@ -203,17 +229,25 @@ export default async function ManageBookingFormsPage({ params, searchParams }: F
     const { booking, tenant } = manageBooking;
     const pendingRequirements = requirements.filter((requirement) => requirement.status === "pending");
     const hasPending = pendingRequirements.length > 0;
+    const hasPostVisit = pendingRequirements.some((r) => r.customerPromptTiming === "post_visit");
+    const timingLabel = hasPostVisit ? "Post-visit forms" : "Pre-visit forms";
+    const headingText = hasPostVisit
+      ? (hasPending ? "Complete your post-visit forms." : "All post-visit forms are complete.")
+      : (hasPending ? "Complete your forms for this visit." : "All forms are complete.");
+    const bodyText = hasPostVisit
+      ? (hasPending
+        ? "Submit any required forms below. Your responses help us improve your experience."
+        : "Thanks for completing your post-visit forms.")
+      : (hasPending
+        ? "Submit any required forms below. Your responses are attached to your customer profile and this appointment."
+        : "Thanks for completing your forms. There is nothing else to do here before your visit.");
 
     return (
       <main className="manage-page page-stack">
         <section className="state-panel state-panel--manage">
-          <p className="store-eyebrow">Pre-visit forms</p>
-          <h1>{hasPending ? "Complete your forms for this visit." : "All forms are complete."}</h1>
-          <p>
-            {hasPending
-              ? "Submit any required forms below. Your responses are attached to your customer profile and this appointment."
-              : "Thanks for completing your forms. There is nothing else to do here before your visit."}
-          </p>
+          <p className="store-eyebrow">{timingLabel}</p>
+          <h1>{headingText}</h1>
+          <p>{bodyText}</p>
           <span className="panel-badge">{booking.status.replaceAll("_", " ")}</span>
         </section>
 

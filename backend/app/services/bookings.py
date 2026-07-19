@@ -306,9 +306,10 @@ async def apply_wallet_credit(
         _apply_payment_resolution(booking, "collected")
 
     reload_booking_id = booking.id
+    reload_tenant_id = tenant.id
     await session.commit()
     session.expire_all()
-    updated_booking = await _load_booking(session, reload_booking_id, tenant.id)
+    updated_booking = await _load_booking(session, reload_booking_id, reload_tenant_id)
     return booking_to_summary(updated_booking)
 
 

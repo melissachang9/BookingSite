@@ -250,8 +250,8 @@ def customer_to_summary(customer: Customer) -> CustomerSummaryResponse:
         phone=customer.phone,
         notes=customer.notes,
         owner_user_id=customer.owner_user_id,
-        acquired_at=None,
-        source_channel=None,
+        acquired_at=customer.acquired_at,
+        source_channel=customer.source_channel,
     )
 
 

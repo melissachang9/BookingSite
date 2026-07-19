@@ -2900,6 +2900,114 @@ body {
   cursor: not-allowed;
 }
 
+/* Wallet credit popup */
+.checkout-panel__wallet-popup {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.checkout-panel__wallet-popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.checkout-panel__wallet-popup-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--ui-ink);
+}
+
+.checkout-panel__wallet-popup-close {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: var(--ui-muted);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.checkout-panel__wallet-popup-close:hover {
+  color: var(--ui-ink);
+}
+
+.checkout-panel__wallet-popup-balances {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.6rem 0.75rem;
+  background: rgba(46, 125, 50, 0.05);
+  border-radius: 6px;
+}
+
+.checkout-panel__wallet-popup-balance-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.checkout-panel__wallet-popup-balance-row strong {
+  color: #2e7d32;
+}
+
+.checkout-panel__wallet-popup-amount {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--ui-muted);
+}
+
+.checkout-panel__wallet-popup-amount input {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ui-ink);
+  background: var(--ui-surface);
+}
+
+.checkout-panel__wallet-popup-amount input:focus {
+  outline: none;
+  border-color: #2e7d32;
+  box-shadow: 0 0 0 2px rgba(46, 125, 50, 0.15);
+}
+
+.checkout-panel__wallet-popup-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.checkout-panel__wallet-popup-cancel {
+  padding: 0.5rem 1rem;
+  background: transparent;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--ui-muted);
+  cursor: pointer;
+}
+
+.checkout-panel__wallet-popup-cancel:hover {
+  color: var(--ui-ink);
+  border-color: var(--ui-ink);
+}
+
+.checkout-panel__wallet-popup-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Tip row + quick-select chips */
 .checkout-panel__tip-row {
   align-items: center;

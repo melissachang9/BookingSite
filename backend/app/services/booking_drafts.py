@@ -66,6 +66,7 @@ async def _upsert_customer(
     else:
         query = query.where(Customer.id == "")
     customer = await session.scalar(query)
+    now = datetime.now(timezone.utc)
     if customer is None:
         customer = Customer(
             tenant_id=tenant_id,
@@ -73,6 +74,8 @@ async def _upsert_customer(
             email=email,
             phone=phone,
             owner_user_id=assign_owner_user_id,
+            acquired_at=now,
+            source_channel="public_online",
         )
         session.add(customer)
         await session.flush()
@@ -81,6 +84,9 @@ async def _upsert_customer(
     customer.name = payload["name"] or customer.name
     customer.email = email or customer.email
     customer.phone = phone or customer.phone
+    if customer.acquired_at is None:
+        customer.acquired_at = now
+        customer.source_channel = "public_online"
     await session.flush()
     return customer
 

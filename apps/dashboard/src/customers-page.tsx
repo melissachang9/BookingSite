@@ -390,6 +390,11 @@ function CustomerProfilePanel({
   });
   const [contactSaveState, setContactSaveState] = useState<"idle" | "submitting" | "error">("idle");
   const [contactError, setContactError] = useState("");
+  const [isAdjustingWallet, setIsAdjustingWallet] = useState(false);
+  const [walletAmountText, setWalletAmountText] = useState("");
+  const [walletNote, setWalletNote] = useState("");
+  const [walletSaveState, setWalletSaveState] = useState<"idle" | "submitting" | "error">("idle");
+  const [walletError, setWalletError] = useState("");
 
   const toggleFormExpand = (id: string) => {
     setExpandedFormIds((prev) => {
@@ -445,6 +450,35 @@ function CustomerProfilePanel({
       setContactError(err instanceof Error ? err.message : "Unable to save contact.");
     }
   };
+
+  const handleWalletAdjustment = async () => {
+    const dollars = parseFloat(walletAmountText.replace(/[^0-9.-]/g, ""));
+    if (isNaN(dollars) || dollars === 0) {
+      setWalletError("Enter a valid dollar amount.");
+      setWalletSaveState("error");
+      return;
+    }
+    const cents = Math.round(dollars * 100);
+    setWalletSaveState("submitting");
+    setWalletError("");
+    try {
+      const body: UpdateCustomerRequest = {
+        walletAdjustmentCents: cents,
+        walletAdjustmentNote: walletNote.trim() || undefined,
+      };
+      await platformApi.updateCustomer(customer.tenantId, customer.id, body);
+      setIsAdjustingWallet(false);
+      setWalletAmountText("");
+      setWalletNote("");
+      setWalletSaveState("idle");
+      if (onCustomerUpdated) {
+        await onCustomerUpdated();
+      }
+    } catch (err) {
+      setWalletSaveState("error");
+      setWalletError(err instanceof Error ? err.message : "Unable to adjust wallet.");
+    }
+  };
   return (
     <div className="customer-profile">
       <header className="customer-profile-header">
@@ -471,12 +505,52 @@ function CustomerProfilePanel({
               <span>Lifetime spend</span>
               <strong>{formatMoney(profileState.profile.lifetimeSpendCents)}</strong>
             </div>
+            <div className="customer-money-row">
+              <span>Wallet balance</span>
+              <strong>{formatMoney(profileState.profile.walletBalanceCents)}</strong>
+            </div>
             {profileState.profile.outstandingBalanceCents > 0 ? (
               <div className="customer-money-row customer-money-row--outstanding">
                 <span>Outstanding</span>
                 <strong>{formatMoney(profileState.profile.outstandingBalanceCents)}</strong>
               </div>
             ) : null}
+            {isAdjustingWallet ? (
+              <div className="customer-notes-editor" style={{ marginTop: "0.75rem" }}>
+                <label style={{ display: "block", marginBottom: "0.5rem" }}>
+                  <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>
+                    Amount (positive = credit, negative = debit)
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={walletAmountText}
+                    onChange={(e) => setWalletAmountText(e.target.value)}
+                    placeholder="e.g. 25.00 or -10.00"
+                    disabled={walletSaveState === "submitting"}
+                    style={{ width: "100%" }}
+                  />
+                </label>
+                <label style={{ display: "block", marginBottom: "0.5rem" }}>
+                  <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Note (required)</span>
+                  <input
+                    type="text"
+                    value={walletNote}
+                    onChange={(e) => setWalletNote(e.target.value)}
+                    placeholder="e.g. Loyalty credit"
+                    disabled={walletSaveState === "submitting"}
+                    style={{ width: "100%" }}
+                  />
+                </label>
+                <div className="customer-notes-editor__actions">
+                  <button type="button" className="text-action" onClick={() => { setIsAdjustingWallet(false); setWalletError(""); }} disabled={walletSaveState === "submitting"}>Cancel</button>
+                  <button type="button" className="primary-action" onClick={handleWalletAdjustment} disabled={walletSaveState === "submitting" || !walletNote.trim()}>{walletSaveState === "submitting" ? "Saving…" : "Adjust"}</button>
+                </div>
+                {walletSaveState === "error" ? <p role="alert" className="settings-error">{walletError}</p> : null}
+              </div>
+            ) : (
+              <button type="button" className="text-action" onClick={() => setIsAdjustingWallet(true)} style={{ marginTop: "0.5rem" }}>Adjust wallet</button>
+            )}
           </div>
         ) : (
           <p className="staff-list-empty">Loading…</p>
