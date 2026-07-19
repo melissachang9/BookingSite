@@ -125,6 +125,7 @@ export function CustomersPage({
     kind: "idle",
   });
   const [clientOwnershipEnabled, setClientOwnershipEnabled] = useState(false);
+  const [sortMode, setSortMode] = useState<"alpha" | "recent">("alpha");
 
   useEffect(() => {
     if (!tenantSlug) return;
@@ -275,101 +276,137 @@ export function CustomersPage({
     );
   }
 
-  return (
-    <main className="ops-page-stack">
-      <h3>{definition.title}</h3>
+  const sortedCustomers = [...customers].sort((a, b) => {
+    if (sortMode === "recent") {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    }
+    return a.name.localeCompare(b.name);
+  });
 
-      <section className="staff-master-detail">
-        <div className="staff-grid">
-          <aside className="staff-list-rail" aria-label="Customer list">
-            <div className="staff-list-rail-header">
-              <h4>Customers</h4>
-              <span className="services-category-count">{customers.length}</span>
-            </div>
-            <div className="customer-search-bar">
-              <input
-                type="text"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") handleSearch();
-                }}
-                placeholder="Search by name, email, or phone"
-                aria-label="Search customers"
-              />
+  const recentCutoff = new Date();
+  recentCutoff.setDate(recentCutoff.getDate() - 30);
+  const recentCustomers = customers.filter((c) => new Date(c.createdAt) >= recentCutoff);
+
+  return (
+    <main className="ops-page-stack customers-page">
+      <div className="customers-page__toolbar">
+        <h3>{definition.title}</h3>
+        <div className="customers-page__controls">
+          <div className="customer-search-bar">
+            <input
+              type="text"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") handleSearch();
+              }}
+              placeholder="Search by name, email, or phone"
+              aria-label="Search customers"
+            />
+            <button
+              type="button"
+              className="ghost-action"
+              onClick={handleSearch}
+            >
+              Search
+            </button>
+          </div>
+          <button type="button" className="primary-action" disabled>
+            Add customer
+          </button>
+        </div>
+        <div className="customers-page__filters">
+          <span className="customers-page__count">{customers.length} total</span>
+          <div className="customers-page__sort">
+            <button
+              type="button"
+              className={`customers-page__sort-btn${sortMode === "alpha" ? " is-active" : ""}`}
+              onClick={() => setSortMode("alpha")}
+            >
+              A–Z
+            </button>
+            <button
+              type="button"
+              className={`customers-page__sort-btn${sortMode === "recent" ? " is-active" : ""}`}
+              onClick={() => setSortMode("recent")}
+            >
+              Last 30 days
+              {sortMode === "recent" ? ` (${recentCustomers.length})` : ""}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {customers.length === 0 ? (
+        <p className="staff-list-empty">No customers found.</p>
+      ) : (
+        <ul className="customers-page__list">
+          {sortedCustomers.map((customer) => (
+            <li key={customer.id}>
               <button
                 type="button"
-                className="ghost-action"
-                onClick={handleSearch}
+                className={`customers-page__row${
+                  selectedCustomerId === customer.id ? " is-active" : ""
+                }`}
+                onClick={() => setSelectedCustomerId(customer.id)}
               >
-                Search
+                <span
+                  className="appointment-customer-avatar"
+                  aria-hidden="true"
+                >
+                  {initialsOf(customer.name)}
+                </span>
+                <div className="customers-page__row-info">
+                  <strong>{customer.name}</strong>
+                  {customer.email ? <span>{customer.email}</span> : null}
+                </div>
+                <span className="customers-page__row-date">
+                  {formatDate(customer.createdAt)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {selectedCustomer ? (
+        <>
+          <div
+            className="appointment-drawer-backdrop"
+            onClick={() => setSelectedCustomerId(null)}
+          />
+          <aside className="appointment-details-drawer customer-profile-drawer" role="dialog" aria-label="Customer profile">
+            <div className="appointment-details-drawer__header">
+              <h4>Customer profile</h4>
+              <button type="button" className="appointment-drawer-outline-action" onClick={() => setSelectedCustomerId(null)}>
+                Close
               </button>
             </div>
-            {customers.length === 0 ? (
-              <p className="staff-list-empty">No customers found.</p>
-            ) : (
-              <ul className="staff-list">
-                {customers.map((customer) => (
-                  <li key={customer.id}>
-                    <button
-                      type="button"
-                      className={`staff-list-item${
-                        selectedCustomerId === customer.id ? " is-active" : ""
-                      }`}
-                      onClick={() => setSelectedCustomerId(customer.id)}
-                    >
-                      <span
-                        className="appointment-customer-avatar"
-                        aria-hidden="true"
-                      >
-                        {initialsOf(customer.name)}
-                      </span>
-                      <div>
-                        <strong>{customer.name}</strong>
-                        {customer.email ? (
-                          <span>{customer.email}</span>
-                        ) : null}
-                      </div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </aside>
-
-          <section className="staff-detail-panel" aria-label="Customer profile">
-            {selectedCustomer ? (
-              <CustomerProfilePanel
-                customer={selectedCustomer}
-                profileState={profileState}
-                formResponsesState={formResponsesState}
-                tenantSlug={tenantSlug}
-                clientOwnershipEnabled={clientOwnershipEnabled}
-                onCustomerUpdated={async () => {
-                  await loadCustomers();
-                  // Re-fetch the profile to get updated notes
-                  if (selectedCustomerId) {
-                    setProfileState({ kind: "loading" });
-                    try {
-                      const profile = await platformApi.getCustomerProfile(tenantSlug, selectedCustomerId);
-                      setProfileState({ kind: "ready", profile });
-                    } catch (error) {
-                      setProfileState({
-                        kind: "error",
-                        message: readErrorMessage(error, "Unable to reload profile."),
-                      });
-                    }
+            <CustomerProfilePanel
+              customer={selectedCustomer}
+              profileState={profileState}
+              formResponsesState={formResponsesState}
+              tenantSlug={tenantSlug}
+              clientOwnershipEnabled={clientOwnershipEnabled}
+              onCustomerUpdated={async () => {
+                await loadCustomers();
+                if (selectedCustomerId) {
+                  setProfileState({ kind: "loading" });
+                  try {
+                    const profile = await platformApi.getCustomerProfile(tenantSlug, selectedCustomerId);
+                    setProfileState({ kind: "ready", profile });
+                  } catch (error) {
+                    setProfileState({
+                      kind: "error",
+                      message: readErrorMessage(error, "Unable to reload profile."),
+                    });
                   }
-                }}
-              />
-            ) : (
-              <div className="staff-detail-empty">
-                <p>Select a customer to view their profile and booking history.</p>
-              </div>
-            )}
-          </section>
-        </div>
-      </section>
+                }
+              }}
+            />
+          </aside>
+        </>
+      ) : null}
     </main>
   );
 }
