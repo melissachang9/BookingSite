@@ -57,3 +57,5 @@ class UpdateCustomerRequest(CamelModel):
     owner_user_id: str | None = None
     wallet_adjustment_cents: int | None = None
     wallet_adjustment_note: str | None = None
+    sms_consent: bool | None = None
+    sms_phone: str | None = None

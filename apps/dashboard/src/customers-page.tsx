@@ -449,6 +449,9 @@ function CustomerProfilePanel({
   const [selectedOwnerId, setSelectedOwnerId] = useState(customer.ownerUserId ?? "");
   const [ownerSaveState, setOwnerSaveState] = useState<"idle" | "submitting" | "error">("idle");
   const [ownerError, setOwnerError] = useState("");
+  const [smsConsent, setSmsConsent] = useState(customer.smsConsent ?? false);
+  const [smsPhone, setSmsPhone] = useState(customer.smsPhone ?? customer.phone ?? "");
+  const [smsSaveState, setSmsSaveState] = useState<"idle" | "submitting" | "error">("idle");
 
   useEffect(() => {
     if (ownerCandidatesLoaded) return;
@@ -479,6 +482,32 @@ function CustomerProfilePanel({
       setOwnerSaveState("error");
       setOwnerError(err instanceof Error ? err.message : "Unable to assign owner.");
       setSelectedOwnerId(customer.ownerUserId ?? "");
+    }
+  };
+
+  const handleSmsConsentChange = async (consent: boolean) => {
+    setSmsConsent(consent);
+    setSmsSaveState("submitting");
+    try {
+      const body: UpdateCustomerRequest = { smsConsent: consent, smsPhone: consent ? smsPhone || customer.phone || null : null };
+      await platformApi.updateCustomer(customer.tenantId, customer.id, body);
+      setSmsSaveState("idle");
+      if (onCustomerUpdated) await onCustomerUpdated();
+    } catch (err) {
+      setSmsSaveState("error");
+      setSmsConsent(customer.smsConsent ?? false);
+    }
+  };
+
+  const handleSmsPhoneSave = async () => {
+    setSmsSaveState("submitting");
+    try {
+      const body: UpdateCustomerRequest = { smsPhone: smsPhone.trim() || null };
+      await platformApi.updateCustomer(customer.tenantId, customer.id, body);
+      setSmsSaveState("idle");
+      if (onCustomerUpdated) await onCustomerUpdated();
+    } catch (err) {
+      setSmsSaveState("error");
     }
   };
 
@@ -767,6 +796,36 @@ function CustomerProfilePanel({
             </button>
           </div>
         )}
+      </section>
+
+      <section className="customer-profile-section">
+        <p className="rail-section-kicker">SMS reminders</p>
+        <label className="settings-toggle-field" style={{ padding: 0 }}>
+          <input
+            type="checkbox"
+            checked={smsConsent}
+            onChange={(e) => { void handleSmsConsentChange(e.target.checked); }}
+            disabled={smsSaveState === "submitting"}
+          />
+          <span>
+            <strong>SMS consent</strong>
+            <small>Customer agrees to receive SMS appointment reminders.</small>
+          </span>
+        </label>
+        {smsConsent ? (
+          <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.4rem" }}>
+            <input
+              type="tel"
+              value={smsPhone}
+              onChange={(e) => setSmsPhone(e.target.value)}
+              onBlur={() => { if (smsPhone.trim() && smsPhone !== (customer.smsPhone ?? customer.phone ?? "")) handleSmsPhoneSave(); }}
+              placeholder="SMS phone number"
+              disabled={smsSaveState === "submitting"}
+              style={{ flex: 1, padding: "0.35rem 0.5rem", fontSize: "0.85rem", border: "1px solid var(--color-border, rgba(0,0,0,0.18))", borderRadius: "4px" }}
+            />
+          </div>
+        ) : null}
+        {smsSaveState === "error" ? <p role="alert" className="settings-error" style={{ marginTop: "0.25rem" }}>Unable to save SMS settings.</p> : null}
       </section>
 
       <section className="customer-profile-section">

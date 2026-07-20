@@ -10,6 +10,8 @@ export type CustomerSummary = AuditFields &
     sourceChannel?: string | null;
     ownerUserId?: UUID | null;
     ownerName?: string | null;
+    smsConsent?: boolean;
+    smsPhone?: string | null;
   };
 
 export type CustomerProfile = CustomerSummary & {
@@ -63,6 +65,8 @@ export type UpdateCustomerRequest = {
   phone?: string;
   notes?: string;
   ownerUserId?: UUID | null;
+  smsConsent?: boolean;
+  smsPhone?: string | null;
 };
 
 export type UpsertCustomerRequest = {

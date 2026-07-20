@@ -88,6 +88,13 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
     status: "available",
   },
   {
+    id: "appointment-reminders",
+    title: "Appointment Reminders",
+    eyebrow: "Notifications",
+    description: "Send email and SMS reminders to customers before their appointments.",
+    status: "available",
+  },
+  {
     id: "payroll",
     title: "Payroll",
     eyebrow: "Payments & checkout",
@@ -232,6 +239,13 @@ export function SettingsPage({
                 />
               ) : section.id === "automated-messages" ? (
                 <AutomatedMessagesSection
+                  canManageSettings={canManageSettings}
+                  tenant={tenant}
+                  onTenantUpdated={onTenantUpdated}
+                  tenantSlug={currentUser.tenantSlug}
+                />
+              ) : section.id === "appointment-reminders" ? (
+                <AppointmentRemindersSection
                   canManageSettings={canManageSettings}
                   tenant={tenant}
                   onTenantUpdated={onTenantUpdated}
@@ -734,6 +748,136 @@ function AutomatedMessagesSection({
           disabled={!canManageSettings || saveState.kind === "submitting"}
         >
           {saveState.kind === "submitting" ? "Saving…" : "Save message settings"}
+        </button>
+        {!canManageSettings ? (
+          <p className="settings-permission-note">You do not have permission to edit tenant settings.</p>
+        ) : null}
+      </div>
+    </form>
+  );
+}
+
+function AppointmentRemindersSection({
+  canManageSettings,
+  tenant,
+  onTenantUpdated,
+  tenantSlug,
+}: {
+  canManageSettings: boolean;
+  tenant: TenantSummary | null;
+  onTenantUpdated: (tenant: TenantSummary) => void;
+  tenantSlug: string;
+}) {
+  const [reminderHours, setReminderHours] = useState<number>(tenant?.settings?.appointmentReminderHours ?? 24);
+  const [emailEnabled, setEmailEnabled] = useState<boolean>(
+    Array.isArray(tenant?.settings?.appointmentReminderChannels)
+      ? tenant!.settings.appointmentReminderChannels.includes("email")
+      : true,
+  );
+  const [smsEnabled, setSmsEnabled] = useState<boolean>(
+    Array.isArray(tenant?.settings?.appointmentReminderChannels)
+      ? tenant!.settings.appointmentReminderChannels.includes("sms")
+      : false,
+  );
+  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
+
+  useEffect(() => {
+    if (tenant) {
+      setReminderHours(tenant.settings?.appointmentReminderHours ?? 24);
+      const channels = tenant.settings?.appointmentReminderChannels;
+      setEmailEnabled(Array.isArray(channels) ? channels.includes("email") : true);
+      setSmsEnabled(Array.isArray(channels) ? channels.includes("sms") : false);
+    }
+  }, [tenant]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canManageSettings) return;
+    setSaveState({ kind: "submitting" });
+    try {
+      const channels: string[] = [];
+      if (emailEnabled) channels.push("email");
+      if (smsEnabled) channels.push("sms");
+      const updated = await platformApi.updateTenantSettings(tenantSlug, {
+        appointmentReminderHours: reminderHours,
+        appointmentReminderChannels: channels,
+      });
+      onTenantUpdated(updated);
+      setSaveState({ kind: "success", message: "Appointment reminder settings saved." });
+    } catch (error) {
+      setSaveState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to save settings.",
+      });
+    }
+  };
+
+  if (tenant === null) {
+    return <p>Loading current settings…</p>;
+  }
+
+  return (
+    <form className="settings-form" onSubmit={handleSubmit}>
+      <p className="rail-section-kicker">Appointment reminders</p>
+      <p className="settings-form-help">
+        Send automated reminders to customers before their confirmed appointments.
+      </p>
+
+      <label className="settings-field">
+        <span>Reminder timing (hours before)</span>
+        <select
+          value={reminderHours}
+          onChange={(event) => setReminderHours(Number(event.target.value))}
+          disabled={!canManageSettings || saveState.kind === "submitting"}
+        >
+          <option value={1}>1 hour</option>
+          <option value={2}>2 hours</option>
+          <option value={4}>4 hours</option>
+          <option value={8}>8 hours</option>
+          <option value={12}>12 hours</option>
+          <option value={24}>24 hours</option>
+          <option value={48}>48 hours</option>
+          <option value={72}>72 hours</option>
+        </select>
+        <small>How far in advance to send appointment reminders.</small>
+      </label>
+
+      <label className="settings-toggle-field">
+        <input
+          type="checkbox"
+          checked={emailEnabled}
+          onChange={(event) => setEmailEnabled(event.target.checked)}
+          disabled={!canManageSettings || saveState.kind === "submitting"}
+        />
+        <span>
+          <strong>Email reminders</strong>
+          <small>Send appointment reminders via email.</small>
+        </span>
+      </label>
+
+      <label className="settings-toggle-field">
+        <input
+          type="checkbox"
+          checked={smsEnabled}
+          onChange={(event) => setSmsEnabled(event.target.checked)}
+          disabled={!canManageSettings || saveState.kind === "submitting"}
+        />
+        <span>
+          <strong>SMS reminders</strong>
+          <small>Send appointment reminders via SMS. Customers must have SMS consent enabled.</small>
+        </span>
+      </label>
+
+      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+
+      <div className="settings-actions">
+        <button
+          type="submit"
+          className="primary-action"
+          disabled={!canManageSettings || saveState.kind === "submitting"}
+        >
+          {saveState.kind === "submitting" ? "Saving…" : "Save reminder settings"}
         </button>
         {!canManageSettings ? (
           <p className="settings-permission-note">You do not have permission to edit tenant settings.</p>

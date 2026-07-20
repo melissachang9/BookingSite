@@ -74,6 +74,8 @@ DEFAULT_TENANT_SETTINGS = {
     "cancellationWindowHours": 24,
     "refundInsideWindow": False,
     "reminderHoursBefore": 24,
+    "appointmentReminderHours": 24,
+    "appointmentReminderChannels": ["email"],
     "minLeadTimeMinutes": 60,
     "maxAdvanceBookingDays": 45,
     "defaultDepositCents": 2500,
@@ -152,6 +154,12 @@ async def update_tenant_settings(
 
     if payload.reminder_hours_before is not None:
         current["reminderHoursBefore"] = payload.reminder_hours_before
+
+    if payload.appointment_reminder_hours is not None:
+        current["appointmentReminderHours"] = payload.appointment_reminder_hours
+
+    if payload.appointment_reminder_channels is not None:
+        current["appointmentReminderChannels"] = payload.appointment_reminder_channels
 
     if payload.cancellation_window_hours is not None:
         current["cancellationWindowHours"] = payload.cancellation_window_hours

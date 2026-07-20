@@ -40,6 +40,8 @@ class CustomerSummaryResponse(CamelModel):
     notes: str | None = None
     owner_user_id: str | None = None
     owner_name: str | None = None
+    sms_consent: bool = False
+    sms_phone: str | None = None
     acquired_at: datetime | None = None
     source_channel: str | None = None
 

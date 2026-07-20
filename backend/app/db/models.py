@@ -72,6 +72,8 @@ class Customer(Base, IdMixin, TimestampMixin):
     acquired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     source_channel: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     notes_history: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    sms_consent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
+    sms_phone: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="customers")
     owner: Mapped[Optional["User"]] = relationship(foreign_keys=[owner_user_id])
@@ -286,6 +288,9 @@ class Booking(Base, IdMixin, TimestampMixin):
     canceled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     last_form_reminder_sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_appointment_reminder_sent_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 

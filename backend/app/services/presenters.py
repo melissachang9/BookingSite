@@ -258,6 +258,8 @@ def customer_to_summary(customer: Customer) -> CustomerSummaryResponse:
         notes=customer.notes,
         owner_user_id=customer.owner_user_id,
         owner_name=owner_name,
+        sms_consent=customer.sms_consent,
+        sms_phone=customer.sms_phone,
         acquired_at=customer.acquired_at,
         source_channel=customer.source_channel,
     )

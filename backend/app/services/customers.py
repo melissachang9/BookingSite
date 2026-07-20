@@ -201,6 +201,10 @@ async def update_customer(
         customer.notes = payload.notes.strip() or None
     if payload.owner_user_id is not None:
         customer.owner_user_id = payload.owner_user_id if payload.owner_user_id.strip() else None
+    if payload.sms_consent is not None:
+        customer.sms_consent = payload.sms_consent
+    if payload.sms_phone is not None:
+        customer.sms_phone = payload.sms_phone.strip() or None
     if payload.wallet_adjustment_cents is not None and payload.wallet_adjustment_cents != 0:
         customer.wallet_balance_cents += payload.wallet_adjustment_cents
         if customer.wallet_balance_cents < 0:

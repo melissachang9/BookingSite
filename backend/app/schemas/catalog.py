@@ -223,6 +223,8 @@ class UpdateTenantSettingsRequest(CamelModel):
     calendar_display_end_hour: int | None = Field(default=None, ge=1, le=24)
     week_starts_on: int | None = Field(default=None, ge=0, le=6)
     reminder_hours_before: int | None = Field(default=None, ge=1, le=168)
+    appointment_reminder_hours: int | None = Field(default=None, ge=1, le=168)
+    appointment_reminder_channels: list[str] | None = None
     cancellation_window_hours: int | None = Field(default=None, ge=0, le=168)
     refund_inside_window: bool | None = None
     min_lead_time_minutes: int | None = Field(default=None, ge=0, le=1440)

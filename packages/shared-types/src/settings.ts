@@ -66,6 +66,8 @@ export type TenantSettings = {
   cancellationWindowHours: number;
   refundInsideWindow: boolean;
   reminderHoursBefore: number;
+  appointmentReminderHours?: number;
+  appointmentReminderChannels?: string[];
   minLeadTimeMinutes: number;
   maxAdvanceBookingDays: number;
   defaultDepositCents: number;
@@ -106,6 +108,8 @@ export type UpdateTenantSettingsRequest = {
   calendarDisplayEndHour?: number;
   weekStartsOn?: number;
   reminderHoursBefore?: number;
+  appointmentReminderHours?: number;
+  appointmentReminderChannels?: string[];
   cancellationWindowHours?: number;
   refundInsideWindow?: boolean;
   minLeadTimeMinutes?: number;
