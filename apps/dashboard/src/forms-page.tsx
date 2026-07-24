@@ -426,16 +426,12 @@ function FormBuilderEditor({
             selectedServiceIds={selectedServiceIds} setSelectedServiceIds={setSelectedServiceIds}
             serviceMode={serviceMode} setServiceMode={setServiceMode}
             selectKey={selectKey} setSelectKey={setSelectKey}
-            saving={saving} error={error}
-            onSave={() => saveForm(formId ? `"${name.trim()}" updated.` : `"${name.trim()}" created.`)}
           />
         ) : null}
 
         {step === "fields" ? (
           <FormFieldsStep
             fields={fields} setFields={setFields}
-            saving={saving} error={error}
-            onSave={() => saveForm(`"${name.trim()}" updated.`)}
           />
         ) : null}
 
@@ -451,6 +447,29 @@ function FormBuilderEditor({
             <p className="settings-form-help">Advanced settings coming soon.</p>
           </div>
         ) : null}
+
+        {error ? <div className="message-banner message-banner--error" style={{ marginTop: "1rem" }}>{error}</div> : null}
+
+        <div className="form-editor__save-bar">
+          <button type="button" className="ghost-action" onClick={onClose}>Cancel</button>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button
+              type="button"
+              className="ghost-action"
+              onClick={() => setStep("preview")}
+            >
+              Preview
+            </button>
+            <button
+              type="button"
+              className="primary-action"
+              disabled={saving || !name.trim()}
+              onClick={() => saveForm(formId ? `"${name.trim()}" updated.` : `"${name.trim()}" created.`)}
+            >
+              {saving ? "Saving…" : formId ? "Save form" : "Create form"}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -470,8 +489,6 @@ function DetailsStep({
   selectedServiceIds, setSelectedServiceIds,
   serviceMode, setServiceMode,
   selectKey, setSelectKey,
-  saving, error,
-  onSave,
 }: {
   name: string; setName: (v: string) => void;
   description: string; setDescription: (v: string) => void;
@@ -482,8 +499,6 @@ function DetailsStep({
   selectedServiceIds: string[]; setSelectedServiceIds: (v: string[]) => void;
   serviceMode: "all" | "specific"; setServiceMode: (v: "all" | "specific") => void;
   selectKey: number; setSelectKey: (v: number) => void;
-  saving: boolean; error: string | null;
-  onSave: () => void;
 }) {
   // Group services by category
   const categoryMap = new Map<string | null, ServiceSummary[]>();
@@ -508,7 +523,6 @@ function DetailsStep({
   };
   return (
     <div className="form-editor__cards">
-      {error ? <div className="message-banner message-banner--error">{error}</div> : null}
 
       {/* Name & Description */}
       <div className="form-editor__card">
@@ -521,11 +535,6 @@ function DetailsStep({
           <span>Description</span>
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Instructions shown at the top of the form" />
         </label>
-        <div className="form-editor__card-actions">
-          <button type="button" className="primary-action" disabled={saving} onClick={onSave}>
-            {saving ? "Saving…" : "Save"}
-          </button>
-        </div>
       </div>
 
       {/* Scope */}
@@ -540,11 +549,6 @@ function DetailsStep({
             <input type="radio" name="scope" checked={scope === "internal"} onChange={() => setScope("internal")} />
             <span>Staff members</span>
           </label>
-        </div>
-        <div className="form-editor__card-actions">
-          <button type="button" className="primary-action" disabled={saving} onClick={onSave}>
-            {saving ? "Saving…" : "Save"}
-          </button>
         </div>
       </div>
 
@@ -569,11 +573,6 @@ function DetailsStep({
             <span>No specific timing</span>
           </label>
         </div>
-        <div className="form-editor__card-actions">
-          <button type="button" className="primary-action" disabled={saving} onClick={onSave}>
-            {saving ? "Saving…" : "Save"}
-          </button>
-        </div>
       </div>
 
       {/* Services */}
@@ -592,7 +591,6 @@ function DetailsStep({
           </div>
           {serviceMode === "specific" ? (
             <div className="form-editor__service-list">
-              {/* Selected services */}
               {selectedServiceIds.length > 0 ? (
                 <div className="form-editor__service-selected">
                   {services.filter((s) => selectedServiceIds.includes(s.id)).map((svc) => (
@@ -608,7 +606,6 @@ function DetailsStep({
                 <p className="settings-form-help">No services selected yet. Add one below.</p>
               )}
 
-              {/* Add a service dropdown */}
               {services.filter((s) => !selectedServiceIds.includes(s.id)).length > 0 ? (
                 <label>
                   <span>Add a service</span>
@@ -627,7 +624,6 @@ function DetailsStep({
                 </label>
               ) : null}
 
-              {/* Category quick-add */}
               {categories.length > 0 ? (
                 <div className="form-editor__category-actions">
                   <span className="form-editor__category-label">Add all services in a category</span>
@@ -649,11 +645,6 @@ function DetailsStep({
               ) : null}
             </div>
           ) : null}
-          <div className="form-editor__card-actions">
-            <button type="button" className="primary-action" disabled={saving} onClick={onSave}>
-              {saving ? "Saving…" : "Save"}
-            </button>
-          </div>
         </div>
       ) : null}
 
@@ -670,11 +661,6 @@ function DetailsStep({
             <span>Review required</span>
           </label>
         </div>
-        <div className="form-editor__card-actions">
-          <button type="button" className="primary-action" disabled={saving} onClick={onSave}>
-            {saving ? "Saving…" : "Save"}
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -686,12 +672,8 @@ function DetailsStep({
 
 function FormFieldsStep({
   fields, setFields,
-  saving, error,
-  onSave,
 }: {
   fields: FormField[]; setFields: (v: FormField[]) => void;
-  saving: boolean; error: string | null;
-  onSave: () => void;
 }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
@@ -734,15 +716,9 @@ function FormFieldsStep({
 
   return (
     <div className="form-editor__cards">
-      {error ? <div className="message-banner message-banner--error">{error}</div> : null}
 
       <div className="form-editor__card">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
-          <h4 style={{ margin: 0 }}>Form fields</h4>
-          <button type="button" className="primary-action" disabled={saving} onClick={onSave}>
-            {saving ? "Saving…" : "Save"}
-          </button>
-        </div>
+        <h4>Form fields</h4>
 
         {fields.length === 0 ? (
           <p className="settings-form-help">No fields yet. Add your first field below.</p>

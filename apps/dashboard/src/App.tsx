@@ -4,11 +4,9 @@ import { startTransition, useEffect, useMemo, useRef, useState, type FormEvent, 
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import type {
   AuthenticatedUser,
-  ApiRootResponse,
   CreateTenantRequest,
   CreateTenantResponse,
   DashboardReport,
-  HealthResponse,
   SessionResponse,
   TenantSummary,
 } from "@booking/shared-types";
@@ -37,11 +35,6 @@ import { LocationsPage } from "./locations-page";
 import { FormsPage } from "./forms-page";
 import { ResourcesPage } from "./resources-page";
 import "./styles.css";
-
-type BackendStatusState =
-  | { kind: "loading" }
-  | { kind: "ready"; root: ApiRootResponse; health: HealthResponse }
-  | { kind: "error"; message: string };
 
 type RouteGroupKey = "settings-management";
 
@@ -306,74 +299,6 @@ function getAuthNoticeMessage(): string | null {
   return null;
 }
 
-function useBackendStatus(): BackendStatusState {
-  const [state, setState] = useState<BackendStatusState>({ kind: "loading" });
-
-  useEffect(() => {
-    let isCancelled = false;
-
-    const loadStatus = async () => {
-      try {
-        const [root, health] = await Promise.all([platformApi.getApiRoot(), platformApi.getHealth()]);
-
-        if (isCancelled) {
-          return;
-        }
-
-        startTransition(() => {
-          setState({ kind: "ready", root, health });
-        });
-      } catch (error) {
-        if (isCancelled) {
-          return;
-        }
-
-        startTransition(() => {
-          setState({
-            kind: "error",
-            message: error instanceof Error ? error.message : "Unable to reach the backend.",
-          });
-        });
-      }
-    };
-
-    void loadStatus();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, []);
-
-  return state;
-}
-
-function BackendStatusCard({ status }: { status: BackendStatusState }) {
-  if (status.kind === "loading") {
-    return (
-      <section className="api-pill" aria-live="polite">
-        <span>API</span>
-        <strong>Checking</strong>
-      </section>
-    );
-  }
-
-  if (status.kind === "error") {
-    return (
-      <section className="api-pill api-pill--error" aria-live="polite">
-        <span>API</span>
-        <strong>Offline</strong>
-      </section>
-    );
-  }
-
-  return (
-    <section className="api-pill api-pill--ready" aria-live="polite" title={`${status.root.message} at ${apiBaseUrl}`}>
-      <span>{status.root.environment}</span>
-      <strong>{status.health.status === "ok" ? "Connected" : "Degraded"}</strong>
-    </section>
-  );
-}
-
 function LoginRedirect() {
   const redirectPathRef = useRef<string>(readStoredRedirectPath() ?? "/dashboard");
 
@@ -402,7 +327,6 @@ function AuthenticatedLayout({
   onSignOut: () => void;
 }) {
   const location = useLocation();
-  const backendStatus = useBackendStatus();
   const pathKey = location.pathname === "/" ? "dashboard" : location.pathname.replace(/^\//, "");
   const isCalendarRoute = pathKey === "calendar";
   const currentDefinition = pageByPath.get(pathKey) ?? pageByPath.get("dashboard") ?? routeDefinitions[0];
@@ -537,7 +461,6 @@ function AuthenticatedLayout({
           </div>
 
           <div className="ops-topbar-actions">
-            <BackendStatusCard status={backendStatus} />
             <div className="user-pill">
               <span>{session.user.role}</span>
               <strong>{session.user.name}</strong>

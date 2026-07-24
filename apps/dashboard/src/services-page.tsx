@@ -391,17 +391,22 @@ export function ServicesPage({
                     {list.length === 0 ? (
                       <p className="services-list-empty">No services yet.</p>
                     ) : (
-                      <ul className="services-list">
+                      <ul className="staff-list">
                         {list.map((service) => (
                           <li key={service.id}>
                             <button
                               type="button"
-                              className={`services-list-item${selection.kind === "service" && selection.serviceId === service.id ? " is-active" : ""}`}
+                              className={`staff-list-item${selection.kind === "service" && selection.serviceId === service.id ? " is-active" : ""}`}
                               onClick={() => { setSelection({ kind: "service", serviceId: service.id }); setActiveTab("details"); }}
                             >
-                              <span className="services-list-item__name">{service.name}</span>
-                              <span className="services-list-item__meta">
-                                {formatDurationMinutes(service.durationMinutes)} · {formatMoney(service.priceCents)}
+                              <span className="staff-avatar staff-avatar--initials" aria-hidden>
+                                {service.name.charAt(0)}
+                              </span>
+                              <span className="staff-list-meta">
+                                <span className="staff-list-name">{service.name}</span>
+                                <span className="staff-list-role">
+                                  {formatDurationMinutes(service.durationMinutes)} · {formatMoney(service.priceCents)}
+                                </span>
                               </span>
                             </button>
                           </li>
@@ -420,17 +425,22 @@ export function ServicesPage({
                       <span className="services-category-group-name">Uncategorized</span>
                       <span className="services-category-count">{uncategorized.length}</span>
                     </div>
-                    <ul className="services-list">
+                    <ul className="staff-list">
                       {uncategorized.map((service) => (
                         <li key={service.id}>
                           <button
                             type="button"
-                            className={`services-list-item${selection.kind === "service" && selection.serviceId === service.id ? " is-active" : ""}`}
+                            className={`staff-list-item${selection.kind === "service" && selection.serviceId === service.id ? " is-active" : ""}`}
                             onClick={() => { setSelection({ kind: "service", serviceId: service.id }); setActiveTab("details"); }}
                           >
-                            <span className="services-list-item__name">{service.name}</span>
-                            <span className="services-list-item__meta">
-                              {formatDurationMinutes(service.durationMinutes)} · {formatMoney(service.priceCents)}
+                            <span className="staff-avatar staff-avatar--initials" aria-hidden>
+                              {service.name.charAt(0)}
+                            </span>
+                            <span className="staff-list-meta">
+                              <span className="staff-list-name">{service.name}</span>
+                              <span className="staff-list-role">
+                                {formatDurationMinutes(service.durationMinutes)} · {formatMoney(service.priceCents)}
+                              </span>
                             </span>
                           </button>
                         </li>
@@ -773,7 +783,14 @@ function ServiceDetail({
         </div>
         <div className="staff-detail-actions">
           {canManage ? (
-            <button type="button" className="svc-duplicate-btn" onClick={() => onDuplicate(service)}>Duplicate</button>
+            <>
+              <button type="button" className="ghost-action" onClick={() => onDuplicate(service)}>Duplicate</button>
+              <button type="button" className="ghost-action ghost-action--danger" onClick={() => {
+                if (window.confirm(`Delete "${service.name}"? This cannot be undone.`)) {
+                  platformApi.deleteService(tenantSlug, service.id).then(() => onSaved(`"${service.name}" deleted.`)).catch((e) => onSaved(readErrorMessage(e, "Unable to delete service.")));
+                }
+              }}>Delete</button>
+            </>
           ) : null}
         </div>
       </header>
