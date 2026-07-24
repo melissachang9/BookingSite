@@ -94,7 +94,7 @@ export default async function ManageBookingPaymentPage({ params, searchParams }:
               <form action={completeManageBookingBalanceCheckoutAction}>
                 <input type="hidden" name="token" value={token} />
                 <input type="hidden" name="sessionId" value={sessionId} />
-                <button type="submit" disabled={booking.balanceDueCents <= 0}>
+                <button type="submit" className="store-button" disabled={booking.balanceDueCents <= 0}>
                   Pay remaining balance
                 </button>
               </form>

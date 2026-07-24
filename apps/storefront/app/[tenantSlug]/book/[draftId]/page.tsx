@@ -18,7 +18,9 @@ import {
 } from "./actions";
 import DateFieldInput from "./date-field-input";
 import DeferrableFormCard from "./deferrable-form-card";
+import HoldCountdown from "./hold-countdown";
 import { PendingSubmitButton } from "./pending-submit-button";
+import ProgressSteps from "./progress-steps";
 import SignatureField from "./signature-field";
 
 type BookingDraftPageProps = {
@@ -284,6 +286,14 @@ export default async function BookingDraftPage({ params }: BookingDraftPageProps
     if (needsContactDetails) {
       return (
         <main className="page-stack">
+          <ProgressSteps
+            steps={[
+              { label: "Contact", active: true, complete: false },
+              { label: "Forms", active: false, complete: false },
+              { label: "Confirm", active: false, complete: false },
+            ]}
+          />
+
           <section className="store-section visit-review-panel visit-review-panel--compact">
             <div className="visit-review-panel__header">
               <div className="visit-review-panel__copy">
@@ -291,7 +301,8 @@ export default async function BookingDraftPage({ params }: BookingDraftPageProps
                 <h1>{draft.service.name}</h1>
               </div>
               <div className="visit-review-panel__status">
-                <p>Slot held &middot; {holdStatusLabel}</p>
+                <span className="panel-badge panel-badge--visit">Slot held</span>
+                <HoldCountdown expiresAt={draft.expiresAt} />
               </div>
             </div>
 
@@ -362,6 +373,14 @@ export default async function BookingDraftPage({ params }: BookingDraftPageProps
     // Step 2: Contact details saved — forms + payment inline, no right rail
     return (
       <main className="page-stack">
+        <ProgressSteps
+          steps={[
+            { label: "Contact", active: false, complete: true },
+            { label: "Forms", active: true, complete: false },
+            { label: "Confirm", active: false, complete: false },
+          ]}
+        />
+
         <section className="store-section visit-review-panel visit-review-panel--compact">
           <div className="visit-review-panel__header">
             <div className="visit-review-panel__copy">
@@ -370,7 +389,7 @@ export default async function BookingDraftPage({ params }: BookingDraftPageProps
             </div>
             <div className="visit-review-panel__status">
               <span className="panel-badge panel-badge--visit">Slot held</span>
-              <p>{holdStatusLabel}</p>
+              <HoldCountdown expiresAt={draft.expiresAt} />
             </div>
           </div>
         </section>
@@ -454,7 +473,7 @@ export default async function BookingDraftPage({ params }: BookingDraftPageProps
               <form action={startDepositCheckoutAction}>
                 <input type="hidden" name="tenantSlug" value={tenantSlug} />
                 <input type="hidden" name="bookingDraftId" value={draft.id} />
-                <PendingSubmitButton label={paymentCtaLabel} pendingLabel={paymentPendingLabel} />
+                <PendingSubmitButton label={paymentCtaLabel} pendingLabel={paymentPendingLabel} className="store-button" />
               </form>
             ) : (
               <button type="button" className="store-button" disabled>

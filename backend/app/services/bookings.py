@@ -556,6 +556,33 @@ async def update_booking_status(
         },
     )
 
+    # Auto-charge no-show fee if tenant setting is enabled
+    tenant_settings = tenant.settings_json if isinstance(tenant.settings_json, dict) else {}
+    auto_charge = tenant_settings.get("autoChargeNoShowFee", False)
+    no_show_fee_cents = tenant_settings.get("noShowFeeCents", 0)
+    if auto_charge and isinstance(no_show_fee_cents, int) and no_show_fee_cents > 0:
+        no_show_payment = Payment(
+            tenant_id=booking.tenant_id,
+            booking=booking,
+            customer_id=booking.customer_id,
+            status="succeeded",
+            deposit_status="paid_in_full",
+            amount_cents=no_show_fee_cents,
+            currency="USD",
+            payment_method_type="no_show_fee",
+            checkout_session_kind=None,
+        )
+        session.add(no_show_payment)
+        await session.flush()
+        _append_payment_event(
+            session,
+            no_show_payment,
+            kind="no_show_fee_charged",
+            actor=actor,
+            amount_cents=no_show_fee_cents,
+            notes=f"No-show fee of ${no_show_fee_cents / 100:.2f} auto-charged. Operator: {actor.name}.",
+        )
+
     reload_booking_id = booking.id
     await session.commit()
     session.expire_all()

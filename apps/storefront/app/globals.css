@@ -359,9 +359,13 @@ button:disabled {
 }
 
 .store-button {
-  color: var(--ui-ivory);
+  color: #fff;
   background: var(--ui-wine);
   border-color: var(--ui-wine);
+}
+
+.store-button span {
+  color: #fff;
 }
 
 .store-button:hover {
@@ -1447,6 +1451,29 @@ button:disabled {
   text-transform: uppercase;
 }
 
+/* Hold countdown timer */
+.hold-countdown {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ui-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.hold-countdown--urgent {
+  color: var(--ui-rose);
+  animation: hold-pulse 1s ease-in-out infinite;
+}
+
+.hold-countdown--expired {
+  color: #b91c1c;
+  font-weight: 800;
+}
+
+@keyframes hold-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 .panel-badge--visit {
   min-height: 4.4rem;
   padding: 0.95rem 1.4rem;
@@ -2088,8 +2115,7 @@ button:disabled {
   align-content: end;
   color: var(--ui-ivory);
   background:
-    linear-gradient(118deg, rgba(7, 37, 31, 0.94), rgba(7, 37, 31, 0.76) 54%, rgba(7, 37, 31, 0.22) 82%),
-    url("/manage-hero.png") center/cover;
+    linear-gradient(135deg, #0f3c34 0%, #1a4d43 30%, #2d5a4f 60%, #3d6b5e 100%);
 }
 
 .state-panel--success .store-eyebrow,
@@ -2103,7 +2129,6 @@ button:disabled {
 .state-panel--manage p {
   max-width: 760px;
   color: var(--ui-ivory);
-  text-shadow: 0 1px 18px rgba(0, 0, 0, 0.28);
 }
 
 .support-panel {
@@ -2549,6 +2574,74 @@ button:disabled {
   margin-top: 0.5rem;
 }
 
+/* Progress steps bar */
+.progress-steps {
+  display: flex;
+  gap: 0;
+  padding: 0.75rem 1rem;
+  background: var(--ui-canvas-raised);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+  justify-content: center;
+}
+
+.progress-steps__step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 1rem;
+  position: relative;
+}
+
+.progress-steps__step + .progress-steps__step::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 1.5rem;
+  height: 1px;
+  background: var(--ui-border-strong);
+}
+
+.progress-steps__dot {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: var(--ui-border);
+  color: var(--ui-muted);
+  flex-shrink: 0;
+}
+
+.progress-steps__step.is-active .progress-steps__dot {
+  background: var(--ui-wine);
+  color: #fff;
+}
+
+.progress-steps__step.is-complete .progress-steps__dot {
+  background: var(--ui-sage);
+  color: #fff;
+}
+
+.progress-steps__label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ui-muted);
+}
+
+.progress-steps__step.is-active .progress-steps__label {
+  color: var(--ui-ink);
+}
+
+.progress-steps__step.is-complete .progress-steps__label {
+  color: var(--ui-sage);
+}
+
 /* Inline payment bar at bottom of step 2 */
 .booking-finalize {
   padding: 0;
@@ -2593,6 +2686,11 @@ button:disabled {
   padding: 0.85rem 1.6rem;
   font-size: 0.88rem;
   font-weight: 700;
+  color: #fff;
+}
+
+.booking-finalize__inner .store-button span {
+  color: #fff;
 }
 
 @media (max-width: 600px) {

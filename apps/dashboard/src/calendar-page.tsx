@@ -1612,7 +1612,7 @@ export function CalendarPage({
         status: "no_show",
         paymentResolution: "collected",
       });
-      setSelectedAppointmentId(null);
+      // Keep drawer open so operator can see the no-show fee
       setCompletionState({ kind: "idle" });
       setReloadKey((k) => k + 1);
     } catch (error) {
@@ -3344,7 +3344,8 @@ function AppointmentDetailsDrawer({
   const statusLabel = getBookingStatusLabel(selectedAppointment.status);
   const isConfirmed = selectedAppointment.status === "confirmed";
   const isCompleted = selectedAppointment.status === "completed";
-  const showFooter = isConfirmed || isCompleted;
+  const isNoShow = selectedAppointment.status === "no_show";
+  const showFooter = isConfirmed || isCompleted || isNoShow;
 
   if (drawerView === "checkout" && api) {
     return (
@@ -3861,7 +3862,7 @@ function AppointmentDetailsDrawer({
         {showFooter ? (
           <div className="appointment-drawer-footer">
             <div className="appointment-drawer-footer__finalize">
-              {isCompleted ? (
+              {isCompleted || isNoShow ? (
                 <button
                   type="button"
                   className="primary-action"
@@ -4011,6 +4012,7 @@ function CheckoutPanel({
   const labelForPayment = (p: BookingPaymentSummary): string => {
     if (p.checkoutSessionKind && p.checkoutSessionKind.includes("deposit")) return "Deposit";
     if (p.paymentMethodType === "wallet") return "Wallet credit";
+    if (p.paymentMethodType === "no_show_fee") return "No-show fee";
     if (p.paymentMethodType === "card") return "Credit card";
     return allMethods.find((m) => m.id === p.paymentMethodType)?.label ?? p.paymentMethodType;
   };
