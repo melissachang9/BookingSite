@@ -27,10 +27,14 @@ type LoadState =
   | { kind: "ready" }
   | { kind: "error"; message: string };
 
+type EditorStep = "details" | "fields" | "preview" | "advanced";
+
+type FormTabKey = "details" | "fields" | "preview" | "advanced";
+
 type BuilderModal =
   | { kind: "none" }
   | { kind: "add" }
-  | { kind: "edit"; form: FormSummaryResponse };
+  | { kind: "edit"; form: FormSummaryResponse; initialStep?: EditorStep };
 
 const SCOPE_LABELS: Record<string, string> = {
   customer: "Customer-facing",
@@ -87,6 +91,7 @@ export function FormsPage({
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
   const [builder, setBuilder] = useState<BuilderModal>({ kind: "none" });
   const [status, setStatus] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<FormTabKey>("details");
 
   const loadForms = async () => {
     try {
@@ -128,16 +133,61 @@ export function FormsPage({
       ) : null}
 
       {builder.kind !== "none" ? (
-        <FormBuilderEditor
-          tenantSlug={tenantSlug}
-          builder={builder}
-          onClose={() => setBuilder({ kind: "none" })}
-          onSaved={async (msg) => {
-            await loadForms();
-            setStatus(msg);
-          }}
-          onStatus={setStatus}
-        />
+        <>
+          <h3>{definition.title}</h3>
+          <section className="staff-master-detail">
+            <div className="staff-grid">
+              <aside className="staff-list-rail" aria-label="Form list">
+                <div className="staff-list-rail-header">
+                  <h4>Forms</h4>
+                  {canManage ? (
+                    <button type="button" className="ghost-action" onClick={() => setBuilder({ kind: "add" })}>
+                      + Build form
+                    </button>
+                  ) : null}
+                </div>
+                {forms.length === 0 ? (
+                  <p className="staff-list-empty">No forms yet. Click "Build form" to create one.</p>
+                ) : (
+                  <ul className="staff-list">
+                    {forms.map((form) => (
+                      <li key={form.id}>
+                        <button
+                          type="button"
+                          className={`staff-list-item${selectedFormId === form.id ? " is-active" : ""}`}
+                          onClick={() => setSelectedFormId(form.id)}
+                        >
+                          <span className="staff-avatar staff-avatar--initials" aria-hidden>
+                            {form.name.charAt(0)}
+                          </span>
+                          <span className="staff-list-meta">
+                            <span className="staff-list-name">{form.name}</span>
+                            <span className="staff-list-role">
+                              {form.schema?.fields.length ?? 0} field{(form.schema?.fields.length ?? 0) !== 1 ? "s" : ""}
+                              {!form.isActive ? " · Inactive" : ""}
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </aside>
+              <div className="staff-detail">
+                <FormBuilderEditor
+                  tenantSlug={tenantSlug}
+                  builder={builder}
+                  onClose={() => setBuilder({ kind: "none" })}
+                  onSaved={async (msg) => {
+                    await loadForms();
+                    setStatus(msg);
+                  }}
+                  onStatus={setStatus}
+                />
+              </div>
+            </div>
+          </section>
+        </>
       ) : (
         <>
           <h3>{definition.title}</h3>
@@ -164,16 +214,16 @@ export function FormsPage({
                           className={`staff-list-item${selectedFormId === form.id ? " is-active" : ""}`}
                           onClick={() => setSelectedFormId(form.id)}
                         >
-                          <div>
-                            <strong>{form.name}</strong>
-                            <span>
-                              {SCOPE_LABELS[form.scope] ?? form.scope}
-                              {form.customerPromptTiming ? ` · ${TIMING_LABELS[form.customerPromptTiming] ?? form.customerPromptTiming}` : ""}
-                              {form.reviewRequired ? " · Review req." : ""}
-                              {" · "}{form.isActive ? "Active" : "Inactive"}
-                              {form.currentVersionNumber ? ` · v${form.currentVersionNumber}` : ""}
+                          <span className="staff-avatar staff-avatar--initials" aria-hidden>
+                            {form.name.charAt(0)}
+                          </span>
+                          <span className="staff-list-meta">
+                            <span className="staff-list-name">{form.name}</span>
+                            <span className="staff-list-role">
+                              {form.schema?.fields.length ?? 0} field{(form.schema?.fields.length ?? 0) !== 1 ? "s" : ""}
+                              {!form.isActive ? " · Inactive" : ""}
                             </span>
-                          </div>
+                          </span>
                         </button>
                       </li>
                     ))}
@@ -181,80 +231,27 @@ export function FormsPage({
                 )}
               </aside>
 
-              <section className="staff-detail-panel" aria-label="Form details">
+              <div className="staff-detail">
                 {selectedForm ? (
-                  <div className="customer-profile">
-                    <header className="customer-profile-header">
-                      <div>
-                        <h4>{selectedForm.name}</h4>
-                        <p className="customer-profile-since">
-                          {SCOPE_LABELS[selectedForm.scope] ?? selectedForm.scope}
-                          {selectedForm.customerPromptTiming ? ` · ${TIMING_LABELS[selectedForm.customerPromptTiming] ?? selectedForm.customerPromptTiming}` : ""}
-                          {selectedForm.reviewRequired ? " · Review required" : ""}
-                          {" · "}{selectedForm.isActive ? "Active" : "Inactive"}
-                          {selectedForm.currentVersionNumber ? ` · v${selectedForm.currentVersionNumber}` : ""}
-                        </p>
-                      </div>
-                      {canManage ? (
-                        <div className="staff-detail-actions">
-                          <button type="button" className="ghost-action" onClick={() => setBuilder({ kind: "edit", form: selectedForm })}>
-                            Edit
-                          </button>
-                          <button type="button" className="ghost-action" onClick={() => handleToggleActive(selectedForm)}>
-                            {selectedForm.isActive ? "Deactivate" : "Activate"}
-                          </button>
-                          <button
-                            type="button"
-                            className="ghost-action ghost-action--danger"
-                            onClick={() => {
-                              if (window.confirm(`Delete "${selectedForm.name}"? This cannot be undone.`)) {
-                                handleDeleteForm(selectedForm);
-                              }
-                            }}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      ) : null}
-                    </header>
-
-                    {selectedForm.schema ? (
-                      <section className="customer-profile-section">
-                        <p className="rail-section-kicker">Schema · {selectedForm.schema.fields.length} fields</p>
-                        {selectedForm.schema.description ? (
-                          <p className="customer-profile-notes" style={{ fontStyle: "normal" }}>{selectedForm.schema.description}</p>
-                        ) : null}
-                        {selectedForm.schema.fields.length === 0 ? (
-                          <p className="staff-list-empty">No fields defined. Edit to add fields.</p>
-                        ) : (
-                          <ul className="form-field-preview-list">
-                            {selectedForm.schema.fields.map((field) => (
-                              <li key={field.id} className="form-field-preview-item">
-                                <span className="form-field-preview-type">{field.type.replace(/_/g, " ")}</span>
-                                <span className="form-field-preview-label">{field.label}{field.required ? " *" : ""}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </section>
-                    ) : (
-                      <section className="customer-profile-section">
-                        <p className="staff-list-empty">No schema defined. Edit to add fields.</p>
-                      </section>
-                    )}
-
-                    {selectedForm.serviceIds.length > 0 ? (
-                      <section className="customer-profile-section">
-                        <p className="rail-section-kicker">Attached to {selectedForm.serviceIds.length} service{selectedForm.serviceIds.length > 1 ? "s" : ""}</p>
-                      </section>
-                    ) : null}
-                  </div>
+                  <FormDetail
+                    form={selectedForm}
+                    tenantSlug={tenantSlug}
+                    canManage={canManage}
+                    activeTab={activeTab}
+                    onTabChange={setActiveTab}
+                    onEdit={() => setBuilder({ kind: "edit", form: selectedForm, initialStep: "fields" })}
+                    onPreview={() => setBuilder({ kind: "edit", form: selectedForm, initialStep: "preview" })}
+                    onToggleActive={() => handleToggleActive(selectedForm)}
+                    onDelete={() => {
+                      if (window.confirm(`Delete "${selectedForm.name}"? This cannot be undone.`)) {
+                        handleDeleteForm(selectedForm);
+                      }
+                    }}
+                  />
                 ) : (
-                  <div className="staff-detail-empty">
-                    <p>Select a form to view details, or click "Build form" to create one.</p>
-                  </div>
+                  <p className="settings-form-help">Select a form to view details, or click "Build form" to create one.</p>
                 )}
-              </section>
+              </div>
             </div>
           </section>
         </>
@@ -289,10 +286,450 @@ export function FormsPage({
 }
 
 // ===========================================================================
-// Form Builder Editor (full-page, step-nav)
+// Form Detail (tabbed view matching staff/services pattern)
 // ===========================================================================
 
-type EditorStep = "details" | "fields" | "preview" | "advanced";
+function FormDetail({
+  form,
+  tenantSlug,
+  canManage,
+  activeTab,
+  onTabChange,
+  onEdit,
+  onPreview,
+  onToggleActive,
+  onDelete,
+}: {
+  form: FormSummaryResponse;
+  tenantSlug: string;
+  canManage: boolean;
+  activeTab: FormTabKey;
+  onTabChange: (tab: FormTabKey) => void;
+  onEdit: () => void;
+  onPreview: () => void;
+  onToggleActive: () => void;
+  onDelete: () => void;
+}) {
+  const [scope, setScope] = useState<FormScope>(form.scope);
+  const [timing, setTiming] = useState<CustomerPromptTiming | "">(form.customerPromptTiming ?? "");
+  const [reviewRequired, setReviewRequired] = useState(form.reviewRequired ?? false);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [serviceIds, setServiceIds] = useState<string[]>(form.serviceIds ?? []);
+  const [allServices, setAllServices] = useState<ServiceSummary[]>([]);
+  const [allCategories, setAllCategories] = useState<ServiceCategorySummary[]>([]);
+  const [servicesLoaded, setServicesLoaded] = useState(false);
+  const [showServicePicker, setShowServicePicker] = useState(false);
+  const [editingFieldIndex, setEditingFieldIndex] = useState<number | null>(null);
+  const [localFields, setLocalFields] = useState<FormField[]>(form.schema?.fields ?? []);
+  const [showFieldPalette, setShowFieldPalette] = useState(false);
+
+  useEffect(() => {
+    setScope(form.scope);
+    setTiming(form.customerPromptTiming ?? "");
+    setReviewRequired(form.reviewRequired ?? false);
+    setServiceIds(form.serviceIds ?? []);
+    setEditingFieldIndex(null);
+    setLocalFields(form.schema?.fields ?? []);
+  }, [form]);
+
+  useEffect(() => {
+    Promise.all([
+      platformApi.listServices(tenantSlug),
+      platformApi.listServiceCategories(tenantSlug).catch(() => ({ categories: [] })),
+    ]).then(([serviceResp, catResp]) => {
+      setAllServices(serviceResp.services.filter((s) => s.isActive));
+      setAllCategories(catResp.categories);
+      setServicesLoaded(true);
+    }).catch(() => setServicesLoaded(true));
+  }, [tenantSlug]);
+
+  const updateFormField = async (field: string, value: unknown) => {
+    if (!canManage) return;
+    setSaving(field);
+    try {
+      const body: UpdateFormRequest = { [field]: value };
+      await platformApi.updateForm(form.tenantId, form.id, body);
+    } catch { /* silently fail, state reverts via useEffect */ }
+    setSaving(null);
+  };
+
+  const tabs: Array<{ key: FormTabKey; label: string }> = [
+    { key: "details", label: "Details" },
+    { key: "fields", label: "Form Fields" },
+    { key: "preview", label: "Preview" },
+    { key: "advanced", label: "Advanced" },
+  ];
+
+  return (
+    <div className="staff-detail-inner">
+      <header className="staff-detail-header">
+        <div>
+          <p className="eyebrow">Form</p>
+          <h4>{form.name}</h4>
+        </div>
+        {canManage ? (
+          <div className="staff-detail-actions">
+            <label className={`svc-toggle${!form.isActive ? " svc-toggle--off" : ""}`} style={{ marginRight: "0.5rem" }} aria-label="Active toggle">
+              <input
+                type="checkbox"
+                checked={form.isActive}
+                onChange={onToggleActive}
+                style={{ position: "absolute", opacity: 0, width: 0, height: 0 }}
+              />
+            </label>
+            <span style={{ fontSize: "0.8rem", color: form.isActive ? "var(--ui-ink)" : "var(--color-muted, #6b7280)", marginRight: "0.75rem" }}>
+              {form.isActive ? "Enabled" : "Disabled"}
+            </span>
+            <button type="button" className="ghost-action ghost-action--danger" onClick={onDelete}>Delete</button>
+          </div>
+        ) : null}
+      </header>
+
+      <nav className="staff-detail-tabs" role="tablist" aria-label="Form sections">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.key}
+            className={`staff-detail-tab${activeTab === tab.key ? " is-active" : ""}`}
+            onClick={() => onTabChange(tab.key)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      {activeTab === "details" ? (
+        <div className="staff-detail-form">
+          {/* Who fills out this form? */}
+          <div className="form-editor__card">
+            <h4>Who fills out this form?</h4>
+            <div className="form-editor__radio-group">
+              <label className={`settings-toggle${saving === "scope" ? " settings-toggle--saving" : ""}`}>
+                <input
+                  type="radio" name="detail-scope" checked={scope === "customer"}
+                  onChange={() => { setScope("customer"); void updateFormField("scope", "customer"); }}
+                  disabled={!canManage || saving !== null}
+                />
+                <span>
+                  <strong>Clients who book an appointment</strong>
+                  <small>A link will be included in reminders and other automated messages</small>
+                </span>
+              </label>
+              <label className={`settings-toggle${saving === "scope" ? " settings-toggle--saving" : ""}`}>
+                <input
+                  type="radio" name="detail-scope" checked={scope === "internal"}
+                  onChange={() => { setScope("internal"); void updateFormField("scope", "internal"); }}
+                  disabled={!canManage || saving !== null}
+                />
+                <span>
+                  <strong>Staff members</strong>
+                  <small>For internal forms related to an appointment</small>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          {/* How often? */}
+          <div className="form-editor__card">
+            <h4>How often do clients need to fill it out?</h4>
+            <div className="form-editor__radio-group">
+              <label className={`settings-toggle${saving === "customerPromptTiming" ? " settings-toggle--saving" : ""}`}>
+                <input
+                  type="radio" name="detail-timing" checked={timing === "pre_booking"}
+                  onChange={() => { setTiming("pre_booking"); void updateFormField("customerPromptTiming", "pre_booking"); }}
+                  disabled={!canManage || saving !== null}
+                />
+                <span>
+                  <strong>Every time they book an appointment</strong>
+                  <small>Clients will be asked to submit the form every time they book</small>
+                </span>
+              </label>
+              <label className={`settings-toggle${saving === "customerPromptTiming" ? " settings-toggle--saving" : ""}`}>
+                <input
+                  type="radio" name="detail-timing" checked={timing === ""}
+                  onChange={() => { setTiming(""); void updateFormField("customerPromptTiming", null); }}
+                  disabled={!canManage || saving !== null}
+                />
+                <span>
+                  <strong>Only once for each client</strong>
+                  <small>Once the form has been submitted, clients will not be asked again</small>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          {/* Which appointments? */}
+          <div className="form-editor__card">
+            <h4>Which appointments is it for?</h4>
+            <div className="form-editor__radio-group">
+              <label className={`settings-toggle${saving === "serviceIds" ? " settings-toggle--saving" : ""}`}>
+                <input
+                  type="radio" name="detail-services" checked={serviceIds.length === 0}
+                  onChange={() => { setServiceIds([]); void updateFormField("serviceIds", []); }}
+                  disabled={!canManage || saving !== null}
+                />
+                <span>
+                  <strong>For all appointments</strong>
+                  <small>Regardless of which services were booked</small>
+                </span>
+              </label>
+              <label className={`settings-toggle${saving === "serviceIds" ? " settings-toggle--saving" : ""}`}>
+                <input
+                  type="radio" name="detail-services" checked={serviceIds.length > 0}
+                  onChange={() => {}}
+                  disabled={!canManage || saving !== null}
+                />
+                <span>
+                  <strong>Only for appointments with specific services</strong>
+                  <small>Select the services this form needs to be filled out for</small>
+                </span>
+              </label>
+            </div>
+
+            {serviceIds.length > 0 && servicesLoaded ? (
+              <div style={{ marginTop: "0.75rem" }}>
+                {/* Selected services */}
+                {serviceIds.length > 0 ? (
+                  <div className="form-editor__service-selected" style={{ marginBottom: "0.5rem" }}>
+                    {allServices.filter((s) => serviceIds.includes(s.id)).map((svc) => (
+                      <div key={svc.id} className="form-editor__service-row">
+                        <span>{svc.name}</span>
+                        <button type="button" className="ghost-action" onClick={() => {
+                          const next = serviceIds.filter((id) => id !== svc.id);
+                          setServiceIds(next);
+                          void updateFormField("serviceIds", next);
+                        }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {/* All services in category */}
+                {allCategories.length > 0 ? (
+                  <div className="form-editor__category-actions" style={{ marginBottom: "0.5rem" }}>
+                    <span className="form-editor__category-label">All services in category</span>
+                    {allCategories.map((cat) => {
+                      const catServices = allServices.filter((s) => s.categoryId === cat.id);
+                      if (catServices.length === 0) return null;
+                      const allSelected = catServices.every((s) => serviceIds.includes(s.id));
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          className={`ghost-action${allSelected ? " is-active" : ""}`}
+                          onClick={() => {
+                            const catIds = catServices.map((s) => s.id);
+                            const next = allSelected
+                              ? serviceIds.filter((id) => !catIds.includes(id))
+                              : [...new Set([...serviceIds, ...catIds])];
+                            setServiceIds(next);
+                            void updateFormField("serviceIds", next);
+                          }}
+                        >
+                          {allSelected ? "✓" : "+"} {cat.name} ({catServices.length})
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {/* Add a service button */}
+                <button type="button" className="ghost-action" onClick={() => setShowServicePicker(true)}>
+                  + Add a service
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Service picker modal */}
+          {showServicePicker ? (
+            <div className="modal-backdrop" role="dialog" aria-label="Add services">
+              <div className="modal-panel" style={{ maxWidth: "min(520px, 100%)" }}>
+                <div className="modal-header">
+                  <h4>Add services</h4>
+                  <button type="button" className="ghost-action" onClick={() => setShowServicePicker(false)}>Done</button>
+                </div>
+                <div className="modal-form">
+                  {allServices.filter((s) => !serviceIds.includes(s.id)).length === 0 ? (
+                    <p className="settings-form-help">All services are already selected.</p>
+                  ) : (
+                    <div className="form-editor__service-list">
+                      {allServices.filter((s) => !serviceIds.includes(s.id)).map((svc) => (
+                        <label key={svc.id} className="settings-toggle" style={{ padding: "0.4rem 0" }}>
+                          <input
+                            type="checkbox"
+                            onChange={() => {
+                              const next = [...serviceIds, svc.id];
+                              setServiceIds(next);
+                              void updateFormField("serviceIds", next);
+                            }}
+                          />
+                          <span>
+                            <strong>{svc.name}</strong>
+                            {svc.description ? <small>{svc.description}</small> : null}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Review? */}
+          <div className="form-editor__card">
+            <h4>Does this form require review?</h4>
+            <div className="form-editor__radio-group">
+              <label className={`settings-toggle${saving === "reviewRequired" ? " settings-toggle--saving" : ""}`}>
+                <input
+                  type="radio" name="detail-review" checked={!reviewRequired}
+                  onChange={() => { setReviewRequired(false); void updateFormField("reviewRequired", false); }}
+                  disabled={!canManage || saving !== null}
+                />
+                <span>
+                  <strong>No review needed</strong>
+                  <small>Most common, for forms that don't need additional review</small>
+                </span>
+              </label>
+              <label className={`settings-toggle${saving === "reviewRequired" ? " settings-toggle--saving" : ""}`}>
+                <input
+                  type="radio" name="detail-review" checked={reviewRequired}
+                  onChange={() => { setReviewRequired(true); void updateFormField("reviewRequired", true); }}
+                  disabled={!canManage || saving !== null}
+                />
+                <span>
+                  <strong>Review required</strong>
+                  <small>For forms that need to be reviewed by certain staff members</small>
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {activeTab === "fields" ? (
+        <div className="staff-detail-form">
+          {form.schema ? (
+            <>
+              {form.schema.description ? (
+                <p className="settings-form-help" style={{ marginBottom: "0.75rem" }}>{form.schema.description}</p>
+              ) : null}
+              {localFields.length === 0 ? (
+                <p className="staff-list-empty">No fields defined yet.</p>
+              ) : (
+                <ul className="form-field-preview-list">
+                  {localFields.map((field, index) => (
+                    <li key={field.id}>
+                      {editingFieldIndex === index ? (
+                        <div className="form-editor__field-card is-expanded" style={{ marginBottom: "0.5rem" }}>
+                          <div className="form-editor__field-card-header">
+                            <span className="form-editor__field-card-icon" aria-hidden="true">
+                              {FIELD_TYPE_ICONS[field.type] ?? "?"}
+                            </span>
+                            <span className="form-editor__field-card-type">{FIELD_TYPE_LABELS[field.type]}</span>
+                            <div className="form-editor__field-card-menu">
+                              <button type="button" className="ghost-action" onClick={() => setEditingFieldIndex(null)}>Done</button>
+                            </div>
+                          </div>
+                          <FieldInlineEditor
+                            field={field}
+                            onUpdate={(patch) => {
+                              const newFields = localFields.map((f, i) => i === index ? { ...f, ...patch } : f);
+                              setLocalFields(newFields);
+                              if (canManage) {
+                                const schema = { title: form.name, description: form.schema?.description, fields: newFields };
+                                platformApi.updateForm(form.tenantId, form.id, { schema } as UpdateFormRequest).catch(() => {});
+                              }
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="form-field-preview-item"
+                          onClick={() => { if (canManage) setEditingFieldIndex(index); }}
+                          style={{ width: "100%", textAlign: "left", cursor: canManage ? "pointer" : "default", background: "none", border: "none", font: "inherit" }}
+                        >
+                          <span className="form-field-preview-type">{field.type.replace(/_/g, " ")}</span>
+                          <span className="form-field-preview-label">{field.label}{field.required ? " *" : ""}</span>
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {canManage ? (
+                <div style={{ marginTop: "0.75rem" }}>
+                  <button type="button" className="ghost-action" onClick={() => setShowFieldPalette(true)}>
+                    + Add a field
+                  </button>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <p className="staff-list-empty">No schema defined.</p>
+          )}
+        </div>
+      ) : null}
+
+      {showFieldPalette ? (
+        <FieldPaletteModal
+          onSelect={(type) => {
+            const newField: FormField = {
+              id: generateFieldId(),
+              type,
+              label: "",
+              required: false,
+            };
+            if (type === "select" || type === "multi_select") {
+              newField.options = [];
+            }
+            const newFields = [...localFields, newField];
+            setLocalFields(newFields);
+            setEditingFieldIndex(newFields.length - 1);
+            setShowFieldPalette(false);
+            const schema = { title: form.name, description: form.schema?.description, fields: newFields };
+            platformApi.updateForm(form.tenantId, form.id, { schema } as UpdateFormRequest).catch(() => {});
+          }}
+          onClose={() => setShowFieldPalette(false)}
+        />
+      ) : null}
+
+      {activeTab === "preview" ? (
+        <div className="staff-detail-form">
+          <div className="form-preview">
+            <h4 className="form-preview__title">{form.name || "Untitled form"}</h4>
+            {form.schema?.description ? <p className="form-preview__desc">{form.schema.description}</p> : null}
+            {localFields.length > 0 ? (
+              <div className="form-preview__fields">
+                {localFields.map((field) => (
+                  <div key={field.id} className="form-preview__field">
+                    <FieldPreview field={field} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="settings-form-help">No fields defined yet.</p>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {activeTab === "advanced" ? (
+        <div className="staff-detail-form">
+          <p className="settings-form-help">Advanced settings coming soon.</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ===========================================================================
+// Form Builder Editor (full-page, step-nav)
+// ===========================================================================
 
 function FormBuilderEditor({
   tenantSlug,
@@ -326,7 +763,7 @@ function FormBuilderEditor({
   const [servicesLoaded, setServicesLoaded] = useState(false);
   const [selectKey, setSelectKey] = useState(0); // force re-mount after selection
 
-  const [step, setStep] = useState<EditorStep>("details");
+  const [step, setStep] = useState<EditorStep>(isEdit ? (builder.initialStep ?? "details") : "details");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -388,33 +825,39 @@ function FormBuilderEditor({
   const steps: Array<{ key: EditorStep; label: string; disabled: boolean }> = [
     { key: "details", label: "Details", disabled: false },
     { key: "fields", label: "Form Fields", disabled: !formId },
-    { key: "preview", label: "Preview", disabled: !formId },
+    { key: "preview", label: "Preview", disabled: false },
     { key: "advanced", label: "Advanced", disabled: true },
   ];
 
   return (
-    <div className="form-editor">
-      <nav className="form-editor__steps" aria-label="Form builder steps">
-        <button type="button" className="ghost-action form-editor__back" onClick={onClose}>
-          ← Back to Forms
-        </button>
-        <ul>
-          {steps.map((s) => (
-            <li key={s.key}>
-              <button
-                type="button"
-                className={`form-editor__step${step === s.key ? " is-active" : ""}`}
-                disabled={s.disabled}
-                onClick={() => setStep(s.key)}
-              >
-                {s.label}
-              </button>
-            </li>
-          ))}
-        </ul>
+    <div className="staff-detail-inner">
+      <header className="staff-detail-header">
+        <div>
+          <p className="eyebrow">{isEdit ? "Edit form" : "New form"}</p>
+          <h4>{name.trim() || "Untitled form"}</h4>
+        </div>
+        <div className="staff-detail-actions">
+          <button type="button" className="ghost-action" onClick={onClose}>Cancel</button>
+        </div>
+      </header>
+
+      <nav className="staff-detail-tabs" role="tablist" aria-label="Form editor sections">
+        {steps.map((s) => (
+          <button
+            key={s.key}
+            type="button"
+            role="tab"
+            aria-selected={step === s.key}
+            disabled={s.disabled}
+            className={`staff-detail-tab${step === s.key ? " is-active" : ""}`}
+            onClick={() => setStep(s.key)}
+          >
+            {s.label}
+          </button>
+        ))}
       </nav>
 
-      <div className="form-editor__content">
+      <div className="staff-detail-form">
         {step === "details" ? (
           <DetailsStep
             name={name} setName={setName}
@@ -451,24 +894,17 @@ function FormBuilderEditor({
         {error ? <div className="message-banner message-banner--error" style={{ marginTop: "1rem" }}>{error}</div> : null}
 
         <div className="form-editor__save-bar">
-          <button type="button" className="ghost-action" onClick={onClose}>Cancel</button>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button
-              type="button"
-              className="ghost-action"
-              onClick={() => setStep("preview")}
-            >
-              Preview
-            </button>
-            <button
-              type="button"
-              className="primary-action"
-              disabled={saving || !name.trim()}
-              onClick={() => saveForm(formId ? `"${name.trim()}" updated.` : `"${name.trim()}" created.`)}
-            >
-              {saving ? "Saving…" : formId ? "Save form" : "Create form"}
-            </button>
-          </div>
+          <button type="button" className="ghost-action" onClick={() => setStep("preview")}>
+            Preview
+          </button>
+          <button
+            type="button"
+            className="primary-action"
+            disabled={saving || !name.trim()}
+            onClick={() => saveForm(formId ? `"${name.trim()}" updated.` : `"${name.trim()}" created.`)}
+          >
+            {saving ? "Saving…" : formId ? "Save form" : "Create form"}
+          </button>
         </div>
       </div>
     </div>
@@ -676,7 +1112,6 @@ function FormFieldsStep({
   fields: FormField[]; setFields: (v: FormField[]) => void;
 }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
   const handleAddField = (type: FormFieldType) => {
     const newField: FormField = {
@@ -688,9 +1123,7 @@ function FormFieldsStep({
     if (type === "select" || type === "multi_select") {
       newField.options = [];
     }
-    const next = [...fields, newField];
-    setFields(next);
-    setExpandedIndex(next.length - 1);
+    setFields([...fields, newField]);
     setPaletteOpen(false);
   };
 
@@ -700,8 +1133,6 @@ function FormFieldsStep({
 
   const handleRemoveField = (index: number) => {
     setFields(fields.filter((_, i) => i !== index));
-    if (expandedIndex === index) setExpandedIndex(null);
-    else if (expandedIndex !== null && expandedIndex > index) setExpandedIndex(expandedIndex - 1);
   };
 
   const handleMoveField = (index: number, direction: -1 | 1) => {
@@ -710,8 +1141,6 @@ function FormFieldsStep({
     const next = [...fields];
     [next[index], next[newIndex]] = [next[newIndex], next[index]];
     setFields(next);
-    if (expandedIndex === index) setExpandedIndex(newIndex);
-    else if (expandedIndex === newIndex) setExpandedIndex(index);
   };
 
   return (
@@ -726,36 +1155,22 @@ function FormFieldsStep({
           <ul className="form-editor__field-list">
             {fields.map((field, index) => (
               <li key={field.id}>
-                <div
-                  className={`form-editor__field-card${expandedIndex === index ? " is-expanded" : ""}`}
-                >
-                  <div
-                    className="form-editor__field-card-header"
-                    onClick={() => setExpandedIndex(expandedIndex === index ? null : index)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpandedIndex(expandedIndex === index ? null : index); } }}
-                  >
+                <div className="form-editor__field-card is-expanded">
+                  <div className="form-editor__field-card-header">
                     <span className="form-editor__field-card-icon" aria-hidden="true">
                       {FIELD_TYPE_ICONS[field.type] ?? "?"}
                     </span>
-                    <span className="form-editor__field-card-label">
-                      {field.label || FIELD_TYPE_LABELS[field.type]}
-                    </span>
                     <span className="form-editor__field-card-type">{FIELD_TYPE_LABELS[field.type]}</span>
-                    <div className="form-editor__field-card-menu" onClick={(e) => e.stopPropagation()}>
+                    <div className="form-editor__field-card-menu">
                       <button type="button" className="ghost-action" disabled={index === 0} onClick={() => handleMoveField(index, -1)}>↑</button>
                       <button type="button" className="ghost-action" disabled={index === fields.length - 1} onClick={() => handleMoveField(index, 1)}>↓</button>
                       <button type="button" className="ghost-action" onClick={() => handleRemoveField(index)}>✕</button>
                     </div>
                   </div>
-                  {expandedIndex === index ? (
-                    <FieldInlineEditor
-                      field={field}
-                      onUpdate={(patch) => handleUpdateField(index, patch)}
-                      onDone={() => setExpandedIndex(null)}
-                    />
-                  ) : null}
+                  <FieldInlineEditor
+                    field={field}
+                    onUpdate={(patch) => handleUpdateField(index, patch)}
+                  />
                 </div>
               </li>
             ))}
@@ -764,7 +1179,7 @@ function FormFieldsStep({
 
         <div style={{ marginTop: "0.75rem" }}>
           <button type="button" className="ghost-action" onClick={() => setPaletteOpen(true)}>
-            + Add a new field
+            + Add a field
           </button>
         </div>
       </div>
@@ -839,11 +1254,9 @@ function FieldPaletteModal({
 function FieldInlineEditor({
   field,
   onUpdate,
-  onDone,
 }: {
   field: FormField;
   onUpdate: (patch: Partial<FormField>) => void;
-  onDone: () => void;
 }) {
   const isLayout = field.type === "section" || field.type === "static_text";
   const hasOptions = field.type === "select" || field.type === "multi_select";
@@ -920,10 +1333,6 @@ function FieldInlineEditor({
           }}>+ Add option</button>
         </div>
       ) : null}
-
-      <div className="form-editor__field-editor-actions">
-        <button type="button" className="primary-action" onClick={onDone}>Done</button>
-      </div>
     </div>
   );
 }
