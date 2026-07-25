@@ -523,3 +523,24 @@ class Resource(Base, IdMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     location_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("locations.id"), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class AuditEvent(Base, IdMixin, TimestampMixin):
+    """Immutable audit trail for all sensitive mutations.
+
+    Every create/update/delete on tenant-scoped entities should record an
+    AuditEvent.  Payments already have PaymentEvent; bookings already have
+    BookingPaymentEvent.  This table covers everything else.
+    """
+
+    __tablename__ = "audit_events"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    actor_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    changes_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

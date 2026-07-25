@@ -433,6 +433,44 @@ async def _ensure_postgres_schema_compatibility() -> None:
             )
         )
 
+        audit_events_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'audit_events'
+                  AND column_name = 'entity_type'
+                """
+            )
+        )
+        if not audit_events_exists:
+            await connection.execute(
+                text(
+                    """
+                    CREATE TABLE audit_events (
+                        id VARCHAR(36) PRIMARY KEY,
+                        tenant_id VARCHAR(36) NOT NULL REFERENCES tenants(id),
+                        entity_type VARCHAR(64) NOT NULL,
+                        entity_id VARCHAR(36) NOT NULL,
+                        action VARCHAR(32) NOT NULL,
+                        actor_type VARCHAR(32) NOT NULL,
+                        actor_id VARCHAR(36),
+                        actor_name VARCHAR(255),
+                        changes_json JSONB,
+                        notes TEXT,
+                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+            )
+            await connection.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_audit_events_tenant_id ON audit_events (tenant_id)")
+            )
+            await connection.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_audit_events_entity ON audit_events (entity_type, entity_id)")
+            )
+
 
 async def initialize_database() -> None:
     async with get_engine().begin() as connection:
