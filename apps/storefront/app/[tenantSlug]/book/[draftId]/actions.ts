@@ -54,6 +54,14 @@ const readFieldAnswer = async (formData: FormData, field: FormField, tenantId: s
     return formData.get(field.id) === "on";
   }
 
+  if (field.type === "multi_select") {
+    const values = formData
+      .getAll(field.id)
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      .map((value) => value.trim());
+    return values.length > 0 ? values : undefined;
+  }
+
   if (field.type === "file_upload" || field.type === "signature") {
     const entries = formData.getAll(field.id).filter(
       (entry): entry is File => typeof entry === "object" && entry !== null && "size" in entry && (entry as File).size > 0,
@@ -147,4 +155,18 @@ export async function submitBookingRequirementAction(formData: FormData) {
   });
 
   redirect(`/${tenantSlug}/book/${bookingDraftId}`);
+}
+
+
+export async function saveBookingRequirementDraftAction(formData: FormData) {
+  const tenantSlug = readRequiredField(formData, "tenantSlug");
+  const bookingDraftId = readRequiredField(formData, "bookingDraftId");
+  const requirementId = readRequiredField(formData, "requirementId");
+  const tenantId = readRequiredField(formData, "tenantId");
+
+  await storefrontApi.saveBookingFormRequirementDraft(tenantSlug, bookingDraftId, requirementId, {
+    answers: await readRequirementAnswers(formData, tenantId),
+  });
+
+  redirect(`/${tenantSlug}/book/${bookingDraftId}?saved=1`);
 }

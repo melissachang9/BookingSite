@@ -31,6 +31,7 @@ import type {
   CustomerLookupQuery,
   CustomerLookupResponse,
   EmailDnsResponse,
+  FormRequirement,
   FormResponseSummary,
   HealthResponse,
   LocationListResponse,
@@ -349,6 +350,25 @@ export const createPlatformApi = (client: ApiClient) => ({
   ) =>
     client.post<FormResponseSummary, SubmitFormRequirementRequest>(
       `tenants/${tenantSlug}/booking-drafts/${bookingDraftId}/form-requirements/${requirementId}/submit`,
+      body,
+    ),
+  saveBookingFormRequirementDraft: (
+    tenantSlug: string,
+    bookingDraftId: string,
+    requirementId: string,
+    body: SubmitFormRequirementRequest,
+  ) =>
+    client.post<FormRequirement, SubmitFormRequirementRequest>(
+      `tenants/${tenantSlug}/booking-drafts/${bookingDraftId}/form-requirements/${requirementId}/draft`,
+      body,
+    ),
+  saveManageBookingFormRequirementDraft: (
+    token: string,
+    requirementId: string,
+    body: SubmitFormRequirementRequest,
+  ) =>
+    client.post<FormRequirement, SubmitFormRequirementRequest>(
+      `bookings/manage/${token}/form-requirements/${requirementId}/draft`,
       body,
     ),
   createCheckoutSession: (body: CreateCheckoutSessionRequest) =>

@@ -5,12 +5,12 @@ import type { BookingFormRequirementSummary, FormField } from "@booking/shared-t
 
 import { storefrontApi, isApiClientError, isApiNotFoundError } from "../../lib/storefront-api";
 import { formatInTenantTime, slugify } from "../../lib/storefront-shell";
-import { submitManageBookingFormRequirementAction } from "./actions";
+import { saveManageBookingFormRequirementDraftAction, submitManageBookingFormRequirementAction } from "./actions";
 import DateFieldInput from "./date-field-input";
 
 type FormCompletionRouteProps = {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ submitted?: string }>;
+  searchParams: Promise<{ saved?: string; submitted?: string }>;
 };
 
 export const dynamic = "force-dynamic";
@@ -209,16 +209,21 @@ function renderRequirementPanel(token: string, requirement: BookingFormRequireme
           const prefill = requirement.prefillAnswers as Record<string, unknown> | null | undefined;
           return renderRequirementField(field, prefill?.[field.id]);
         })}
-        <button type="submit" className="store-button">
-          Submit form
-        </button>
+        <div className="requirement-form-actions">
+          <button type="submit" className="ghost-link" formAction={saveManageBookingFormRequirementDraftAction} formNoValidate>
+            Save draft
+          </button>
+          <button type="submit" className="store-button">
+            Submit form
+          </button>
+        </div>
       </form>
     </article>
   );
 }
 
 export default async function ManageBookingFormsPage({ params, searchParams }: FormCompletionRouteProps) {
-  const [{ token }, { submitted }] = await Promise.all([params, searchParams]);
+  const [{ token }, { saved, submitted }] = await Promise.all([params, searchParams]);
 
   try {
     const [manageBooking, requirements] = await Promise.all([
@@ -255,6 +260,13 @@ export default async function ManageBookingFormsPage({ params, searchParams }: F
           <section className="status-banner" aria-live="polite">
             <strong>Form submitted.</strong>
             <span>Your response is saved to this appointment and your customer profile.</span>
+          </section>
+        ) : null}
+
+        {saved === "1" ? (
+          <section className="status-banner" aria-live="polite">
+            <strong>Draft saved.</strong>
+            <span>You can return to this link and finish before submitting.</span>
           </section>
         ) : null}
 

@@ -41,6 +41,7 @@ class FormSummaryResponse(CamelModel):
     customer_prompt_timing: str | None = None
     review_required: bool = False
     is_active: bool
+    applies_to_all_services: bool = False
     current_version_id: str | None = None
     current_version_number: int | None = None
     schema: FormSchemaPayload | None = None
@@ -83,6 +84,7 @@ class FormRequirementResponse(CamelModel):
     form_title: str | None = None
     form_description: str | None = None
     schema: dict[str, Any] | None = None
+    draft_answers: dict[str, Any] | None = None
 
 
 class SubmitFormRequirementRequest(CamelModel):
@@ -136,6 +138,7 @@ class BookingFormRequirementEntry(CamelModel):
     status: str
     satisfied_by_response_id: str | None = None
     schema: dict[str, Any] | None = None
+    draft_answers: dict[str, Any] | None = None
 
 
 class BookingFormRequirementListResponse(CamelModel):

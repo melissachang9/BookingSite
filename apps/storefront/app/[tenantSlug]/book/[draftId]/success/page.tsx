@@ -112,6 +112,9 @@ export default async function BookingSuccessPage({ params, searchParams }: Booki
               <Link href={`/cancel/${booking.customerManageToken}`} className="store-button">
                 Manage booking
               </Link>
+              <Link href={`/forms/${booking.customerManageToken}`} className="store-button">
+                Complete forms
+              </Link>
               <Link href={`/${tenantSlug}/services/${slugify(booking.service.name)}`} className="ghost-link">
                 Back to openings
               </Link>

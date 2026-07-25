@@ -103,6 +103,7 @@ export type FormRequirement = AuditFields & {
   formTitle?: string | null;
   formDescription?: string | null;
   schema?: FormSchema | null;
+  draftAnswers?: FormAnswers | null;
 };
 
 export type FormSummaryResponse = AuditFields &
@@ -112,6 +113,7 @@ export type FormSummaryResponse = AuditFields &
     customerPromptTiming?: CustomerPromptTiming | null;
     reviewRequired: boolean;
     isActive: boolean;
+    appliesToAllServices: boolean;
     currentVersionId?: UUID | null;
     currentVersionNumber?: number | null;
     schema?: FormSchema | null;
@@ -200,6 +202,7 @@ export type BookingFormRequirementSummary = {
   status: FormRequirementStatus;
   schema?: FormSchema | null;
   prefillAnswers?: Record<string, unknown> | null;
+  draftAnswers?: FormAnswers | null;
 };
 
 export type BookingFormRequirementEntry = {
@@ -213,6 +216,7 @@ export type BookingFormRequirementEntry = {
   status: FormRequirementStatus;
   satisfiedByResponseId?: UUID | null;
   schema?: FormSchema | null;
+  draftAnswers?: FormAnswers | null;
 };
 
 export type BookingFormRequirementList = {

@@ -17,6 +17,7 @@ from app.db.models import (
     BookingDraftIntakePlan,
     BookingPaymentEvent,
     Customer,
+    FormDefinition,
     Payment,
     PaymentEvent,
     Provider,
@@ -27,6 +28,7 @@ from app.db.models import (
     Tenant,
 )
 from app.schemas.bookings import BookingSummaryResponse, CancelManageBookingRequest, CustomerManageBookingResponse
+from app.services.payment_processor import refund_payment_via_processor
 from app.schemas.booking_drafts import BookingDraftSummaryResponse, CreateBookingDraftRequest, UpdateBookingDraftRequest
 from app.services.availability import list_availability
 from app.services.presenters import booking_draft_to_summary, booking_to_summary, tenant_to_summary
@@ -135,6 +137,7 @@ async def _upsert_intake_plan(
 
 async def _attach_form_requirements(session: AsyncSession, draft: BookingDraft) -> None:
     """Attach all form requirements for the service to the booking draft."""
+    # Forms explicitly attached to this service
     attachments = (
         await session.scalars(
             select(ServiceFormAttachment)
@@ -146,8 +149,23 @@ async def _attach_form_requirements(session: AsyncSession, draft: BookingDraft) 
         )
     ).all()
 
-    if not attachments:
+    # Forms that apply to all services
+    all_service_forms = (
+        await session.scalars(
+            select(FormDefinition)
+            .options(selectinload(FormDefinition.versions))
+            .where(
+                FormDefinition.tenant_id == draft.tenant_id,
+                FormDefinition.applies_to_all_services == True,
+                FormDefinition.is_active == True,
+            )
+        )
+    ).all()
+
+    if not attachments and not all_service_forms:
         return
+
+    seen_form_ids: set[str] = set()
 
     for attachment in attachments:
         scope = attachment.form.scope if attachment.form is not None else "customer"
@@ -159,6 +177,28 @@ async def _attach_form_requirements(session: AsyncSession, draft: BookingDraft) 
                 form_version_id=attachment.form_version_id,
                 scope=scope,
                 customer_prompt_timing=attachment.customer_prompt_timing,
+                status="pending",
+            )
+        )
+        seen_form_ids.add(attachment.form_id)
+
+    for form_def in all_service_forms:
+        if form_def.id in seen_form_ids:
+            continue
+        latest_version = next(
+            (v for v in sorted(form_def.versions, key=lambda v: v.version_number, reverse=True)),
+            None,
+        )
+        if latest_version is None:
+            continue
+        session.add(
+            BookingDraftFormRequirement(
+                tenant_id=draft.tenant_id,
+                booking_draft_id=draft.id,
+                form_id=form_def.id,
+                form_version_id=latest_version.id,
+                scope=form_def.scope,
+                customer_prompt_timing=form_def.customer_prompt_timing or "pre_booking",
                 status="pending",
             )
         )
@@ -321,22 +361,29 @@ def _append_manage_booking_event(
     refund_inside_window: bool,
     reason: str | None,
     wallet_credited_cents: int = 0,
+    processor_refund_id: str | None = None,
+    processor_refund_amount_cents: int = 0,
 ) -> None:
+    payload: dict[str, object] = {
+        "actorType": "customer",
+        "actorLabel": "Customer self-service",
+        "reason": reason,
+        "walletCreditedCents": wallet_credited_cents,
+        "forfeitedAmountCents": forfeited_amount_cents,
+        "isInsideCancellationWindow": is_inside_cancellation_window,
+        "refundInsideWindow": refund_inside_window,
+    }
+    if processor_refund_id is not None:
+        payload["processorRefundId"] = processor_refund_id
+        payload["processorRefundAmountCents"] = processor_refund_amount_cents
+
     session.add(
         BookingPaymentEvent(
             tenant_id=booking.tenant_id,
             booking_id=booking.id,
             event_kind="customer_canceled",
             amount_cents=refunded_amount_cents,
-            payload_json={
-                "actorType": "customer",
-                "actorLabel": "Customer self-service",
-                "reason": reason,
-                "walletCreditedCents": wallet_credited_cents,
-                "forfeitedAmountCents": forfeited_amount_cents,
-                "isInsideCancellationWindow": is_inside_cancellation_window,
-                "refundInsideWindow": refund_inside_window,
-            },
+            payload_json=payload,
         )
     )
 
@@ -554,24 +601,51 @@ async def cancel_manage_booking(
     refunded_amount_cents = 0
     forfeited_amount_cents = 0
     wallet_credited_cents = 0
+    processor_refund_id: str | None = None
 
-    # Credit the customer's wallet instead of refunding to Stripe.
     booking.status = "canceled"
     booking.canceled_at = datetime.now(timezone.utc)
 
     if refundable:
         for payment in deposit_payments:
-            wallet_credited_cents += payment.amount_cents
-            payment.status = "refunded"
-            payment.deposit_status = "refunded"
-            _append_manage_payment_event(
-                session,
-                payment,
-                kind="wallet_credited",
-                amount_cents=payment.amount_cents,
-                notes="Deposit credited to customer wallet when customer canceled from the private manage link.",
-            )
-        booking.customer.wallet_balance_cents += wallet_credited_cents
+            # Try processor refund first (Stripe, future Clover/Square).
+            # Falls back to wallet credit if the processor isn't available.
+            processor_result = None
+            if payment.checkout_session_id:
+                processor_result = await refund_payment_via_processor(
+                    checkout_session_id=payment.checkout_session_id,
+                    amount_cents=payment.amount_cents,
+                    idempotency_key=f"cancel-manage-{booking.id}-{payment.id}",
+                )
+
+            if processor_result is not None:
+                refunded_amount_cents += processor_result.amount_cents
+                processor_refund_id = processor_result.processor_refund_id
+                payment.status = "refunded"
+                payment.deposit_status = "refunded"
+                _append_manage_payment_event(
+                    session,
+                    payment,
+                    kind="refund_processed",
+                    amount_cents=processor_result.amount_cents,
+                    notes=f"Refunded ${processor_result.amount_cents / 100:.2f} via {processor_result.processor} "
+                          f"(refund {processor_result.processor_refund_id}). Customer canceled from the private manage link.",
+                )
+            else:
+                # Fall back to wallet credit
+                wallet_credited_cents += payment.amount_cents
+                payment.status = "refunded"
+                payment.deposit_status = "refunded"
+                _append_manage_payment_event(
+                    session,
+                    payment,
+                    kind="wallet_credited",
+                    amount_cents=payment.amount_cents,
+                    notes="Deposit credited to customer wallet when customer canceled from the private manage link.",
+                )
+
+        if wallet_credited_cents > 0:
+            booking.customer.wallet_balance_cents += wallet_credited_cents
         booking.deposit_status = "refunded"
         booking.payment_resolution = "waived"
     elif forfeited:
@@ -599,6 +673,8 @@ async def cancel_manage_booking(
         refund_inside_window=refund_inside_window,
         reason=reason,
         wallet_credited_cents=wallet_credited_cents,
+        processor_refund_id=processor_refund_id,
+        processor_refund_amount_cents=refunded_amount_cents,
     )
 
     await session.commit()

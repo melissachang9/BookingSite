@@ -348,7 +348,7 @@ function FormDetail({
     setSaving(field);
     try {
       const body: UpdateFormRequest = { [field]: value };
-      await platformApi.updateForm(form.tenantId, form.id, body);
+      await platformApi.updateForm(tenantSlug, form.id, body);
     } catch { /* silently fail, state reverts via useEffect */ }
     setSaving(null);
   };

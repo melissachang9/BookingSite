@@ -18,19 +18,31 @@ def _auth_headers(client: TestClient, email: str = "owner@browbeautylab.test", p
     return {"Authorization": f"Bearer {response.json()['accessToken']}"}
 
 
-def _create_form(client: TestClient, name: str = "Test Form", schema: dict | None = None) -> dict:
+def _create_form(
+    client: TestClient,
+    name: str = "Test Form",
+    schema: dict | None = None,
+    customer_prompt_timing: str = "pre_booking",
+) -> dict:
     headers = _auth_headers(client)
     payload: dict = {
         "name": name,
         "scope": "customer",
-        "customerPromptTiming": "pre_booking",
+        "customerPromptTiming": customer_prompt_timing,
         "isActive": True,
     }
     if schema is not None:
         payload["schema"] = schema
     response = client.post("/api/v1/tenants/brow-beauty-lab/forms", json=payload, headers=headers)
     assert response.status_code == 201, response.text
-    return response.json()
+    form = response.json()
+    if "latestVersion" not in form and form.get("currentVersionId") is not None:
+        form["latestVersion"] = {
+            "id": form["currentVersionId"],
+            "versionNumber": form.get("currentVersionNumber"),
+            "schema": form.get("schema"),
+        }
+    return form
 
 
 def _simple_schema() -> dict:
@@ -382,3 +394,56 @@ def test_prefill_returns_last_response(client: TestClient) -> None:
     assert prefill_req["prefillAnswers"]["allergies"] == "Latex"
     assert prefill_req["prefillAnswers"]["medications"] == "Aspirin"
     assert prefill_req["prefillAnswers"]["pregnant"] == "true"
+
+
+def test_manage_form_requirement_draft_answers_prefill(client: TestClient) -> None:
+    """Manage-link draft saves are returned as prefillAnswers before final submission."""
+    form = _create_form(client, "Manage Draft Form", _simple_schema(), customer_prompt_timing="pre_visit")
+    service = _create_service_with_form(client, form["id"], form["latestVersion"]["id"])
+    slot = _get_first_available_slot(client, service["id"])
+
+    draft_resp = client.post(
+        "/api/v1/tenants/brow-beauty-lab/booking-drafts",
+        json={
+            "tenantSlug": "brow-beauty-lab",
+            "serviceId": service["id"],
+            "providerId": slot["providerId"],
+            "locationId": slot["locationId"],
+            "startsAt": slot["startAt"],
+        },
+    )
+    assert draft_resp.status_code == 200
+    draft = draft_resp.json()
+
+    update_resp = client.patch(
+        f"/api/v1/tenants/brow-beauty-lab/booking-drafts/{draft['id']}",
+        json={
+            "customer": {"name": "Manage Draft Guest", "email": "manage-draft@example.com", "phone": "555-0601"},
+            "intakeCompletionTiming": "before_visit",
+        },
+    )
+    assert update_resp.status_code == 200
+
+    confirm_resp = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/booking-drafts/{draft['id']}/confirm",
+        json={"tenantSlug": "brow-beauty-lab"},
+    )
+    assert confirm_resp.status_code == 200, confirm_resp.text
+    manage_token = confirm_resp.json()["customerManageToken"]
+
+    reqs_resp = client.get(f"/api/v1/bookings/manage/{manage_token}/form-requirements")
+    assert reqs_resp.status_code == 200, reqs_resp.text
+    requirement = reqs_resp.json()[0]
+
+    save_resp = client.post(
+        f"/api/v1/bookings/manage/{manage_token}/form-requirements/{requirement['id']}/draft",
+        json={"answers": {"medications": "Ibuprofen"}},
+    )
+    assert save_resp.status_code == 200, save_resp.text
+    assert save_resp.json()["status"] == "pending"
+
+    updated_reqs_resp = client.get(f"/api/v1/bookings/manage/{manage_token}/form-requirements")
+    assert updated_reqs_resp.status_code == 200, updated_reqs_resp.text
+    updated_requirement = updated_reqs_resp.json()[0]
+    assert updated_requirement["draftAnswers"] == {"medications": "Ibuprofen"}
+    assert updated_requirement["prefillAnswers"] == {"medications": "Ibuprofen"}

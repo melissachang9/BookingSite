@@ -390,6 +390,49 @@ async def _ensure_postgres_schema_compatibility() -> None:
             if not exists:
                 await connection.execute(text(f"ALTER TABLE provider_schedules ADD COLUMN {col_name} {col_type}"))
 
+        draft_answers_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'booking_draft_form_requirements'
+                  AND column_name = 'draft_answers_json'
+                """
+            )
+        )
+        if not draft_answers_exists:
+            await connection.execute(
+                text("ALTER TABLE booking_draft_form_requirements ADD COLUMN draft_answers_json JSONB")
+            )
+
+        applies_all_services_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'forms'
+                  AND column_name = 'applies_to_all_services'
+                """
+            )
+        )
+        if not applies_all_services_exists:
+            await connection.execute(
+                text("ALTER TABLE forms ADD COLUMN applies_to_all_services BOOLEAN NOT NULL DEFAULT FALSE")
+            )
+
+        # Backfill: forms with no service attachments should be "applies to all"
+        # This runs every startup (idempotent) to catch forms configured before the column existed
+        await connection.execute(
+            text(
+                """
+                UPDATE forms SET applies_to_all_services = TRUE
+                WHERE id NOT IN (
+                    SELECT DISTINCT form_id FROM service_form_attachments
+                )
+                """
+            )
+        )
+
 
 async def initialize_database() -> None:
     async with get_engine().begin() as connection:

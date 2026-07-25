@@ -19,6 +19,7 @@ from app.schemas.bookings import (
 )
 from app.schemas.forms import (
     BookingFormRequirementListResponse,
+    FormRequirementResponse,
     BookingFormResponseListResponse,
     FormResponseSummaryResponse,
     SendFormReminderResponse,
@@ -30,6 +31,7 @@ from app.services.booking_forms import (
     list_booking_form_requirements,
     list_booking_form_responses,
     list_booking_form_requirements_by_token,
+    save_booking_form_requirement_draft_by_token,
     send_booking_form_reminder,
     submit_booking_form_requirement_by_token,
 )
@@ -266,3 +268,17 @@ async def submit_manage_booking_form_requirement_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> FormResponseSummaryResponse:
     return await submit_booking_form_requirement_by_token(session, token, requirement_id, payload)
+
+
+@router.post(
+    "/bookings/manage/{token}/form-requirements/{requirement_id}/draft",
+    response_model=FormRequirementResponse,
+    summary="Save a draft form requirement response from a customer manage link",
+)
+async def save_manage_booking_form_requirement_draft_route(
+    token: str,
+    requirement_id: str,
+    payload: SubmitFormRequirementRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> FormRequirementResponse:
+    return await save_booking_form_requirement_draft_by_token(session, token, requirement_id, payload)

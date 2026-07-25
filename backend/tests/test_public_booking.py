@@ -1166,6 +1166,58 @@ def test_submit_booking_form_requirement_validates_required_answers(client) -> N
     assert submit_response.json()["error"]["code"] == "validation_error"
 
 
+def test_save_booking_form_requirement_draft_keeps_requirement_pending(client) -> None:
+    service = _service_by_name(client, "Brow Shape and Tint")
+    date_text = _next_weekday(4)
+    availability_response = client.get(
+        "/api/v1/tenants/brow-beauty-lab/availability",
+        params={"serviceId": service["id"], "date": date_text},
+    )
+    first_slot = availability_response.json()["slots"][0]
+
+    create_response = client.post(
+        "/api/v1/tenants/brow-beauty-lab/booking-drafts",
+        json={
+            "tenantSlug": "brow-beauty-lab",
+            "serviceId": service["id"],
+            "providerId": first_slot["providerId"],
+            "locationId": first_slot["locationId"],
+            "startsAt": first_slot["startAt"],
+        },
+    )
+    booking_draft_id = create_response.json()["id"]
+    requirement = create_response.json()["formRequirements"][0]
+
+    update_response = client.patch(
+        f"/api/v1/tenants/brow-beauty-lab/booking-drafts/{booking_draft_id}",
+        json={
+            "customer": {
+                "name": "Draft Form Guest",
+                "email": "draft-form@example.com",
+                "phone": "555-0403",
+            },
+            "intakeCompletionTiming": "before_visit",
+        },
+    )
+    assert update_response.status_code == 200
+
+    save_response = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/booking-drafts/{booking_draft_id}/form-requirements/{requirement['id']}/draft",
+        json={"answers": {"skinSensitivityNotes": "I need to check my product list."}},
+    )
+
+    assert save_response.status_code == 200
+    save_payload = save_response.json()
+    assert save_payload["status"] == "pending"
+    assert save_payload["draftAnswers"] == {"skinSensitivityNotes": "I need to check my product list."}
+
+    draft_response = client.get(f"/api/v1/tenants/brow-beauty-lab/booking-drafts/{booking_draft_id}")
+    saved_requirement = draft_response.json()["formRequirements"][0]
+    assert saved_requirement["status"] == "pending"
+    assert saved_requirement["satisfiedByResponseId"] is None
+    assert saved_requirement["draftAnswers"]["skinSensitivityNotes"] == "I need to check my product list."
+
+
 def test_submit_booking_form_requirement_requires_matching_tenant(client) -> None:
     service = _service_by_name(client, "Brow Shape and Tint")
     date_text = _next_weekday(4)
@@ -1216,6 +1268,52 @@ def test_submit_booking_form_requirement_requires_matching_tenant(client) -> Non
 
     assert submit_response.status_code == 404
     assert submit_response.json()["error"]["code"] == "not_found"
+
+
+def test_save_booking_form_requirement_draft_requires_matching_tenant(client) -> None:
+    service = _service_by_name(client, "Brow Shape and Tint")
+    date_text = _next_weekday(4)
+    availability_response = client.get(
+        "/api/v1/tenants/brow-beauty-lab/availability",
+        params={"serviceId": service["id"], "date": date_text},
+    )
+    first_slot = availability_response.json()["slots"][0]
+
+    create_response = client.post(
+        "/api/v1/tenants/brow-beauty-lab/booking-drafts",
+        json={
+            "tenantSlug": "brow-beauty-lab",
+            "serviceId": service["id"],
+            "providerId": first_slot["providerId"],
+            "locationId": first_slot["locationId"],
+            "startsAt": first_slot["startAt"],
+        },
+    )
+    booking_draft_id = create_response.json()["id"]
+    requirement = create_response.json()["formRequirements"][0]
+
+    update_response = client.patch(
+        f"/api/v1/tenants/brow-beauty-lab/booking-drafts/{booking_draft_id}",
+        json={
+            "customer": {
+                "name": "Cross Tenant Draft Guest",
+                "email": "cross-tenant-draft@example.com",
+                "phone": "555-0404",
+            },
+            "intakeCompletionTiming": "before_visit",
+        },
+    )
+    assert update_response.status_code == 200
+
+    _create_secondary_tenant()
+
+    save_response = client.post(
+        f"/api/v1/tenants/other-tenant/booking-drafts/{booking_draft_id}/form-requirements/{requirement['id']}/draft",
+        json={"answers": {"skinSensitivityNotes": "Tenant mismatch should fail."}},
+    )
+
+    assert save_response.status_code == 404
+    assert save_response.json()["error"]["code"] == "not_found"
 
 
 def test_create_checkout_session_requires_completed_pre_booking_forms(client) -> None:
@@ -1520,11 +1618,11 @@ def test_cancel_refund_ordering_stripe_before_state_mutation() -> None:
 
     for fn, name in [(cancel_booking, "cancel_booking"), (cancel_manage_booking, "cancel_manage_booking")]:
         src = inspect.getsource(fn)
-        stripe_idx = src.find("create_stripe_refund")
+        refund_idx = src.find("refund_payment_via_processor")
         cancel_idx = src.find('booking.status = "canceled"')
-        assert stripe_idx >= 0, f"{name} must call create_stripe_refund"
+        assert refund_idx >= 0, f"{name} must call refund_payment_via_processor"
         assert cancel_idx >= 0, f"{name} must set booking.status = 'canceled'"
-        assert stripe_idx < cancel_idx, (
-            f"{name}: create_stripe_refund (char {stripe_idx}) must be called "
+        assert refund_idx < cancel_idx, (
+            f"{name}: refund_payment_via_processor (char {refund_idx}) must be called "
             f"BEFORE booking.status = 'canceled' (char {cancel_idx})"
         )

@@ -67,7 +67,7 @@ async def create_tenant_form(
 
     # Attach to services
     service_ids: list[str] = []
-    if payload.service_ids:
+    if payload.service_ids is not None:
         await _sync_service_attachments(session, tenant.id, form.id, version.id, payload.service_ids, form.customer_prompt_timing or "pre_booking")
         service_ids = payload.service_ids
 
@@ -159,6 +159,7 @@ def _form_to_summary(
         customer_prompt_timing=form.customer_prompt_timing,
         review_required=form.review_required,
         is_active=form.is_active,
+        applies_to_all_services=form.applies_to_all_services,
         current_version_id=version.id if version else None,
         current_version_number=version.version_number if version else None,
         schema=schema,
@@ -186,6 +187,23 @@ async def _sync_service_attachments(
     ).all()
     for att in existing:
         await session.delete(att)
+
+    # Load the form to update its applies_to_all_services flag
+    form = await session.scalar(
+        select(FormDefinition).where(
+            FormDefinition.tenant_id == tenant_id,
+            FormDefinition.id == form_id,
+        )
+    )
+
+    if not service_ids:
+        # Empty list means "apply to all services"
+        if form is not None:
+            form.applies_to_all_services = True
+        return
+
+    if form is not None:
+        form.applies_to_all_services = False
 
     # Create new attachments using the form's own timing
     for service_id in service_ids:

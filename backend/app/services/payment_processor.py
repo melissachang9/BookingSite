@@ -37,6 +37,15 @@ class StripeRefund:
 
 
 @dataclass(frozen=True)
+class ProcessorRefundResult:
+    """Processor-agnostic refund result. Add fields as new processors are supported."""
+    refund_id: str
+    amount_cents: int
+    processor: str  # e.g. "stripe", "clover", "square"
+    processor_refund_id: str  # processor-specific refund identifier
+
+
+@dataclass(frozen=True)
 class StripeWebhookEvent:
     event_id: str
     event_type: str
@@ -367,3 +376,46 @@ async def create_stripe_refund(
         amount_cents=int(payload.get("amount") or amount_cents),
         payment_intent_id=checkout_session.payment_intent_id,
     )
+
+
+# ---------------------------------------------------------------------------
+# Processor-agnostic refund routing
+# ---------------------------------------------------------------------------
+# When adding a new payment processor (Clover, Square, etc.), implement a
+# refund function following the same pattern and register it here.
+# The cancellation flow calls `refund_payment_via_processor` which tries
+# each configured processor in order. If no processor can refund, the
+# cancellation falls back to wallet credit.
+
+
+async def refund_payment_via_processor(
+    *,
+    checkout_session_id: str,
+    amount_cents: int,
+    idempotency_key: str,
+) -> ProcessorRefundResult | None:
+    """Try to refund via the configured payment processor.
+
+    Returns a ProcessorRefundResult on success, or None if no processor
+    is configured / the payment wasn't processed by a known processor.
+    Callers should fall back to wallet credit when None is returned.
+    """
+    if is_stripe_checkout_session_id(checkout_session_id) and stripe_processor_configured():
+        stripe_refund = await create_stripe_refund(
+            session_id=checkout_session_id,
+            amount_cents=amount_cents,
+            idempotency_key=idempotency_key,
+        )
+        return ProcessorRefundResult(
+            refund_id=stripe_refund.refund_id,
+            amount_cents=stripe_refund.amount_cents,
+            processor="stripe",
+            processor_refund_id=stripe_refund.refund_id,
+        )
+
+    # Future processors (Clover, Square, etc.) go here:
+    # if is_clover_payment(checkout_session_id) and clover_configured():
+    #     clover_refund = await create_clover_refund(...)
+    #     return ProcessorRefundResult(processor="clover", ...)
+
+    return None

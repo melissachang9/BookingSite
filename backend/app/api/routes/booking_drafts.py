@@ -8,9 +8,9 @@ from app.schemas.booking_drafts import (
     CreateBookingDraftRequest,
     UpdateBookingDraftRequest,
 )
-from app.schemas.forms import FormResponseSummaryResponse, SubmitFormRequirementRequest
+from app.schemas.forms import FormRequirementResponse, FormResponseSummaryResponse, SubmitFormRequirementRequest
 from app.services.booking_drafts import confirm_booking_draft, create_booking_draft, get_booking_draft, update_booking_draft
-from app.services.booking_forms import submit_booking_form_requirement
+from app.services.booking_forms import save_booking_form_requirement_draft, submit_booking_form_requirement
 
 
 router = APIRouter(tags=["booking-drafts"])
@@ -82,3 +82,18 @@ async def submit_booking_form_requirement_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> FormResponseSummaryResponse:
     return await submit_booking_form_requirement(session, tenant_slug, booking_draft_id, requirement_id, payload)
+
+
+@router.post(
+    "/tenants/{tenant_slug}/booking-drafts/{booking_draft_id}/form-requirements/{requirement_id}/draft",
+    response_model=FormRequirementResponse,
+    summary="Save a draft response for a booking draft form requirement",
+)
+async def save_booking_form_requirement_draft_route(
+    tenant_slug: str,
+    booking_draft_id: str,
+    requirement_id: str,
+    payload: SubmitFormRequirementRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> FormRequirementResponse:
+    return await save_booking_form_requirement_draft(session, tenant_slug, booking_draft_id, requirement_id, payload)

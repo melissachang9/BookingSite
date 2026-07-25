@@ -441,6 +441,7 @@ class FormDefinition(Base, IdMixin, TimestampMixin):
     customer_prompt_timing: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     review_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    applies_to_all_services: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     versions: Mapped[list[FormVersion]] = relationship(back_populates="form", cascade="all, delete-orphan")
     service_attachments: Mapped[list[ServiceFormAttachment]] = relationship(
@@ -506,6 +507,7 @@ class BookingDraftFormRequirement(Base, IdMixin, TimestampMixin):
     customer_prompt_timing: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     satisfied_by_response_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("form_responses.id"), nullable=True)
+    draft_answers_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     booking_draft: Mapped[BookingDraft] = relationship(back_populates="form_requirements")
     form_version: Mapped[FormVersion] = relationship()

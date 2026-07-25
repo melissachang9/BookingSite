@@ -26,6 +26,7 @@ from app.schemas.forms import (
     BookingFormRequirementListResponse,
     BookingFormResponseEntry,
     BookingFormResponseListResponse,
+    FormRequirementResponse,
     FormResponseSummaryResponse,
     SendFormReminderResponse,
     SubmitFormRequirementRequest,
@@ -100,6 +101,22 @@ def _form_response_to_summary(response: FormResponse) -> FormResponseSummaryResp
     )
 
 
+async def _draft_ids_for_booking(session: AsyncSession, booking: Booking) -> list[str]:
+    if booking.source_draft is not None:
+        return [booking.source_draft.id]
+
+    return list(
+        (
+            await session.scalars(
+                select(BookingDraft.id).where(
+                    BookingDraft.tenant_id == booking.tenant_id,
+                    BookingDraft.confirmed_booking_id == booking.id,
+                )
+            )
+        ).all()
+    )
+
+
 async def submit_booking_form_requirement(
     session: AsyncSession,
     tenant_slug: str,
@@ -148,6 +165,7 @@ async def submit_booking_form_requirement(
 
     requirement.status = "satisfied"
     requirement.satisfied_by_response_id = response.id
+    requirement.draft_answers_json = None
 
     from app.services.funnel import form_requirement_submitted
     form_requirement_submitted(
@@ -167,6 +185,41 @@ async def submit_booking_form_requirement(
 
     await session.commit()
     return _form_response_to_summary(response)
+
+
+async def save_booking_form_requirement_draft(
+    session: AsyncSession,
+    tenant_slug: str,
+    booking_draft_id: str,
+    requirement_id: str,
+    payload: SubmitFormRequirementRequest,
+) -> FormRequirementResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    draft = await _load_booking_draft(session, booking_draft_id, tenant.id)
+    _ensure_not_expired(draft)
+
+    requirement = await session.scalar(
+        select(BookingDraftFormRequirement)
+        .options(selectinload(BookingDraftFormRequirement.form_version))
+        .where(
+            BookingDraftFormRequirement.id == requirement_id,
+            BookingDraftFormRequirement.booking_draft_id == booking_draft_id,
+            BookingDraftFormRequirement.tenant_id == tenant.id,
+        )
+    )
+    if requirement is None:
+        raise api_exception(404, "not_found", "Form requirement was not found for this booking draft.")
+    if draft.customer_id is None:
+        raise api_exception(400, "bad_request", "Customer details are required before saving forms.")
+    if requirement.status != "pending":
+        raise api_exception(409, "conflict", "This form requirement has already been satisfied.")
+
+    requirement.draft_answers_json = payload.answers
+    await session.commit()
+
+    from app.services.presenters import form_requirement_to_summary
+
+    return form_requirement_to_summary(requirement)
 
 
 async def list_booking_form_responses(
@@ -290,6 +343,7 @@ async def list_booking_form_requirements(
                 status=req.status,
                 satisfied_by_response_id=req.satisfied_by_response_id,
                 schema=schema,
+                draft_answers=req.draft_answers_json if isinstance(req.draft_answers_json, dict) else None,
             )
         )
 
@@ -360,7 +414,8 @@ async def list_booking_form_requirements_by_token(
         version = req.form_version
         form = version.form if version is not None else None
         schema = version.schema_json if version is not None and isinstance(version.schema_json, dict) else None
-        prefill = last_responses.get(req.form_id)
+        draft_answers = req.draft_answers_json if isinstance(req.draft_answers_json, dict) else None
+        prefill = draft_answers if draft_answers is not None else last_responses.get(req.form_id)
         result.append({
             "id": req.id,
             "formId": req.form_id,
@@ -371,6 +426,7 @@ async def list_booking_form_requirements_by_token(
             "status": req.status,
             "schema": schema,
             "prefillAnswers": prefill,
+            "draftAnswers": draft_answers,
         })
 
     return result
@@ -393,6 +449,7 @@ async def submit_booking_form_requirement_by_token(
             .where(
                 BookingDraftFormRequirement.id == requirement_id,
                 BookingDraftFormRequirement.tenant_id == tenant.id,
+                BookingDraftFormRequirement.booking_draft_id.in_(await _draft_ids_for_booking(session, booking)),
             )
     )
     if requirement is None:
@@ -422,9 +479,41 @@ async def submit_booking_form_requirement_by_token(
 
     requirement.status = "satisfied"
     requirement.satisfied_by_response_id = response.id
+    requirement.draft_answers_json = None
     await session.commit()
 
     return _form_response_to_summary(response)
+
+
+async def save_booking_form_requirement_draft_by_token(
+    session: AsyncSession,
+    token: str,
+    requirement_id: str,
+    payload: SubmitFormRequirementRequest,
+) -> FormRequirementResponse:
+    from app.services.booking_drafts import _load_manage_booking_context
+    from app.services.presenters import form_requirement_to_summary
+
+    booking, tenant = await _load_manage_booking_context(session, token)
+
+    requirement = await session.scalar(
+        select(BookingDraftFormRequirement)
+        .options(selectinload(BookingDraftFormRequirement.form_version))
+        .where(
+            BookingDraftFormRequirement.id == requirement_id,
+            BookingDraftFormRequirement.tenant_id == tenant.id,
+            BookingDraftFormRequirement.booking_draft_id.in_(await _draft_ids_for_booking(session, booking)),
+        )
+    )
+    if requirement is None:
+        raise api_exception(404, "not_found", "Form requirement was not found.")
+    if requirement.status != "pending":
+        raise api_exception(409, "conflict", "This form requirement has already been satisfied.")
+
+    requirement.draft_answers_json = payload.answers
+    await session.commit()
+
+    return form_requirement_to_summary(requirement)
 
 
 def _format_visit_start(starts_at: datetime) -> str:

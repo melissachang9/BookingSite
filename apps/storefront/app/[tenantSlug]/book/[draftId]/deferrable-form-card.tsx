@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { FormField, FormRequirement } from "@booking/shared-types";
-import { submitBookingRequirementAction } from "./actions";
+import type { FormAnswers, FormField, FormRequirement } from "@booking/shared-types";
+import { saveBookingRequirementDraftAction, submitBookingRequirementAction } from "./actions";
 import DateFieldInput from "./date-field-input";
 import SignatureField from "./signature-field";
 
@@ -19,7 +19,20 @@ function formatTimingLabel(timing: string | null | undefined): string {
   }
 }
 
-function renderRequirementField(field: FormField) {
+function stringDefaultValue(defaultValue: unknown): string | undefined {
+  if (defaultValue === undefined || defaultValue === null || Array.isArray(defaultValue) || typeof defaultValue === "object") {
+    return undefined;
+  }
+  return String(defaultValue);
+}
+
+function selectedDefaultValues(defaultValue: unknown): string[] {
+  return Array.isArray(defaultValue) ? defaultValue.map(String) : [];
+}
+
+function renderRequirementField(field: FormField, defaultValue?: unknown) {
+  const defaultText = stringDefaultValue(defaultValue);
+
   if (field.type === "section") {
     return (
       <div key={field.id} className="requirement-copy-block">
@@ -38,6 +51,7 @@ function renderRequirementField(field: FormField) {
   }
 
   if (field.type === "yes_no") {
+    const selectedValue = defaultValue === true || defaultText === "true" ? "true" : defaultValue === false || defaultText === "false" ? "false" : undefined;
     return (
       <fieldset key={field.id} className="requirement-choice-fieldset">
         <legend>
@@ -47,11 +61,11 @@ function renderRequirementField(field: FormField) {
         {field.helpText ? <small>{field.helpText}</small> : null}
         <div className="requirement-choice-row">
           <label className="requirement-choice-option">
-            <input type="radio" name={field.id} value="true" required={field.required} />
+            <input type="radio" name={field.id} value="true" required={field.required} defaultChecked={selectedValue === "true"} />
             <span>Yes</span>
           </label>
           <label className="requirement-choice-option">
-            <input type="radio" name={field.id} value="false" required={field.required} />
+            <input type="radio" name={field.id} value="false" required={field.required} defaultChecked={selectedValue === "false"} />
             <span>No</span>
           </label>
         </div>
@@ -62,7 +76,7 @@ function renderRequirementField(field: FormField) {
   if (field.type === "checkbox") {
     return (
       <label key={field.id} className="requirement-checkbox-field">
-        <input type="checkbox" name={field.id} required={field.required} />
+        <input type="checkbox" name={field.id} required={field.required} defaultChecked={defaultValue === true || defaultText === "true"} />
         <span>{field.label}</span>
       </label>
     );
@@ -76,7 +90,7 @@ function renderRequirementField(field: FormField) {
           {field.required ? " *" : ""}
         </span>
         {field.helpText ? <small>{field.helpText}</small> : null}
-        <textarea name={field.id} rows={4} placeholder={field.placeholder} required={field.required} />
+        <textarea name={field.id} rows={4} placeholder={field.placeholder} required={field.required} defaultValue={defaultText} />
       </label>
     );
   }
@@ -114,7 +128,7 @@ function renderRequirementField(field: FormField) {
           {field.required ? " *" : ""}
         </span>
         {field.helpText ? <small>{field.helpText}</small> : null}
-        <DateFieldInput name={field.id} required={field.required} />
+        <DateFieldInput name={field.id} required={field.required} defaultValue={defaultText} />
       </label>
     );
   }
@@ -127,12 +141,13 @@ function renderRequirementField(field: FormField) {
           {field.required ? " *" : ""}
         </span>
         {field.helpText ? <small>{field.helpText}</small> : null}
-        <input name={field.id} type="number" required={field.required} />
+        <input name={field.id} type="number" required={field.required} defaultValue={defaultText} />
       </label>
     );
   }
 
   if (field.type === "select" || field.type === "multi_select") {
+    const selectedValues = selectedDefaultValues(defaultValue);
     return (
       <label key={field.id} className="requirement-form-field">
         <span>
@@ -140,7 +155,17 @@ function renderRequirementField(field: FormField) {
           {field.required ? " *" : ""}
         </span>
         {field.helpText ? <small>{field.helpText}</small> : null}
-        <select name={field.id} required={field.required} multiple={field.type === "multi_select"}>
+        <select
+          name={field.id}
+          required={field.required}
+          multiple={field.type === "multi_select"}
+          defaultValue={field.type === "multi_select" ? selectedValues : defaultText ?? ""}
+        >
+          {field.type === "select" ? (
+            <option value="" disabled>
+              Choose an option
+            </option>
+          ) : null}
           {field.options?.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
@@ -156,7 +181,7 @@ function renderRequirementField(field: FormField) {
         {field.required ? " *" : ""}
       </span>
       {field.helpText ? <small>{field.helpText}</small> : null}
-      <input name={field.id} type="text" placeholder={field.placeholder} required={field.required} />
+      <input name={field.id} type="text" placeholder={field.placeholder} required={field.required} defaultValue={defaultText} />
     </label>
   );
 }
@@ -180,6 +205,7 @@ export default function DeferrableFormCard({
   const timingLabel = formatTimingLabel(requirement.customerPromptTiming);
   const title = requirement.formTitle ?? `Required form ${requirement.formVersionId}`;
   const description = requirement.formDescription ?? `Version ${requirement.formVersionId}`;
+  const draftAnswers = requirement.draftAnswers as FormAnswers | null | undefined;
 
   if (requirement.status !== "pending" || !requirement.schema) {
     return (
@@ -238,9 +264,12 @@ export default function DeferrableFormCard({
         <input type="hidden" name="tenantId" value={tenantId} />
         <input type="hidden" name="schemaJson" value={JSON.stringify(requirement.schema)} />
 
-        {requirement.schema.fields.map((field) => renderRequirementField(field))}
+        {requirement.schema.fields.map((field) => renderRequirementField(field, draftAnswers?.[field.id]))}
 
         <div className="deferrable-actions">
+          <button type="submit" className="ghost-link" formAction={saveBookingRequirementDraftAction} formNoValidate>
+            Save draft
+          </button>
           <button type="submit" className="store-button">
             Submit form
           </button>

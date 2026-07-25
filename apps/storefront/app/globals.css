@@ -1999,6 +1999,13 @@ button:disabled {
   margin-top: 0.25rem;
 }
 
+.requirement-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
 /* Signature pad */
 .signature-pad {
   position: relative;

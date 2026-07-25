@@ -11,6 +11,7 @@ from app.db.models import Booking, BookingDraft, BookingPaymentEvent, Payment, P
 from app.schemas.bookings import BookingListResponse, BookingSummaryResponse, CancelBookingRequest, PaginationMetaResponse, UpdateBookingRequest, UpdateBookingStatusRequest
 from app.schemas.payments import ApplyWalletCreditRequest, RecordManualPaymentRequest, RefundPaymentRequest
 from app.services.booking_drafts import _cancellation_policy_for_booking, _load_booking
+from app.services.payment_processor import refund_payment_via_processor
 from app.services.presenters import booking_balance_due_cents, booking_to_summary
 
 
@@ -686,26 +687,53 @@ async def cancel_booking(
     refunded_amount_cents = 0
     forfeited_amount_cents = 0
     wallet_credited_cents = 0
+    processor_refund_id: str | None = None
 
-    # Credit the customer's wallet instead of refunding to Stripe.
-    # The deposit stays with the customer and can be applied to future bookings.
     booking.status = "canceled"
     booking.canceled_at = datetime.now(timezone.utc)
 
     if refundable:
         for payment in deposit_payments:
-            wallet_credited_cents += payment.amount_cents
-            payment.status = "refunded"
-            payment.deposit_status = "refunded"
-            _append_payment_event(
-                session,
-                payment,
-                kind="wallet_credited",
-                actor=actor,
-                amount_cents=payment.amount_cents,
-                notes=f"Deposit credited to customer wallet when staff canceled. Operator: {actor.name}.",
-            )
-        booking.customer.wallet_balance_cents += wallet_credited_cents
+            # Try processor refund first (Stripe, future Clover/Square).
+            # Falls back to wallet credit if the processor isn't available.
+            processor_result = None
+            if payment.checkout_session_id:
+                processor_result = await refund_payment_via_processor(
+                    checkout_session_id=payment.checkout_session_id,
+                    amount_cents=payment.amount_cents,
+                    idempotency_key=f"cancel-staff-{booking.id}-{payment.id}",
+                )
+
+            if processor_result is not None:
+                refunded_amount_cents += processor_result.amount_cents
+                processor_refund_id = processor_result.processor_refund_id
+                payment.status = "refunded"
+                payment.deposit_status = "refunded"
+                _append_payment_event(
+                    session,
+                    payment,
+                    kind="refund_processed",
+                    actor=actor,
+                    amount_cents=processor_result.amount_cents,
+                    notes=f"Refunded ${processor_result.amount_cents / 100:.2f} via {processor_result.processor} "
+                          f"(refund {processor_result.processor_refund_id}). Staff canceled. Operator: {actor.name}.",
+                )
+            else:
+                # Fall back to wallet credit
+                wallet_credited_cents += payment.amount_cents
+                payment.status = "refunded"
+                payment.deposit_status = "refunded"
+                _append_payment_event(
+                    session,
+                    payment,
+                    kind="wallet_credited",
+                    actor=actor,
+                    amount_cents=payment.amount_cents,
+                    notes=f"Deposit credited to customer wallet when staff canceled. Operator: {actor.name}.",
+                )
+
+        if wallet_credited_cents > 0:
+            booking.customer.wallet_balance_cents += wallet_credited_cents
         booking.deposit_status = "refunded"
         booking.payment_resolution = "waived"
     elif forfeited:
@@ -725,6 +753,17 @@ async def cancel_booking(
     elif booking.deposit_status in {"unpaid", "follow_up"}:
         booking.payment_resolution = "waived"
 
+    extra_payload: dict[str, object] = {
+        "walletCreditedCents": wallet_credited_cents,
+        "forfeitedAmountCents": forfeited_amount_cents,
+        "isInsideCancellationWindow": is_inside_cancellation_window,
+        "refundInsideWindow": refund_inside_window,
+        "reason": reason,
+    }
+    if processor_refund_id is not None:
+        extra_payload["processorRefundId"] = processor_refund_id
+        extra_payload["processorRefundAmountCents"] = refunded_amount_cents
+
     _append_booking_event(
         session,
         booking,
@@ -732,13 +771,7 @@ async def cancel_booking(
         actor=actor,
         amount_cents=refunded_amount_cents,
         notes=reason,
-        extra_payload={
-            "walletCreditedCents": wallet_credited_cents,
-            "forfeitedAmountCents": forfeited_amount_cents,
-            "isInsideCancellationWindow": is_inside_cancellation_window,
-            "refundInsideWindow": refund_inside_window,
-            "reason": reason,
-        },
+        extra_payload=extra_payload,
     )
 
     reload_booking_id = booking.id

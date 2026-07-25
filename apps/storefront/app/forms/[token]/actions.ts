@@ -45,6 +45,14 @@ const readFieldAnswer = async (formData: FormData, field: FormField, tenantId: s
     return formData.get(field.id) === "on";
   }
 
+  if (field.type === "multi_select") {
+    const values = formData
+      .getAll(field.id)
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      .map((value) => value.trim());
+    return values.length > 0 ? values : undefined;
+  }
+
   if (field.type === "file_upload" || field.type === "signature") {
     const entries = formData.getAll(field.id).filter(
       (entry): entry is File => typeof entry === "object" && entry !== null && "size" in entry && (entry as File).size > 0,
@@ -87,4 +95,17 @@ export async function submitManageBookingFormRequirementAction(formData: FormDat
   });
 
   redirect(`/forms/${token}?submitted=1`);
+}
+
+
+export async function saveManageBookingFormRequirementDraftAction(formData: FormData) {
+  const token = readRequiredField(formData, "token");
+  const requirementId = readRequiredField(formData, "requirementId");
+  const tenantId = readRequiredField(formData, "tenantId");
+
+  await storefrontApi.saveManageBookingFormRequirementDraft(token, requirementId, {
+    answers: await readRequirementAnswers(formData, tenantId),
+  });
+
+  redirect(`/forms/${token}?saved=1`);
 }

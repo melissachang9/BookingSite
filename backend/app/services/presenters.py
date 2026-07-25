@@ -300,6 +300,7 @@ def form_requirement_to_summary(requirement: BookingDraftFormRequirement) -> For
         form_title=title if isinstance(title, str) else None,
         form_description=description if isinstance(description, str) else None,
         schema=schema if isinstance(schema, dict) else None,
+        draft_answers=requirement.draft_answers_json if isinstance(requirement.draft_answers_json, dict) else None,
     )
 
 
