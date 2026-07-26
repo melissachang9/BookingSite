@@ -2560,11 +2560,11 @@ body {
   left: 0;
   z-index: 100;
   margin-top: 4px;
-  background: var(--ui-surface);
-  border: 1px solid var(--ui-border);
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
   border-radius: 10px;
   padding: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   min-width: 260px;
 }
 
