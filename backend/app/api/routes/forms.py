@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.auth import require_tenant_permission
+from app.db.models import User
 from app.db.session import get_db_session
 from app.schemas.forms import (
     CreateFormRequest,
@@ -12,6 +13,7 @@ from app.schemas.forms import (
     UpdateFormRequest,
 )
 from app.services.forms import create_tenant_form, delete_tenant_form, list_tenant_forms, update_tenant_form
+from app.services.audit import record_audit
 
 
 router = APIRouter(tags=["forms"])
@@ -39,10 +41,12 @@ async def list_forms(
 async def create_form(
     tenant_slug: str,
     payload: CreateFormRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> FormSummaryResponse:
-    return await create_tenant_form(session, tenant_slug, payload)
+    result = await create_tenant_form(session, tenant_slug, payload)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="form", entity_id=result.id, action="create", actor=actor, notes=result.name)
+    return result
 
 
 @router.patch(
@@ -54,10 +58,12 @@ async def update_form(
     tenant_slug: str,
     form_id: str,
     payload: UpdateFormRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> FormSummaryResponse:
-    return await update_tenant_form(session, tenant_slug, form_id, payload)
+    result = await update_tenant_form(session, tenant_slug, form_id, payload)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="form", entity_id=form_id, action="update", actor=actor)
+    return result
 
 
 @router.delete(
@@ -67,8 +73,9 @@ async def update_form(
 async def delete_form(
     tenant_slug: str,
     form_id: str,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Response:
     await delete_tenant_form(session, tenant_slug, form_id)
+    await record_audit(session, tenant_id="", entity_type="form", entity_id=form_id, action="delete", actor=actor)
     return Response(status_code=204)

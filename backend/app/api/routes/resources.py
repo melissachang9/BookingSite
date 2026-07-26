@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.auth import require_tenant_permission
+from app.db.models import User
 from app.db.session import get_db_session
 from app.schemas.resources import (
     CreateResourceRequest,
@@ -12,6 +13,7 @@ from app.schemas.resources import (
     UpdateResourceRequest,
 )
 from app.services.resources import create_tenant_resource, list_tenant_resources, update_tenant_resource
+from app.services.audit import record_audit
 
 
 router = APIRouter(tags=["resources"])
@@ -39,10 +41,12 @@ async def list_resources(
 async def create_resource(
     tenant_slug: str,
     payload: CreateResourceRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ResourceSummaryResponse:
-    return await create_tenant_resource(session, tenant_slug, payload)
+    result = await create_tenant_resource(session, tenant_slug, payload)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="resource", entity_id=result.id, action="create", actor=actor, notes=result.name)
+    return result
 
 
 @router.patch(
@@ -54,7 +58,9 @@ async def update_resource(
     tenant_slug: str,
     resource_id: str,
     payload: UpdateResourceRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ResourceSummaryResponse:
-    return await update_tenant_resource(session, tenant_slug, resource_id, payload)
+    result = await update_tenant_resource(session, tenant_slug, resource_id, payload)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="resource", entity_id=resource_id, action="update", actor=actor)
+    return result

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.auth import require_tenant_permission
+from app.db.models import User
 from app.db.session import get_db_session
 from app.schemas.availability import AvailabilityResponse
 from app.schemas.catalog import (
@@ -39,6 +40,7 @@ from app.schemas.catalog import (
     UpdateTenantWalletMembershipRequest,
 )
 from app.schemas.reporting import DashboardReportResponse
+from app.services.audit import record_audit
 from app.services.availability import list_availability
 from app.services.reporting import get_dashboard_report
 from app.services.tenants import (
@@ -112,10 +114,12 @@ async def get_tenant_report(
 async def patch_tenant_settings(
     tenant_slug: str,
     payload: UpdateTenantSettingsRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantSummaryResponse:
-    return await update_tenant_settings(session, tenant_slug, payload)
+    result = await update_tenant_settings(session, tenant_slug, payload)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="tenant", entity_id=result.id, action="update_settings", actor=actor)
+    return result
 
 
 @router.patch(
@@ -126,10 +130,12 @@ async def patch_tenant_settings(
 async def patch_tenant_business(
     tenant_slug: str,
     payload: UpdateTenantBusinessRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantSummaryResponse:
-    return await update_tenant_business(session, tenant_slug, payload)
+    result = await update_tenant_business(session, tenant_slug, payload)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="tenant", entity_id=result.id, action="update_business", actor=actor)
+    return result
 
 
 @router.patch(
@@ -140,10 +146,12 @@ async def patch_tenant_business(
 async def patch_tenant_business_hours(
     tenant_slug: str,
     payload: UpdateTenantBusinessHoursRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantSummaryResponse:
-    return await update_tenant_business_hours(session, tenant_slug, payload)
+    result = await update_tenant_business_hours(session, tenant_slug, payload)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="tenant", entity_id=result.id, action="update_business_hours", actor=actor)
+    return result
 
 
 @router.patch(
@@ -154,10 +162,12 @@ async def patch_tenant_business_hours(
 async def patch_tenant_branding(
     tenant_slug: str,
     payload: UpdateTenantBrandingRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantSummaryResponse:
-    return await update_tenant_branding(session, tenant_slug, payload)
+    result = await update_tenant_branding(session, tenant_slug, payload)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="tenant", entity_id=result.id, action="update_branding", actor=actor)
+    return result
 
 
 @router.patch(
@@ -168,10 +178,12 @@ async def patch_tenant_branding(
 async def patch_tenant_client_ownership(
     tenant_slug: str,
     payload: UpdateTenantClientOwnershipRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantSummaryResponse:
-    return await update_tenant_client_ownership(session, tenant_slug, payload)
+    result = await update_tenant_client_ownership(session, tenant_slug, payload)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="tenant", entity_id=result.id, action="update_client_ownership", actor=actor)
+    return result
 
 
 @router.patch(
@@ -182,10 +194,12 @@ async def patch_tenant_client_ownership(
 async def patch_tenant_custom_email(
     tenant_slug: str,
     payload: UpdateTenantCustomEmailRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantSummaryResponse:
-    return await update_tenant_custom_email(session, tenant_slug, payload)
+    result = await update_tenant_custom_email(session, tenant_slug, payload)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="tenant", entity_id=result.id, action="update_custom_email", actor=actor)
+    return result
 
 
 @router.get(
@@ -210,10 +224,12 @@ async def get_tenant_email_dns_route(
 async def patch_tenant_wallet_membership(
     tenant_slug: str,
     payload: UpdateTenantWalletMembershipRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantSummaryResponse:
-    return await update_tenant_wallet_membership(session, tenant_slug, payload)
+    result = await update_tenant_wallet_membership(session, tenant_slug, payload)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="tenant", entity_id=result.id, action="update_wallet_membership", actor=actor)
+    return result
 
 
 @router.get(
@@ -238,10 +254,12 @@ async def get_tenant_users(
 async def post_tenant_user(
     tenant_slug: str,
     payload: CreateTenantUserRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantUserSummaryResponse:
-    return await create_tenant_user(session, tenant_slug, payload)
+    result = await create_tenant_user(session, tenant_slug, payload)
+    await record_audit(session, tenant_id=actor.tenant_id, entity_type="user", entity_id=result.id, action="create", actor=actor, notes=result.email)
+    return result
 
 
 @router.patch(
@@ -253,10 +271,12 @@ async def patch_tenant_user(
     tenant_slug: str,
     user_id: str,
     payload: UpdateTenantUserRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantUserSummaryResponse:
-    return await update_tenant_user(session, tenant_slug, user_id, payload)
+    result = await update_tenant_user(session, tenant_slug, user_id, payload)
+    await record_audit(session, tenant_id=actor.tenant_id, entity_type="user", entity_id=user_id, action="update", actor=actor)
+    return result
 
 
 @router.post(
@@ -268,10 +288,12 @@ async def post_tenant_user_password(
     tenant_slug: str,
     user_id: str,
     payload: ResetTenantUserPasswordRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantUserSummaryResponse:
-    return await reset_tenant_user_password(session, tenant_slug, user_id, payload)
+    result = await reset_tenant_user_password(session, tenant_slug, user_id, payload)
+    await record_audit(session, tenant_id=actor.tenant_id, entity_type="user", entity_id=user_id, action="reset_password", actor=actor)
+    return result
 
 
 @router.get(
@@ -323,10 +345,12 @@ async def get_public_service(
 async def create_service(
     tenant_slug: str,
     payload: CreateServiceRequest,
-    _: object = Depends(require_tenant_permission("services.manage")),
+    actor: User = Depends(require_tenant_permission("services.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ServiceSummaryResponse:
-    return await create_tenant_service(session, tenant_slug, payload)
+    result = await create_tenant_service(session, tenant_slug, payload)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="service", entity_id=result.id, action="create", actor=actor, notes=result.name)
+    return result
 
 
 @router.get(
@@ -363,10 +387,12 @@ async def list_locations_admin(
 async def create_location(
     tenant_slug: str,
     payload: CreateLocationRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> LocationSummaryResponse:
-    return await create_tenant_location(session, tenant_slug, payload)
+    result = await create_tenant_location(session, tenant_slug, payload)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="location", entity_id=result.id, action="create", actor=actor, notes=result.name)
+    return result
 
 
 @router.patch(
@@ -378,10 +404,12 @@ async def patch_location(
     tenant_slug: str,
     location_id: str,
     payload: UpdateLocationRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> LocationSummaryResponse:
-    return await update_tenant_location(session, tenant_slug, location_id, payload)
+    result = await update_tenant_location(session, tenant_slug, location_id, payload)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="location", entity_id=location_id, action="update", actor=actor)
+    return result
 
 
 @router.delete(
@@ -392,10 +420,12 @@ async def patch_location(
 async def delete_location(
     tenant_slug: str,
     location_id: str,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> LocationSummaryResponse:
-    return await deactivate_tenant_location(session, tenant_slug, location_id)
+    result = await deactivate_tenant_location(session, tenant_slug, location_id)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="location", entity_id=location_id, action="deactivate", actor=actor)
+    return result
 
 
 @router.get(
@@ -459,10 +489,12 @@ async def list_providers_admin(
 async def post_tenant_provider(
     tenant_slug: str,
     payload: CreateProviderRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ProviderSummaryResponse:
-    return await create_tenant_provider(session, tenant_slug, payload)
+    result = await create_tenant_provider(session, tenant_slug, payload)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="provider", entity_id=result.id, action="create", actor=actor, notes=result.name)
+    return result
 
 
 @router.patch(
@@ -474,10 +506,12 @@ async def patch_tenant_provider(
     tenant_slug: str,
     provider_id: str,
     payload: UpdateProviderRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ProviderSummaryResponse:
-    return await update_tenant_provider(session, tenant_slug, provider_id, payload)
+    result = await update_tenant_provider(session, tenant_slug, provider_id, payload)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="provider", entity_id=provider_id, action="update", actor=actor)
+    return result
 
 
 @router.patch(
@@ -489,11 +523,13 @@ async def patch_provider_compensation(
     tenant_slug: str,
     provider_id: str,
     payload: UpdateProviderCompensationRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ProviderSummaryResponse:
     from app.services.tenants import update_provider_compensation
-    return await update_provider_compensation(session, tenant_slug, provider_id, payload)
+    result = await update_provider_compensation(session, tenant_slug, provider_id, payload)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="provider", entity_id=provider_id, action="update_compensation", actor=actor)
+    return result
 
 
 @router.delete(
@@ -504,10 +540,12 @@ async def patch_provider_compensation(
 async def delete_tenant_provider(
     tenant_slug: str,
     provider_id: str,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ProviderSummaryResponse:
-    return await deactivate_tenant_provider(session, tenant_slug, provider_id)
+    result = await deactivate_tenant_provider(session, tenant_slug, provider_id)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="provider", entity_id=provider_id, action="deactivate", actor=actor)
+    return result
 
 
 @router.post(
@@ -519,10 +557,12 @@ async def delete_tenant_provider(
 async def post_tenant_staff(
     tenant_slug: str,
     payload: CreateStaffRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> CreateStaffResponse:
-    return await create_tenant_staff(session, tenant_slug, payload)
+    result = await create_tenant_staff(session, tenant_slug, payload)
+    await record_audit(session, tenant_id=actor.tenant_id, entity_type="staff", entity_id=result.user.id, action="create", actor=actor, notes=result.user.email)
+    return result
 
 # === Phase C: Provider weekly schedule ===
 
@@ -559,10 +599,12 @@ async def put_provider_schedule(
     tenant_slug: str,
     provider_id: str,
     payload: ReplaceProviderScheduleRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ProviderScheduleResponse:
-    return await replace_tenant_provider_schedule(session, tenant_slug, provider_id, payload)
+    result = await replace_tenant_provider_schedule(session, tenant_slug, provider_id, payload)
+    await record_audit(session, tenant_id=result.provider.tenant_id, entity_type="provider_schedule", entity_id=provider_id, action="replace", actor=actor)
+    return result
 
 
 # === Phase D: Provider time off ===
@@ -603,10 +645,12 @@ async def create_provider_time_off(
     tenant_slug: str,
     provider_id: str,
     payload: CreateProviderTimeOffRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ProviderTimeOffResponse:
-    return await create_tenant_provider_time_off(session, tenant_slug, provider_id, payload)
+    result = await create_tenant_provider_time_off(session, tenant_slug, provider_id, payload)
+    await record_audit(session, tenant_id=actor.tenant_id, entity_type="provider_time_off", entity_id=result.id, action="create", actor=actor)
+    return result
 
 
 @router.delete(
@@ -619,10 +663,11 @@ async def delete_provider_time_off(
     tenant_slug: str,
     provider_id: str,
     time_off_id: str,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Response:
     await delete_tenant_provider_time_off(session, tenant_slug, provider_id, time_off_id)
+    await record_audit(session, tenant_id="", entity_type="provider_time_off", entity_id=time_off_id, action="delete", actor=actor)
     return Response(status_code=204)
 
 
@@ -664,10 +709,12 @@ async def post_copy_day(
     tenant_slug: str,
     provider_id: str,
     payload: CopyDayRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> WorkHoursResponse:
-    return await copy_provider_day(session, tenant_slug, provider_id, payload)
+    result = await copy_provider_day(session, tenant_slug, provider_id, payload)
+    await record_audit(session, tenant_id=result.provider.tenant_id, entity_type="provider_schedule", entity_id=provider_id, action="copy_day", actor=actor)
+    return result
 
 
 @router.patch(
@@ -680,10 +727,12 @@ async def patch_provider_time_off(
     provider_id: str,
     time_off_id: str,
     payload: UpdateProviderTimeOffRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ProviderTimeOffResponse:
-    return await update_tenant_provider_time_off(session, tenant_slug, provider_id, time_off_id, payload)
+    result = await update_tenant_provider_time_off(session, tenant_slug, provider_id, time_off_id, payload)
+    await record_audit(session, tenant_id=actor.tenant_id, entity_type="provider_time_off", entity_id=time_off_id, action="update", actor=actor)
+    return result
 
 
 # === Phase E: Per-user permission overrides ===
@@ -721,10 +770,12 @@ async def put_user_permissions(
     tenant_slug: str,
     user_id: str,
     payload: ReplaceUserPermissionsRequest,
-    _: object = Depends(require_tenant_permission("settings.manage")),
+    actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> UserPermissionsResponse:
-    return await replace_tenant_user_permissions(session, tenant_slug, user_id, payload)
+    result = await replace_tenant_user_permissions(session, tenant_slug, user_id, payload)
+    await record_audit(session, tenant_id=actor.tenant_id, entity_type="user_permissions", entity_id=user_id, action="replace", actor=actor)
+    return result
 
 
 # === Phase G: Service categories, reorder, duplicate, variants, update ===
@@ -775,10 +826,12 @@ async def list_service_categories(
 async def create_service_category(
     tenant_slug: str,
     payload: CreateServiceCategoryRequest,
-    _: object = Depends(require_tenant_permission("services.manage")),
+    actor: User = Depends(require_tenant_permission("services.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ServiceCategorySummaryResponse:
-    return await create_tenant_service_category(session, tenant_slug, payload)
+    result = await create_tenant_service_category(session, tenant_slug, payload)
+    await record_audit(session, tenant_id=actor.tenant_id, entity_type="service_category", entity_id=result.id, action="create", actor=actor, notes=result.name)
+    return result
 
 
 @router.patch(
@@ -790,10 +843,12 @@ async def patch_service_category(
     tenant_slug: str,
     category_id: str,
     payload: UpdateServiceCategoryRequest,
-    _: object = Depends(require_tenant_permission("services.manage")),
+    actor: User = Depends(require_tenant_permission("services.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ServiceCategorySummaryResponse:
-    return await update_tenant_service_category(session, tenant_slug, category_id, payload)
+    result = await update_tenant_service_category(session, tenant_slug, category_id, payload)
+    await record_audit(session, tenant_id=actor.tenant_id, entity_type="service_category", entity_id=category_id, action="update", actor=actor)
+    return result
 
 
 @router.delete(
@@ -805,10 +860,11 @@ async def patch_service_category(
 async def delete_service_category(
     tenant_slug: str,
     category_id: str,
-    _: object = Depends(require_tenant_permission("services.manage")),
+    actor: User = Depends(require_tenant_permission("services.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Response:
     await delete_tenant_service_category(session, tenant_slug, category_id)
+    await record_audit(session, tenant_id="", entity_type="service_category", entity_id=category_id, action="delete", actor=actor)
     return Response(status_code=204)
 
 
@@ -849,10 +905,12 @@ async def patch_service(
     tenant_slug: str,
     service_id: str,
     payload: UpdateServiceRequest,
-    _: object = Depends(require_tenant_permission("services.manage")),
+    actor: User = Depends(require_tenant_permission("services.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ServiceSummaryResponse:
-    return await update_tenant_service(session, tenant_slug, service_id, payload)
+    result = await update_tenant_service(session, tenant_slug, service_id, payload)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="service", entity_id=service_id, action="update", actor=actor)
+    return result
 
 
 @router.post(
@@ -864,10 +922,12 @@ async def patch_service(
 async def post_service_duplicate(
     tenant_slug: str,
     service_id: str,
-    _: object = Depends(require_tenant_permission("services.manage")),
+    actor: User = Depends(require_tenant_permission("services.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ServiceSummaryResponse:
-    return await duplicate_tenant_service(session, tenant_slug, service_id)
+    result = await duplicate_tenant_service(session, tenant_slug, service_id)
+    await record_audit(session, tenant_id=result.tenant_id, entity_type="service", entity_id=result.id, action="duplicate", actor=actor, notes=result.name)
+    return result
 
 
 @router.get(

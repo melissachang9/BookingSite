@@ -13,6 +13,7 @@ from app.schemas.catalog import TenantUserListResponse
 from app.services.auth import ROLE_PERMISSION_ALLOWLIST
 from app.services.booking_forms import list_customer_form_responses
 from app.services.customers import get_customer_profile, list_tenant_customers, lookup_tenant_customers, update_customer
+from app.services.audit import record_audit
 from app.services.tenants import list_tenant_users
 
 
@@ -95,10 +96,12 @@ async def update_customer_route(
     tenant_slug: str,
     customer_id: str,
     payload: UpdateCustomerRequest,
-    _: object = Depends(require_tenant_permission("customers.manage")),
+    actor: User = Depends(require_tenant_permission("customers.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> CustomerProfileResponse:
-    return await update_customer(session, tenant_slug, customer_id, payload)
+    result = await update_customer(session, tenant_slug, customer_id, payload)
+    await record_audit(session, tenant_id=result.customer.tenant_id, entity_type="customer", entity_id=customer_id, action="update", actor=actor)
+    return result
 
 
 @router.get(
