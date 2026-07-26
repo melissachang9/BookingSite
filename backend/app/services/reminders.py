@@ -14,7 +14,7 @@ from app.db.models import (
     BookingDraftIntakePlan,
     Tenant,
 )
-from app.services.notifications import send_transactional_email
+from app.services.notifications import send_transactional_email, send_transactional_sms
 
 
 def _format_booking_start(starts_at: datetime) -> str:
@@ -22,12 +22,13 @@ def _format_booking_start(starts_at: datetime) -> str:
 
 
 async def send_due_intake_reminders(session: AsyncSession) -> dict[str, int]:
-    """Send email reminders for bookings whose intake reminder window has arrived.
+    """Send email and SMS reminders for bookings whose intake reminder window has arrived.
 
     Returns a summary dict with counts of sent, skipped, and failed reminders.
     """
     now = datetime.now(timezone.utc)
 
+    # Email reminders
     due_plans = (
         await session.scalars(
             select(BookingDraftIntakePlan)
@@ -89,6 +90,56 @@ async def send_due_intake_reminders(session: AsyncSession) -> dict[str, int]:
                 html_body=html_body,
             )
             plan.email_reminder_sent_at = now
+            sent += 1
+        except Exception:
+            failed += 1
+
+    # SMS reminders
+    sms_due_plans = (
+        await session.scalars(
+            select(BookingDraftIntakePlan)
+            .options(
+                selectinload(BookingDraftIntakePlan.booking_draft)
+                .selectinload(BookingDraft.customer),
+                selectinload(BookingDraftIntakePlan.booking_draft)
+                .selectinload(BookingDraft.service),
+                selectinload(BookingDraftIntakePlan.booking_draft)
+                .selectinload(BookingDraft.provider),
+            )
+            .where(
+                BookingDraftIntakePlan.status == "reminders_scheduled",
+                BookingDraftIntakePlan.sms_reminder_scheduled_at.is_not(None),
+                BookingDraftIntakePlan.sms_reminder_scheduled_at <= now,
+                BookingDraftIntakePlan.sms_reminder_sent_at.is_(None),
+            )
+        )
+    ).all()
+
+    for plan in sms_due_plans:
+        draft = plan.booking_draft
+        if draft is None or draft.customer is None:
+            skipped += 1
+            continue
+        if not draft.customer.sms_consent or not draft.customer.sms_phone:
+            skipped += 1
+            continue
+
+        customer_name = draft.customer.name or "there"
+        service_name = draft.service.name if draft.service is not None else "your appointment"
+        provider_name = draft.provider.name if draft.provider is not None else "your provider"
+        appointment_label = _format_booking_start(draft.starts_at)
+
+        sms_body = (
+            f"Hi {customer_name}, reminder about your {service_name} appointment "
+            f"with {provider_name} on {appointment_label}. "
+            f"Please complete any pending forms before your visit."
+        )
+        try:
+            await send_transactional_sms(
+                recipient_phone=draft.customer.sms_phone,
+                body=sms_body,
+            )
+            plan.sms_reminder_sent_at = now
             sent += 1
         except Exception:
             failed += 1

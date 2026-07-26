@@ -450,6 +450,7 @@ class BookingDraftIntakePlan(Base, IdMixin, TimestampMixin):
     email_reminder_scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     email_reminder_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     sms_reminder_scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    sms_reminder_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     booking_draft: Mapped[BookingDraft] = relationship(back_populates="intake_plan")
 

@@ -510,6 +510,21 @@ async def _ensure_postgres_schema_compatibility() -> None:
                 text("CREATE INDEX IF NOT EXISTS ix_wallet_transactions_tenant ON wallet_transactions (tenant_id)")
             )
 
+        sms_reminder_sent_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'booking_draft_intake_plans'
+                  AND column_name = 'sms_reminder_sent_at'
+                """
+            )
+        )
+        if not sms_reminder_sent_exists:
+            await connection.execute(
+                text("ALTER TABLE booking_draft_intake_plans ADD COLUMN sms_reminder_sent_at TIMESTAMP WITH TIME ZONE")
+            )
+
 
 async def initialize_database() -> None:
     async with get_engine().begin() as connection:

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import Booking, Tenant
-from app.services.notifications import send_transactional_email
+from app.services.notifications import send_transactional_email, send_transactional_sms
 
 
 _APPOINTMENT_REMINDER_MIN_GAP = timedelta(hours=6)
@@ -127,10 +127,21 @@ async def send_due_appointment_reminders(session: AsyncSession) -> dict[str, int
                 failed += 1
                 continue
 
-        # SMS placeholder - will be implemented when SMS provider is integrated
+        # SMS reminder
         if "sms" in channels and booking.customer.sms_consent and booking.customer.sms_phone:
-            # TODO: Integrate Twilio or similar SMS provider
-            pass
+            sms_body = (
+                f"Hi {customer_name}, this is a reminder about your {service_name} appointment "
+                f"with {provider_name} on {appointment_label}. "
+                f"Reply to reschedule or cancel."
+            )
+            try:
+                await send_transactional_sms(
+                    recipient_phone=booking.customer.sms_phone,
+                    body=sms_body,
+                )
+            except Exception:
+                failed += 1
+                continue
 
         booking.last_appointment_reminder_sent_at = now
         sent += 1

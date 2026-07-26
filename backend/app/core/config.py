@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     stripe_webhook_secret: Optional[str] = None
     stripe_webhook_tolerance_seconds: int = 300
     stripe_api_base_url: str = "https://api.stripe.com/v1"
+    twilio_account_sid: Optional[str] = None
+    twilio_auth_token: Optional[str] = None
+    twilio_phone_number: Optional[str] = None
     storefront_public_base_url: str = "http://localhost:3001"
     media_root: str = "/media"
     media_base_url: str = "http://localhost:8000/api/v1/forms/files"
