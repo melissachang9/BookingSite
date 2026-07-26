@@ -74,6 +74,7 @@ class Customer(Base, IdMixin, TimestampMixin):
     notes_history: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     sms_consent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
     sms_phone: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    stripe_customer_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="customers")
     owner: Mapped[Optional["User"]] = relationship(foreign_keys=[owner_user_id])

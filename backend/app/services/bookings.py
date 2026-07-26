@@ -11,7 +11,7 @@ from app.db.models import Booking, BookingDraft, BookingPaymentEvent, Payment, P
 from app.schemas.bookings import BookingListResponse, BookingSummaryResponse, CancelBookingRequest, PaginationMetaResponse, UpdateBookingRequest, UpdateBookingStatusRequest
 from app.schemas.payments import ApplyWalletCreditRequest, RecordManualPaymentRequest, RefundPaymentRequest
 from app.services.booking_drafts import _cancellation_policy_for_booking, _load_booking
-from app.services.payment_processor import refund_payment_via_processor
+from app.services.payment_processor import charge_stripe_no_show_fee, refund_payment_via_processor
 from app.services.presenters import booking_balance_due_cents, booking_to_summary
 from app.services.state_machine import guard_transition
 from app.services.wallet import record_wallet_transaction
@@ -583,15 +583,27 @@ async def update_booking_status(
     auto_charge = tenant_settings.get("autoChargeNoShowFee", False)
     no_show_fee_cents = tenant_settings.get("noShowFeeCents", 0)
     if auto_charge and isinstance(no_show_fee_cents, int) and no_show_fee_cents > 0:
+        stripe_charge_result = None
+        if booking.customer is not None and booking.customer.stripe_customer_id:
+            try:
+                stripe_charge_result = await charge_stripe_no_show_fee(
+                    stripe_customer_id=booking.customer.stripe_customer_id,
+                    amount_cents=no_show_fee_cents,
+                    description=f"No-show fee for {booking.service.name if booking.service else 'appointment'}",
+                    idempotency_key=f"no-show-{booking.id}",
+                )
+            except Exception:
+                pass  # Charge failed; still record the payment as pending
+
         no_show_payment = Payment(
             tenant_id=booking.tenant_id,
             booking=booking,
             customer_id=booking.customer_id,
-            status="succeeded",
-            deposit_status="paid_in_full",
+            status="succeeded" if stripe_charge_result is not None else "failed",
+            deposit_status="paid_in_full" if stripe_charge_result is not None else "unpaid",
             amount_cents=no_show_fee_cents,
             currency="USD",
-            payment_method_type="no_show_fee",
+            payment_method_type="stripe" if stripe_charge_result is not None else "no_show_fee",
             checkout_session_kind=None,
         )
         session.add(no_show_payment)
@@ -602,7 +614,12 @@ async def update_booking_status(
             kind="no_show_fee_charged",
             actor=actor,
             amount_cents=no_show_fee_cents,
-            notes=f"No-show fee of ${no_show_fee_cents / 100:.2f} auto-charged. Operator: {actor.name}.",
+            notes=(
+                f"No-show fee of ${no_show_fee_cents / 100:.2f} charged via Stripe "
+                f"(pi {stripe_charge_result.payment_intent_id}). Operator: {actor.name}."
+            )
+            if stripe_charge_result is not None
+            else f"No-show fee of ${no_show_fee_cents / 100:.2f} recorded (charge failed). Operator: {actor.name}.",
         )
 
     reload_booking_id = booking.id

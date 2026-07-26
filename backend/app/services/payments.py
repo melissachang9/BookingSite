@@ -877,6 +877,12 @@ async def process_stripe_webhook_event(
         payment_status = event_object.get("payment_status") if isinstance(event_object.get("payment_status"), str) else None
         if payment_status != "paid":
             return {"status": "ignored", "reason": "payment_not_paid"}
+
+        # Save Stripe customer ID for future off-session charges (no-show fees)
+        stripe_customer_id = event_object.get("customer") if isinstance(event_object.get("customer"), str) else None
+        if stripe_customer_id and payment.customer is not None and not payment.customer.stripe_customer_id:
+            payment.customer.stripe_customer_id = stripe_customer_id
+
         if payment.checkout_session_kind == "booking_balance":
             await _complete_booking_balance_checkout_payment(
                 session,

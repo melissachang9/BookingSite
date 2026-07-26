@@ -261,6 +261,7 @@ async def create_stripe_deposit_checkout_session(
         ("metadata[tenant_slug]", tenant_slug),
         ("metadata[booking_draft_id]", booking_draft_id),
         ("metadata[payment_kind]", "deposit"),
+        ("payment_intent_data[setup_future_usage]", "off_session"),
     ]
     if customer_email:
         data.append(("customer_email", customer_email))
@@ -419,3 +420,63 @@ async def refund_payment_via_processor(
     #     return ProcessorRefundResult(processor="clover", ...)
 
     return None
+
+
+async def charge_stripe_no_show_fee(
+    *,
+    stripe_customer_id: str,
+    amount_cents: int,
+    description: str,
+    idempotency_key: str,
+) -> StripeRefund | None:
+    """Charge a no-show fee to a customer's saved card via Stripe.
+
+    Returns a StripeRefund-like result on success, or None if Stripe
+    is not configured.  Raises on payment failure.
+    """
+    if not stripe_processor_configured():
+        return None
+
+    # Get the customer's default payment method
+    customer = await _stripe_request(
+        "GET",
+        f"customers/{stripe_customer_id}",
+        params=[("expand[]", "invoice_settings.default_payment_method")],
+    )
+
+    payment_method_id: str | None = None
+    settings_obj = customer.get("invoice_settings")
+    if isinstance(settings_obj, dict):
+        pm = settings_obj.get("default_payment_method")
+        if isinstance(pm, dict):
+            payment_method_id = pm.get("id") if isinstance(pm.get("id"), str) else None
+        elif isinstance(pm, str):
+            payment_method_id = pm
+
+    if not payment_method_id:
+        raise api_exception(409, "conflict", "Customer has no saved payment method to charge.")
+
+    payload = await _stripe_request(
+        "POST",
+        "payment_intents",
+        data=[
+            ("amount", str(amount_cents)),
+            ("currency", "usd"),
+            ("customer", stripe_customer_id),
+            ("payment_method", payment_method_id),
+            ("off_session", "true"),
+            ("confirm", "true"),
+            ("description", description),
+        ],
+        idempotency_key=idempotency_key,
+    )
+
+    payment_intent_id = payload.get("id") if isinstance(payload.get("id"), str) else None
+    if not payment_intent_id:
+        raise api_exception(502, "payment_processor_error", "Stripe payment intent response was incomplete.")
+
+    return StripeRefund(
+        refund_id=payment_intent_id,
+        amount_cents=int(payload.get("amount") or amount_cents),
+        payment_intent_id=payment_intent_id,
+    )

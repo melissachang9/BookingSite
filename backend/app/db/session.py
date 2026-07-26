@@ -525,6 +525,21 @@ async def _ensure_postgres_schema_compatibility() -> None:
                 text("ALTER TABLE booking_draft_intake_plans ADD COLUMN sms_reminder_sent_at TIMESTAMP WITH TIME ZONE")
             )
 
+        stripe_customer_id_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'customers'
+                  AND column_name = 'stripe_customer_id'
+                """
+            )
+        )
+        if not stripe_customer_id_exists:
+            await connection.execute(
+                text("ALTER TABLE customers ADD COLUMN stripe_customer_id VARCHAR(255)")
+            )
+
 
 async def initialize_database() -> None:
     async with get_engine().begin() as connection:
