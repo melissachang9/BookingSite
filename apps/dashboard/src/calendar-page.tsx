@@ -2833,147 +2833,120 @@ function SlotActionDrawer({
             >
               {isAppointmentMode ? "Create time block" : "Create appointment"}
             </button>
-            <button type="button" className="appointment-drawer-outline-action" onClick={onClose}>
-              Close
+            <button type="button" className="appointment-drawer-close" onClick={onClose} aria-label="Close">
+              ×
             </button>
           </div>
         </header>
 
-        <div className="appointment-drawer-when" aria-label="Calendar slot timing">
-          <div style={{ position: "relative" }} ref={datePickerContainerRef}>
-            On{" "}
-            <button
-              type="button"
-              className="appointment-drawer-date-pick"
-              onClick={() => {
-                setPickerMonth(monthAnchor(selectedSlot.date));
-                setShowDatePopover((prev) => !prev);
-              }}
-              aria-expanded={showDatePopover}
-            >
-              <strong>{getDateLabel(selectedSlot.date)}</strong>
-            </button>
-            {showDatePopover ? (
-              <div className="appointment-drawer-date-popover">
-                <div className="month-rail__header">
-                  <h5>{monthLabelFormatter.format(parseIsoDate(pickerMonth))}</h5>
-                  <div className="month-rail__controls">
-                    <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, -1))}>
-                      Prev
-                    </button>
-                    <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, 1))}>
-                      Next
-                    </button>
-                  </div>
+        <div className="appointment-drawer-body">
+          {/* When */}
+          <div className="booking-rail-section">
+            <p className="rail-section-kicker">When</p>
+            <div className="appointment-drawer-when" aria-label="Calendar slot timing">
+              <div className="appointment-drawer-when__block">
+                <div className="appointment-drawer-when__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>
                 </div>
-                <div className="month-grid-labels" role="presentation">
-                  {monthDayLabel.map((label) => (
-                    <span key={label}>{label}</span>
-                  ))}
-                </div>
-                <div className="month-grid" role="grid">
-                  {pickerGrid.map((date) => {
-                    const isInCurrentMonth = date.slice(0, 7) === pickerMonth.slice(0, 7);
-                    const isSelected = date === selectedSlot.date;
-                    return (
-                      <button
-                        key={date}
-                        type="button"
-                        role="gridcell"
-                        disabled={!isInCurrentMonth}
-                        aria-pressed={isSelected}
-                        aria-label={getDateLabel(date)}
-                        className={[
-                          "month-day",
-                          !isInCurrentMonth ? "month-day--outside" : "",
-                          isSelected ? "month-day--focused" : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" ")}
-                        onClick={() => {
-                          onStartDateChange(date);
-                          setShowDatePopover(false);
-                        }}
-                      >
-                        <span>{parseIsoDate(date).getUTCDate()}</span>
-                      </button>
-                    );
-                  })}
+                <div>
+                  <div className="appointment-drawer-when__date">{getDateLabel(selectedSlot.date)}</div>
+                  <div className="appointment-drawer-when__time">{headingTimeRange}</div>
                 </div>
               </div>
-            ) : null}
+              <div className="appointment-drawer-when__links">
+                <div style={{ position: "relative" }} ref={datePickerContainerRef}>
+                  <button
+                    type="button"
+                    className="link-action"
+                    onClick={() => {
+                      setPickerMonth(monthAnchor(selectedSlot.date));
+                      setShowDatePopover((prev) => !prev);
+                    }}
+                    aria-expanded={showDatePopover}
+                  >
+                    Change date
+                  </button>
+                  {showDatePopover ? (
+                    <div className="appointment-drawer-date-popover">
+                      <div className="month-rail__header">
+                        <h5>{monthLabelFormatter.format(parseIsoDate(pickerMonth))}</h5>
+                        <div className="month-rail__controls">
+                          <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, -1))}>
+                            Prev
+                          </button>
+                          <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, 1))}>
+                            Next
+                          </button>
+                        </div>
+                      </div>
+                      <div className="month-grid-labels" role="presentation">
+                        {monthDayLabel.map((label) => (
+                          <span key={label}>{label}</span>
+                        ))}
+                      </div>
+                      <div className="month-grid" role="grid">
+                        {pickerGrid.map((date) => {
+                          const isInCurrentMonth = date.slice(0, 7) === pickerMonth.slice(0, 7);
+                          const isSelected = date === selectedSlot.date;
+                          return (
+                            <button
+                              key={date}
+                              type="button"
+                              role="gridcell"
+                              disabled={!isInCurrentMonth}
+                              aria-pressed={isSelected}
+                              aria-label={getDateLabel(date)}
+                              className={[
+                                "month-day",
+                                !isInCurrentMonth ? "month-day--outside" : "",
+                                isSelected ? "month-day--focused" : "",
+                              ]
+                                .filter(Boolean)
+                                .join(" ")}
+                              onClick={() => {
+                                onStartDateChange(date);
+                                setShowDatePopover(false);
+                              }}
+                            >
+                              <span>{parseIsoDate(date).getUTCDate()}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+                {showTimeInput ? (
+                  <input
+                    type="time"
+                    className="appointment-drawer-time-input"
+                    value={formatTimeInputValue(selectedSlot.startAt)}
+                    onChange={(event) => {
+                      onStartTimeChange(event.target.value);
+                      setShowTimeInput(false);
+                    }}
+                    autoFocus
+                    onBlur={() => setShowTimeInput(false)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        setShowTimeInput(false);
+                      }
+                    }}
+                  />
+                ) : (
+                  <button type="button" className="link-action" onClick={() => setShowTimeInput(true)}>
+                    Change time
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
-          <div>
-            At{" "}
-            {showTimeInput ? (
-              <input
-                type="time"
-                className="appointment-drawer-time-input"
-                value={formatTimeInputValue(selectedSlot.startAt)}
-                onChange={(event) => {
-                  onStartTimeChange(event.target.value);
-                  setShowTimeInput(false);
-                }}
-                autoFocus
-                onBlur={() => setShowTimeInput(false)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    setShowTimeInput(false);
-                  }
-                }}
-              />
-            ) : (
-              <button
-                type="button"
-                className="appointment-drawer-date-pick"
-                onClick={() => setShowTimeInput(true)}
-              >
-                <strong>{headingTimeRange}</strong>
-              </button>
-            )}
-          </div>
-        </div>
 
-        <section className="booking-rail-section" aria-label="Slot setup">
-          <p className="rail-section-kicker">Setup</p>
-          <div className="slot-action-grid">
-            <label>
-              <span>Provider</span>
-              {selectedSlot.providerOptions.length > 1 ? (
-                <select value={selectedSlot.providerId ?? ""} onChange={(event) => onSelectProvider(event.target.value)}>
-                  {selectedSlot.providerOptions.map((provider) => (
-                    <option key={provider.id} value={provider.id}>
-                      {provider.name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input value={selectedSlot.providerName ?? "No provider available"} readOnly />
-              )}
-            </label>
-            {isAppointmentMode ? (
-              <label>
-                <span>Start time</span>
-                <input type="time" value={formatTimeInputValue(selectedSlot.startAt)} onChange={(event) => onStartTimeChange(event.target.value)} />
-              </label>
-            ) : null}
-            {isAppointmentMode ? (
-              <>
-                <label>
-                  <span>Appointment type</span>
-                  <select value={selectedServiceId ?? ""} onChange={(event) => onSelectService(event.target.value)} disabled={serviceOptions.length === 0}>
-                    {serviceOptions.length === 0 ? <option value="">No appointment types available</option> : null}
-                    {serviceOptions.map((service) => (
-                      <option key={service.id} value={service.id}>
-                        {service.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Appointment duration</span>
-                  <input value={selectedService ? formatDuration(selectedService.durationMinutes) : "Choose appointment type"} readOnly />
-                </label>
+        {isAppointmentMode ? (
+          <section className="booking-rail-section" aria-label="Customer info">
+            <p className="rail-section-kicker">Customer</p>
+            <div className="appointment-summary-card">
+              <div className="slot-action-grid">
                 <label>
                   <span>Client name</span>
                   <input value={customer.name} onChange={(event) => onCustomerFieldChange("name", event.target.value)} autoComplete="off" />
@@ -2986,42 +2959,90 @@ function SlotActionDrawer({
                   <span>Email</span>
                   <input value={customer.email} onChange={(event) => onCustomerFieldChange("email", event.target.value)} inputMode="email" autoComplete="email" />
                 </label>
-              </>
+              </div>
+              <label className="time-block-notes-field">
+                <span>Notes</span>
+                <textarea value={notes} onChange={(event) => onNotesChange(event.target.value)} placeholder="Add context for this client or appointment." rows={3} />
+              </label>
+            </div>
+            {customerLookupState.kind === "loading" ? <div className="slot-customer-lookup-note" role="status">Searching clients...</div> : null}
+            {customerLookupState.kind === "ready" && customerLookupState.items.length > 0 ? (
+              <div className="slot-customer-results" aria-label="Matching clients">
+                {customerLookupState.items.map((lookupCustomer) => (
+                  <button key={lookupCustomer.id} type="button" onClick={() => onApplyCustomer(lookupCustomer)}>
+                    <strong>{lookupCustomer.name}</strong>
+                    <span>{lookupCustomer.email ?? lookupCustomer.phone ?? "Client record"}</span>
+                  </button>
+                ))}
+              </div>
             ) : null}
+            {customerLookupState.kind === "error" ? (
+              <div className="message-banner message-banner--error" role="alert">
+                {customerLookupState.message}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        <section className="booking-rail-section" aria-label="Slot setup">
+          <p className="rail-section-kicker">Setup</p>
+          <div className="appointment-summary-card">
+            <div className="slot-action-grid">
+              <label>
+                <span>Provider</span>
+                {selectedSlot.providerOptions.length > 1 ? (
+                  <select value={selectedSlot.providerId ?? ""} onChange={(event) => onSelectProvider(event.target.value)}>
+                    {selectedSlot.providerOptions.map((provider) => (
+                      <option key={provider.id} value={provider.id}>
+                        {provider.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input value={selectedSlot.providerName ?? "No provider available"} readOnly />
+                )}
+              </label>
+              {isAppointmentMode ? (
+                <label>
+                  <span>Start time</span>
+                  <input type="time" value={formatTimeInputValue(selectedSlot.startAt)} onChange={(event) => onStartTimeChange(event.target.value)} />
+                </label>
+              ) : null}
+              {isAppointmentMode ? (
+                <>
+                  <label>
+                    <span>Appointment type</span>
+                    <select value={selectedServiceId ?? ""} onChange={(event) => onSelectService(event.target.value)} disabled={serviceOptions.length === 0}>
+                      {serviceOptions.length === 0 ? <option value="">No appointment types available</option> : null}
+                      {serviceOptions.map((service) => (
+                        <option key={service.id} value={service.id}>
+                          {service.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Appointment duration</span>
+                    <input value={selectedService ? formatDuration(selectedService.durationMinutes) : "Choose appointment type"} readOnly />
+                  </label>
+                </>
+              ) : null}
+            </div>
           </div>
-          {isAppointmentMode && customerLookupState.kind === "loading" ? <div className="slot-customer-lookup-note" role="status">Searching clients...</div> : null}
-          {isAppointmentMode && customerLookupState.kind === "ready" && customerLookupState.items.length > 0 ? (
-            <div className="slot-customer-results" aria-label="Matching clients">
-              {customerLookupState.items.map((lookupCustomer) => (
-                <button key={lookupCustomer.id} type="button" onClick={() => onApplyCustomer(lookupCustomer)}>
-                  <strong>{lookupCustomer.name}</strong>
-                  <span>{lookupCustomer.email ?? lookupCustomer.phone ?? "Client record"}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-          {isAppointmentMode && customerLookupState.kind === "error" ? (
-            <div className="message-banner message-banner--error" role="alert">
-              {customerLookupState.message}
-            </div>
-          ) : null}
         </section>
 
         {isAppointmentMode ? (
           <section className="booking-rail-section" aria-label="Book appointment from slot">
-            <p className="rail-section-kicker">Book appointment</p>
+            <p className="rail-section-kicker">Summary</p>
             <div className="appointment-summary-card">
-              <div>
-                <strong>{selectedService?.name ?? "Choose an appointment type"}</strong>
-                <span>{formatTimeRange(selectedSlot.startAt, appointmentEndAt)}</span>
+              <div className="appointment-field-list">
+                <div className="appointment-field-row"><span>Service</span><span>{selectedService?.name ?? "Choose an appointment type"}</span></div>
+                <div className="appointment-field-row"><span>Time</span><span>{formatTimeRange(selectedSlot.startAt, appointmentEndAt)}</span></div>
+                {selectedService ? (
+                  <div className="appointment-field-row"><span>Price</span><span>{formatPriceCents(selectedService.priceCents)}{selectedService.depositCents > 0 ? ` · $${(selectedService.depositCents / 100).toFixed(2)} deposit` : " · No deposit"}</span></div>
+                ) : null}
+                <div className="appointment-field-row"><span>Client</span><span>{customer.name || "Client required"}</span></div>
               </div>
-              {selectedService ? (
-                <p style={{ fontSize: "13px", color: "var(--ui-ink)", marginTop: "4px" }}>
-                  {formatPriceCents(selectedService.priceCents)}
-                  {selectedService.depositCents > 0 ? ` · $${(selectedService.depositCents / 100).toFixed(2)} deposit` : " · No deposit"}
-                </p>
-              ) : null}
-              <p>{customer.name || "Client required"}</p>
             </div>
             {draftCreationState.kind === "error" ? (
               <div className="message-banner message-banner--error" role="alert">
@@ -3033,20 +3054,11 @@ function SlotActionDrawer({
                 Booking draft created and slot held for 15 minutes.
               </div>
             ) : null}
-            <div className="time-block-drawer-actions">
-              <button type="button" className="primary-action" onClick={onBookAppointment} disabled={!canCreateDraft || draftCreationState.kind === "success"}>
-                {draftCreationState.kind === "submitting" ? "Creating draft..." : draftCreationState.kind === "success" ? "Draft created" : "Book appointment"}
-              </button>
-              {draftHref ? (
-                <a className="secondary-action" href={draftHref}>
-                  Open draft in storefront
-                </a>
-              ) : null}
-            </div>
           </section>
         ) : (
           <section className="booking-rail-section" aria-label="Add time block from slot">
-            <p className="rail-section-kicker">Add time block</p>
+            <p className="rail-section-kicker">Time block</p>
+            <div className="appointment-summary-card">
             <div className="slot-action-grid">
               <label>
                 <span>Start date</span>
@@ -3098,11 +3110,31 @@ function SlotActionDrawer({
                 </label>
               ))}
             </div>
-            <button type="button" className="primary-action" onClick={onAddTimeBlock} disabled={!canAddTimeBlock}>
-              Add time block
-            </button>
+            </div>
           </section>
         )}
+        </div>
+
+        <div className="appointment-drawer-footer">
+          <div className="appointment-drawer-footer__finalize">
+            {isAppointmentMode ? (
+              <>
+                <button type="button" className="primary-action" onClick={onBookAppointment} disabled={!canCreateDraft || draftCreationState.kind === "success"}>
+                  {draftCreationState.kind === "submitting" ? "Creating draft..." : draftCreationState.kind === "success" ? "Draft created" : "Book appointment"}
+                </button>
+                {draftHref ? (
+                  <a className="secondary-action" href={draftHref}>
+                    Open draft in storefront
+                  </a>
+                ) : null}
+              </>
+            ) : (
+              <button type="button" className="primary-action" onClick={onAddTimeBlock} disabled={!canAddTimeBlock}>
+                Add time block
+              </button>
+            )}
+          </div>
+        </div>
       </aside>
     </>
   );
@@ -3462,15 +3494,13 @@ function AppointmentDetailsDrawer({
 }: AppointmentDetailsDrawerProps): ReactElement | null {
   const [viewingFormEntry, setViewingFormEntry] = useState<BookingFormResponseEntry | null>(null);
   const [drawerView, setDrawerView] = useState<"details" | "checkout">("details");
-  const [isEditing, setIsEditing] = useState(false);
-  const [editDate, setEditDate] = useState("");
-  const [editTime, setEditTime] = useState("");
-  const [editServiceId, setEditServiceId] = useState("");
-  const [editProviderId, setEditProviderId] = useState("");
-  const [editNotes, setEditNotes] = useState("");
-  const [editSaveState, setEditSaveState] = useState<"idle" | "submitting" | "error">("idle");
-  const [editErrorMessage, setEditErrorMessage] = useState("");
-  const [notificationChoice, setNotificationChoice] = useState<"notify" | "silent">("notify");
+  const [showRescheduleDatePopover, setShowRescheduleDatePopover] = useState(false);
+  const [showRescheduleTimeInput, setShowRescheduleTimeInput] = useState(false);
+  const [pickerMonth, setPickerMonth] = useState<string>(monthAnchor(getUpcomingDate(1)));
+  const pickerGrid = useMemo(() => buildMonthGrid(pickerMonth), [pickerMonth]);
+  const datePickerContainerRef = useRef<HTMLDivElement | null>(null);
+  const [rescheduleSaveState, setRescheduleSaveState] = useState<"idle" | "submitting" | "error">("idle");
+  const [rescheduleErrorMessage, setRescheduleErrorMessage] = useState("");
   const [isEditingAppointmentNotes, setIsEditingAppointmentNotes] = useState(false);
   const [appointmentNotesDraft, setAppointmentNotesDraft] = useState("");
   const [appointmentNotesSaveState, setAppointmentNotesSaveState] = useState<"idle" | "submitting" | "error">("idle");
@@ -3487,7 +3517,23 @@ function AppointmentDetailsDrawer({
   // Reset drawer view when switching appointments
   useEffect(() => {
     setDrawerView("details");
+    setShowRescheduleDatePopover(false);
+    setShowRescheduleTimeInput(false);
+    setRescheduleSaveState("idle");
+    setRescheduleErrorMessage("");
   }, [selectedAppointment?.id]);
+
+  useEffect(() => {
+    if (!showRescheduleDatePopover) return;
+    const handler = (event: Event) => {
+      const target = event.target as Node;
+      if (datePickerContainerRef.current && !datePickerContainerRef.current.contains(target)) {
+        setShowRescheduleDatePopover(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showRescheduleDatePopover]);
 
   if (!selectedAppointment) {
     return null;
@@ -3555,73 +3601,140 @@ function AppointmentDetailsDrawer({
           {/* When */}
           <div className="booking-rail-section">
             <p className="rail-section-kicker">When</p>
-            {isEditing ? (
-              <div className="appointment-drawer-when" aria-label="Edit appointment">
-                <label className="appointment-drawer-when__field">
-                  <span>On</span>
-                  <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} disabled={editSaveState === "submitting"} />
-                </label>
-                <label className="appointment-drawer-when__field">
-                  <span>At</span>
-                  <input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)} disabled={editSaveState === "submitting"} />
-                </label>
-                <label className="appointment-drawer-when__field">
-                  <span>Service</span>
-                  <select value={editServiceId} onChange={(e) => setEditServiceId(e.target.value)} disabled={editSaveState === "submitting"}>
-                    {services.map((s) => (<option key={s.id} value={s.id}>{s.name} ({s.durationMinutes} min · {formatMoney(s.priceCents)})</option>))}
-                  </select>
-                </label>
-                <label className="appointment-drawer-when__field">
-                  <span>Provider</span>
-                  <select value={editProviderId} onChange={(e) => setEditProviderId(e.target.value)} disabled={editSaveState === "submitting"}>
-                    {providers.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
-                  </select>
-                </label>
-                <label className="appointment-drawer-when__field">
-                  <span>Notification</span>
-                  <select value={notificationChoice} onChange={(e) => setNotificationChoice(e.target.value as "notify" | "silent")} disabled={editSaveState === "submitting"}>
-                    <option value="notify">Notify customer</option>
-                    <option value="silent">Save without notifying</option>
-                  </select>
-                </label>
-                <div className="appointment-drawer-when__actions">
-                  <button type="button" className="text-action" onClick={() => setIsEditing(false)} disabled={editSaveState === "submitting"}>Cancel</button>
-                  <button type="button" className="primary-action" disabled={editSaveState === "submitting"} onClick={async () => {
-                    if (!onUpdate) return;
-                    setEditSaveState("submitting"); setEditErrorMessage("");
-                    try {
-                      const newStartsAt = new Date(`${editDate}T${editTime}:00`).toISOString();
-                      await onUpdate(selectedAppointment, { startsAt: newStartsAt, serviceId: editServiceId !== selectedAppointment.serviceId ? editServiceId : undefined, providerId: editProviderId !== selectedAppointment.providerId ? editProviderId : undefined, notes: editNotes || undefined, sendConfirmation: notificationChoice === "notify" });
-                      setIsEditing(false); setEditSaveState("idle");
-                    } catch (err) { setEditSaveState("error"); setEditErrorMessage(err instanceof Error ? err.message : "Unable to save changes."); }
-                  }}>{editSaveState === "submitting" ? "Saving..." : "Save"}</button>
+            <div className="appointment-drawer-when" aria-label="Appointment timing">
+              <div className="appointment-drawer-when__block">
+                <div className="appointment-drawer-when__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>
                 </div>
-                {editSaveState === "error" ? <p role="alert" className="settings-error">{editErrorMessage}</p> : null}
-              </div>
-            ) : (
-              <div className="appointment-drawer-when" aria-label="Appointment timing">
-                <div className="appointment-drawer-when__block">
-                  <div className="appointment-drawer-when__icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>
-                  </div>
-                  <div>
-                    <div className="appointment-drawer-when__date">{selectedAppointment.dayLabel}</div>
-                    <div className="appointment-drawer-when__time">{selectedAppointmentClockLabel}</div>
+                <div>
+                  <div className="appointment-drawer-when__date">{selectedAppointment.dayLabel}</div>
+                  <div className="appointment-drawer-when__time">
+                    {showRescheduleTimeInput ? (
+                      <input
+                        type="time"
+                        className="appointment-drawer-time-input"
+                        defaultValue={new Date(selectedAppointment.startAt).toTimeString().slice(0, 5)}
+                        autoFocus
+                        disabled={rescheduleSaveState === "submitting"}
+                        onBlur={() => setShowRescheduleTimeInput(false)}
+                        onKeyDown={(event) => { if (event.key === "Enter") { setShowRescheduleTimeInput(false); } }}
+                        onChange={async (event) => {
+                          if (!onUpdate) return;
+                          const newTime = event.target.value;
+                          if (!newTime) return;
+                          const current = new Date(selectedAppointment.startAt);
+                          const dateStr = current.toISOString().slice(0, 10);
+                          setRescheduleSaveState("submitting"); setRescheduleErrorMessage("");
+                          try {
+                            const newStartsAt = new Date(`${dateStr}T${newTime}:00`).toISOString();
+                            await onUpdate(selectedAppointment, { startsAt: newStartsAt, sendConfirmation: true });
+                            setRescheduleSaveState("idle");
+                            setShowRescheduleTimeInput(false);
+                          } catch (err) {
+                            setRescheduleSaveState("error");
+                            setRescheduleErrorMessage(err instanceof Error ? err.message : "Unable to reschedule.");
+                          }
+                        }}
+                      />
+                    ) : (
+                      selectedAppointmentClockLabel
+                    )}
                   </div>
                 </div>
-                {isConfirmed ? (
-                  <div className="appointment-drawer-when__links">
-                    <button type="button" className="link-action" onClick={() => {
-                      const d = new Date(selectedAppointment.startAt);
-                      setEditDate(d.toISOString().slice(0, 10)); setEditTime(d.toTimeString().slice(0, 5));
-                      setEditServiceId(selectedAppointment.serviceId); setEditProviderId(selectedAppointment.providerId);
-                      setEditNotes(selectedAppointment.notes ?? ""); setNotificationChoice("notify"); setEditSaveState("idle"); setIsEditing(true);
-                    }}>Reschedule</button>
-                    {onCancel ? <button type="button" className="link-action link-action--danger" onClick={() => { if (window.confirm("Cancel this booking?")) { void onCancel(selectedAppointment); } }} disabled={completionState?.kind === "submitting"}>Cancel</button> : null}
-                  </div>
-                ) : null}
               </div>
-            )}
+              {isConfirmed ? (
+                <div className="appointment-drawer-when__links">
+                  <div style={{ position: "relative" }} ref={datePickerContainerRef}>
+                    <button
+                      type="button"
+                      className="link-action"
+                      disabled={rescheduleSaveState === "submitting"}
+                      onClick={() => {
+                        setPickerMonth(monthAnchor(new Date(selectedAppointment.startAt).toISOString().slice(0, 10)));
+                        setShowRescheduleDatePopover((prev) => !prev);
+                      }}
+                      aria-expanded={showRescheduleDatePopover}
+                    >
+                      Reschedule date
+                    </button>
+                    {showRescheduleDatePopover ? (
+                      <div className="appointment-drawer-date-popover">
+                        <div className="month-rail__header">
+                          <h5>{monthLabelFormatter.format(parseIsoDate(pickerMonth))}</h5>
+                          <div className="month-rail__controls">
+                            <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, -1))}>
+                              Prev
+                            </button>
+                            <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, 1))}>
+                              Next
+                            </button>
+                          </div>
+                        </div>
+                        <div className="month-grid-labels" role="presentation">
+                          {monthDayLabel.map((label) => (
+                            <span key={label}>{label}</span>
+                          ))}
+                        </div>
+                        <div className="month-grid" role="grid">
+                          {pickerGrid.map((date) => {
+                            const isInCurrentMonth = date.slice(0, 7) === pickerMonth.slice(0, 7);
+                            const currentDate = new Date(selectedAppointment.startAt).toISOString().slice(0, 10);
+                            const isSelected = date === currentDate;
+                            return (
+                              <button
+                                key={date}
+                                type="button"
+                                role="gridcell"
+                                disabled={!isInCurrentMonth}
+                                aria-pressed={isSelected}
+                                aria-label={getDateLabel(date)}
+                                className={["month-day", !isInCurrentMonth ? "month-day--outside" : "", isSelected ? "month-day--focused" : ""].filter(Boolean).join(" ")}
+                                onClick={async () => {
+                                  if (!onUpdate) return;
+                                  setShowRescheduleDatePopover(false);
+                                  const current = new Date(selectedAppointment.startAt);
+                                  const timeStr = current.toTimeString().slice(0, 5);
+                                  setRescheduleSaveState("submitting"); setRescheduleErrorMessage("");
+                                  try {
+                                    const newStartsAt = new Date(`${date}T${timeStr}:00`).toISOString();
+                                    await onUpdate(selectedAppointment, { startsAt: newStartsAt, sendConfirmation: true });
+                                    setRescheduleSaveState("idle");
+                                  } catch (err) {
+                                    setRescheduleSaveState("error");
+                                    setRescheduleErrorMessage(err instanceof Error ? err.message : "Unable to reschedule.");
+                                  }
+                                }}
+                              >
+                                <span>{parseIsoDate(date).getUTCDate()}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    className="link-action"
+                    disabled={rescheduleSaveState === "submitting"}
+                    onClick={() => setShowRescheduleTimeInput(true)}
+                  >
+                    Reschedule time
+                  </button>
+                  {onCancel ? (
+                    <button
+                      type="button"
+                      className="link-action link-action--danger"
+                      onClick={() => { if (window.confirm("Cancel this booking?")) { void onCancel(selectedAppointment); } }}
+                      disabled={completionState?.kind === "submitting" || rescheduleSaveState === "submitting"}
+                    >
+                      Cancel
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+              {rescheduleSaveState === "error" ? <p role="alert" className="settings-error">{rescheduleErrorMessage}</p> : null}
+            </div>
           </div>
 
           {/* Customer */}

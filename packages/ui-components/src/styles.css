@@ -3,51 +3,61 @@
   --ui-font-sans: "Avenir Next", "Avenir", "Nunito Sans", "Helvetica Neue", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   --ui-font-serif: "Avenir Next", "Avenir", "Nunito Sans", "Helvetica Neue", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 
-  /* Warm cinematic palette — see docs/ui-design-system.md */
-  --ui-ink: #2a1d18;            /* espresso */
-  --ui-ink-soft: #6b4a36;       /* bronze */
-  --ui-muted: #a8968f;          /* taupe */
-  --ui-canvas: #efe6d8;         /* cream — light band surface */
-  --ui-canvas-raised: #f5efe2;  /* ivory — floating cards */
-  --ui-ivory: #f5efe2;
-  --ui-sand: #d9c9b3;
-  --ui-cocoa: #4a3429;
-  --ui-espresso: #2a1d18;
-  --ui-charcoal: #1a110e;
+  /* Light + amber palette — see mockups/dashboard-redesign/ */
+  --ui-ink: #1f2a30;            /* dark slate */
+  --ui-ink-soft: #66757d;       /* muted slate */
+  --ui-muted: #9aa7ad;          /* faint */
+  --ui-canvas: #e7efe9;         /* soft mint page background */
+  --ui-canvas-raised: #ffffff;  /* white cards */
+  --ui-ivory: #ffffff;
+  --ui-sand: #e7ecea;
+  --ui-cocoa: #66757d;
+  --ui-espresso: #1f2a30;
+  --ui-charcoal: #141c20;
 
-  /* Single accent */
-  --ui-gold: #c89968;           /* amber — primary accent */
-  --ui-amber: #c89968;
-  --ui-amber-deep: #a47744;
+  /* Single accent — amber */
+  --ui-gold: #f2c14e;
+  --ui-amber: #f2c14e;
+  --ui-amber-deep: #e0a72e;
+  --ui-amber-ink: #6b4e12;
+  --ui-amber-soft: #fdf3d8;
 
-  /* Legacy aliases repointed so existing components keep working */
-  --ui-blush: #d9c0a5;
-  --ui-blush-soft: #efe6d8;
-  --ui-sage: #4a3429;
-  --ui-sage-soft: #ddd0b8;
-  --ui-rose: #6b4a36;
-  --ui-wine: #2a1d18;
+  /* Pastel service-type categories */
+  --ui-cat-pink-bg: #fbe1ea;    --ui-cat-pink-ink: #9c3d64;   --ui-cat-pink-bar: #e79ab7;
+  --ui-cat-blue-bg: #dceafb;    --ui-cat-blue-ink: #2f5b9b;   --ui-cat-blue-bar: #93b9ef;
+  --ui-cat-peach-bg: #fbe7d3;   --ui-cat-peach-ink: #8a5015;  --ui-cat-peach-bar: #f0b57e;
+  --ui-cat-purple-bg: #eae2fb;  --ui-cat-purple-ink: #6a4bb0; --ui-cat-purple-bar: #b7a3ee;
+  --ui-cat-green-bg: #d9f0df;   --ui-cat-green-ink: #1f6b40;  --ui-cat-green-bar: #8fd4a5;
+  --ui-cat-teal-bg: #d3eef0;    --ui-cat-teal-ink: #1a5960;   --ui-cat-teal-bar: #86cdd3;
+
+  /* Legacy aliases repointed to pastel categories so existing components keep working */
+  --ui-blush: var(--ui-cat-pink-bar);
+  --ui-blush-soft: var(--ui-cat-pink-bg);
+  --ui-sage: var(--ui-cat-green-bar);
+  --ui-sage-soft: var(--ui-cat-green-bg);
+  --ui-rose: var(--ui-cat-peach-bar);
+  --ui-wine: var(--ui-cat-purple-bar);
 
   /* Status (semantic) */
-  --ui-danger: #9a3d32;
-  --ui-danger-soft: #f8e5e1;
-  --ui-success: #486f4c;
-  --ui-success-soft: #e7f1e5;
-  --ui-warning: #a47744;
-  --ui-warning-soft: #f1dcbe;
+  --ui-danger: #c05a4d;
+  --ui-danger-soft: #fdf3f1;
+  --ui-success: #2f7d4f;
+  --ui-success-soft: #e7f5ec;
+  --ui-warning: #b06a26;
+  --ui-warning-soft: #fef6ee;
 
-  --ui-border: rgba(74, 52, 41, 0.18);
-  --ui-border-strong: rgba(74, 52, 41, 0.32);
-  --ui-ring: rgba(200, 153, 104, 0.45);
+  --ui-border: rgba(31, 42, 48, 0.12);
+  --ui-border-strong: rgba(31, 42, 48, 0.22);
+  --ui-ring: rgba(224, 167, 46, 0.40);
 
-  --ui-shadow-sm: 0 1px 2px rgba(26, 17, 14, 0.22);
-  --ui-shadow-md: 0 14px 34px rgba(26, 17, 14, 0.42);
-  --ui-shadow-lg: 0 30px 80px rgba(26, 17, 14, 0.60);
+  --ui-shadow-sm: 0 1px 2px rgba(31, 42, 48, 0.06);
+  --ui-shadow-md: 0 8px 22px rgba(31, 42, 48, 0.10);
+  --ui-shadow-lg: 0 18px 44px rgba(31, 42, 48, 0.16);
 
   --ui-radius-xs: 10px;
-  --ui-radius-sm: 18px;
-  --ui-radius-md: 22px;
-  --ui-radius-lg: 28px;
+  --ui-radius-sm: 14px;
+  --ui-radius-md: 20px;
+  --ui-radius-lg: 26px;
 
   --ui-space-1: 0.25rem;
   --ui-space-2: 0.5rem;
@@ -109,7 +119,7 @@ textarea {
 }
 
 ::selection {
-  background: rgba(200, 153, 104, 0.32);
+  background: var(--ui-amber-soft);
 }
 
 .ui-stack {

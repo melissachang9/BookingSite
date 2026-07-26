@@ -104,7 +104,7 @@ const routeDefinitions: RouteDefinition[] = [
   {
     path: "/calendar",
     title: "Calendar",
-    eyebrow: "Calendar-first booking",
+    eyebrow: "",
     description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
     metric: "Live availability",
     tone: "ready",
@@ -353,6 +353,17 @@ function AuthenticatedLayout({
     }
     return initial;
   });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("booking.dashboard.sidebar-collapsed") === "true";
+  });
+  const toggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      window.localStorage.setItem("booking.dashboard.sidebar-collapsed", String(next));
+      return next;
+    });
+  };
   useEffect(() => {
     setExpandedGroups((current) => {
       let next = current;
@@ -378,7 +389,7 @@ function AuthenticatedLayout({
   );
 
   return (
-    <div className={`ops-shell${isCalendarRoute ? " ops-shell--calendar" : ""}`}>
+    <div className={`ops-shell${isCalendarRoute ? " ops-shell--calendar" : ""}${sidebarCollapsed ? " ops-shell--sidebar-collapsed" : ""}`}>
       <aside className={`ops-sidebar${isCalendarRoute ? " ops-sidebar--calendar" : ""}`}>
         <div className="ops-sidebar-brand" aria-label="Dashboard workspace">
           <span className="ops-sidebar-brand__mark" aria-hidden="true" />
@@ -386,6 +397,15 @@ function AuthenticatedLayout({
             <strong>Brow Beauty Lab</strong>
             <span>Operator desk</span>
           </div>
+          <button
+            type="button"
+            className="ops-sidebar-collapse"
+            onClick={toggleSidebar}
+            aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+            title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+          >
+            {sidebarCollapsed ? "»" : "«"}
+          </button>
         </div>
 
         {isCalendarRoute ? <div id="dashboard-calendar-sidebar-rail" className="ops-sidebar-calendar-slot" aria-label="Sidebar month calendar" /> : null}
@@ -446,6 +466,73 @@ function AuthenticatedLayout({
           })}
         </nav>
 
+        {isCalendarRoute ? (
+          <div className="sidebar-filters">
+            <div className="sidebar-filters__head">
+              <span>Service types</span>
+              <span>▾</span>
+            </div>
+            <label className="sidebar-filter-check">
+              <input type="checkbox" defaultChecked />
+              <span className="sidebar-filter-check__box">✓</span>
+              <span className="sidebar-filter-dot" style={{ background: "var(--ui-cat-pink-bar)" }} />
+              Facials
+            </label>
+            <label className="sidebar-filter-check">
+              <input type="checkbox" defaultChecked />
+              <span className="sidebar-filter-check__box">✓</span>
+              <span className="sidebar-filter-dot" style={{ background: "var(--ui-cat-blue-bar)" }} />
+              Injectables
+            </label>
+            <label className="sidebar-filter-check">
+              <input type="checkbox" defaultChecked />
+              <span className="sidebar-filter-check__box">✓</span>
+              <span className="sidebar-filter-dot" style={{ background: "var(--ui-cat-peach-bar)" }} />
+              Laser &amp; skin
+            </label>
+            <label className="sidebar-filter-check">
+              <input type="checkbox" defaultChecked />
+              <span className="sidebar-filter-check__box">✓</span>
+              <span className="sidebar-filter-dot" style={{ background: "var(--ui-cat-purple-bar)" }} />
+              Peels
+            </label>
+            <label className="sidebar-filter-check">
+              <input type="checkbox" defaultChecked />
+              <span className="sidebar-filter-check__box">✓</span>
+              <span className="sidebar-filter-dot" style={{ background: "var(--ui-cat-green-bar)" }} />
+              Massage
+            </label>
+            <label className="sidebar-filter-check">
+              <input type="checkbox" defaultChecked />
+              <span className="sidebar-filter-check__box">✓</span>
+              <span className="sidebar-filter-dot" style={{ background: "var(--ui-cat-teal-bar)" }} />
+              Consultation
+            </label>
+
+            <div className="sidebar-filters__head" style={{ marginTop: "0.5rem" }}>
+              <span>Status</span>
+            </div>
+            <div className="sidebar-legend">
+              <div className="sidebar-legend__row">
+                <span className="sidebar-legend__swatch sidebar-legend__swatch--service" />
+                Booked · service color
+              </div>
+              <div className="sidebar-legend__row">
+                <span className="sidebar-legend__swatch sidebar-legend__swatch--active" />
+                In progress · checked in
+              </div>
+              <div className="sidebar-legend__row">
+                <span className="sidebar-legend__swatch sidebar-legend__swatch--done" />
+                Checked out · completed
+              </div>
+              <div className="sidebar-legend__row">
+                <span className="sidebar-legend__swatch sidebar-legend__swatch--canceled" />
+                Canceled · no-show
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <section className="ops-sidebar-panel">
           <p className="eyebrow">Current route</p>
           <strong>{currentDefinition.title}</strong>
@@ -454,10 +541,27 @@ function AuthenticatedLayout({
       </aside>
 
       <div className="ops-main">
+        <button
+          type="button"
+          className="ops-sidebar-reopen"
+          onClick={toggleSidebar}
+          aria-label="Show sidebar"
+        >
+          » Menu
+        </button>
         <header className="ops-topbar">
           <div>
-            <p className="eyebrow">{currentDefinition.eyebrow}</p>
-            <h2>{currentDefinition.title}</h2>
+            {isCalendarRoute ? (
+              <div className="ops-topbar-search">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
+                <input placeholder="Search appointments, customers…" />
+              </div>
+            ) : (
+              <>
+                {currentDefinition.eyebrow ? <p className="eyebrow">{currentDefinition.eyebrow}</p> : null}
+                <h2>{currentDefinition.title}</h2>
+              </>
+            )}
           </div>
 
           <div className="ops-topbar-actions">
