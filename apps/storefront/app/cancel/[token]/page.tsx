@@ -185,7 +185,21 @@ export default async function ManageBookingPage({ params, searchParams }: Manage
               <strong>{paymentAmountLabel}</strong>
               <p>{paymentDetail}</p>
             </article>
+            {booking.walletBalanceCents != null && booking.walletBalanceCents > 0 ? (
+              <article className="summary-card">
+                <span>Wallet credit</span>
+                <strong>{formatCurrency(booking.walletBalanceCents)}</strong>
+                <p>Available credit on your account. Applied automatically to future bookings.</p>
+              </article>
+            ) : null}
           </div>
+          {booking.balanceDueCents > 0 && booking.status === "confirmed" ? (
+            <div style={{ marginTop: "1rem" }}>
+              <Link href={`/cancel/${token}/payment`} className="store-button">
+                Pay remaining balance
+              </Link>
+            </div>
+          ) : null}
         </section>
 
         <section className="store-section">
@@ -264,9 +278,14 @@ export default async function ManageBookingPage({ params, searchParams }: Manage
             <p className="store-eyebrow">Need another appointment?</p>
             <h3>Return to online booking.</h3>
           </div>
-          <Link href={`/${tenant.slug}/services/${slugify(booking.service.name)}`} className="ghost-link">
-            Book with {tenant.name}
-          </Link>
+          <div className="hero-actions">
+            <Link href={`/forms/${token}`} className="store-button">
+              Complete forms
+            </Link>
+            <Link href={`/${tenant.slug}/services/${slugify(booking.service.name)}`} className="ghost-link">
+              Book with {tenant.name}
+            </Link>
+          </div>
         </section>
       </main>
     );
