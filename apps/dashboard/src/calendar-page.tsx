@@ -2783,11 +2783,23 @@ function SlotActionDrawer({
   const [showTimeInput, setShowTimeInput] = useState(false);
   const [pickerMonth, setPickerMonth] = useState<string>(monthAnchor(getUpcomingDate(1)));
   const pickerGrid = useMemo(() => buildMonthGrid(pickerMonth), [pickerMonth]);
+  const datePickerContainerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     setMode("appointment");
     setShowDatePopover(false);
     setShowTimeInput(false);
   }, [slotKey]);
+  useEffect(() => {
+    if (!showDatePopover) return;
+    const handler = (event: Event) => {
+      const target = event.target as Node;
+      if (datePickerContainerRef.current && !datePickerContainerRef.current.contains(target)) {
+        setShowDatePopover(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showDatePopover]);
 
   if (selectedSlot === null) {
     return null;
@@ -2828,7 +2840,7 @@ function SlotActionDrawer({
         </header>
 
         <div className="appointment-drawer-when" aria-label="Calendar slot timing">
-          <div style={{ position: "relative" }}>
+          <div style={{ position: "relative" }} ref={datePickerContainerRef}>
             On{" "}
             <button
               type="button"
