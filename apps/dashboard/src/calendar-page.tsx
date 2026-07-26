@@ -668,6 +668,7 @@ export function CalendarPage({
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [selectedWeekProviderId, setSelectedWeekProviderId] = useState<string | null>(null);
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<PendingCalendarSlot | null>(null);
   const [selectedSlotServiceId, setSelectedSlotServiceId] = useState<string | null>(null);
   const [selectedSlotNotes, setSelectedSlotNotes] = useState("");
@@ -691,6 +692,17 @@ export function CalendarPage({
   const [formResponsesState, setFormResponsesState] = useState<FormResponsesState>({ kind: "idle" });
   const [intakeStatusByBookingId, setIntakeStatusByBookingId] = useState<Record<string, IntakeStatus>>({});
   const [formReminderState, setFormReminderState] = useState<FormReminderState>({ kind: "idle" });
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!contextMenuOpen) return;
+    const handler = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".context")) setContextMenuOpen(false);
+    };
+    document.addEventListener("click", handler, true);
+    return () => document.removeEventListener("click", handler, true);
+  }, [contextMenuOpen]);
 
   const selectedAppointment = useMemo<SelectedCalendarAppointment | null>(() => {
     if (calendarState.kind !== "ready" || selectedAppointmentId === null) {
@@ -1725,14 +1737,11 @@ export function CalendarPage({
 
       <section className="calendar-workspace">
         <article className="ops-panel calendar-panel">
-          <div className="panel-title-row">
-            <div
-              className="calendar-header-actions"
-              style={{ justifyContent: "flex-start", flexWrap: "nowrap", alignItems: "center" }}
-            >
+          <div className="calendar-topbar">
+            <div className="calendar-topbar__nav">
               <button
                 type="button"
-                className="filter-chip"
+                className="calendar-topbar__today"
                 onClick={() => {
                   setFocusedDate(toIsoDate(new Date()));
                   setViewMode("day");
@@ -1743,7 +1752,7 @@ export function CalendarPage({
               </button>
               <button
                 type="button"
-                className="filter-chip"
+                className="calendar-topbar__arrow"
                 onClick={() => moveFocus(viewMode === "day" ? -1 : -7)}
                 disabled={calendarState.kind !== "ready"}
                 aria-label="Previous"
@@ -1752,18 +1761,17 @@ export function CalendarPage({
               </button>
               <button
                 type="button"
-                className="filter-chip"
+                className="calendar-topbar__arrow"
                 onClick={() => moveFocus(viewMode === "day" ? 1 : 7)}
                 disabled={calendarState.kind !== "ready"}
                 aria-label="Next"
               >
                 ›
               </button>
-              <div style={{ marginLeft: "0.5rem" }}>
-                <h4 className="calendar-header-date">{visibleDateRangeLabel || "Weekly calendar"}</h4>
-              </div>
+              <h4 className="calendar-topbar__date">{visibleDateRangeLabel || "Weekly calendar"}</h4>
             </div>
-            <div className="calendar-header-actions">
+
+            <div className="calendar-topbar__actions">
               {calendarState.kind === "ready" && calendarState.services.length > 0 ? (
                 <label className="calendar-service-filter">
                   <span>Availability for</span>
@@ -1777,6 +1785,58 @@ export function CalendarPage({
                   </select>
                 </label>
               ) : null}
+
+              {viewMode === "week" && weekProviderOptions.length > 0 ? (
+                <div className="context" style={{ position: "relative" }}>
+                  <button
+                    type="button"
+                    className="calendar-context-chip"
+                    onClick={() => setContextMenuOpen((prev) => !prev)}
+                    aria-expanded={contextMenuOpen}
+                  >
+                    {selectedWeekProviderId
+                      ? (() => {
+                          const p = weekProviderOptions.find((x) => x.id === selectedWeekProviderId);
+                          return p ? (
+                            <span className="context-opt__id">
+                              {p.imageUrl ? <img className="pfp pfp--sm" src={p.imageUrl} alt="" /> : null}
+                              {p.name}
+                            </span>
+                          ) : "All providers";
+                        })()
+                      : "All providers"} ▾
+                  </button>
+                  {contextMenuOpen ? (
+                    <div className="context-menu" role="menu">
+                      <button
+                        type="button"
+                        className={`context-opt${!selectedWeekProviderId ? " context-opt--selected" : ""}`}
+                        role="menuitemradio"
+                        aria-checked={!selectedWeekProviderId}
+                        onClick={() => { handleSelectWeekProvider(null); setContextMenuOpen(false); }}
+                      >
+                        All providers
+                      </button>
+                      {weekProviderOptions.map((provider) => (
+                        <button
+                          key={provider.id}
+                          type="button"
+                          className={`context-opt${selectedWeekProviderId === provider.id ? " context-opt--selected" : ""}`}
+                          role="menuitemradio"
+                          aria-checked={selectedWeekProviderId === provider.id}
+                          onClick={() => { handleSelectWeekProvider(provider.id); setContextMenuOpen(false); }}
+                        >
+                          <span className="context-opt__id">
+                            {provider.imageUrl ? <img className="pfp pfp--sm" src={provider.imageUrl} alt="" /> : null}
+                            {provider.name}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="view-mode-toggle" role="group" aria-label="Calendar view mode">
                 <button
                   type="button"
@@ -1795,22 +1855,6 @@ export function CalendarPage({
                   Week
                 </button>
               </div>
-              {viewMode === "week" && weekProviderOptions.length > 0 ? (
-                <label className="calendar-service-filter">
-                  <span>Show provider</span>
-                  <select
-                    value={selectedWeekProviderId ?? ""}
-                    onChange={(event) => handleSelectWeekProvider(event.target.value || null)}
-                  >
-                    <option value="">All providers</option>
-                    {weekProviderOptions.map((provider) => (
-                      <option key={provider.id} value={provider.id}>
-                        {provider.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
             </div>
           </div>
           <CalendarBoard
@@ -1992,7 +2036,7 @@ function TimeOffDetailsDrawer({
       <button type="button" className="appointment-drawer-backdrop" aria-label="Close time off details" onClick={onClose} />
       <aside className="appointment-details-drawer" role="dialog" aria-label="Time off details">
         <header className="appointment-details-drawer__header">
-          <span className="appointment-status-chip" style={{ background: "#F5EFE0", color: "#6B5A47" }}>
+          <span className="appointment-status-chip" style={{ background: "var(--ui-ivory)", color: "var(--ui-ink-soft)" }}>
             <span aria-hidden="true" />
             {isCustom ? "Override shift" : "Blocked date"}
           </span>
@@ -2001,7 +2045,7 @@ function TimeOffDetailsDrawer({
               <>
                 <button type="button" className="appointment-drawer-outline-action" onClick={() => setEditing(true)}>Edit</button>
                 <button type="button" className="appointment-drawer-outline-action" onClick={handleDelete} disabled={saving}
-                  style={{ color: "#8A2E1E", borderColor: "#D9CBB1" }}>Delete</button>
+                  style={{ color: "var(--ui-danger)", borderColor: "var(--ui-sand)" }}>Delete</button>
               </>
             ) : null}
             <button type="button" className="ghost-action" onClick={onClose} aria-label="Close">×</button>
@@ -2016,14 +2060,14 @@ function TimeOffDetailsDrawer({
                   <input type="date" className="svc-input" style={{ width: "140px" }}
                     value={startDate} aria-label="Start date"
                     onChange={(e) => setStartDate(e.target.value)} />
-                  <span style={{ color: "#8B7960", fontSize: "12px" }}>to</span>
+                  <span style={{ color: "var(--ui-muted)", fontSize: "12px" }}>to</span>
                   <input type="date" className="svc-input" style={{ width: "140px" }}
                     value={endDate} aria-label="End date"
                     onChange={(e) => setEndDate(e.target.value)} />
                 </div>
               </section>
               <section className="booking-rail-section">
-                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "#4A3D30", cursor: "pointer" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--ui-ink)", cursor: "pointer" }}>
                   <input type="checkbox" checked={allDay}
                     onChange={(e) => setAllDay(e.target.checked)} />
                   Block all day
@@ -2033,7 +2077,7 @@ function TimeOffDetailsDrawer({
                     <input type="text" className="svc-input" style={{ width: "80px", textAlign: "center" }}
                       value={startTime} placeholder="09:00" aria-label="Start time"
                       onChange={(e) => setStartTime(e.target.value)} />
-                    <span style={{ color: "#8B7960", fontSize: "12px" }}>to</span>
+                    <span style={{ color: "var(--ui-muted)", fontSize: "12px" }}>to</span>
                     <input type="text" className="svc-input" style={{ width: "80px", textAlign: "center" }}
                       value={endTime} placeholder="17:00" aria-label="End time"
                       onChange={(e) => setEndTime(e.target.value)} />
@@ -2047,7 +2091,7 @@ function TimeOffDetailsDrawer({
                   onChange={(e) => setReason(e.target.value)} />
               </section>
               {error ? (
-                <div role="alert" style={{ padding: "8px 10px", background: "#FDE7E1", borderRadius: "6px", fontSize: "12px", color: "#8A2E1E", marginTop: "8px" }}>
+                <div role="alert" style={{ padding: "8px 10px", background: "var(--ui-danger-soft)", borderRadius: "6px", fontSize: "12px", color: "var(--ui-danger)", marginTop: "8px" }}>
                   {error}
                 </div>
               ) : null}
@@ -2062,20 +2106,20 @@ function TimeOffDetailsDrawer({
             <>
               <section className="booking-rail-section">
                 <div className="booking-rail-section__label">Type</div>
-                <div style={{ fontSize: "13px", color: "#1F1612" }}>
+                <div style={{ fontSize: "13px", color: "var(--ui-ink)" }}>
                   {isCustom ? "Custom hours override" : "Full-day block"}
                 </div>
               </section>
               <section className="booking-rail-section">
                 <div className="booking-rail-section__label">Date</div>
-                <div style={{ fontSize: "13px", color: "#1F1612" }}>
+                <div style={{ fontSize: "13px", color: "var(--ui-ink)" }}>
                   {sameDay ? fmtD(startD) : `${fmtD(startD)} – ${fmtD(endD)}`}
                 </div>
               </section>
               {isCustom && timeOff.startTime ? (
                 <section className="booking-rail-section">
                   <div className="booking-rail-section__label">Time</div>
-                  <div style={{ fontSize: "13px", color: "#1F1612" }}>
+                  <div style={{ fontSize: "13px", color: "var(--ui-ink)" }}>
                     {timeOff.startTime} – {timeOff.endTime}
                   </div>
                 </section>
@@ -2083,12 +2127,12 @@ function TimeOffDetailsDrawer({
               {timeOff.reason ? (
                 <section className="booking-rail-section">
                   <div className="booking-rail-section__label">Reason</div>
-                  <div style={{ fontSize: "13px", color: "#1F1612" }}>{timeOff.reason}</div>
+                  <div style={{ fontSize: "13px", color: "var(--ui-ink)" }}>{timeOff.reason}</div>
                 </section>
               ) : null}
               <section className="booking-rail-section">
                 <div className="booking-rail-section__label">Duration</div>
-                <div style={{ fontSize: "13px", color: "#1F1612" }}>
+                <div style={{ fontSize: "13px", color: "var(--ui-ink)" }}>
                   {sameDay ? "1 day" : `${Math.ceil((endD.getTime() - startD.getTime()) / 86400000) + 1} days`}
                 </div>
               </section>
@@ -2637,11 +2681,16 @@ function CalendarBoard({
                     Math.min(rawHeightPx, scheduleHeightPx - topPx),
                   );
 
+                  const statusClass =
+                    appointment.status === "completed" ? " schedule-event--done" :
+                    appointment.status === "canceled" || appointment.status === "no_show" ? " schedule-event--canceled" :
+                    "";
+
                   return (
                     <button
                       key={appointment.id}
                       type="button"
-                      className={`schedule-event${isSelected ? " schedule-event--selected" : ""}`}
+                      className={`schedule-event${isSelected ? " schedule-event--selected" : ""}${statusClass}`}
                       aria-label={`View ${appointment.customerName} booked ${formatDateTime(appointment.startAt)} with ${appointment.providerName}. ${intakeLabel}.`}
                       aria-pressed={isSelected}
                       onClick={(event) => {
@@ -2730,8 +2779,10 @@ function SlotActionDrawer({
     ? `${selectedSlot.date}|${selectedSlot.providerId ?? ""}|${selectedSlot.startAt}`
     : null;
   const [mode, setMode] = useState<"appointment" | "time-block">("appointment");
+  const [showDatePicker, setShowDatePicker] = useState(false);
   useEffect(() => {
     setMode("appointment");
+    setShowDatePicker(false);
   }, [slotKey]);
 
   if (selectedSlot === null) {
@@ -2774,7 +2825,28 @@ function SlotActionDrawer({
 
         <div className="appointment-drawer-when" aria-label="Calendar slot timing">
           <div>
-            On <strong>{getDateLabel(selectedSlot.date)}</strong>
+            On{" "}
+            <button
+              type="button"
+              className="appointment-drawer-date-pick"
+              onClick={() => setShowDatePicker((prev) => !prev)}
+              aria-expanded={showDatePicker}
+            >
+              <strong>{getDateLabel(selectedSlot.date)}</strong>
+            </button>
+            {showDatePicker ? (
+              <input
+                type="date"
+                className="appointment-drawer-date-input"
+                value={selectedSlot.date}
+                onChange={(event) => {
+                  onStartDateChange(event.target.value);
+                  setShowDatePicker(false);
+                }}
+                autoFocus
+                onBlur={() => setShowDatePicker(false)}
+              />
+            ) : null}
           </div>
           <div>
             At <strong>{headingTimeRange}</strong>
@@ -2863,7 +2935,7 @@ function SlotActionDrawer({
                 <span>{formatTimeRange(selectedSlot.startAt, appointmentEndAt)}</span>
               </div>
               {selectedService ? (
-                <p style={{ fontSize: "13px", color: "#4A3D30", marginTop: "4px" }}>
+                <p style={{ fontSize: "13px", color: "var(--ui-ink)", marginTop: "4px" }}>
                   {formatPriceCents(selectedService.priceCents)}
                   {selectedService.depositCents > 0 ? ` · $${(selectedService.depositCents / 100).toFixed(2)} deposit` : " · No deposit"}
                 </p>
@@ -3392,511 +3464,198 @@ function AppointmentDetailsDrawer({
                 Check in
               </button>
             ) : null}
-            <button type="button" className="appointment-drawer-outline-action" onClick={onClose}>
-              Close
+            <button type="button" className="appointment-drawer-close" onClick={onClose} aria-label="Close">
+              ×
             </button>
           </div>
         </header>
 
-        {isConfirmed ? (
-          <div className="appointment-drawer-actions">
-            {selectedAppointment.customerEmail ? (
-              <a
-                href={`mailto:${encodeURIComponent(selectedAppointment.customerEmail)}`}
-                className="text-action"
-              >
-                Message
-              </a>
-            ) : (
-              <button type="button" className="text-action" disabled>Message</button>
-            )}
-            <span className="text-action-separator">·</span>
-            <button
-              type="button"
-              className="text-action"
-              onClick={() => {
-                const d = new Date(selectedAppointment.startAt);
-                setEditDate(d.toISOString().slice(0, 10));
-                setEditTime(d.toTimeString().slice(0, 5));
-                setEditServiceId(selectedAppointment.serviceId);
-                setEditProviderId(selectedAppointment.providerId);
-                setEditNotes(selectedAppointment.notes ?? "");
-                setNotificationChoice("notify");
-                setEditSaveState("idle");
-                setIsEditing(true);
-              }}
-            >
-              Reschedule
-            </button>
-            {onCancel ? (
-              <>
-                <span className="text-action-separator">·</span>
-                <button
-                  type="button"
-                  className="text-action text-action--danger"
-                  onClick={() => {
-                    if (window.confirm("Cancel this booking? The cancellation policy will be applied.")) {
-                      void onCancel(selectedAppointment);
-                    }
-                  }}
-                  disabled={completionState?.kind === "submitting"}
-                >
-                  Cancel
-                </button>
-              </>
-            ) : null}
-          </div>
-        ) : null}
-
-        {isEditing ? (
-          <div className="appointment-drawer-when" aria-label="Edit appointment">
-            <label className="appointment-drawer-when__field">
-              <span>On</span>
-              <input
-                type="date"
-                value={editDate}
-                onChange={(e) => setEditDate(e.target.value)}
-                disabled={editSaveState === "submitting"}
-              />
-            </label>
-            <label className="appointment-drawer-when__field">
-              <span>At</span>
-              <input
-                type="time"
-                value={editTime}
-                onChange={(e) => setEditTime(e.target.value)}
-                disabled={editSaveState === "submitting"}
-              />
-            </label>
-            <label className="appointment-drawer-when__field">
-              <span>Service</span>
-              <select
-                value={editServiceId}
-                onChange={(e) => setEditServiceId(e.target.value)}
-                disabled={editSaveState === "submitting"}
-              >
-                {services.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.durationMinutes} min · {formatMoney(s.priceCents)})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="appointment-drawer-when__field">
-              <span>Provider</span>
-              <select
-                value={editProviderId}
-                onChange={(e) => setEditProviderId(e.target.value)}
-                disabled={editSaveState === "submitting"}
-              >
-                {providers.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="appointment-drawer-when__field">
-              <span>Notification</span>
-              <select
-                value={notificationChoice}
-                onChange={(e) => setNotificationChoice(e.target.value as "notify" | "silent")}
-                disabled={editSaveState === "submitting"}
-              >
-                <option value="notify">Notify customer</option>
-                <option value="silent">Save without notifying</option>
-              </select>
-            </label>
-            <div className="appointment-drawer-when__actions">
-              <button
-                type="button"
-                className="text-action"
-                onClick={() => setIsEditing(false)}
-                disabled={editSaveState === "submitting"}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="primary-action"
-                disabled={editSaveState === "submitting"}
-                onClick={async () => {
-                  if (!onUpdate) return;
-                  setEditSaveState("submitting");
-                  setEditErrorMessage("");
-                  try {
-                    const newStartsAt = new Date(`${editDate}T${editTime}:00`).toISOString();
-                    await onUpdate(selectedAppointment, {
-                      startsAt: newStartsAt,
-                      serviceId: editServiceId !== selectedAppointment.serviceId ? editServiceId : undefined,
-                      providerId: editProviderId !== selectedAppointment.providerId ? editProviderId : undefined,
-                      notes: editNotes || undefined,
-                      sendConfirmation: notificationChoice === "notify",
-                    });
-                    setIsEditing(false);
-                    setEditSaveState("idle");
-                  } catch (err) {
-                    setEditSaveState("error");
-                    setEditErrorMessage(err instanceof Error ? err.message : "Unable to save changes.");
-                  }
-                }}
-              >
-                {editSaveState === "submitting" ? "Saving..." : "Save"}
-              </button>
-            </div>
-            {editSaveState === "error" ? (
-              <p role="alert" className="settings-error">{editErrorMessage}</p>
-            ) : null}
-          </div>
-        ) : (
-          <div className="appointment-drawer-when" aria-label="Appointment timing">
-            <div>
-              On <strong>{selectedAppointment.dayLabel}</strong>
-            </div>
-            <div>
-              At <strong>{selectedAppointmentClockLabel}</strong>
-            </div>
-            {isConfirmed ? (
-              <div className="appointment-drawer-when__actions" />
-            ) : null}
-          </div>
-        )}
-
-        <section className="booking-rail-section booking-rail-section--customer" aria-label="Customer details">
-          <p className="rail-section-kicker">Customer</p>
-          {isEditingCustomerContact ? (
-            <div className="customer-notes-editor">
-              <label style={{ display: "block", marginBottom: "0.5rem" }}>
-                <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Name</span>
-                <input
-                  type="text"
-                  value={customerContactDraft.name}
-                  onChange={(e) => setCustomerContactDraft((d) => ({ ...d, name: e.target.value }))}
-                  disabled={customerContactSaveState === "submitting"}
-                  style={{ width: "100%" }}
-                />
-              </label>
-              <label style={{ display: "block", marginBottom: "0.5rem" }}>
-                <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Email</span>
-                <input
-                  type="email"
-                  value={customerContactDraft.email}
-                  onChange={(e) => setCustomerContactDraft((d) => ({ ...d, email: e.target.value }))}
-                  disabled={customerContactSaveState === "submitting"}
-                  style={{ width: "100%" }}
-                />
-              </label>
-              <label style={{ display: "block", marginBottom: "0.5rem" }}>
-                <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Phone</span>
-                <input
-                  type="tel"
-                  value={customerContactDraft.phone}
-                  onChange={(e) => setCustomerContactDraft((d) => ({ ...d, phone: e.target.value }))}
-                  disabled={customerContactSaveState === "submitting"}
-                  style={{ width: "100%" }}
-                />
-              </label>
-              <div className="customer-notes-editor__actions">
-                <button
-                  type="button"
-                  className="text-action"
-                  onClick={() => {
-                    setIsEditingCustomerContact(false);
-                    setCustomerContactError("");
-                  }}
-                  disabled={customerContactSaveState === "submitting"}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="primary-action"
-                  onClick={async () => {
-                    if (!onUpdateCustomerContact) return;
-                    if (!customerContactDraft.name.trim()) {
-                      setCustomerContactSaveState("error");
-                      setCustomerContactError("Name is required.");
-                      return;
-                    }
-                    setCustomerContactSaveState("submitting");
-                    setCustomerContactError("");
+        <div className="appointment-drawer-body">
+          {/* When */}
+          <div className="booking-rail-section">
+            <p className="rail-section-kicker">When</p>
+            {isEditing ? (
+              <div className="appointment-drawer-when" aria-label="Edit appointment">
+                <label className="appointment-drawer-when__field">
+                  <span>On</span>
+                  <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} disabled={editSaveState === "submitting"} />
+                </label>
+                <label className="appointment-drawer-when__field">
+                  <span>At</span>
+                  <input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)} disabled={editSaveState === "submitting"} />
+                </label>
+                <label className="appointment-drawer-when__field">
+                  <span>Service</span>
+                  <select value={editServiceId} onChange={(e) => setEditServiceId(e.target.value)} disabled={editSaveState === "submitting"}>
+                    {services.map((s) => (<option key={s.id} value={s.id}>{s.name} ({s.durationMinutes} min · {formatMoney(s.priceCents)})</option>))}
+                  </select>
+                </label>
+                <label className="appointment-drawer-when__field">
+                  <span>Provider</span>
+                  <select value={editProviderId} onChange={(e) => setEditProviderId(e.target.value)} disabled={editSaveState === "submitting"}>
+                    {providers.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+                  </select>
+                </label>
+                <label className="appointment-drawer-when__field">
+                  <span>Notification</span>
+                  <select value={notificationChoice} onChange={(e) => setNotificationChoice(e.target.value as "notify" | "silent")} disabled={editSaveState === "submitting"}>
+                    <option value="notify">Notify customer</option>
+                    <option value="silent">Save without notifying</option>
+                  </select>
+                </label>
+                <div className="appointment-drawer-when__actions">
+                  <button type="button" className="text-action" onClick={() => setIsEditing(false)} disabled={editSaveState === "submitting"}>Cancel</button>
+                  <button type="button" className="primary-action" disabled={editSaveState === "submitting"} onClick={async () => {
+                    if (!onUpdate) return;
+                    setEditSaveState("submitting"); setEditErrorMessage("");
                     try {
-                      await onUpdateCustomerContact(selectedAppointment, {
-                        name: customerContactDraft.name.trim(),
-                        email: customerContactDraft.email.trim(),
-                        phone: customerContactDraft.phone.trim(),
-                      });
-                      setIsEditingCustomerContact(false);
-                      setCustomerContactSaveState("idle");
-                    } catch (err) {
-                      setCustomerContactSaveState("error");
-                      setCustomerContactError(err instanceof Error ? err.message : "Unable to save contact.");
-                    }
-                  }}
-                  disabled={customerContactSaveState === "submitting"}
-                >
-                  {customerContactSaveState === "submitting" ? "Saving…" : "Save"}
-                </button>
-              </div>
-              {customerContactSaveState === "error" ? (
-                <p role="alert" className="settings-error">{customerContactError}</p>
-              ) : null}
-            </div>
-          ) : (
-            <div className="customer-notes-display">
-              <div className="appointment-customer-card">
-                <span className="appointment-customer-avatar" aria-hidden="true">{getInitials(selectedAppointment.customerName)}</span>
-                <div>
-                  <strong>{selectedAppointment.customerName}</strong>
-                  <span>Client profile</span>
+                      const newStartsAt = new Date(`${editDate}T${editTime}:00`).toISOString();
+                      await onUpdate(selectedAppointment, { startsAt: newStartsAt, serviceId: editServiceId !== selectedAppointment.serviceId ? editServiceId : undefined, providerId: editProviderId !== selectedAppointment.providerId ? editProviderId : undefined, notes: editNotes || undefined, sendConfirmation: notificationChoice === "notify" });
+                      setIsEditing(false); setEditSaveState("idle");
+                    } catch (err) { setEditSaveState("error"); setEditErrorMessage(err instanceof Error ? err.message : "Unable to save changes."); }
+                  }}>{editSaveState === "submitting" ? "Saving..." : "Save"}</button>
                 </div>
+                {editSaveState === "error" ? <p role="alert" className="settings-error">{editErrorMessage}</p> : null}
               </div>
-              <div className="appointment-customer-fields">
-                {selectedAppointment.customerPhone ? (
-                  <div className="appointment-customer-field">
-                    <span className="appointment-customer-field__label">Phone</span>
-                    <span className="appointment-customer-field__value">{selectedAppointment.customerPhone}</span>
+            ) : (
+              <div className="appointment-drawer-when" aria-label="Appointment timing">
+                <div className="appointment-drawer-when__block">
+                  <div className="appointment-drawer-when__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>
                   </div>
-                ) : null}
-                {selectedAppointment.customerEmail ? (
-                  <div className="appointment-customer-field">
-                    <span className="appointment-customer-field__label">Email</span>
-                    <span className="appointment-customer-field__value">{selectedAppointment.customerEmail}</span>
+                  <div>
+                    <div className="appointment-drawer-when__date">{selectedAppointment.dayLabel}</div>
+                    <div className="appointment-drawer-when__time">{selectedAppointmentClockLabel}</div>
+                  </div>
+                </div>
+                {isConfirmed ? (
+                  <div className="appointment-drawer-when__links">
+                    <button type="button" className="link-action" onClick={() => {
+                      const d = new Date(selectedAppointment.startAt);
+                      setEditDate(d.toISOString().slice(0, 10)); setEditTime(d.toTimeString().slice(0, 5));
+                      setEditServiceId(selectedAppointment.serviceId); setEditProviderId(selectedAppointment.providerId);
+                      setEditNotes(selectedAppointment.notes ?? ""); setNotificationChoice("notify"); setEditSaveState("idle"); setIsEditing(true);
+                    }}>Reschedule</button>
+                    {onCancel ? <button type="button" className="link-action link-action--danger" onClick={() => { if (window.confirm("Cancel this booking?")) { void onCancel(selectedAppointment); } }} disabled={completionState?.kind === "submitting"}>Cancel</button> : null}
                   </div>
                 ) : null}
               </div>
-              {onUpdateCustomerContact ? (
-                <button
-                  type="button"
-                  className="text-action"
-                  onClick={() => {
-                    setCustomerContactDraft({
-                      name: selectedAppointment.customerName,
-                      email: selectedAppointment.customerEmail ?? "",
-                      phone: selectedAppointment.customerPhone ?? "",
-                    });
-                    setIsEditingCustomerContact(true);
-                  }}
-                >
-                  Edit contact
-                </button>
-              ) : null}
-            </div>
-          )}
-          <div className="appointment-customer-notes">
-            {isEditingCustomerNotes ? (
-              <div className="customer-notes-editor">
-                <textarea
-                  value={customerNotesDraft}
-                  onChange={(e) => setCustomerNotesDraft(e.target.value)}
-                  rows={3}
-                  placeholder="Add notes about this client..."
-                  disabled={customerNotesSaveState === "submitting"}
-                />
-                <div className="customer-notes-editor__actions">
-                  <button
-                    type="button"
-                    className="text-action"
-                    onClick={() => {
-                      setIsEditingCustomerNotes(false);
-                      setCustomerNotesError("");
-                    }}
-                    disabled={customerNotesSaveState === "submitting"}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="primary-action"
-                    onClick={async () => {
-                      if (!onUpdateCustomerNotes) return;
-                      setCustomerNotesSaveState("submitting");
-                      setCustomerNotesError("");
-                      try {
-                        await onUpdateCustomerNotes(selectedAppointment, customerNotesDraft);
-                        setIsEditingCustomerNotes(false);
-                        setCustomerNotesSaveState("idle");
-                      } catch (err) {
-                        setCustomerNotesSaveState("error");
-                        setCustomerNotesError(err instanceof Error ? err.message : "Unable to save notes.");
-                      }
-                    }}
-                    disabled={customerNotesSaveState === "submitting"}
-                  >
-                    {customerNotesSaveState === "submitting" ? "Saving…" : "Save"}
-                  </button>
-                </div>
-                {customerNotesSaveState === "error" ? (
-                  <p role="alert" className="settings-error">{customerNotesError}</p>
-                ) : null}
-              </div>
-            ) : (
-              <div className="customer-notes-display">
-                {selectedAppointment.customerNotes ? (
-                  <p className="customer-profile-notes">{selectedAppointment.customerNotes}</p>
-                ) : (
-                  <p className="staff-list-empty">No client notes.</p>
-                )}
-                <button
-                  type="button"
-                  className="text-action"
-                  onClick={() => {
-                    setCustomerNotesDraft(selectedAppointment.customerNotes ?? "");
-                    setIsEditingCustomerNotes(true);
-                  }}
-                >
-                  {selectedAppointment.customerNotes ? "Edit" : "Add note"}
-                </button>
-              </div>
             )}
           </div>
-        </section>
 
-        <section className="booking-rail-section" aria-label="Appointment details">
-          <p className="rail-section-kicker">Appointment</p>
-          <div className="appointment-summary-card">
-            <div className="appointment-summary-card__row">
-              <strong>{selectedAppointment.serviceName}</strong>
-              <span className="appointment-summary-card__price">{formatMoney(selectedAppointment.priceCents)}</span>
-            </div>
-            <p className="appointment-summary-card__meta">
-              {selectedAppointment.durationMinutes} min · {selectedAppointment.providerName}
-            </p>
-            {isEditingAppointmentNotes ? (
+          {/* Customer */}
+          <div className="booking-rail-section" aria-label="Customer details">
+            <p className="rail-section-kicker">Customer</p>
+            {isEditingCustomerContact ? (
               <div className="customer-notes-editor">
-                <textarea
-                  value={appointmentNotesDraft}
-                  onChange={(e) => setAppointmentNotesDraft(e.target.value)}
-                  rows={3}
-                  placeholder="Add appointment notes..."
-                  disabled={appointmentNotesSaveState === "submitting"}
-                />
+                <label style={{ display: "block", marginBottom: "0.5rem" }}><span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Name</span><input type="text" value={customerContactDraft.name} onChange={(e) => setCustomerContactDraft((d) => ({ ...d, name: e.target.value }))} disabled={customerContactSaveState === "submitting"} style={{ width: "100%" }} /></label>
+                <label style={{ display: "block", marginBottom: "0.5rem" }}><span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Email</span><input type="email" value={customerContactDraft.email} onChange={(e) => setCustomerContactDraft((d) => ({ ...d, email: e.target.value }))} disabled={customerContactSaveState === "submitting"} style={{ width: "100%" }} /></label>
+                <label style={{ display: "block", marginBottom: "0.5rem" }}><span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Phone</span><input type="tel" value={customerContactDraft.phone} onChange={(e) => setCustomerContactDraft((d) => ({ ...d, phone: e.target.value }))} disabled={customerContactSaveState === "submitting"} style={{ width: "100%" }} /></label>
                 <div className="customer-notes-editor__actions">
-                  <button
-                    type="button"
-                    className="text-action"
-                    onClick={() => {
-                      setIsEditingAppointmentNotes(false);
-                      setAppointmentNotesError("");
-                    }}
-                    disabled={appointmentNotesSaveState === "submitting"}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="primary-action"
-                    onClick={async () => {
-                      if (!onUpdate) return;
-                      setAppointmentNotesSaveState("submitting");
-                      setAppointmentNotesError("");
-                      try {
-                        await onUpdate(selectedAppointment, {
-                          notes: appointmentNotesDraft || undefined,
-                        });
-                        setIsEditingAppointmentNotes(false);
-                        setAppointmentNotesSaveState("idle");
-                      } catch (err) {
-                        setAppointmentNotesSaveState("error");
-                        setAppointmentNotesError(err instanceof Error ? err.message : "Unable to save notes.");
-                      }
-                    }}
-                    disabled={appointmentNotesSaveState === "submitting"}
-                  >
-                    {appointmentNotesSaveState === "submitting" ? "Saving…" : "Save"}
-                  </button>
+                  <button type="button" className="text-action" onClick={() => { setIsEditingCustomerContact(false); setCustomerContactError(""); }} disabled={customerContactSaveState === "submitting"}>Cancel</button>
+                  <button type="button" className="primary-action" onClick={async () => { if (!onUpdateCustomerContact) return; if (!customerContactDraft.name.trim()) { setCustomerContactSaveState("error"); setCustomerContactError("Name is required."); return; } setCustomerContactSaveState("submitting"); setCustomerContactError(""); try { await onUpdateCustomerContact(selectedAppointment, { name: customerContactDraft.name.trim(), email: customerContactDraft.email.trim(), phone: customerContactDraft.phone.trim() }); setIsEditingCustomerContact(false); setCustomerContactSaveState("idle"); } catch (err) { setCustomerContactSaveState("error"); setCustomerContactError(err instanceof Error ? err.message : "Unable to save contact."); } }} disabled={customerContactSaveState === "submitting"}>{customerContactSaveState === "submitting" ? "Saving…" : "Save"}</button>
                 </div>
-                {appointmentNotesSaveState === "error" ? (
-                  <p role="alert" className="settings-error">{appointmentNotesError}</p>
-                ) : null}
+                {customerContactSaveState === "error" ? <p role="alert" className="settings-error">{customerContactError}</p> : null}
               </div>
             ) : (
-              <div className="customer-notes-display">
-                {selectedAppointment.notes ? (
-                  <p className="customer-profile-notes">{selectedAppointment.notes}</p>
-                ) : (
-                  <p className="staff-list-empty">No appointment notes.</p>
-                )}
-                <button
-                  type="button"
-                  className="text-action"
-                  onClick={() => {
-                    setAppointmentNotesDraft(selectedAppointment.notes ?? "");
-                    setIsEditingAppointmentNotes(true);
-                  }}
-                >
-                  {selectedAppointment.notes ? "Edit" : "Add note"}
-                </button>
-              </div>
+              <>
+                <div className="appointment-customer-card">
+                  <span className="appointment-customer-avatar" aria-hidden="true">{getInitials(selectedAppointment.customerName)}</span>
+                  <div>
+                    <button type="button" className="appointment-customer-name" onClick={() => { if (!onUpdateCustomerContact) return; setCustomerContactDraft({ name: selectedAppointment.customerName, email: selectedAppointment.customerEmail ?? "", phone: selectedAppointment.customerPhone ?? "" }); setIsEditingCustomerContact(true); }} title="Click to edit contact">
+                      {selectedAppointment.customerName}
+                    </button>
+                    {selectedAppointment.customerPhone ? <span className="appointment-customer-detail">{selectedAppointment.customerPhone}</span> : null}
+                    {selectedAppointment.customerEmail ? <span className="appointment-customer-detail">{selectedAppointment.customerEmail}</span> : null}
+                  </div>
+                </div>
+                <div className="appointment-customer-notes">
+                  {isEditingCustomerNotes ? (
+                    <div className="customer-notes-editor">
+                      <textarea value={customerNotesDraft} onChange={(e) => setCustomerNotesDraft(e.target.value)} rows={3} placeholder="Add notes about this client..." disabled={customerNotesSaveState === "submitting"} />
+                      <div className="customer-notes-editor__actions">
+                        <button type="button" className="text-action" onClick={() => { setIsEditingCustomerNotes(false); setCustomerNotesError(""); }} disabled={customerNotesSaveState === "submitting"}>Cancel</button>
+                        <button type="button" className="primary-action" onClick={async () => { if (!onUpdateCustomerNotes) return; setCustomerNotesSaveState("submitting"); setCustomerNotesError(""); try { await onUpdateCustomerNotes(selectedAppointment, customerNotesDraft); setIsEditingCustomerNotes(false); setCustomerNotesSaveState("idle"); } catch (err) { setCustomerNotesSaveState("error"); setCustomerNotesError(err instanceof Error ? err.message : "Unable to save notes."); } }} disabled={customerNotesSaveState === "submitting"}>{customerNotesSaveState === "submitting" ? "Saving…" : "Save"}</button>
+                      </div>
+                      {customerNotesSaveState === "error" ? <p role="alert" className="settings-error">{customerNotesError}</p> : null}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="appointment-customer-notes-box"
+                      onClick={() => { setCustomerNotesDraft(selectedAppointment.customerNotes ?? ""); setIsEditingCustomerNotes(true); }}
+                    >
+                      {selectedAppointment.customerNotes || "Add a note…"}
+                    </button>
+                  )}
+                </div>
+              </>
             )}
           </div>
-          <div className="appointment-payment-summary">
-            {selectedAppointment.depositCents > 0 ? (
-              <div className="appointment-payment-row">
-                <span>Deposit</span>
-                <span>{formatMoney(selectedAppointment.depositCents)}</span>
-              </div>
-            ) : null}
-            <div className="appointment-payment-row">
-              <span>Paid</span>
-              <span>{formatMoney(selectedAppointment.amountPaidCents)}</span>
-            </div>
-            {selectedAppointment.balanceDueCents > 0 ? (
-              <div className="appointment-payment-row appointment-payment-row--due">
-                <span>Balance due</span>
-                <span>{formatMoney(selectedAppointment.balanceDueCents)}</span>
-              </div>
-            ) : null}
-          </div>
-        </section>
 
-        <section className="booking-rail-section booking-rail-section--forms" aria-label="Intake forms">
-          <FormResponsesPanel
-            selectedAppointment={selectedAppointment}
-            state={formResponsesState}
-            intakeStatus={intakeStatus}
-            reminderState={formReminderState}
-            onSendReminder={onSendFormReminder ? () => onSendFormReminder(selectedAppointment) : undefined}
-            onViewForm={setViewingFormEntry}
-          />
-        </section>
+          {/* Service */}
+          <div className="booking-rail-section" aria-label="Service details">
+            <p className="rail-section-kicker">Service</p>
+            <div className="appointment-summary-card">
+              <div className="appointment-field-list">
+                <div className="appointment-field-row"><span>Service</span><span>{selectedAppointment.serviceName}</span></div>
+                <div className="appointment-field-row"><span>Duration</span><span>{selectedAppointment.durationMinutes} min</span></div>
+                <div className="appointment-field-row">
+                  <span>Provider</span>
+                  <span className="appointment-field-row__provider">
+                    {(() => {
+                      const prov = providers.find((p) => p.id === selectedAppointment.providerId);
+                      return prov?.imageUrl ? <img className="pfp pfp--sm" src={prov.imageUrl} alt="" /> : null;
+                    })()}
+                    {selectedAppointment.providerName}
+                  </span>
+                </div>
+                <div className="appointment-field-row"><span>Price</span><span>{formatMoney(selectedAppointment.priceCents)}</span></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Payment */}
+          <div className="booking-rail-section" aria-label="Payment summary">
+            <p className="rail-section-kicker">Payment</p>
+            <div className="appointment-payment-summary">
+              <div className="appointment-payment-row"><span>Subtotal</span><span>{formatMoney(selectedAppointment.priceCents)}</span></div>
+              {selectedAppointment.taxCents > 0 ? <div className="appointment-payment-row"><span>Tax</span><span>{formatMoney(selectedAppointment.taxCents)}</span></div> : null}
+              {selectedAppointment.depositCents > 0 ? <div className="appointment-payment-row"><span>Deposit</span><span>{formatMoney(selectedAppointment.depositCents)}</span></div> : null}
+              <div className="appointment-payment-row"><span>Paid</span><span>{formatMoney(selectedAppointment.amountPaidCents)}</span></div>
+              {selectedAppointment.balanceDueCents > 0 ? <div className="appointment-payment-row appointment-payment-row--due"><span>Balance due</span><span>{formatMoney(selectedAppointment.balanceDueCents)}</span></div> : null}
+            </div>
+          </div>
+
+          {/* Forms */}
+          <div className="booking-rail-section booking-rail-section--forms" aria-label="Intake forms">
+            <FormResponsesPanel
+              selectedAppointment={selectedAppointment}
+              state={formResponsesState}
+              intakeStatus={intakeStatus}
+              reminderState={formReminderState}
+              onSendReminder={onSendFormReminder ? () => onSendFormReminder(selectedAppointment) : undefined}
+              onViewForm={setViewingFormEntry}
+            />
+          </div>
+        </div>
 
         {showFooter ? (
           <div className="appointment-drawer-footer">
             <div className="appointment-drawer-footer__finalize">
               {isCompleted || isNoShow ? (
-                <button
-                  type="button"
-                  className="primary-action"
-                  onClick={() => setDrawerView("checkout")}
-                >
-                  View Sale
-                </button>
+                <button type="button" className="primary-action" onClick={() => setDrawerView("checkout")}>View Sale</button>
               ) : (
                 <>
-                  <button
-                    type="button"
-                    className="primary-action"
-                    onClick={() => setDrawerView("checkout")}
-                    disabled={completionState?.kind === "submitting"}
-                  >
-                    Checkout
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-action"
-                    onClick={() => void onNoShow(selectedAppointment)}
-                    disabled={completionState?.kind === "submitting"}
-                  >
-                    {completionState?.kind === "submitting" ? "Saving..." : "No-show"}
-                  </button>
+                  <button type="button" className="primary-action" onClick={() => setDrawerView("checkout")} disabled={completionState?.kind === "submitting"}>Checkout</button>
+                  <button type="button" className="secondary-action" onClick={() => void onNoShow(selectedAppointment)} disabled={completionState?.kind === "submitting"}>{completionState?.kind === "submitting" ? "Saving..." : "No-show"}</button>
                 </>
               )}
             </div>
           </div>
         ) : null}
         {completionState?.kind === "error" ? (
-          <div className="message-banner message-banner--error" role="alert">
-            {completionState.message}
-          </div>
+          <div className="message-banner message-banner--error" role="alert">{completionState.message}</div>
         ) : null}
       </aside>
       {createPortal(
@@ -4783,6 +4542,7 @@ function FormResponsesPanel({
   }
 
   const hasPending = requirements.some((req) => req.status === "pending");
+  const pendingCount = requirements.filter((req) => req.status === "pending").length;
   const reminderForThisBooking =
     reminderState.kind !== "idle" && bookingId !== null && "bookingId" in reminderState && reminderState.bookingId === bookingId
       ? reminderState
@@ -4792,11 +4552,10 @@ function FormResponsesPanel({
   return (
     <>
       <div className="rail-section-heading">
-        <div>
-          <p className="eyebrow">Forms</p>
-          <h4>Customer intake</h4>
-        </div>
-        <span className={`intake-status-badge intake-status-badge--${intakeStatus}`}>{intakeLabel}</span>
+        <p className="rail-section-kicker">Forms</p>
+        <span className={`intake-status-badge intake-status-badge--${intakeStatus}`}>
+          {pendingCount > 0 ? `${pendingCount} missing` : intakeLabel}
+        </span>
       </div>
       {!selectedAppointment ? (
         <p>Select an appointment to review any intake forms attached to it.</p>
@@ -4810,7 +4569,7 @@ function FormResponsesPanel({
         <p className="form-responses-empty">No intake forms are attached to this booking.</p>
       ) : (
         <>
-          <ul className="form-requirements-list" aria-label="Intake forms">
+          <div className="form-responses-list" aria-label="Intake forms">
             {requirements.length > 0
               ? requirements.map((req) => {
                   const matchedResponse = responseByRequirementId.get(req.id);
@@ -4818,92 +4577,55 @@ function FormResponsesPanel({
                   const submittedAt = matchedResponse ? formatDateTime(matchedResponse.submittedAt) : null;
                   const timingLabel = req.customerPromptTiming?.replaceAll("_", " ") ?? req.scope;
                   return (
-                    <li
+                    <div
                       key={req.id}
-                      className={`form-requirements-list__item form-requirements-list__item--${isCompleted ? "completed" : "pending"}`}
+                      className={`form-response-item form-response-item--${isCompleted ? "submitted" : "missing"}`}
                     >
-                      <span
-                        className={`form-requirements-list__status form-requirements-list__status--${isCompleted ? "completed" : "pending"}`}
-                        aria-hidden="true"
-                      >
-                        {isCompleted ? "✓" : ""}
-                      </span>
-                      <div className="form-requirements-list__body">
-                        <div className="form-requirements-list__title">{req.formName}</div>
-                        <div className="form-requirements-list__meta">
-                          {isCompleted
-                            ? submittedAt
-                              ? `Completed ${submittedAt}`
-                              : "Completed"
-                            : "Form not started"}
-                          {" · "}
-                          {timingLabel}
-                        </div>
+                      <div className="form-response-item__name">
+                        {req.formName}
+                        <span className={`form-response-item__badge form-response-item__badge--${isCompleted ? "submitted" : "missing"}`}>
+                          {isCompleted ? "Submitted" : "Missing"}
+                        </span>
                       </div>
-                      {isCompleted && matchedResponse ? (
-                        <button
-                          type="button"
-                          className="form-requirements-list__action"
-                          onClick={() => onViewForm?.(matchedResponse)}
-                        >
-                          View
-                        </button>
-                      ) : null}
-                    </li>
+                      <div className="form-response-item__date">
+                        {isCompleted
+                          ? submittedAt
+                            ? `Submitted ${submittedAt}`
+                            : "Completed"
+                          : "Due before visit"}
+                      </div>
+                    </div>
                   );
                 })
               : responses.map((entry) => {
                   const submittedAt = formatDateTime(entry.submittedAt);
                   const timingLabel = entry.customerPromptTiming?.replaceAll("_", " ") ?? entry.scope;
                   return (
-                    <li
-                      key={entry.id}
-                      className="form-requirements-list__item form-requirements-list__item--completed"
-                    >
-                      <span
-                        className="form-requirements-list__status form-requirements-list__status--completed"
-                        aria-hidden="true"
-                      >
-                        ✓
-                      </span>
-                      <div className="form-requirements-list__body">
-                        <div className="form-requirements-list__title">{entry.formName}</div>
-                        <div className="form-requirements-list__meta">
-                          Completed {submittedAt} · {timingLabel}
-                        </div>
+                    <div key={entry.id} className="form-response-item form-response-item--submitted">
+                      <div className="form-response-item__name">
+                        {entry.formName}
+                        <span className="form-response-item__badge form-response-item__badge--submitted">Submitted</span>
                       </div>
-                      <button
-                        type="button"
-                        className="form-requirements-list__action"
-                        onClick={() => onViewForm?.(entry)}
-                      >
-                        View
-                      </button>
-                    </li>
+                      <div className="form-response-item__date">Submitted {submittedAt} · {timingLabel}</div>
+                    </div>
                   );
                 })}
-          </ul>
+          </div>
           {hasPending && onSendReminder ? (
-            <div className="form-requirements-reminder">
-              <button
-                type="button"
-                className="secondary-action"
-                onClick={onSendReminder}
-                disabled={reminderSending}
-              >
-                {reminderSending ? "Sending reminder..." : "Send reminder"}
-              </button>
-              {reminderForThisBooking?.kind === "success" ? (
-                <span className="form-requirements-reminder__status" role="status">
-                  {reminderForThisBooking.message}
-                </span>
-              ) : null}
-              {reminderForThisBooking?.kind === "error" ? (
-                <span className="form-requirements-reminder__status form-requirements-reminder__status--error" role="alert">
-                  {reminderForThisBooking.message}
-                </span>
-              ) : null}
-            </div>
+            <button
+              type="button"
+              className="form-reminder-btn"
+              onClick={onSendReminder}
+              disabled={reminderSending}
+            >
+              {reminderSending ? "Sending reminder..." : "Send form reminder"}
+            </button>
+          ) : null}
+          {reminderForThisBooking?.kind === "success" ? (
+            <span className="form-reminder-status" role="status">{reminderForThisBooking.message}</span>
+          ) : null}
+          {reminderForThisBooking?.kind === "error" ? (
+            <span className="form-reminder-status form-reminder-status--error" role="alert">{reminderForThisBooking.message}</span>
           ) : null}
         </>
       )}
