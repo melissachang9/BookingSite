@@ -1,4 +1,6 @@
 from contextlib import asynccontextmanager
+import asyncio
+import logging
 
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -10,13 +12,28 @@ from app.core.config import get_settings
 from app.db.seed import seed_demo_data
 from app.db.session import dispose_engine, get_session_maker, initialize_database
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await initialize_database()
     async with get_session_maker()() as session:
         await seed_demo_data(session)
+
+    # Start background slot hold cleanup
+    from app.services.slot_hold_cleanup import cleanup_expired_slot_holds, run_periodic_cleanup
+
+    await cleanup_expired_slot_holds()  # run once on startup
+    cleanup_task = asyncio.create_task(run_periodic_cleanup())
+
     yield
+
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
     await dispose_engine()
 
 

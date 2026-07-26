@@ -1626,3 +1626,93 @@ def test_cancel_refund_ordering_stripe_before_state_mutation() -> None:
             f"{name}: refund_payment_via_processor (char {refund_idx}) must be called "
             f"BEFORE booking.status = 'canceled' (char {cancel_idx})"
         )
+
+
+def test_cleanup_expired_slot_holds_removes_expired_holds(client) -> None:
+    """Expired slot holds are deleted by the cleanup function."""
+    from app.db.models import SlotHold
+    from app.db.session import get_session_maker
+    from app.services.slot_hold_cleanup import cleanup_expired_slot_holds
+
+    service = _first_service(client)
+    date_text = _next_weekday(0)
+    availability_response = client.get(
+        "/api/v1/tenants/brow-beauty-lab/availability",
+        params={"serviceId": service["id"], "date": date_text},
+    )
+    first_slot = availability_response.json()["slots"][0]
+
+    # Create a draft to get a slot hold
+    create_response = client.post(
+        "/api/v1/tenants/brow-beauty-lab/booking-drafts",
+        json={
+            "tenantSlug": "brow-beauty-lab",
+            "serviceId": service["id"],
+            "providerId": first_slot["providerId"],
+            "locationId": first_slot["locationId"],
+            "startsAt": first_slot["startAt"],
+        },
+    )
+    draft_id = create_response.json()["id"]
+
+    # Expire the hold
+    _expire_booking_draft(draft_id)
+
+    # Verify the hold exists but is expired
+    async def _count_holds() -> int:
+        async with get_session_maker()() as session:
+            from sqlalchemy import select, func
+            total = await session.scalar(select(func.count()).select_from(SlotHold))
+            return total or 0
+
+    count_before = asyncio.run(_count_holds())
+    assert count_before >= 1
+
+    # Run cleanup
+    deleted = asyncio.run(cleanup_expired_slot_holds())
+    assert deleted >= 1
+
+    # Verify the expired hold is gone
+    count_after = asyncio.run(_count_holds())
+    assert count_after < count_before
+
+
+def test_cleanup_expired_slot_holds_preserves_active_holds(client) -> None:
+    """Active (non-expired) slot holds are not deleted by cleanup."""
+    from app.db.models import SlotHold
+    from app.db.session import get_session_maker
+    from app.services.slot_hold_cleanup import cleanup_expired_slot_holds
+
+    service = _first_service(client)
+    date_text = _next_weekday(0)
+    availability_response = client.get(
+        "/api/v1/tenants/brow-beauty-lab/availability",
+        params={"serviceId": service["id"], "date": date_text},
+    )
+    first_slot = availability_response.json()["slots"][0]
+
+    create_response = client.post(
+        "/api/v1/tenants/brow-beauty-lab/booking-drafts",
+        json={
+            "tenantSlug": "brow-beauty-lab",
+            "serviceId": service["id"],
+            "providerId": first_slot["providerId"],
+            "locationId": first_slot["locationId"],
+            "startsAt": first_slot["startAt"],
+        },
+    )
+    assert create_response.status_code == 200
+
+    async def _count_holds() -> int:
+        async with get_session_maker()() as session:
+            from sqlalchemy import select, func
+            return await session.scalar(select(func.count()).select_from(SlotHold)) or 0
+
+    count_before = asyncio.run(_count_holds())
+    assert count_before >= 1
+
+    # Run cleanup — should not delete the active hold
+    asyncio.run(cleanup_expired_slot_holds())
+
+    count_after = asyncio.run(_count_holds())
+    assert count_after == count_before
