@@ -29,6 +29,7 @@ from app.db.models import (
 )
 from app.schemas.bookings import BookingSummaryResponse, CancelManageBookingRequest, CustomerManageBookingResponse
 from app.services.payment_processor import refund_payment_via_processor
+from app.services.state_machine import guard_transition
 from app.services.wallet import record_wallet_transaction
 from app.schemas.booking_drafts import BookingDraftSummaryResponse, CreateBookingDraftRequest, UpdateBookingDraftRequest
 from app.services.availability import list_availability
@@ -204,6 +205,7 @@ async def _attach_form_requirements(session: AsyncSession, draft: BookingDraft) 
             )
         )
 
+    guard_transition("booking_draft", draft.id, draft.status, "awaiting_form")
     draft.status = "awaiting_form"
     await session.flush()
 
@@ -307,6 +309,7 @@ async def _promote_draft_to_booking(
         )
     )
 
+    guard_transition("booking_draft", draft.id, draft.status, "confirmed")
     draft.status = "confirmed"
     draft.confirmed_booking_id = booking.id
     if draft.hold is not None:
@@ -604,6 +607,7 @@ async def cancel_manage_booking(
     wallet_credited_cents = 0
     processor_refund_id: str | None = None
 
+    guard_transition("booking", booking.id, booking.status, "canceled")
     booking.status = "canceled"
     booking.canceled_at = datetime.now(timezone.utc)
 
@@ -758,6 +762,7 @@ async def confirm_booking_draft(
     _ensure_not_expired(draft)
 
     if _has_pending_pre_booking_requirements(draft):
+        guard_transition("booking_draft", draft.id, draft.status, "awaiting_form")
         draft.status = "awaiting_form"
         await session.commit()
         raise api_exception(400, "bad_request", "Complete required forms before confirming the booking.")
@@ -766,6 +771,7 @@ async def confirm_booking_draft(
         raise api_exception(400, "bad_request", "Customer details are required before confirming the booking.")
 
     if draft.deposit_cents > 0:
+        guard_transition("booking_draft", draft.id, draft.status, "awaiting_payment")
         draft.status = "awaiting_payment"
         await session.commit()
         raise api_exception(409, "conflict", "Deposit checkout is not yet implemented for this booking.")

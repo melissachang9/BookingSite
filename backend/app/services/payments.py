@@ -37,6 +37,7 @@ from app.services.booking_drafts import (
 )
 from app.services.notifications import send_transactional_email
 from app.services.presenters import booking_balance_due_cents, booking_draft_to_summary, booking_to_summary
+from app.services.state_machine import guard_transition
 from app.services.auth import ROLE_PERMISSION_ALLOWLIST
 from app.services.tenants import get_tenant_by_slug
 
@@ -678,6 +679,7 @@ async def create_checkout_session(
         requirement.customer_prompt_timing == "pre_booking" and requirement.status == "pending"
         for requirement in draft.form_requirements
     ):
+        guard_transition("booking_draft", draft.id, draft.status, "awaiting_form")
         draft.status = "awaiting_form"
         await session.commit()
         raise api_exception(400, "bad_request", "Complete the required forms before payment.")
@@ -701,6 +703,7 @@ async def create_checkout_session(
     )
 
     if existing_payment is not None and existing_payment.checkout_expires_at is not None and existing_payment.checkout_url is not None:
+        guard_transition("booking_draft", draft.id, draft.status, "awaiting_payment")
         draft.status = "awaiting_payment"
         draft.expires_at = max(_ensure_aware(draft.expires_at), _ensure_aware(existing_payment.checkout_expires_at))
         draft.hold.expires_at = draft.expires_at
@@ -774,6 +777,7 @@ async def create_checkout_session(
         stripe_session_id=stripe_checkout.session_id if stripe_checkout is not None else None,
     )
 
+    guard_transition("booking_draft", draft.id, draft.status, "awaiting_payment")
     draft.status = "awaiting_payment"
     draft.expires_at = expires_at
     draft.hold.expires_at = expires_at

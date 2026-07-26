@@ -1618,12 +1618,14 @@ def test_cancel_refund_ordering_stripe_before_state_mutation() -> None:
 
     for fn, name in [(cancel_booking, "cancel_booking"), (cancel_manage_booking, "cancel_manage_booking")]:
         src = inspect.getsource(fn)
-        refund_idx = src.find("refund_payment_via_processor")
+        guard_idx = src.find("guard_transition")
         cancel_idx = src.find('booking.status = "canceled"')
-        assert refund_idx >= 0, f"{name} must call refund_payment_via_processor"
+        refund_idx = src.find("refund_payment_via_processor")
+        assert guard_idx >= 0, f"{name} must call guard_transition"
         assert cancel_idx >= 0, f"{name} must set booking.status = 'canceled'"
-        assert refund_idx < cancel_idx, (
-            f"{name}: refund_payment_via_processor (char {refund_idx}) must be called "
+        assert refund_idx >= 0, f"{name} must call refund_payment_via_processor"
+        assert guard_idx < cancel_idx, (
+            f"{name}: guard_transition (char {guard_idx}) must be called "
             f"BEFORE booking.status = 'canceled' (char {cancel_idx})"
         )
 

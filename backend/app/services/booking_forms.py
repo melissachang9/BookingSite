@@ -33,6 +33,7 @@ from app.schemas.forms import (
 )
 from app.services.booking_drafts import _ensure_aware, _ensure_not_expired, _load_booking, _load_booking_draft
 from app.services.notifications import send_transactional_email
+from app.services.state_machine import guard_transition
 from app.services.tenants import get_tenant_by_slug
 
 
@@ -181,6 +182,7 @@ async def submit_booking_form_requirement(
         if item.id != requirement.id and item.customer_prompt_timing == "pre_booking" and item.status == "pending"
     ]
     if not pending_requirements:
+        guard_transition("booking_draft", draft.id, draft.status, "slot_held")
         draft.status = "slot_held"
 
     await session.commit()

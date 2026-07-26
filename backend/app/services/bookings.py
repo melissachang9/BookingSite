@@ -13,6 +13,7 @@ from app.schemas.payments import ApplyWalletCreditRequest, RecordManualPaymentRe
 from app.services.booking_drafts import _cancellation_policy_for_booking, _load_booking
 from app.services.payment_processor import refund_payment_via_processor
 from app.services.presenters import booking_balance_due_cents, booking_to_summary
+from app.services.state_machine import guard_transition
 from app.services.wallet import record_wallet_transaction
 
 
@@ -518,6 +519,7 @@ async def update_booking_status(
         if payment_resolution == "follow_up" and remaining_balance_cents <= 0:
             raise api_exception(409, "conflict", "Follow-up is only valid when a balance still remains due.")
 
+        guard_transition("booking", booking.id, booking.status, "completed")
         booking.status = "completed"
         booking.completed_at = datetime.now(timezone.utc)
         booking.notes = notes
@@ -559,6 +561,7 @@ async def update_booking_status(
     if booking.status != "confirmed":
         raise api_exception(409, "conflict", "Only confirmed bookings can be marked as no-show.")
 
+    guard_transition("booking", booking.id, booking.status, "no_show")
     booking.status = "no_show"
     booking.notes = notes
     _append_booking_event(
@@ -707,6 +710,7 @@ async def cancel_booking(
     wallet_credited_cents = 0
     processor_refund_id: str | None = None
 
+    guard_transition("booking", booking.id, booking.status, "canceled")
     booking.status = "canceled"
     booking.canceled_at = datetime.now(timezone.utc)
 
