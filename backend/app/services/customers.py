@@ -206,9 +206,14 @@ async def update_customer(
     if payload.sms_phone is not None:
         customer.sms_phone = payload.sms_phone.strip() or None
     if payload.wallet_adjustment_cents is not None and payload.wallet_adjustment_cents != 0:
-        customer.wallet_balance_cents += payload.wallet_adjustment_cents
-        if customer.wallet_balance_cents < 0:
-            customer.wallet_balance_cents = 0
+        await record_wallet_transaction(
+            session,
+            customer=customer,
+            amount_cents=payload.wallet_adjustment_cents,
+            kind="staff_adjustment",
+            actor=actor,
+            notes=payload.wallet_adjustment_note or "Manual wallet adjustment",
+        )
 
     await session.commit()
     await session.refresh(customer)

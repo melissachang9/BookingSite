@@ -80,6 +80,28 @@ class Customer(Base, IdMixin, TimestampMixin):
     bookings: Mapped[list[Booking]] = relationship(back_populates="customer")
     booking_drafts: Mapped[list[BookingDraft]] = relationship(back_populates="customer")
     payments: Mapped[list[Payment]] = relationship(back_populates="customer")
+    wallet_transactions: Mapped[list[WalletTransaction]] = relationship(back_populates="customer", cascade="all, delete-orphan")
+
+
+class WalletTransaction(Base, IdMixin, TimestampMixin):
+    """Append-only wallet ledger.  The customer's wallet_balance_cents is the
+    sum of all amount_cents rows.  Never mutate wallet_balance_cents directly;
+    always create a WalletTransaction and recompute the balance."""
+
+    __tablename__ = "wallet_transactions"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    customer_id: Mapped[str] = mapped_column(String(36), ForeignKey("customers.id"), index=True, nullable=False)
+    amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    actor_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    booking_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("bookings.id"), nullable=True)
+    payment_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("payments.id"), nullable=True)
+
+    customer: Mapped[Customer] = relationship(back_populates="wallet_transactions")
 
 
 class Location(Base, IdMixin, TimestampMixin):

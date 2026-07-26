@@ -29,6 +29,7 @@ from app.db.models import (
 )
 from app.schemas.bookings import BookingSummaryResponse, CancelManageBookingRequest, CustomerManageBookingResponse
 from app.services.payment_processor import refund_payment_via_processor
+from app.services.wallet import record_wallet_transaction
 from app.schemas.booking_drafts import BookingDraftSummaryResponse, CreateBookingDraftRequest, UpdateBookingDraftRequest
 from app.services.availability import list_availability
 from app.services.presenters import booking_draft_to_summary, booking_to_summary, tenant_to_summary
@@ -645,7 +646,15 @@ async def cancel_manage_booking(
                 )
 
         if wallet_credited_cents > 0:
-            booking.customer.wallet_balance_cents += wallet_credited_cents
+            await record_wallet_transaction(
+                session,
+                customer=booking.customer,
+                amount_cents=wallet_credited_cents,
+                kind="cancellation_credit",
+                actor=None,
+                booking_id=booking.id,
+                notes="Deposit credited to wallet when customer canceled from the private manage link.",
+            )
         booking.deposit_status = "refunded"
         booking.payment_resolution = "waived"
     elif forfeited:

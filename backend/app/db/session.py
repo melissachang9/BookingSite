@@ -471,6 +471,45 @@ async def _ensure_postgres_schema_compatibility() -> None:
                 text("CREATE INDEX IF NOT EXISTS ix_audit_events_entity ON audit_events (entity_type, entity_id)")
             )
 
+        wallet_tx_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'wallet_transactions'
+                  AND column_name = 'kind'
+                """
+            )
+        )
+        if not wallet_tx_exists:
+            await connection.execute(
+                text(
+                    """
+                    CREATE TABLE wallet_transactions (
+                        id VARCHAR(36) PRIMARY KEY,
+                        tenant_id VARCHAR(36) NOT NULL REFERENCES tenants(id),
+                        customer_id VARCHAR(36) NOT NULL REFERENCES customers(id),
+                        amount_cents INTEGER NOT NULL,
+                        kind VARCHAR(32) NOT NULL,
+                        actor_type VARCHAR(32) NOT NULL,
+                        actor_id VARCHAR(36),
+                        actor_name VARCHAR(255),
+                        notes TEXT,
+                        booking_id VARCHAR(36) REFERENCES bookings(id),
+                        payment_id VARCHAR(36) REFERENCES payments(id),
+                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+            )
+            await connection.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_wallet_transactions_customer ON wallet_transactions (customer_id)")
+            )
+            await connection.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_wallet_transactions_tenant ON wallet_transactions (tenant_id)")
+            )
+
 
 async def initialize_database() -> None:
     async with get_engine().begin() as connection:

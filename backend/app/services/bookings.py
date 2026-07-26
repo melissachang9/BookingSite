@@ -13,6 +13,7 @@ from app.schemas.payments import ApplyWalletCreditRequest, RecordManualPaymentRe
 from app.services.booking_drafts import _cancellation_policy_for_booking, _load_booking
 from app.services.payment_processor import refund_payment_via_processor
 from app.services.presenters import booking_balance_due_cents, booking_to_summary
+from app.services.wallet import record_wallet_transaction
 
 
 def _clean_notes(notes: str | None) -> str | None:
@@ -259,8 +260,16 @@ async def apply_wallet_credit(
 
     apply_amount = min(payload.amount_cents, wallet_balance)
 
-    # Deduct from wallet
-    booking.customer.wallet_balance_cents -= apply_amount
+    # Deduct from wallet via ledger
+    await record_wallet_transaction(
+        session,
+        customer=booking.customer,
+        amount_cents=-apply_amount,
+        kind="applied_to_booking",
+        actor=actor,
+        booking_id=booking.id,
+        notes=f"Applied ${apply_amount / 100:.2f} wallet credit to booking.",
+    )
 
     # Record as a payment
     payment = Payment(
@@ -355,7 +364,16 @@ async def refund_payment(
 
     # If the payment was a wallet credit application, return the funds to the wallet.
     if is_wallet_payment:
-        booking.customer.wallet_balance_cents += refund_amount_cents
+        await record_wallet_transaction(
+            session,
+            customer=booking.customer,
+            amount_cents=refund_amount_cents,
+            kind="refund_returned",
+            actor=actor,
+            booking_id=booking.id,
+            payment_id=payment.id,
+            notes=f"Wallet credit returned (${refund_amount_cents / 100:.2f})." + (f" Reason: {reason}" if reason else ""),
+        )
         event_kind = "wallet_returned"
         partial_note = " (partial)" if is_partial else ""
         actor_notes = (
@@ -733,7 +751,15 @@ async def cancel_booking(
                 )
 
         if wallet_credited_cents > 0:
-            booking.customer.wallet_balance_cents += wallet_credited_cents
+            await record_wallet_transaction(
+                session,
+                customer=booking.customer,
+                amount_cents=wallet_credited_cents,
+                kind="cancellation_credit",
+                actor=actor,
+                booking_id=booking.id,
+                notes=f"Deposit credited to wallet when staff canceled. Operator: {actor.name}.",
+            )
         booking.deposit_status = "refunded"
         booking.payment_resolution = "waived"
     elif forfeited:
