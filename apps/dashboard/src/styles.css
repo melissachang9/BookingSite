@@ -2554,15 +2554,77 @@ body {
   color: var(--ui-amber-deep);
 }
 
-.appointment-drawer-date-input {
-  display: block;
-  margin-top: 6px;
-  padding: 6px 8px;
+.appointment-drawer-date-popover {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 100;
+  margin-top: 4px;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  min-width: 260px;
+}
+
+.appointment-drawer-date-popover .month-rail__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.appointment-drawer-date-popover .month-rail__header h5 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+.appointment-drawer-date-popover .month-rail__controls {
+  display: flex;
+  gap: 4px;
+}
+.appointment-drawer-date-popover .month-grid-labels {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 11px;
+  color: var(--ui-muted);
+  margin-bottom: 4px;
+}
+.appointment-drawer-date-popover .month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.appointment-drawer-date-popover .month-day {
+  aspect-ratio: 1;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.appointment-drawer-date-popover .month-day:hover {
+  background: var(--ui-amber-soft);
+}
+.appointment-drawer-date-popover .month-day--outside {
+  visibility: hidden;
+}
+.appointment-drawer-date-popover .month-day--focused {
+  background: var(--ui-amber-deep);
+  color: #fff;
+  font-weight: 700;
+}
+
+.appointment-drawer-time-input {
+  padding: 4px 8px;
   border: 1px solid var(--ui-amber-deep);
   border-radius: 6px;
-  font-size: 14px;
-  width: 100%;
-  max-width: 200px;
+  font-size: 16px;
+  font-weight: 700;
+  width: 140px;
 }
 
 /* Glanceable When block (date + start time) */

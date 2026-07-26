@@ -2779,10 +2779,14 @@ function SlotActionDrawer({
     ? `${selectedSlot.date}|${selectedSlot.providerId ?? ""}|${selectedSlot.startAt}`
     : null;
   const [mode, setMode] = useState<"appointment" | "time-block">("appointment");
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showDatePopover, setShowDatePopover] = useState(false);
+  const [showTimeInput, setShowTimeInput] = useState(false);
+  const [pickerMonth, setPickerMonth] = useState<string>(monthAnchor(getUpcomingDate(1)));
+  const pickerGrid = useMemo(() => buildMonthGrid(pickerMonth), [pickerMonth]);
   useEffect(() => {
     setMode("appointment");
-    setShowDatePicker(false);
+    setShowDatePopover(false);
+    setShowTimeInput(false);
   }, [slotKey]);
 
   if (selectedSlot === null) {
@@ -2824,32 +2828,97 @@ function SlotActionDrawer({
         </header>
 
         <div className="appointment-drawer-when" aria-label="Calendar slot timing">
-          <div>
+          <div style={{ position: "relative" }}>
             On{" "}
             <button
               type="button"
               className="appointment-drawer-date-pick"
-              onClick={() => setShowDatePicker((prev) => !prev)}
-              aria-expanded={showDatePicker}
+              onClick={() => {
+                setPickerMonth(monthAnchor(selectedSlot.date));
+                setShowDatePopover((prev) => !prev);
+              }}
+              aria-expanded={showDatePopover}
             >
               <strong>{getDateLabel(selectedSlot.date)}</strong>
             </button>
-            {showDatePicker ? (
-              <input
-                type="date"
-                className="appointment-drawer-date-input"
-                value={selectedSlot.date}
-                onChange={(event) => {
-                  onStartDateChange(event.target.value);
-                  setShowDatePicker(false);
-                }}
-                autoFocus
-                onBlur={() => setShowDatePicker(false)}
-              />
+            {showDatePopover ? (
+              <div className="appointment-drawer-date-popover">
+                <div className="month-rail__header">
+                  <h5>{monthLabelFormatter.format(parseIsoDate(pickerMonth))}</h5>
+                  <div className="month-rail__controls">
+                    <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, -1))}>
+                      Prev
+                    </button>
+                    <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, 1))}>
+                      Next
+                    </button>
+                  </div>
+                </div>
+                <div className="month-grid-labels" role="presentation">
+                  {monthDayLabel.map((label) => (
+                    <span key={label}>{label}</span>
+                  ))}
+                </div>
+                <div className="month-grid" role="grid">
+                  {pickerGrid.map((date) => {
+                    const isInCurrentMonth = date.slice(0, 7) === pickerMonth.slice(0, 7);
+                    const isSelected = date === selectedSlot.date;
+                    return (
+                      <button
+                        key={date}
+                        type="button"
+                        role="gridcell"
+                        disabled={!isInCurrentMonth}
+                        aria-pressed={isSelected}
+                        aria-label={getDateLabel(date)}
+                        className={[
+                          "month-day",
+                          !isInCurrentMonth ? "month-day--outside" : "",
+                          isSelected ? "month-day--focused" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        onClick={() => {
+                          onStartDateChange(date);
+                          setShowDatePopover(false);
+                        }}
+                      >
+                        <span>{parseIsoDate(date).getUTCDate()}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             ) : null}
           </div>
           <div>
-            At <strong>{headingTimeRange}</strong>
+            At{" "}
+            {showTimeInput ? (
+              <input
+                type="time"
+                className="appointment-drawer-time-input"
+                value={formatTimeInputValue(selectedSlot.startAt)}
+                onChange={(event) => {
+                  onStartTimeChange(event.target.value);
+                  setShowTimeInput(false);
+                }}
+                autoFocus
+                onBlur={() => setShowTimeInput(false)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    setShowTimeInput(false);
+                  }
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                className="appointment-drawer-date-pick"
+                onClick={() => setShowTimeInput(true)}
+              >
+                <strong>{headingTimeRange}</strong>
+              </button>
+            )}
           </div>
         </div>
 
