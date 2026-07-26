@@ -1,11 +1,13 @@
 from contextlib import asynccontextmanager
 import asyncio
 import logging
+import traceback
 
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 
 from app.api.router import api_router
 from app.core.config import get_settings
@@ -88,6 +90,32 @@ def create_application() -> FastAPI:
                     "code": "validation_error",
                     "message": "Request validation failed.",
                     "issues": issues,
+                }
+            },
+        )
+
+    @application.exception_handler(IntegrityError)
+    async def integrity_error_handler(_, exc: IntegrityError) -> JSONResponse:
+        logger.error("Database integrity error: %s", exc, exc_info=True)
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": {
+                    "code": "conflict",
+                    "message": "The request could not be completed due to a data conflict.",
+                }
+            },
+        )
+
+    @application.exception_handler(Exception)
+    async def unhandled_exception_handler(_, exc: Exception) -> JSONResponse:
+        logger.error("Unhandled exception: %s", exc, exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "internal_error",
+                    "message": "An unexpected error occurred. Please try again later.",
                 }
             },
         )
