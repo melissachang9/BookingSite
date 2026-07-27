@@ -627,6 +627,19 @@ async def send_booking_form_reminder(
     manage_url = _build_form_manage_url(token)
 
     subject, text_body, html_body = _build_form_reminder_content(booking, pending_count, manage_url)
+
+    settings = get_settings()
+    if not settings.resend_api_key or not settings.resend_from_email:
+        return SendFormReminderResponse(
+            booking_id=booking.id,
+            pending_requirement_count=pending_count,
+            recipient_email=booking.customer.email,
+            provider="none",
+            provider_message_id="email-not-configured",
+            sent_at=datetime.now(timezone.utc),
+            manage_url=manage_url,
+        )
+
     delivery = await send_transactional_email(
         recipient_email=booking.customer.email,
         subject=subject,
