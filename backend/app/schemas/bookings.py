@@ -75,6 +75,11 @@ class CancelManageBookingRequest(CamelModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class RescheduleManageBookingRequest(CamelModel):
+    starts_at: datetime
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class CancelBookingRequest(CamelModel):
     reason: str | None = Field(default=None, max_length=500)
 

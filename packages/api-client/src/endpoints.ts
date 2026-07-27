@@ -10,6 +10,7 @@ import type {
   CancelBookingRequest,
   CancelManageBookingRequest,
   CustomerManageBooking,
+  RescheduleManageBookingRequest,
   CreateServiceCategoryRequest,
   CreateServiceRequest,
   CreateTenantRequest,
@@ -327,6 +328,8 @@ export const createPlatformApi = (client: ApiClient) => ({
   getManageBooking: (token: string) => client.get<CustomerManageBooking>(`bookings/manage/${token}`),
   cancelManageBooking: (token: string, body: CancelManageBookingRequest) =>
     client.post<CustomerManageBooking, CancelManageBookingRequest>(`bookings/manage/${token}/cancel`, body),
+  rescheduleManageBooking: (token: string, body: RescheduleManageBookingRequest) =>
+    client.post<CustomerManageBooking, RescheduleManageBookingRequest>(`bookings/manage/${token}/reschedule`, body),
   listManageBookingFormRequirements: (token: string) =>
     client.get<BookingFormRequirementSummary[]>(`bookings/manage/${token}/form-requirements`),
   submitManageBookingFormRequirement: (

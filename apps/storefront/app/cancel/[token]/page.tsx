@@ -3,11 +3,11 @@ import { notFound, redirect } from "next/navigation";
 
 import { storefrontApi, isApiClientError, isApiNotFoundError } from "../../lib/storefront-api";
 import { formatCurrency, formatInTenantTime, slugify } from "../../lib/storefront-shell";
-import { cancelManageBookingAction } from "./actions";
+import { cancelManageBookingAction, rescheduleManageBookingAction } from "./actions";
 
 type ManageRouteProps = {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ canceled?: string; error?: string; paid?: string; sessionId?: string }>;
+  searchParams: Promise<{ canceled?: string; error?: string; paid?: string; rescheduled?: string; sessionId?: string }>;
 };
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,7 @@ const isNextNavigationSignal = (error: unknown): error is { digest: string } =>
   (error.digest.startsWith("NEXT_REDIRECT") || error.digest.startsWith("NEXT_HTTP_ERROR_FALLBACK"));
 
 export default async function ManageBookingPage({ params, searchParams }: ManageRouteProps) {
-  const [{ token }, { canceled, error, paid, sessionId }] = await Promise.all([params, searchParams]);
+  const [{ token }, { canceled, error, paid, rescheduled, sessionId }] = await Promise.all([params, searchParams]);
 
   try {
     const manageBooking = await storefrontApi.getManageBooking(token);
@@ -118,6 +118,10 @@ export default async function ManageBookingPage({ params, searchParams }: Manage
         ? "This appointment can no longer be canceled from the private booking link."
         : error === "cancel-error"
           ? "The cancellation could not be completed. Please contact the studio directly."
+          : error === "reschedule-unavailable"
+            ? "The selected time is no longer available. Please try a different time."
+          : error === "reschedule-error"
+            ? "The reschedule could not be completed. Please contact the studio directly."
           : error === "payment-pending"
             ? "The payment processor is still finishing the balance checkout. Refresh this page in a moment."
             : error === "payment-expired"
@@ -157,6 +161,13 @@ export default async function ManageBookingPage({ params, searchParams }: Manage
           <section className="status-banner" aria-live="polite">
             <strong>Appointment canceled.</strong>
             <span>{cancellationOutcomeTitle}</span>
+          </section>
+        ) : null}
+
+        {rescheduled === "1" ? (
+          <section className="status-banner" aria-live="polite">
+            <strong>Appointment rescheduled.</strong>
+            <span>Your appointment has been moved to {formatInTenantTime(booking.startsAt, tenant.timezone)}.</span>
           </section>
         ) : null}
 
@@ -201,6 +212,42 @@ export default async function ManageBookingPage({ params, searchParams }: Manage
             </div>
           ) : null}
         </section>
+
+        {booking.status === "confirmed" ? (
+          <section className="store-section">
+            <div className="section-header">
+              <div>
+                <p className="store-eyebrow">Reschedule</p>
+                <h2>Change your appointment time</h2>
+              </div>
+            </div>
+            <form action={rescheduleManageBookingAction} className="requirement-form">
+              <input type="hidden" name="token" value={token} />
+              <div className="requirement-copy-block">
+                <strong>Pick a new date and time</strong>
+                <p>Your current appointment is {formatInTenantTime(booking.startsAt, tenant.timezone)}. Choose a new time below.</p>
+              </div>
+              <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+                <label className="requirement-form-field" style={{ flex: "1", minWidth: "180px" }}>
+                  <span>New date</span>
+                  <input type="date" name="date" required min={new Date().toISOString().slice(0, 10)} />
+                </label>
+                <label className="requirement-form-field" style={{ flex: "1", minWidth: "180px" }}>
+                  <span>New time</span>
+                  <input type="time" name="time" required />
+                </label>
+              </div>
+              <label className="requirement-form-field">
+                <span>Reason for rescheduling</span>
+                <small>Optional note for the studio.</small>
+                <textarea name="reason" maxLength={500} placeholder="Schedule conflict, need a different time, etc." />
+              </label>
+              <button type="submit" className="store-button">
+                Reschedule appointment
+              </button>
+            </form>
+          </section>
+        ) : null}
 
         <section className="store-section">
           <div className="section-header">

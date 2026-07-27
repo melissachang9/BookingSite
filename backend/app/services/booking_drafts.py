@@ -27,7 +27,7 @@ from app.db.models import (
     SlotHold,
     Tenant,
 )
-from app.schemas.bookings import BookingSummaryResponse, CancelManageBookingRequest, CustomerManageBookingResponse
+from app.schemas.bookings import BookingSummaryResponse, CancelManageBookingRequest, CustomerManageBookingResponse, RescheduleManageBookingRequest
 from app.services.payment_processor import refund_payment_via_processor
 from app.services.state_machine import guard_transition
 from app.services.wallet import record_wallet_transaction
@@ -688,6 +688,70 @@ async def cancel_manage_booking(
         wallet_credited_cents=wallet_credited_cents,
         processor_refund_id=processor_refund_id,
         processor_refund_amount_cents=refunded_amount_cents,
+    )
+
+    await session.commit()
+    hydrated_booking, hydrated_tenant = await _load_manage_booking_context(session, token)
+    return _build_manage_booking_response(hydrated_booking, hydrated_tenant)
+
+
+async def reschedule_manage_booking(
+    session: AsyncSession,
+    token: str,
+    payload: RescheduleManageBookingRequest,
+) -> CustomerManageBookingResponse:
+    booking, tenant = await _load_manage_booking_context(session, token)
+
+    if booking.status != "confirmed":
+        raise api_exception(409, "conflict", "Only confirmed bookings can be rescheduled from this link.")
+
+    new_starts_at = _ensure_aware(payload.starts_at)
+    duration = booking.ends_at - booking.starts_at
+    new_ends_at = new_starts_at + duration
+
+    # Verify the new slot is available
+    requested_date_text = new_starts_at.astimezone(ZoneInfo(tenant.timezone)).date().isoformat()
+    availability = await list_availability(
+        session=session,
+        tenant_slug=tenant.slug,
+        service_id=booking.service_id,
+        provider_id=booking.provider_id,
+        location_id=booking.location_id,
+        requested_date_text=requested_date_text,
+    )
+    matching_slot = next(
+        (
+            slot
+            for slot in availability.slots
+            if slot.start_at == new_starts_at
+            and slot.provider_id == booking.provider_id
+            and (booking.location_id is None or slot.location_id == booking.location_id)
+        ),
+        None,
+    )
+    if matching_slot is None:
+        raise api_exception(409, "conflict", "The selected time slot is no longer available.")
+
+    guard_transition("booking", booking.id, booking.status, "confirmed")
+    old_starts_at = booking.starts_at
+    booking.starts_at = new_starts_at
+    booking.ends_at = new_ends_at
+
+    reason = payload.reason.strip() if isinstance(payload.reason, str) and payload.reason.strip() else None
+    session.add(
+        BookingPaymentEvent(
+            tenant_id=booking.tenant_id,
+            booking_id=booking.id,
+            event_kind="customer_rescheduled",
+            amount_cents=0,
+            payload_json={
+                "actorType": "customer",
+                "actorLabel": "Customer self-service",
+                "reason": reason,
+                "previousStartsAt": old_starts_at.isoformat(),
+                "newStartsAt": new_starts_at.isoformat(),
+            },
+        )
     )
 
     await session.commit()

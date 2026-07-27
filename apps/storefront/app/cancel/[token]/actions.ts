@@ -52,6 +52,28 @@ export async function cancelManageBookingAction(formData: FormData) {
   redirect(`/cancel/${token}?canceled=1`);
 }
 
+export async function rescheduleManageBookingAction(formData: FormData) {
+  const token = readRequiredField(formData, "token");
+  const date = readRequiredField(formData, "date");
+  const time = readRequiredField(formData, "time");
+  const reasonValue = formData.get("reason");
+  const reason = typeof reasonValue === "string" && reasonValue.trim().length > 0 ? reasonValue.trim() : undefined;
+
+  const startsAt = new Date(`${date}T${time}:00`).toISOString();
+
+  try {
+    await storefrontApi.rescheduleManageBooking(token, { startsAt, reason });
+  } catch (error) {
+    if (isApiClientError(error)) {
+      const errorCode = error.status === 409 ? "reschedule-unavailable" : "reschedule-error";
+      redirect(`/cancel/${token}?error=${errorCode}`);
+    }
+    throw error;
+  }
+
+  redirect(`/cancel/${token}?rescheduled=1`);
+}
+
 export async function completeManageBookingBalanceCheckoutAction(formData: FormData) {
   const token = readRequiredField(formData, "token");
   const sessionId = readRequiredField(formData, "sessionId");

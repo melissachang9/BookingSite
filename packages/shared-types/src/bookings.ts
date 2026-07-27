@@ -140,6 +140,11 @@ export type CancelManageBookingRequest = {
   reason?: string;
 };
 
+export type RescheduleManageBookingRequest = {
+  startsAt: ISODateString;
+  reason?: string;
+};
+
 export type CancelBookingRequest = {
   reason?: string;
 };

@@ -14,6 +14,7 @@ from app.schemas.bookings import (
     CancelBookingRequest,
     CancelManageBookingRequest,
     CustomerManageBookingResponse,
+    RescheduleManageBookingRequest,
     UpdateBookingRequest,
     UpdateBookingStatusRequest,
 )
@@ -26,7 +27,7 @@ from app.schemas.forms import (
     SubmitFormRequirementRequest,
 )
 from app.schemas.payments import ApplyWalletCreditRequest, RecordManualPaymentRequest, RefundPaymentRequest
-from app.services.booking_drafts import cancel_manage_booking, get_booking, get_manage_booking
+from app.services.booking_drafts import cancel_manage_booking, get_booking, get_manage_booking, reschedule_manage_booking
 from app.services.booking_forms import (
     list_booking_form_requirements,
     list_booking_form_responses,
@@ -97,6 +98,19 @@ async def cancel_manage_booking_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> CustomerManageBookingResponse:
     return await cancel_manage_booking(session, token, payload)
+
+
+@router.post(
+    "/bookings/manage/{token}/reschedule",
+    response_model=CustomerManageBookingResponse,
+    summary="Reschedule a booking from a customer manage link",
+)
+async def reschedule_manage_booking_route(
+    token: str,
+    payload: RescheduleManageBookingRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> CustomerManageBookingResponse:
+    return await reschedule_manage_booking(session, token, payload)
 
 
 @router.get(
