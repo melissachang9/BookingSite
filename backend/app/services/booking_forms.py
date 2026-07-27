@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from html import escape
 from urllib.parse import urljoin
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -378,6 +378,7 @@ async def list_booking_form_requirements_by_token(
     if not draft_ids:
         return []
 
+    # Query both draft-linked and booking-linked requirements
     requirements = (
         await session.scalars(
             select(BookingDraftFormRequirement)
@@ -386,7 +387,10 @@ async def list_booking_form_requirements_by_token(
             )
             .where(
                 BookingDraftFormRequirement.tenant_id == tenant.id,
-                BookingDraftFormRequirement.booking_draft_id.in_(draft_ids),
+                or_(
+                    BookingDraftFormRequirement.booking_draft_id.in_(draft_ids),
+                    BookingDraftFormRequirement.booking_id == booking.id,
+                ),
                 BookingDraftFormRequirement.status == "pending",
             )
             .order_by(BookingDraftFormRequirement.created_at.asc())
@@ -451,7 +455,10 @@ async def submit_booking_form_requirement_by_token(
             .where(
                 BookingDraftFormRequirement.id == requirement_id,
                 BookingDraftFormRequirement.tenant_id == tenant.id,
-                BookingDraftFormRequirement.booking_draft_id.in_(await _draft_ids_for_booking(session, booking)),
+                or_(
+                    BookingDraftFormRequirement.booking_draft_id.in_(await _draft_ids_for_booking(session, booking)),
+                    BookingDraftFormRequirement.booking_id == booking.id,
+                ),
             )
     )
     if requirement is None:
@@ -504,7 +511,10 @@ async def save_booking_form_requirement_draft_by_token(
         .where(
             BookingDraftFormRequirement.id == requirement_id,
             BookingDraftFormRequirement.tenant_id == tenant.id,
-            BookingDraftFormRequirement.booking_draft_id.in_(await _draft_ids_for_booking(session, booking)),
+            or_(
+                BookingDraftFormRequirement.booking_draft_id.in_(await _draft_ids_for_booking(session, booking)),
+                BookingDraftFormRequirement.booking_id == booking.id,
+            ),
         )
     )
     if requirement is None:

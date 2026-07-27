@@ -318,25 +318,39 @@ export default async function ManageBookingFormsPage({ params, searchParams }: F
           </section>
         ) : null}
 
-        <section className="support-panel">
-          <div>
-            <p className="store-eyebrow">Need to change this appointment?</p>
-            <h3>Manage your booking.</h3>
-          </div>
-          <Link href={`/cancel/${token}`} className="ghost-link">
-            Manage with {tenant.name}
-          </Link>
-        </section>
+        {hasPostVisit ? (
+          <section className="support-panel">
+            <div>
+              <p className="store-eyebrow">Thank you for visiting {tenant.name}.</p>
+              <h3>Your responses help us serve you better.</h3>
+            </div>
+            <Link href={`/${tenant.slug}/services/${slugify(booking.service.name)}`} className="ghost-link">
+              Book another visit
+            </Link>
+          </section>
+        ) : (
+          <>
+            <section className="support-panel">
+              <div>
+                <p className="store-eyebrow">Need to change this appointment?</p>
+                <h3>Manage your booking.</h3>
+              </div>
+              <Link href={`/cancel/${token}`} className="ghost-link">
+                Manage with {tenant.name}
+              </Link>
+            </section>
 
-        <section className="support-panel">
-          <div>
-            <p className="store-eyebrow">Need another appointment?</p>
-            <h3>Book again with {tenant.name}.</h3>
-          </div>
-          <Link href={`/${tenant.slug}/services/${slugify(booking.service.name)}`} className="ghost-link">
-            Book another visit
-          </Link>
-        </section>
+            <section className="support-panel">
+              <div>
+                <p className="store-eyebrow">Need another appointment?</p>
+                <h3>Book again with {tenant.name}.</h3>
+              </div>
+              <Link href={`/${tenant.slug}/services/${slugify(booking.service.name)}`} className="ghost-link">
+                Book another visit
+              </Link>
+            </section>
+          </>
+        )}
       </main>
     );
   } catch (error) {

@@ -436,8 +436,11 @@ async def refund_payment(
 
 
 async def _deliver_post_visit_forms(session: AsyncSession, booking: Booking) -> None:
-    """Create post-visit form requirements on a completed booking."""
+    """Create post-visit form requirements on a completed booking and notify the customer."""
+    from app.core.config import get_settings
+    from app.core.security import create_customer_manage_token
     from app.db.models import BookingDraftFormRequirement, ServiceFormAttachment
+    from app.services.notifications import send_transactional_email
     from sqlalchemy.orm import selectinload
 
     attachments = (
@@ -469,6 +472,41 @@ async def _deliver_post_visit_forms(session: AsyncSession, booking: Booking) -> 
 
     if attachments:
         await session.commit()
+
+        # Send email notification with the forms link
+        customer = booking.customer
+        if customer is not None and customer.email:
+            token, _ = create_customer_manage_token({
+                "bookingId": booking.id,
+                "tenantId": booking.tenant_id,
+            })
+            settings = get_settings()
+            forms_url = f"{settings.storefront_public_base_url}/forms/{token}"
+            service_name = booking.service.name if booking.service is not None else "your appointment"
+            customer_name = customer.name or "there"
+            forms_word = "form" if len(attachments) == 1 else "forms"
+
+            try:
+                await send_transactional_email(
+                    recipient_email=customer.email,
+                    subject=f"Complete your post-visit {forms_word} for {service_name}",
+                    text_body=(
+                        f"Hi {customer_name},\n\n"
+                        f"Your {service_name} appointment is complete. "
+                        f"Please fill out {len(attachments)} post-visit {forms_word} to help us improve your experience.\n\n"
+                        f"Complete your {forms_word} here: {forms_url}\n\n"
+                        f"Thank you!"
+                    ),
+                    html_body=(
+                        f"<p>Hi {customer_name},</p>"
+                        f"<p>Your <strong>{service_name}</strong> appointment is complete. "
+                        f"Please fill out <strong>{len(attachments)} post-visit {forms_word}</strong> to help us improve your experience.</p>"
+                        f"<p><a href=\"{forms_url}\">Complete your {forms_word} here</a></p>"
+                        f"<p>Thank you!</p>"
+                    ),
+                )
+            except Exception:
+                pass  # Don't block completion if email fails
 
 
 async def update_booking_status(
