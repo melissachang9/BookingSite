@@ -27,7 +27,7 @@ from app.db.models import (
     SlotHold,
     Tenant,
 )
-from app.schemas.bookings import BookingSummaryResponse, CancelManageBookingRequest, CustomerManageBookingResponse, RescheduleManageBookingRequest
+from app.schemas.bookings import BookingListResponse, BookingSummaryResponse, CancelManageBookingRequest, CustomerManageBookingResponse, RescheduleManageBookingRequest
 from app.services.payment_processor import refund_payment_via_processor
 from app.services.state_machine import guard_transition
 from app.services.wallet import record_wallet_transaction
@@ -419,6 +419,49 @@ async def _load_manage_booking_context(
     if tenant is None:
         raise api_exception(404, "not_found", MANAGE_LINK_ERROR_MESSAGE)
     return booking, tenant
+
+
+def _decode_customer_manage_token(token: str) -> tuple[str, str]:
+    """Decode a manage token to extract customerId and tenantId."""
+    try:
+        payload = decode_token(token)
+    except Exception as error:  # noqa: BLE001
+        raise api_exception(404, "not_found", MANAGE_LINK_ERROR_MESSAGE) from error
+
+    if payload.get("tokenType") != "customer_manage":
+        raise api_exception(404, "not_found", MANAGE_LINK_ERROR_MESSAGE)
+
+    customer_id = payload.get("customerId")
+    tenant_id = payload.get("tenantId")
+    if not isinstance(customer_id, str) or not isinstance(tenant_id, str):
+        raise api_exception(404, "not_found", MANAGE_LINK_ERROR_MESSAGE)
+
+    return customer_id, tenant_id
+
+
+async def list_customer_bookings(
+    session: AsyncSession,
+    token: str,
+) -> BookingListResponse:
+    """List all bookings for a customer, identified by manage token."""
+    from app.services.bookings import list_bookings
+
+    customer_id, tenant_id = _decode_customer_manage_token(token)
+
+    # Load tenant to get slug
+    tenant = await session.scalar(
+        select(Tenant).where(Tenant.id == tenant_id)
+    )
+    if tenant is None:
+        raise api_exception(404, "not_found", MANAGE_LINK_ERROR_MESSAGE)
+
+    return await list_bookings(
+        session,
+        tenant.slug,
+        customer_id=customer_id,
+        limit=50,
+        offset=0,
+    )
 
 
 def _build_manage_booking_response(

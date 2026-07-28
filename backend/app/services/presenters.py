@@ -352,6 +352,7 @@ def booking_to_summary(booking: Booking) -> BookingSummaryResponse:
         {
             "bookingId": booking.id,
             "tenantId": booking.tenant_id,
+            "customerId": booking.customer_id,
         }
     )
 

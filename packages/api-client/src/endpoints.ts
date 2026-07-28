@@ -330,6 +330,8 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.post<CustomerManageBooking, CancelManageBookingRequest>(`bookings/manage/${token}/cancel`, body),
   rescheduleManageBooking: (token: string, body: RescheduleManageBookingRequest) =>
     client.post<CustomerManageBooking, RescheduleManageBookingRequest>(`bookings/manage/${token}/reschedule`, body),
+  listCustomerBookings: (token: string) =>
+    client.get<BookingListResponse>(`bookings/manage/${token}/bookings`),
   listManageBookingFormRequirements: (token: string) =>
     client.get<BookingFormRequirementSummary[]>(`bookings/manage/${token}/form-requirements`),
   submitManageBookingFormRequirement: (

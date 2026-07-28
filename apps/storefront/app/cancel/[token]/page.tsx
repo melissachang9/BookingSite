@@ -329,6 +329,9 @@ export default async function ManageBookingPage({ params, searchParams }: Manage
             <Link href={`/forms/${token}`} className="store-button">
               Complete forms
             </Link>
+            <Link href={`/cancel/${token}/bookings`} className="ghost-link">
+              View all bookings
+            </Link>
             <Link href={`/${tenant.slug}/services/${slugify(booking.service.name)}`} className="ghost-link">
               Book with {tenant.name}
             </Link>
