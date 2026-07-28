@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { storefrontApi, isApiClientError, isApiNotFoundError } from "../../../lib/storefront-api";
-import { formatCurrency, formatInTenantTime, slugify } from "../../../lib/storefront-shell";
+import { formatInTenantTime, slugify } from "../../../lib/storefront-shell";
 
 type ProfileRouteProps = {
   params: Promise<{ token: string }>;
@@ -40,10 +40,6 @@ export default async function CustomerProfilePage({ params }: ProfileRouteProps)
     const upcoming = bookings.filter((b) => b.status === "confirmed" && new Date(b.startsAt) >= now);
     const past = bookings.filter((b) => b.status !== "confirmed" || new Date(b.startsAt) < now);
 
-    const totalSpend = bookings
-      .filter((b) => b.status === "completed")
-      .reduce((sum, b) => sum + b.amountPaidCents, 0);
-
     return (
       <main className="manage-page page-stack">
         <section className="state-panel state-panel--manage">
@@ -52,7 +48,7 @@ export default async function CustomerProfilePage({ params }: ProfileRouteProps)
           <p>
             {bookings.length === 0
               ? "No appointments yet."
-              : `${bookings.length} appointment${bookings.length === 1 ? "" : "s"} · ${formatCurrency(totalSpend)} total spend`}
+              : `${bookings.length} appointment${bookings.length === 1 ? "" : "s"}`}
           </p>
         </section>
 
