@@ -4716,6 +4716,27 @@ body {
 .customer-profile-drawer .customer-profile {
   padding: 0;
 }
+
+.customer-owner-select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--ui-border, #e5e7eb);
+  border-radius: 8px;
+  background: var(--ui-surface, #f9fafb);
+  color: var(--ui-ink);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2rem;
+}
+
+.customer-owner-select:focus {
+  outline: none;
+  border-color: var(--ui-amber-deep, #b45309);
+  box-shadow: 0 0 0 2px rgba(180, 83, 9, 0.15);
+}
 .staff-list-empty {
   padding: 1rem;
   color: var(--text-muted, #6b7280);

@@ -262,6 +262,10 @@ def customer_to_summary(customer: Customer) -> CustomerSummaryResponse:
         sms_phone=customer.sms_phone,
         acquired_at=customer.acquired_at,
         source_channel=customer.source_channel,
+        address_street=customer.address_street,
+        address_city=customer.address_city,
+        address_state=customer.address_state,
+        address_zip=customer.address_zip,
     )
 
 

@@ -44,6 +44,10 @@ class CustomerSummaryResponse(CamelModel):
     sms_phone: str | None = None
     acquired_at: datetime | None = None
     source_channel: str | None = None
+    address_street: str | None = None
+    address_city: str | None = None
+    address_state: str | None = None
+    address_zip: str | None = None
 
 
 class CreateBookingDraftRequest(CamelModel):

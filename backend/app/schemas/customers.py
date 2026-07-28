@@ -59,3 +59,7 @@ class UpdateCustomerRequest(CamelModel):
     wallet_adjustment_note: str | None = None
     sms_consent: bool | None = None
     sms_phone: str | None = None
+    address_street: str | None = None
+    address_city: str | None = None
+    address_state: str | None = None
+    address_zip: str | None = None

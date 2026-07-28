@@ -12,6 +12,10 @@ export type CustomerSummary = AuditFields &
     ownerName?: string | null;
     smsConsent?: boolean;
     smsPhone?: string | null;
+    addressStreet?: string | null;
+    addressCity?: string | null;
+    addressState?: string | null;
+    addressZip?: string | null;
   };
 
 export type CustomerProfile = CustomerSummary & {

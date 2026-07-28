@@ -441,6 +441,10 @@ function CustomerProfilePanel({
     name: customer.name,
     email: customer.email ?? "",
     phone: customer.phone ?? "",
+    addressStreet: customer.addressStreet ?? "",
+    addressCity: customer.addressCity ?? "",
+    addressState: customer.addressState ?? "",
+    addressZip: customer.addressZip ?? "",
   });
   const [contactSaveState, setContactSaveState] = useState<"idle" | "submitting" | "error">("idle");
   const [contactError, setContactError] = useState("");
@@ -558,6 +562,10 @@ function CustomerProfilePanel({
         name: contactDraft.name.trim(),
         email: contactDraft.email.trim(),
         phone: contactDraft.phone.trim(),
+        addressStreet: contactDraft.addressStreet.trim() || undefined,
+        addressCity: contactDraft.addressCity.trim() || undefined,
+        addressState: contactDraft.addressState.trim() || undefined,
+        addressZip: contactDraft.addressZip.trim() || undefined,
       };
       await platformApi.updateCustomer(customer.tenantId, customer.id, body);
       setIsEditingContact(false);
@@ -728,6 +736,48 @@ function CustomerProfilePanel({
                 style={{ width: "100%" }}
               />
             </label>
+            <label style={{ display: "block", marginBottom: "0.5rem" }}>
+              <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Street address</span>
+              <input
+                type="text"
+                value={contactDraft.addressStreet}
+                onChange={(e) => setContactDraft((d) => ({ ...d, addressStreet: e.target.value }))}
+                disabled={contactSaveState === "submitting"}
+                style={{ width: "100%" }}
+              />
+            </label>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <label style={{ display: "block", marginBottom: "0.5rem", flex: "2" }}>
+                <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>City</span>
+                <input
+                  type="text"
+                  value={contactDraft.addressCity}
+                  onChange={(e) => setContactDraft((d) => ({ ...d, addressCity: e.target.value }))}
+                  disabled={contactSaveState === "submitting"}
+                  style={{ width: "100%" }}
+                />
+              </label>
+              <label style={{ display: "block", marginBottom: "0.5rem", flex: "1" }}>
+                <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>State</span>
+                <input
+                  type="text"
+                  value={contactDraft.addressState}
+                  onChange={(e) => setContactDraft((d) => ({ ...d, addressState: e.target.value }))}
+                  disabled={contactSaveState === "submitting"}
+                  style={{ width: "100%" }}
+                />
+              </label>
+              <label style={{ display: "block", marginBottom: "0.5rem", flex: "1" }}>
+                <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>ZIP</span>
+                <input
+                  type="text"
+                  value={contactDraft.addressZip}
+                  onChange={(e) => setContactDraft((d) => ({ ...d, addressZip: e.target.value }))}
+                  disabled={contactSaveState === "submitting"}
+                  style={{ width: "100%" }}
+                />
+              </label>
+            </div>
             <div className="customer-notes-editor__actions">
               <button
                 type="button"
@@ -738,6 +788,10 @@ function CustomerProfilePanel({
                     name: customer.name,
                     email: customer.email ?? "",
                     phone: customer.phone ?? "",
+                    addressStreet: customer.addressStreet ?? "",
+                    addressCity: customer.addressCity ?? "",
+                    addressState: customer.addressState ?? "",
+                    addressZip: customer.addressZip ?? "",
                   });
                   setContactError("");
                 }}
@@ -767,7 +821,10 @@ function CustomerProfilePanel({
               {customer.phone ? (
                 <div className="appointment-field-row"><span>Phone</span><span>{customer.phone}</span></div>
               ) : null}
-              {!customer.email && !customer.phone ? (
+              {customer.addressStreet ? (
+                <div className="appointment-field-row"><span>Address</span><span>{[customer.addressStreet, customer.addressCity, customer.addressState, customer.addressZip].filter(Boolean).join(", ")}</span></div>
+              ) : null}
+              {!customer.email && !customer.phone && !customer.addressStreet ? (
                 <p className="staff-list-empty">No contact information on file.</p>
               ) : null}
             </div>
@@ -779,6 +836,10 @@ function CustomerProfilePanel({
                   name: customer.name,
                   email: customer.email ?? "",
                   phone: customer.phone ?? "",
+                  addressStreet: customer.addressStreet ?? "",
+                  addressCity: customer.addressCity ?? "",
+                  addressState: customer.addressState ?? "",
+                  addressZip: customer.addressZip ?? "",
                 });
                 setIsEditingContact(true);
               }}

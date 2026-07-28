@@ -205,6 +205,14 @@ async def update_customer(
         customer.sms_consent = payload.sms_consent
     if payload.sms_phone is not None:
         customer.sms_phone = payload.sms_phone.strip() or None
+    if payload.address_street is not None:
+        customer.address_street = payload.address_street.strip() or None
+    if payload.address_city is not None:
+        customer.address_city = payload.address_city.strip() or None
+    if payload.address_state is not None:
+        customer.address_state = payload.address_state.strip() or None
+    if payload.address_zip is not None:
+        customer.address_zip = payload.address_zip.strip() or None
     if payload.wallet_adjustment_cents is not None and payload.wallet_adjustment_cents != 0:
         await record_wallet_transaction(
             session,

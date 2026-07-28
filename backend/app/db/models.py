@@ -75,6 +75,10 @@ class Customer(Base, IdMixin, TimestampMixin):
     sms_consent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
     sms_phone: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     stripe_customer_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    address_street: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    address_city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    address_state: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    address_zip: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="customers")
     owner: Mapped[Optional["User"]] = relationship(foreign_keys=[owner_user_id])
