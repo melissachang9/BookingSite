@@ -704,6 +704,19 @@ export function CalendarPage({
     return () => document.removeEventListener("click", handler, true);
   }, [contextMenuOpen]);
 
+  // Read bookingId from URL query param on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const bookingId = params.get("bookingId");
+    if (bookingId) {
+      setSelectedAppointmentId(bookingId);
+      // Clean the URL without reloading
+      const url = new URL(window.location.href);
+      url.searchParams.delete("bookingId");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
+
   const selectedAppointment = useMemo<SelectedCalendarAppointment | null>(() => {
     if (calendarState.kind !== "ready" || selectedAppointmentId === null) {
       return null;

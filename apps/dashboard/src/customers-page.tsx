@@ -944,7 +944,11 @@ function CustomerBookingRow({ booking }: { booking: CustomerBookingEntry }) {
   const statusLabel = getStatusLabel(booking.status);
   return (
     <li className="customer-booking-row">
-      <div className="customer-booking-row__main">
+      <a
+        href={`/calendar?bookingId=${booking.id}`}
+        className="customer-booking-row__main"
+        style={{ textDecoration: "none", color: "inherit", display: "contents" }}
+      >
         <div className="customer-booking-row__header">
           <strong>{booking.serviceName}</strong>
           <span className={`customer-booking-status customer-booking-status--${booking.status}`}>
@@ -954,7 +958,7 @@ function CustomerBookingRow({ booking }: { booking: CustomerBookingEntry }) {
         <p className="customer-booking-row__meta">
           {formatDateTime(booking.startsAt)} · {booking.providerName}
         </p>
-      </div>
+      </a>
       <div className="customer-booking-row__payment">
         <span>{formatMoney(booking.priceCents)}</span>
         {booking.balanceDueCents > 0 ? (

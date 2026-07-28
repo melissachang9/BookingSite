@@ -2,9 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { storefrontApi, isApiClientError, isApiNotFoundError } from "../../../lib/storefront-api";
-import { formatCurrency, formatInTenantTime } from "../../../lib/storefront-shell";
+import { formatCurrency, formatInTenantTime, slugify } from "../../../lib/storefront-shell";
 
-type BookingHistoryRouteProps = {
+type ProfileRouteProps = {
   params: Promise<{ token: string }>;
 };
 
@@ -24,7 +24,7 @@ const STATUS_LABELS: Record<string, string> = {
   no_show: "No-show",
 };
 
-export default async function CustomerBookingHistoryPage({ params }: BookingHistoryRouteProps) {
+export default async function CustomerProfilePage({ params }: ProfileRouteProps) {
   const { token } = await params;
 
   try {
@@ -33,23 +33,54 @@ export default async function CustomerBookingHistoryPage({ params }: BookingHist
       storefrontApi.listCustomerBookings(token),
     ]);
 
-    const { tenant } = manageBooking;
+    const { booking, tenant } = manageBooking;
     const bookings = bookingList.items;
     const now = new Date();
 
     const upcoming = bookings.filter((b) => b.status === "confirmed" && new Date(b.startsAt) >= now);
     const past = bookings.filter((b) => b.status !== "confirmed" || new Date(b.startsAt) < now);
 
+    const totalSpend = bookings
+      .filter((b) => b.status === "completed")
+      .reduce((sum, b) => sum + b.amountPaidCents, 0);
+
     return (
       <main className="manage-page page-stack">
         <section className="state-panel state-panel--manage">
-          <p className="store-eyebrow">Booking history</p>
-          <h1>Your appointments with {tenant.name}</h1>
+          <p className="store-eyebrow">Your profile</p>
+          <h1>{booking.customer.name}</h1>
           <p>
             {bookings.length === 0
-              ? "You don't have any appointments yet."
-              : `${bookings.length} appointment${bookings.length === 1 ? "" : "s"} on file.`}
+              ? "No appointments yet."
+              : `${bookings.length} appointment${bookings.length === 1 ? "" : "s"} · ${formatCurrency(totalSpend)} total spend`}
           </p>
+        </section>
+
+        <section className="store-section">
+          <div className="section-header">
+            <div>
+              <p className="store-eyebrow">Contact</p>
+              <h2>Your information</h2>
+            </div>
+          </div>
+          <div className="summary-grid summary-grid--three">
+            <article className="summary-card">
+              <span>Name</span>
+              <strong>{booking.customer.name}</strong>
+            </article>
+            {booking.customer.email ? (
+              <article className="summary-card">
+                <span>Email</span>
+                <strong>{booking.customer.email}</strong>
+              </article>
+            ) : null}
+            {booking.customer.phone ? (
+              <article className="summary-card">
+                <span>Phone</span>
+                <strong>{booking.customer.phone}</strong>
+              </article>
+            ) : null}
+          </div>
         </section>
 
         {upcoming.length > 0 ? (
@@ -61,19 +92,24 @@ export default async function CustomerBookingHistoryPage({ params }: BookingHist
               </div>
             </div>
             <div className="summary-grid summary-grid--three">
-              {upcoming.map((booking) => (
+              {upcoming.map((b) => (
                 <Link
-                  key={booking.id}
-                  href={`/cancel/${booking.customerManageToken}`}
+                  key={b.id}
+                  href={`/cancel/${b.customerManageToken}`}
                   className="summary-card"
                   style={{ textDecoration: "none", color: "inherit" }}
                 >
-                  <span>{STATUS_LABELS[booking.status] ?? booking.status}</span>
-                  <strong>{booking.service.name}</strong>
+                  <span>{STATUS_LABELS[b.status] ?? b.status}</span>
+                  <strong>{b.service.name}</strong>
                   <p>
-                    {formatInTenantTime(booking.startsAt, tenant.timezone)}
+                    {formatInTenantTime(b.startsAt, tenant.timezone)}
                     {" · "}
-                    {booking.provider.name}
+                    {b.provider.name}
+                    {b.balanceDueCents > 0
+                      ? ` · ${formatCurrency(b.balanceDueCents)} due`
+                      : b.amountPaidCents > 0
+                        ? ` · ${formatCurrency(b.amountPaidCents)} paid`
+                        : ""}
                   </p>
                 </Link>
               ))}
@@ -90,23 +126,23 @@ export default async function CustomerBookingHistoryPage({ params }: BookingHist
               </div>
             </div>
             <div className="summary-grid summary-grid--three">
-              {past.map((booking) => (
+              {past.map((b) => (
                 <Link
-                  key={booking.id}
-                  href={`/cancel/${booking.customerManageToken}`}
+                  key={b.id}
+                  href={`/cancel/${b.customerManageToken}`}
                   className="summary-card"
                   style={{ textDecoration: "none", color: "inherit" }}
                 >
-                  <span>{STATUS_LABELS[booking.status] ?? booking.status}</span>
-                  <strong>{booking.service.name}</strong>
+                  <span>{STATUS_LABELS[b.status] ?? b.status}</span>
+                  <strong>{b.service.name}</strong>
                   <p>
-                    {formatInTenantTime(booking.startsAt, tenant.timezone)}
+                    {formatInTenantTime(b.startsAt, tenant.timezone)}
                     {" · "}
-                    {booking.provider.name}
-                    {booking.balanceDueCents > 0
-                      ? ` · ${formatCurrency(booking.balanceDueCents)} due`
-                      : booking.amountPaidCents > 0
-                        ? ` · ${formatCurrency(booking.amountPaidCents)} paid`
+                    {b.provider.name}
+                    {b.balanceDueCents > 0
+                      ? ` · ${formatCurrency(b.balanceDueCents)} due`
+                      : b.amountPaidCents > 0
+                        ? ` · ${formatCurrency(b.amountPaidCents)} paid`
                         : ""}
                   </p>
                 </Link>
@@ -123,22 +159,22 @@ export default async function CustomerBookingHistoryPage({ params }: BookingHist
               </div>
             </div>
             <p style={{ color: "var(--ui-ink-soft)" }}>
-              When you book an appointment with {tenant.name}, it will appear here. You can manage each appointment from its private link.
+              When you book an appointment with {tenant.name}, it will appear here.
             </p>
           </section>
         ) : null}
 
         <section className="support-panel">
           <div>
-            <p className="store-eyebrow">View a specific appointment</p>
-            <h3>Back to your booking.</h3>
+            <p className="store-eyebrow">Need another appointment?</p>
+            <h3>Book again with {tenant.name}.</h3>
           </div>
           <div className="hero-actions">
             <Link href={`/cancel/${token}`} className="ghost-link">
-              Manage this appointment
+              Back to appointment
             </Link>
-            <Link href={`/cancel/${token}/profile`} className="ghost-link">
-              My profile
+            <Link href={`/${tenant.slug}/services/${slugify(booking.service.name)}`} className="store-button">
+              Book another visit
             </Link>
           </div>
         </section>
@@ -153,13 +189,13 @@ export default async function CustomerBookingHistoryPage({ params }: BookingHist
       notFound();
     }
 
-    const detail = isApiClientError(error) ? error.message : "The booking history could not be loaded.";
+    const detail = isApiClientError(error) ? error.message : "Your profile could not be loaded.";
 
     return (
       <main className="manage-page page-stack">
         <section className="state-panel">
-          <p className="store-eyebrow">Booking history unavailable</p>
-          <h1>We could not load your appointments.</h1>
+          <p className="store-eyebrow">Profile unavailable</p>
+          <h1>We could not load your profile.</h1>
           <p>{detail}</p>
         </section>
       </main>
