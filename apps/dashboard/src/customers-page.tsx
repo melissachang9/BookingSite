@@ -376,34 +376,39 @@ export function CustomersPage({
             onClick={() => setSelectedCustomerId(null)}
           />
           <aside className="appointment-details-drawer customer-profile-drawer" role="dialog" aria-label="Customer profile">
-            <div className="appointment-details-drawer__header">
-              <h4>Customer profile</h4>
-              <button type="button" className="appointment-drawer-outline-action" onClick={() => setSelectedCustomerId(null)}>
-                Close
+            <header className="appointment-details-drawer__header">
+              <span className="appointment-status-chip">
+                <span aria-hidden="true" />
+                Customer profile
+              </span>
+              <button type="button" className="appointment-drawer-close" onClick={() => setSelectedCustomerId(null)} aria-label="Close">
+                ×
               </button>
-            </div>
-            <CustomerProfilePanel
-              customer={selectedCustomer}
-              profileState={profileState}
-              formResponsesState={formResponsesState}
-              tenantSlug={tenantSlug}
-              clientOwnershipEnabled={clientOwnershipEnabled}
-              onCustomerUpdated={async () => {
-                await loadCustomers();
-                if (selectedCustomerId) {
-                  setProfileState({ kind: "loading" });
-                  try {
-                    const profile = await platformApi.getCustomerProfile(tenantSlug, selectedCustomerId);
-                    setProfileState({ kind: "ready", profile });
-                  } catch (error) {
-                    setProfileState({
-                      kind: "error",
-                      message: readErrorMessage(error, "Unable to reload profile."),
-                    });
+            </header>
+            <div className="appointment-drawer-body">
+              <CustomerProfilePanel
+                customer={selectedCustomer}
+                profileState={profileState}
+                formResponsesState={formResponsesState}
+                tenantSlug={tenantSlug}
+                clientOwnershipEnabled={clientOwnershipEnabled}
+                onCustomerUpdated={async () => {
+                  await loadCustomers();
+                  if (selectedCustomerId) {
+                    setProfileState({ kind: "loading" });
+                    try {
+                      const profile = await platformApi.getCustomerProfile(tenantSlug, selectedCustomerId);
+                      setProfileState({ kind: "ready", profile });
+                    } catch (error) {
+                      setProfileState({
+                        kind: "error",
+                        message: readErrorMessage(error, "Unable to reload profile."),
+                      });
+                    }
                   }
-                }
-              }}
-            />
+                }}
+              />
+            </div>
           </aside>
         </>
       ) : null}
@@ -595,61 +600,57 @@ function CustomerProfilePanel({
     }
   };
   return (
-    <div className="customer-profile">
-      <header className="customer-profile-header">
-        <span
-          className="appointment-customer-avatar"
-          aria-hidden="true"
-          style={{ width: "3rem", height: "3rem", fontSize: "1rem" }}
-        >
-          {initialsOf(customer.name)}
-        </span>
-        <div>
-          <h4>{customer.name}</h4>
-          <p className="customer-profile-since">
-            Client since {formatDate(customer.createdAt)}
-          </p>
+    <>
+      {/* Customer header */}
+      <div className="booking-rail-section">
+        <div className="appointment-customer-card">
+          <span
+            className="appointment-customer-avatar"
+            aria-hidden="true"
+            style={{ width: "2.5rem", height: "2.5rem", fontSize: "0.9rem" }}
+          >
+            {initialsOf(customer.name)}
+          </span>
+          <div>
+            <strong className="appointment-customer-name">{customer.name}</strong>
+            <span className="appointment-customer-detail">
+              Client since {formatDate(customer.createdAt)}
+            </span>
+          </div>
         </div>
-      </header>
+      </div>
 
       {clientOwnershipEnabled ? (
-      <section className="customer-profile-section">
+      <div className="booking-rail-section">
         <p className="rail-section-kicker">Owner</p>
-        <div className="customer-owner-row">
-          <select
-            value={selectedOwnerId}
-            onChange={(e) => { void handleOwnerChange(e.target.value); }}
-            disabled={ownerSaveState === "submitting" || !ownerCandidatesLoaded}
-            className="customer-owner-select"
-          >
-            <option value="">Unassigned</option>
-            {ownerCandidates.map((u) => (
-              <option key={u.id} value={u.id}>{u.name}</option>
-            ))}
-          </select>
-          {ownerSaveState === "submitting" ? <span className="customer-owner-saving">Saving…</span> : null}
+        <div className="appointment-summary-card">
+          <div className="customer-owner-row">
+            <select
+              value={selectedOwnerId}
+              onChange={(e) => { void handleOwnerChange(e.target.value); }}
+              disabled={ownerSaveState === "submitting" || !ownerCandidatesLoaded}
+              className="customer-owner-select"
+            >
+              <option value="">Unassigned</option>
+              {ownerCandidates.map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+            {ownerSaveState === "submitting" ? <span className="customer-owner-saving">Saving…</span> : null}
+          </div>
         </div>
         {ownerSaveState === "error" ? <p role="alert" className="settings-error">{ownerError}</p> : null}
-      </section>
+      </div>
       ) : null}
 
-      <section className="customer-profile-section customer-profile-money">
+      <div className="booking-rail-section">
         <p className="rail-section-kicker">Money</p>
         {profileState.kind === "ready" ? (
-          <div className="customer-money-summary">
-            <div className="customer-money-row">
-              <span>Lifetime spend</span>
-              <strong>{formatMoney(profileState.profile.lifetimeSpendCents)}</strong>
-            </div>
-            <div className="customer-money-row">
-              <span>Wallet balance</span>
-              <strong>{formatMoney(profileState.profile.walletBalanceCents)}</strong>
-            </div>
+          <div className="appointment-payment-summary">
+            <div className="appointment-payment-row"><span>Lifetime spend</span><span>{formatMoney(profileState.profile.lifetimeSpendCents)}</span></div>
+            <div className="appointment-payment-row"><span>Wallet balance</span><span>{formatMoney(profileState.profile.walletBalanceCents)}</span></div>
             {profileState.profile.outstandingBalanceCents > 0 ? (
-              <div className="customer-money-row customer-money-row--outstanding">
-                <span>Outstanding</span>
-                <strong>{formatMoney(profileState.profile.outstandingBalanceCents)}</strong>
-              </div>
+              <div className="appointment-payment-row appointment-payment-row--due"><span>Outstanding</span><span>{formatMoney(profileState.profile.outstandingBalanceCents)}</span></div>
             ) : null}
             {isAdjustingWallet ? (
               <div className="customer-notes-editor" style={{ marginTop: "0.75rem" }}>
@@ -685,15 +686,15 @@ function CustomerProfilePanel({
                 {walletSaveState === "error" ? <p role="alert" className="settings-error">{walletError}</p> : null}
               </div>
             ) : (
-              <button type="button" className="text-action" onClick={() => setIsAdjustingWallet(true)} style={{ marginTop: "0.5rem" }}>Adjust wallet</button>
+              <button type="button" className="link-action" onClick={() => setIsAdjustingWallet(true)} style={{ marginTop: "0.5rem" }}>Adjust wallet</button>
             )}
           </div>
         ) : (
           <p className="staff-list-empty">Loading…</p>
         )}
-      </section>
+      </div>
 
-      <section className="customer-profile-section">
+      <div className="booking-rail-section">
         <p className="rail-section-kicker">Contact</p>
         {isEditingContact ? (
           <div className="customer-notes-editor">
@@ -758,23 +759,13 @@ function CustomerProfilePanel({
             ) : null}
           </div>
         ) : (
-          <div className="customer-notes-display">
-            <div className="appointment-customer-fields">
+          <div className="appointment-summary-card">
+            <div className="appointment-field-list">
               {customer.email ? (
-                <div className="appointment-customer-field">
-                  <span className="appointment-customer-field__label">Email</span>
-                  <span className="appointment-customer-field__value">
-                    {customer.email}
-                  </span>
-                </div>
+                <div className="appointment-field-row"><span>Email</span><span>{customer.email}</span></div>
               ) : null}
               {customer.phone ? (
-                <div className="appointment-customer-field">
-                  <span className="appointment-customer-field__label">Phone</span>
-                  <span className="appointment-customer-field__value">
-                    {customer.phone}
-                  </span>
-                </div>
+                <div className="appointment-field-row"><span>Phone</span><span>{customer.phone}</span></div>
               ) : null}
               {!customer.email && !customer.phone ? (
                 <p className="staff-list-empty">No contact information on file.</p>
@@ -782,7 +773,7 @@ function CustomerProfilePanel({
             </div>
             <button
               type="button"
-              className="text-action"
+              className="link-action"
               onClick={() => {
                 setContactDraft({
                   name: customer.name,
@@ -791,44 +782,47 @@ function CustomerProfilePanel({
                 });
                 setIsEditingContact(true);
               }}
+              style={{ marginTop: "0.5rem" }}
             >
-              Edit
+              Edit contact
             </button>
           </div>
         )}
-      </section>
+      </div>
 
-      <section className="customer-profile-section">
+      <div className="booking-rail-section">
         <p className="rail-section-kicker">SMS reminders</p>
-        <label className="settings-toggle-field" style={{ padding: 0 }}>
-          <input
-            type="checkbox"
-            checked={smsConsent}
-            onChange={(e) => { void handleSmsConsentChange(e.target.checked); }}
-            disabled={smsSaveState === "submitting"}
-          />
-          <span>
-            <strong>SMS consent</strong>
-            <small>Customer agrees to receive SMS appointment reminders.</small>
-          </span>
-        </label>
-        {smsConsent ? (
-          <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.4rem" }}>
+        <div className="appointment-summary-card">
+          <label className="settings-toggle-field" style={{ padding: 0 }}>
             <input
-              type="tel"
-              value={smsPhone}
-              onChange={(e) => setSmsPhone(e.target.value)}
-              onBlur={() => { if (smsPhone.trim() && smsPhone !== (customer.smsPhone ?? customer.phone ?? "")) handleSmsPhoneSave(); }}
-              placeholder="SMS phone number"
+              type="checkbox"
+              checked={smsConsent}
+              onChange={(e) => { void handleSmsConsentChange(e.target.checked); }}
               disabled={smsSaveState === "submitting"}
-              style={{ flex: 1, padding: "0.35rem 0.5rem", fontSize: "0.85rem", border: "1px solid var(--color-border, rgba(0,0,0,0.18))", borderRadius: "4px" }}
             />
-          </div>
-        ) : null}
+            <span>
+              <strong>SMS consent</strong>
+              <small>Customer agrees to receive SMS appointment reminders.</small>
+            </span>
+          </label>
+          {smsConsent ? (
+            <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.4rem" }}>
+              <input
+                type="tel"
+                value={smsPhone}
+                onChange={(e) => setSmsPhone(e.target.value)}
+                onBlur={() => { if (smsPhone.trim() && smsPhone !== (customer.smsPhone ?? customer.phone ?? "")) handleSmsPhoneSave(); }}
+                placeholder="SMS phone number"
+                disabled={smsSaveState === "submitting"}
+                style={{ flex: 1, padding: "0.35rem 0.5rem", fontSize: "0.85rem", border: "1px solid var(--color-border, rgba(0,0,0,0.18))", borderRadius: "4px" }}
+              />
+            </div>
+          ) : null}
+        </div>
         {smsSaveState === "error" ? <p role="alert" className="settings-error" style={{ marginTop: "0.25rem" }}>Unable to save SMS settings.</p> : null}
-      </section>
+      </div>
 
-      <section className="customer-profile-section">
+      <div className="booking-rail-section">
         <p className="rail-section-kicker">Notes</p>
         {isEditingNotes ? (
           <div className="customer-notes-editor">
@@ -866,7 +860,7 @@ function CustomerProfilePanel({
             ) : null}
           </div>
         ) : (
-          <div className="customer-notes-display">
+          <div className="appointment-summary-card">
             {customer.notes ? (
               <p className="customer-profile-notes">{customer.notes}</p>
             ) : (
@@ -874,19 +868,20 @@ function CustomerProfilePanel({
             )}
             <button
               type="button"
-              className="text-action"
+              className="link-action"
               onClick={() => {
                 setNotesDraft(customer.notes ?? "");
                 setIsEditingNotes(true);
               }}
+              style={{ marginTop: "0.5rem" }}
             >
               {customer.notes ? "Edit" : "Add note"}
             </button>
           </div>
         )}
-      </section>
+      </div>
 
-      <section className="customer-profile-section">
+      <div className="booking-rail-section">
         <p className="rail-section-kicker">Booking history</p>
         {profileState.kind === "loading" ? (
           <p>Loading bookings...</p>
@@ -907,9 +902,9 @@ function CustomerProfilePanel({
         ) : (
           <p className="staff-list-empty">Select a customer to load bookings.</p>
         )}
-      </section>
+      </div>
 
-      <section className="customer-profile-section">
+      <div className="booking-rail-section">
         <p className="rail-section-kicker">Form responses</p>
         {formResponsesState.kind === "loading" ? (
           <p>Loading form responses...</p>
@@ -935,8 +930,8 @@ function CustomerProfilePanel({
         ) : (
           <p className="staff-list-empty">Select a customer to load form responses.</p>
         )}
-      </section>
-    </div>
+      </div>
+    </>
   );
 }
 
