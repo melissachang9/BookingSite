@@ -421,23 +421,6 @@ async def _load_manage_booking_context(
     return booking, tenant
 
 
-def _decode_customer_manage_token(token: str) -> tuple[str, str]:
-    """Decode a manage token to extract customerId and tenantId."""
-    try:
-        payload = decode_token(token)
-    except Exception as error:  # noqa: BLE001
-        raise api_exception(404, "not_found", MANAGE_LINK_ERROR_MESSAGE) from error
-
-    if payload.get("tokenType") != "customer_manage":
-        raise api_exception(404, "not_found", MANAGE_LINK_ERROR_MESSAGE)
-
-    customer_id = payload.get("customerId")
-    tenant_id = payload.get("tenantId")
-    if not isinstance(customer_id, str) or not isinstance(tenant_id, str):
-        raise api_exception(404, "not_found", MANAGE_LINK_ERROR_MESSAGE)
-
-    return customer_id, tenant_id
-
 
 async def list_customer_bookings(
     session: AsyncSession,
@@ -446,7 +429,27 @@ async def list_customer_bookings(
     """List all bookings for a customer, identified by manage token."""
     from app.services.bookings import list_bookings
 
-    customer_id, tenant_id = _decode_customer_manage_token(token)
+    # Try to decode customerId from token; fall back to resolving from booking
+    try:
+        payload = decode_token(token)
+    except Exception as error:  # noqa: BLE001
+        raise api_exception(404, "not_found", MANAGE_LINK_ERROR_MESSAGE) from error
+
+    if payload.get("tokenType") != "customer_manage":
+        raise api_exception(404, "not_found", MANAGE_LINK_ERROR_MESSAGE)
+
+    tenant_id = payload.get("tenantId")
+    if not isinstance(tenant_id, str):
+        raise api_exception(404, "not_found", MANAGE_LINK_ERROR_MESSAGE)
+
+    customer_id = payload.get("customerId")
+    if not isinstance(customer_id, str):
+        # Fallback: resolve customer from the booking the token points to
+        booking_id = payload.get("bookingId")
+        if not isinstance(booking_id, str):
+            raise api_exception(404, "not_found", MANAGE_LINK_ERROR_MESSAGE)
+        booking = await _load_booking(session, booking_id, tenant_id)
+        customer_id = booking.customer_id
 
     # Load tenant to get slug
     tenant = await session.scalar(
@@ -458,7 +461,12 @@ async def list_customer_bookings(
     return await list_bookings(
         session,
         tenant.slug,
+        status_filters=None,
+        starts_at_gte=None,
+        starts_at_lte=None,
+        provider_id=None,
         customer_id=customer_id,
+        location_id=None,
         limit=50,
         offset=0,
     )
