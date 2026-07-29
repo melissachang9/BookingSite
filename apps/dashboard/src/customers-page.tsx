@@ -482,7 +482,7 @@ function CustomerProfilePanel({
     setOwnerError("");
     try {
       const body: UpdateCustomerRequest = { ownerUserId: userId || null };
-      await platformApi.updateCustomer(customer.tenantId, customer.id, body);
+      await platformApi.updateCustomer(tenantSlug, customer.id, body);
       setOwnerSaveState("idle");
       if (onCustomerUpdated) {
         await onCustomerUpdated();
@@ -499,7 +499,7 @@ function CustomerProfilePanel({
     setSmsSaveState("submitting");
     try {
       const body: UpdateCustomerRequest = { smsConsent: consent, smsPhone: consent ? smsPhone || customer.phone || null : null };
-      await platformApi.updateCustomer(customer.tenantId, customer.id, body);
+      await platformApi.updateCustomer(tenantSlug, customer.id, body);
       setSmsSaveState("idle");
       if (onCustomerUpdated) await onCustomerUpdated();
     } catch (err) {
@@ -512,7 +512,7 @@ function CustomerProfilePanel({
     setSmsSaveState("submitting");
     try {
       const body: UpdateCustomerRequest = { smsPhone: smsPhone.trim() || null };
-      await platformApi.updateCustomer(customer.tenantId, customer.id, body);
+      await platformApi.updateCustomer(tenantSlug, customer.id, body);
       setSmsSaveState("idle");
       if (onCustomerUpdated) await onCustomerUpdated();
     } catch (err) {
@@ -537,7 +537,7 @@ function CustomerProfilePanel({
     setNotesError("");
     try {
       const body: UpdateCustomerRequest = { notes: notesDraft };
-      await platformApi.updateCustomer(customer.tenantId, customer.id, body);
+      await platformApi.updateCustomer(tenantSlug, customer.id, body);
       setIsEditingNotes(false);
       setNotesSaveState("idle");
       if (onCustomerUpdated) {
@@ -567,7 +567,7 @@ function CustomerProfilePanel({
         addressState: contactDraft.addressState.trim() || undefined,
         addressZip: contactDraft.addressZip.trim() || undefined,
       };
-      await platformApi.updateCustomer(customer.tenantId, customer.id, body);
+      await platformApi.updateCustomer(tenantSlug, customer.id, body);
       setIsEditingContact(false);
       setContactSaveState("idle");
       if (onCustomerUpdated) {
@@ -594,7 +594,7 @@ function CustomerProfilePanel({
         walletAdjustmentCents: cents,
         walletAdjustmentNote: walletNote.trim() || undefined,
       };
-      await platformApi.updateCustomer(customer.tenantId, customer.id, body);
+      await platformApi.updateCustomer(tenantSlug, customer.id, body);
       setIsAdjustingWallet(false);
       setWalletAmountText("");
       setWalletNote("");
