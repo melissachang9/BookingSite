@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { storefrontApi, isApiClientError, isApiNotFoundError } from "../../../lib/storefront-api";
-import { formatInTenantTime, slugify } from "../../../lib/storefront-shell";
+import { formatCurrency, formatInTenantTime, slugify } from "../../../lib/storefront-shell";
 
 type ProfileRouteProps = {
   params: Promise<{ token: string }>;
@@ -39,6 +39,11 @@ export default async function CustomerProfilePage({ params }: ProfileRouteProps)
 
     const upcoming = bookings.filter((b) => b.status === "confirmed" && new Date(b.startsAt) >= now);
     const past = bookings.filter((b) => b.status !== "confirmed" || new Date(b.startsAt) < now);
+
+    // Collect all payments across all bookings
+    const allPayments = bookings.flatMap((b) =>
+      (b.payments ?? []).map((p) => ({ ...p, bookingServiceName: b.service.name, bookingStartsAt: b.startsAt }))
+    ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     return (
       <main className="manage-page page-stack">
@@ -142,6 +147,30 @@ export default async function CustomerProfilePage({ params }: ProfileRouteProps)
                         : ""}
                   </p>
                 </Link>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {allPayments.length > 0 ? (
+          <section className="store-section">
+            <div className="section-header">
+              <div>
+                <p className="store-eyebrow">Payment history</p>
+                <h2>{allPayments.length} payment{allPayments.length === 1 ? "" : "s"}</h2>
+              </div>
+            </div>
+            <div className="summary-grid summary-grid--three">
+              {allPayments.map((p) => (
+                <article key={p.id} className="summary-card">
+                  <span>{p.status === "succeeded" ? "Paid" : p.status}</span>
+                  <strong>{formatCurrency(p.amountCents)}</strong>
+                  <p>
+                    {p.bookingServiceName}
+                    {" · "}
+                    {formatInTenantTime(p.bookingStartsAt, tenant.timezone)}
+                  </p>
+                </article>
               ))}
             </div>
           </section>
