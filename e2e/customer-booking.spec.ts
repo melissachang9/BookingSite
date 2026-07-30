@@ -653,3 +653,44 @@ test("customer can reschedule a confirmed booking from the manage link", async (
   expect(updatedBooking.startsAt).toContain(newDate);
   expect(updatedBooking.status).toBe("confirmed");
 });
+
+test("customer can access pre-visit forms from the manage link", async ({ page, request }) => {
+  test.setTimeout(60_000);
+
+  const startedBooking = await startBookingForService(page, request, "New Client Consultation");
+
+  await saveContactDetails(page, {
+    name: "Pre-Visit Forms Guest",
+    email: "previsit-forms@example.com",
+    phone: "555-0500",
+  });
+
+  await expect(page.getByRole("button", { name: "Confirm booking" })).toBeEnabled();
+
+  await Promise.all([
+    page.waitForURL(new RegExp(`/${startedBooking.tenant.slug}/book/${startedBooking.bookingDraftId}/success\\?bookingId=`)),
+    page.getByRole("button", { name: "Confirm booking" }).click(),
+  ]);
+
+  await expect(page.getByRole("heading", { name: "Your appointment is confirmed." })).toBeVisible({ timeout: 15_000 });
+
+  // Navigate to manage booking page
+  const managePanel = page.locator(".support-panel").filter({ has: page.getByText("Need to update this visit?") });
+  const manageLink = managePanel.getByRole("link", { name: "Manage booking" });
+  const manageHref = await manageLink.getAttribute("href");
+  expect(manageHref).toBeTruthy();
+  if (!manageHref) throw new Error("Manage link href missing.");
+
+  await page.goto(manageHref);
+  await expect(page.getByRole("heading", { name: "Manage your appointment." })).toBeVisible({ timeout: 15_000 });
+
+  // Click "Complete forms" link
+  const formsLink = page.getByRole("link", { name: "Complete forms" });
+  await expect(formsLink).toBeVisible();
+  const formsHref = await formsLink.getAttribute("href");
+  expect(formsHref).toMatch(/\/forms\//);
+
+  await page.goto(formsHref!);
+  await expect(page.getByRole("heading", { name: /complete your forms|all forms are complete/i })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(startedBooking.service.name)).toBeVisible();
+});
