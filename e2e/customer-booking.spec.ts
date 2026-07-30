@@ -295,6 +295,40 @@ test("customer can confirm a zero-deposit consultation", async ({ page, request 
   await expectSlotConflict(request, startedBooking.tenant.slug, startedBooking.draft);
 });
 
+test("confirmed booking has SMS and email reminders scheduled", async ({ page, request }) => {
+  test.setTimeout(60_000);
+
+  const startedBooking = await startBookingForService(page, request, "New Client Consultation");
+
+  await saveContactDetails(page, {
+    name: "Reminder Guest",
+    email: "reminders@example.com",
+    phone: "555-0700",
+  });
+
+  // Verify reminder text is visible on the review page
+  await expect(page.getByText(/Reminder email and text scheduled/)).toBeVisible();
+
+  await Promise.all([
+    page.waitForURL(new RegExp(`/${startedBooking.tenant.slug}/book/${startedBooking.bookingDraftId}/success\\?bookingId=`)),
+    page.getByRole("button", { name: "Confirm booking" }).click(),
+  ]);
+
+  await expect(page.getByRole("heading", { name: "Your appointment is confirmed." })).toBeVisible({ timeout: 15_000 });
+
+  const bookingId = readBookingIdFromSuccessURL(page);
+  expect(bookingId).toBeTruthy();
+  if (!bookingId) throw new Error("Booking id missing.");
+
+  const booking = await getBooking(request, startedBooking.tenant.slug, bookingId);
+  expect(booking.status).toBe("confirmed");
+
+  // Verify intake plan has reminders scheduled
+  expect(booking.intakePlan).toBeDefined();
+  expect(booking.intakePlan!.status).toBe("reminders_scheduled");
+  expect(booking.intakePlan!.completionTiming).toBe("before_visit");
+});
+
 test("customer can open a manage link after confirmation", async ({ page, request }) => {
   test.setTimeout(60_000);
 
