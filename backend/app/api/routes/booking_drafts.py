@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies.auth import require_tenant_permission
 from app.db.models import User
 from app.db.session import get_db_session
 from app.schemas.bookings import BookingSummaryResponse
