@@ -6,6 +6,7 @@ Triggered by cron every 15 minutes.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from html import escape
 
@@ -15,6 +16,8 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models import Booking, Tenant
 from app.services.notifications import send_transactional_email, send_transactional_sms
+
+logger = logging.getLogger(__name__)
 
 
 _APPOINTMENT_REMINDER_MIN_GAP = timedelta(hours=6)
@@ -124,6 +127,7 @@ async def send_due_appointment_reminders(session: AsyncSession) -> dict[str, int
                     html_body=html_body,
                 )
             except Exception:
+                logger.exception("Failed to send appointment email reminder for booking %s to %s", booking.id, booking.customer.email)
                 failed += 1
                 continue
 
@@ -140,6 +144,7 @@ async def send_due_appointment_reminders(session: AsyncSession) -> dict[str, int
                     body=sms_body,
                 )
             except Exception:
+                logger.exception("Failed to send appointment SMS reminder for booking %s to %s", booking.id, booking.customer.sms_phone)
                 failed += 1
                 continue
 

@@ -14,6 +14,11 @@ from app.core.config import get_settings
 from app.db.seed import seed_demo_data
 from app.db.session import dispose_engine, get_session_maker, initialize_database
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    handlers=[logging.StreamHandler()],
+)
 logger = logging.getLogger(__name__)
 
 
@@ -28,6 +33,16 @@ async def lifespan(_: FastAPI):
 
     await cleanup_expired_slot_holds()  # run once on startup
     cleanup_task = asyncio.create_task(run_periodic_cleanup())
+
+    async def _watchdog(task: asyncio.Task, name: str) -> None:
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("Background task %s died unexpectedly", name)
+
+    asyncio.create_task(_watchdog(cleanup_task, "slot_hold_cleanup"))
 
     yield
 

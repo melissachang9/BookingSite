@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from html import escape
 
@@ -15,6 +16,8 @@ from app.db.models import (
     Tenant,
 )
 from app.services.notifications import send_transactional_email, send_transactional_sms
+
+logger = logging.getLogger(__name__)
 
 
 def _format_booking_start(starts_at: datetime) -> str:
@@ -92,6 +95,7 @@ async def send_due_intake_reminders(session: AsyncSession) -> dict[str, int]:
             plan.email_reminder_sent_at = now
             sent += 1
         except Exception:
+            logger.exception("Failed to send intake email reminder to %s", draft.customer.email)
             failed += 1
 
     # SMS reminders
@@ -142,6 +146,7 @@ async def send_due_intake_reminders(session: AsyncSession) -> dict[str, int]:
             plan.sms_reminder_sent_at = now
             sent += 1
         except Exception:
+            logger.exception("Failed to send intake SMS reminder to %s", draft.customer.sms_phone)
             failed += 1
 
     if sent > 0 or skipped > 0 or failed > 0:
@@ -282,6 +287,7 @@ async def send_due_confirmed_booking_form_reminders(session: AsyncSession) -> di
             booking.last_form_reminder_sent_at = now
             sent += 1
         except Exception:
+            logger.exception("Failed to send form reminder for booking %s to %s", booking.id, booking.customer.email)
             failed += 1
 
     if sent > 0 or skipped > 0 or failed > 0:

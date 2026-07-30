@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
@@ -13,6 +14,8 @@ from app.schemas.payments import ApplyWalletCreditRequest, RecordManualPaymentRe
 from app.services.booking_drafts import _cancellation_policy_for_booking, _load_booking
 from app.services.payment_processor import charge_stripe_no_show_fee, refund_payment_via_processor
 from app.services.presenters import booking_balance_due_cents, booking_to_summary
+
+logger = logging.getLogger(__name__)
 from app.services.state_machine import guard_transition
 from app.services.wallet import record_wallet_transaction
 
@@ -506,7 +509,10 @@ async def _deliver_post_visit_forms(session: AsyncSession, booking: Booking) -> 
                     ),
                 )
             except Exception:
-                pass  # Don't block completion if email fails
+                logger.exception(
+                    "Post-visit form email failed for booking %s, customer %s",
+                    booking.id, customer.id if customer else "unknown",
+                )
 
 
 async def update_booking_status(
@@ -631,7 +637,10 @@ async def update_booking_status(
                     idempotency_key=f"no-show-{booking.id}",
                 )
             except Exception:
-                pass  # Charge failed; still record the payment as pending
+                logger.exception(
+                    "No-show fee charge failed for booking %s, customer %s, amount %d cents",
+                    booking.id, booking.customer_id, no_show_fee_cents,
+                )
 
         no_show_payment = Payment(
             tenant_id=booking.tenant_id,
