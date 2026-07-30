@@ -36,7 +36,6 @@ export default async function TenantLayout({ children, params }: TenantLayoutPro
         </Link>
 
         <nav className="tenant-nav tenant-nav--minimal" aria-label="Customer booking routes">
-          <Link href="/cancel/demo-token">Manage booking</Link>
           {homepageUrl ? (
             <a href={homepageUrl} target="_blank" rel="noreferrer">
               Visit website
