@@ -589,3 +589,67 @@ test("customer can click inside date field in required pre-booking form", async 
     });
   }
 });
+
+test("customer can reschedule a confirmed booking from the manage link", async ({ page, request }) => {
+  test.setTimeout(90_000);
+
+  const startedBooking = await startBookingForService(page, request, "New Client Consultation");
+
+  await saveContactDetails(page, {
+    name: "Reschedule Guest",
+    email: "reschedule@example.com",
+    phone: "555-0400",
+  });
+
+  await expect(page.getByRole("button", { name: "Confirm booking" })).toBeEnabled();
+
+  await Promise.all([
+    page.waitForURL(new RegExp(`/${startedBooking.tenant.slug}/book/${startedBooking.bookingDraftId}/success\\?bookingId=`)),
+    page.getByRole("button", { name: "Confirm booking" }).click(),
+  ]);
+
+  await expect(page.getByRole("heading", { name: "Your appointment is confirmed." })).toBeVisible({ timeout: 15_000 });
+
+  const bookingId = readBookingIdFromSuccessURL(page);
+  expect(bookingId).toBeTruthy();
+  if (!bookingId) throw new Error("Booking id missing from success URL.");
+
+  const originalBooking = await getBooking(request, startedBooking.tenant.slug, bookingId);
+  const originalStartsAt = originalBooking.startsAt;
+
+  // Navigate to manage booking page
+  const managePanel = page.locator(".support-panel").filter({ has: page.getByText("Need to update this visit?") });
+  const manageLink = managePanel.getByRole("link", { name: "Manage booking" });
+  const manageHref = await manageLink.getAttribute("href");
+  expect(manageHref).toBeTruthy();
+  if (!manageHref) throw new Error("Manage link href missing.");
+
+  await page.goto(manageHref);
+  await expect(page.getByRole("heading", { name: "Manage your appointment." })).toBeVisible({ timeout: 15_000 });
+
+  // Find the reschedule section and pick a new date
+  await expect(page.getByRole("heading", { name: "Change your appointment time" })).toBeVisible();
+
+  // Pick a date one week later
+  const nextWeek = new Date();
+  nextWeek.setDate(nextWeek.getDate() + 7);
+  const newDate = nextWeek.toISOString().slice(0, 10);
+
+  await page.getByLabel("New date").fill(newDate);
+  await page.getByLabel("New time").fill("14:00");
+  await page.getByRole("textbox", { name: "Reason for rescheduling" }).fill("Schedule conflict.");
+
+  await Promise.all([
+    page.waitForURL(/rescheduled=1/),
+    page.getByRole("button", { name: "Reschedule appointment" }).click(),
+  ]);
+
+  await expect(page.getByRole("heading", { name: "Manage your appointment." })).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator(".status-banner strong").filter({ hasText: "Appointment rescheduled." }).first()).toBeVisible();
+
+  // Verify the booking was actually rescheduled
+  const updatedBooking = await getBooking(request, startedBooking.tenant.slug, bookingId);
+  expect(updatedBooking.startsAt).not.toBe(originalStartsAt);
+  expect(updatedBooking.startsAt).toContain(newDate);
+  expect(updatedBooking.status).toBe("confirmed");
+});
