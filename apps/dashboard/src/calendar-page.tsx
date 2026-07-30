@@ -2515,8 +2515,15 @@ function CalendarBoard({
                   ? minutesInTenantDay(column.openings[0].startAt)
                   : scheduleStartMinute;
               const startMinute = Math.max(scheduleStartMinute, Math.min(scheduleEndMinute - 15, roundToQuarterHour(clickedMinutes)));
+              // Snap to the nearest actual opening slot
+              const snappedMinute = column.openings.length > 0
+                ? column.openings.reduce((best, opening) => {
+                    const openingMinute = minutesInTenantDay(opening.startAt);
+                    return Math.abs(openingMinute - startMinute) < Math.abs(best - startMinute) ? openingMinute : best;
+                  }, startMinute)
+                : startMinute;
               const durationMinutes = timeBlockDurationMinutes;
-              const endMinute = Math.min(scheduleEndMinute, startMinute + durationMinutes);
+              const endMinute = Math.min(scheduleEndMinute, snappedMinute + durationMinutes);
               const providerId = column.providerId ?? slotProviderOptions[0]?.id ?? null;
               const providerName = column.providerName ?? slotProviderOptions[0]?.name ?? null;
               const providerOpening = providerId ? column.openings.find((opening) => opening.providerId === providerId) : column.openings[0];
@@ -2526,7 +2533,7 @@ function CalendarBoard({
                 providerId,
                 providerName,
                 locationId: providerOpening?.locationId,
-                startAt: toTenantDateTimeIso(column.date, startMinute),
+                startAt: toTenantDateTimeIso(column.date, snappedMinute),
                 endAt: toTenantDateTimeIso(column.date, endMinute),
                 openings: column.openings,
                 providerOptions: slotProviderOptions,
