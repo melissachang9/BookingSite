@@ -365,7 +365,7 @@ function toTenantDateTimeIso(date: string, minuteOfDay: number): string {
   const minute = safeMinute % 60;
   const hourText = String(hour).padStart(2, "0");
   const minuteText = String(minute).padStart(2, "0");
-  return new Date(`${date}T${hourText}:${minuteText}:00-07:00`).toISOString();
+  return new Date(`${date}T${hourText}:${minuteText}:00Z`).toISOString();
 }
 
 function formatTimeInputValue(value: string): string {
