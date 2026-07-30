@@ -186,6 +186,12 @@ export type UpdateBookingDraftRequest = {
   intakeCompletionTiming?: IntakeCompletionTiming;
 };
 
+export type ConfirmWithPaymentRequest = {
+  paymentMethodType?: string;
+  amountCents: number;
+  notes?: string;
+};
+
 export type BookingStatusTransition = {
   bookingId: UUID;
   fromStatus: BookingState;

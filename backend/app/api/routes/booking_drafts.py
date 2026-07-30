@@ -1,15 +1,17 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models import User
 from app.db.session import get_db_session
 from app.schemas.bookings import BookingSummaryResponse
 from app.schemas.booking_drafts import (
     BookingDraftSummaryResponse,
+    ConfirmWithPaymentRequest,
     CreateBookingDraftRequest,
     UpdateBookingDraftRequest,
 )
 from app.schemas.forms import FormRequirementResponse, FormResponseSummaryResponse, SubmitFormRequirementRequest
-from app.services.booking_drafts import confirm_booking_draft, create_booking_draft, get_booking_draft, update_booking_draft
+from app.services.booking_drafts import confirm_booking_draft, confirm_booking_draft_with_payment, create_booking_draft, get_booking_draft, update_booking_draft
 from app.services.booking_forms import save_booking_form_requirement_draft, submit_booking_form_requirement
 
 
@@ -67,6 +69,21 @@ async def confirm_booking_draft_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingSummaryResponse:
     return await confirm_booking_draft(session, tenant_slug, booking_draft_id)
+
+
+@router.post(
+    "/tenants/{tenant_slug}/booking-drafts/{booking_draft_id}/confirm-with-payment",
+    response_model=BookingSummaryResponse,
+    summary="Confirm a booking draft and record an in-person payment (staff-side)",
+)
+async def confirm_booking_draft_with_payment_route(
+    tenant_slug: str,
+    booking_draft_id: str,
+    payload: ConfirmWithPaymentRequest,
+    current_user: User = Depends(require_tenant_permission("bookings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> BookingSummaryResponse:
+    return await confirm_booking_draft_with_payment(session, tenant_slug, booking_draft_id, payload, current_user)
 
 
 @router.post(

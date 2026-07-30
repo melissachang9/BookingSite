@@ -24,6 +24,33 @@ const STATUS_LABELS: Record<string, string> = {
   no_show: "No-show",
 };
 
+const PAYMENT_LABELS: Record<string, string> = {
+  succeeded: "Paid",
+  refunded: "Refunded",
+  failed: "Failed",
+  pending: "Pending",
+};
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  stripe: "Credit card (online)",
+  card: "Credit card (in-person)",
+  cash: "Cash",
+  manual: "Manual",
+  external_pos: "External POS",
+  no_show_fee: "No-show fee",
+};
+
+function paymentMethodLabel(paymentMethodType: string): string {
+  return PAYMENT_METHOD_LABELS[paymentMethodType] ?? paymentMethodType;
+}
+
+function paymentLabel(p: { status: string; depositStatus: string; paymentMethodType: string }): string {
+  if (p.depositStatus === "refunded") return "Refunded";
+  if (p.depositStatus === "forfeited") return "Forfeited";
+  if (p.status === "succeeded") return paymentMethodLabel(p.paymentMethodType);
+  return PAYMENT_LABELS[p.status] ?? p.status;
+}
+
 export default async function CustomerProfilePage({ params }: ProfileRouteProps) {
   const { token } = await params;
 
@@ -163,7 +190,7 @@ export default async function CustomerProfilePage({ params }: ProfileRouteProps)
             <div className="summary-grid summary-grid--three">
               {allPayments.map((p) => (
                 <article key={p.id} className="summary-card">
-                  <span>{p.status === "succeeded" ? "Paid" : p.status}</span>
+                  <span>{paymentLabel(p)}</span>
                   <strong>{formatCurrency(p.amountCents)}</strong>
                   <p>
                     {p.bookingServiceName}

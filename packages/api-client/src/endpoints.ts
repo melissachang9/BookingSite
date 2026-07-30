@@ -318,6 +318,11 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.request<BookingSummary>(`tenants/${tenantSlug}/booking-drafts/${bookingDraftId}/confirm`, {
       method: "POST",
     }),
+  confirmBookingDraftWithPayment: (tenantSlug: string, bookingDraftId: string, body: ConfirmWithPaymentRequest) =>
+    client.request<BookingSummary>(`tenants/${tenantSlug}/booking-drafts/${bookingDraftId}/confirm-with-payment`, {
+      method: "POST",
+      body,
+    }),
   updateBookingDraft: (tenantSlug: string, bookingDraftId: string, body: UpdateBookingDraftRequest) =>
     client.patch<BookingDraftSummary, UpdateBookingDraftRequest>(
       `tenants/${tenantSlug}/booking-drafts/${bookingDraftId}`,

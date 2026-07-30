@@ -66,6 +66,12 @@ class UpdateBookingDraftRequest(CamelModel):
     intake_completion_timing: IntakeCompletionTiming | None = None
 
 
+class ConfirmWithPaymentRequest(CamelModel):
+    payment_method_type: str = "card"
+    amount_cents: int
+    notes: str | None = None
+
+
 class BookingDraftSummaryResponse(CamelModel):
     id: str
     tenant_id: str

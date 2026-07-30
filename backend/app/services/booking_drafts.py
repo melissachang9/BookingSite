@@ -26,12 +26,13 @@ from app.db.models import (
     ServiceLocation,
     SlotHold,
     Tenant,
+    User,
 )
 from app.schemas.bookings import BookingListResponse, BookingSummaryResponse, CancelManageBookingRequest, CustomerManageBookingResponse, RescheduleManageBookingRequest
 from app.services.payment_processor import refund_payment_via_processor
 from app.services.state_machine import guard_transition
 from app.services.wallet import record_wallet_transaction
-from app.schemas.booking_drafts import BookingDraftSummaryResponse, CreateBookingDraftRequest, UpdateBookingDraftRequest
+from app.schemas.booking_drafts import BookingDraftSummaryResponse, ConfirmWithPaymentRequest, CreateBookingDraftRequest, UpdateBookingDraftRequest
 from app.services.availability import list_availability
 from app.services.presenters import booking_draft_to_summary, booking_to_summary, tenant_to_summary
 from app.services.tenants import get_tenant_by_slug
@@ -903,6 +904,88 @@ async def confirm_booking_draft(
             "bookingMethod": draft.booking_method,
         },
     )
+
+    await session.commit()
+    hydrated_booking = await _load_booking(session, booking.id, tenant.id)
+    return booking_to_summary(hydrated_booking)
+
+
+async def confirm_booking_draft_with_payment(
+    session: AsyncSession,
+    tenant_slug: str,
+    booking_draft_id: str,
+    payload: ConfirmWithPaymentRequest,
+    actor: User,
+) -> BookingSummaryResponse:
+    """Confirm a booking draft and record an in-person payment (staff-side)."""
+    from app.services.bookings import _append_payment_event, _append_booking_event, _apply_payment_resolution
+
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    draft = await _load_booking_draft(session, booking_draft_id, tenant.id)
+
+    if draft.confirmed_booking_id is not None:
+        booking = await _load_booking(session, draft.confirmed_booking_id, tenant.id)
+        return booking_to_summary(booking)
+
+    _ensure_not_expired(draft)
+
+    if draft.customer_id is None or draft.customer is None:
+        raise api_exception(400, "bad_request", "Customer details are required before confirming the booking.")
+
+    # Promote draft to booking
+    deposit_status = "paid" if payload.amount_cents > 0 else "not_required"
+    payment_resolution = "pending"
+    booking = await _promote_draft_to_booking(
+        session,
+        draft,
+        deposit_status=deposit_status,
+        payment_resolution=payment_resolution,
+        event_kind="deposit_collected_in_person",
+        event_amount_cents=payload.amount_cents,
+        event_payload={
+            "bookingDraftId": draft.id,
+            "bookingMethod": draft.booking_method,
+            "paymentMethodType": payload.payment_method_type,
+        },
+    )
+
+    # Record the payment
+    if payload.amount_cents > 0:
+        payment = Payment(
+            tenant_id=booking.tenant_id,
+            booking=booking,
+            customer_id=booking.customer_id,
+            status="succeeded",
+            deposit_status="paid",
+            amount_cents=payload.amount_cents,
+            currency="USD",
+            payment_method_type=payload.payment_method_type,
+            checkout_session_kind=None,
+        )
+        session.add(payment)
+        await session.flush()
+
+        _append_payment_event(
+            session,
+            payment,
+            kind="payment_recorded",
+            actor=actor,
+            amount_cents=payload.amount_cents,
+            notes=payload.notes or "In-person deposit collected by staff.",
+        )
+
+        _append_booking_event(
+            session,
+            booking,
+            event_kind="admin_completion",
+            actor=actor,
+            amount_cents=payload.amount_cents,
+            notes=payload.notes,
+            extra_payload={
+                "paymentMethodType": payload.payment_method_type,
+                "bookingStatus": booking.status,
+            },
+        )
 
     await session.commit()
     hydrated_booking = await _load_booking(session, booking.id, tenant.id)

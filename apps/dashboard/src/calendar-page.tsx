@@ -2797,10 +2797,20 @@ function SlotActionDrawer({
   const [pickerMonth, setPickerMonth] = useState<string>(monthAnchor(getUpcomingDate(1)));
   const pickerGrid = useMemo(() => buildMonthGrid(pickerMonth), [pickerMonth]);
   const datePickerContainerRef = useRef<HTMLDivElement | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState("card");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentNote, setPaymentNote] = useState("");
+  const [confirmPaymentState, setConfirmPaymentState] = useState<"idle" | "submitting" | "error">("idle");
+  const [confirmPaymentError, setConfirmPaymentError] = useState("");
   useEffect(() => {
     setMode("appointment");
     setShowDatePopover(false);
     setShowTimeInput(false);
+    setPaymentMethod("card");
+    setPaymentAmount("");
+    setPaymentNote("");
+    setConfirmPaymentState("idle");
+    setConfirmPaymentError("");
   }, [slotKey]);
   useEffect(() => {
     if (!showDatePopover) return;
@@ -3067,6 +3077,44 @@ function SlotActionDrawer({
                 Booking draft created and slot held for 15 minutes.
               </div>
             ) : null}
+            {draftCreationState.kind === "success" && selectedService && selectedService.depositCents > 0 ? (
+              <div className="appointment-summary-card" style={{ marginTop: "0.75rem" }}>
+                <p className="rail-section-kicker" style={{ marginBottom: "0.5rem" }}>Collect deposit</p>
+                <div className="slot-action-grid">
+                  <label>
+                    <span>Payment method</span>
+                    <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                      <option value="card">Credit card (in-person)</option>
+                      <option value="cash">Cash</option>
+                      <option value="external_pos">External POS</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Amount</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={paymentAmount || `$${(selectedService.depositCents / 100).toFixed(2)}`}
+                      onChange={(e) => setPaymentAmount(e.target.value)}
+                      placeholder={`$${(selectedService.depositCents / 100).toFixed(2)}`}
+                    />
+                  </label>
+                </div>
+                <label className="time-block-notes-field" style={{ marginTop: "0.5rem" }}>
+                  <span>Payment note</span>
+                  <input
+                    type="text"
+                    value={paymentNote}
+                    onChange={(e) => setPaymentNote(e.target.value)}
+                    placeholder="e.g. Collected at front desk"
+                    style={{ width: "100%" }}
+                  />
+                </label>
+                {confirmPaymentState === "error" ? (
+                  <p role="alert" className="settings-error" style={{ marginTop: "0.5rem" }}>{confirmPaymentError}</p>
+                ) : null}
+              </div>
+            ) : null}
           </section>
         ) : (
           <section className="booking-rail-section" aria-label="Add time block from slot">
@@ -3132,9 +3180,37 @@ function SlotActionDrawer({
           <div className="appointment-drawer-footer__finalize">
             {isAppointmentMode ? (
               <>
-                <button type="button" className="primary-action" onClick={onBookAppointment} disabled={!canCreateDraft || draftCreationState.kind === "success"}>
-                  {draftCreationState.kind === "submitting" ? "Creating draft..." : draftCreationState.kind === "success" ? "Draft created" : "Book appointment"}
-                </button>
+                {draftCreationState.kind === "success" && selectedService && selectedService.depositCents > 0 ? (
+                  <button
+                    type="button"
+                    className="primary-action"
+                    disabled={confirmPaymentState === "submitting"}
+                    onClick={async () => {
+                      if (draftCreationState.kind !== "success") return;
+                      setConfirmPaymentState("submitting");
+                      setConfirmPaymentError("");
+                      try {
+                        const amountStr = paymentAmount.replace(/[^0-9.]/g, "") || `${selectedService!.depositCents / 100}`;
+                        const amountCents = Math.round(parseFloat(amountStr) * 100);
+                        await platformApi.confirmBookingDraftWithPayment(tenantSlug, draftCreationState.draftId, {
+                          paymentMethodType: paymentMethod,
+                          amountCents,
+                          notes: paymentNote.trim() || undefined,
+                        });
+                        onClose();
+                      } catch (err) {
+                        setConfirmPaymentState("error");
+                        setConfirmPaymentError(err instanceof Error ? err.message : "Unable to confirm booking.");
+                      }
+                    }}
+                  >
+                    {confirmPaymentState === "submitting" ? "Processing..." : `Confirm & collect deposit`}
+                  </button>
+                ) : (
+                  <button type="button" className="primary-action" onClick={onBookAppointment} disabled={!canCreateDraft || draftCreationState.kind === "success"}>
+                    {draftCreationState.kind === "submitting" ? "Creating draft..." : draftCreationState.kind === "success" ? "Draft created" : "Book appointment"}
+                  </button>
+                )}
                 {draftHref ? (
                   <a className="secondary-action" href={draftHref}>
                     Open draft in storefront
