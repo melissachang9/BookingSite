@@ -694,3 +694,62 @@ test("customer can access pre-visit forms from the manage link", async ({ page, 
   await expect(page.getByRole("heading", { name: /complete your forms|all forms are complete/i })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(startedBooking.service.name)).toBeVisible();
 });
+
+test("canceled paid booking has correct payment event trail", async ({ page, request }) => {
+  test.setTimeout(90_000);
+
+  const startedBooking = await startBookingForService(page, request, "Signature Facial", {
+    targetDate: nextWeekday(3),
+  });
+
+  await saveContactDetails(page, {
+    name: "Payment Trail Guest",
+    email: "payment-trail@example.com",
+    phone: "555-0600",
+  });
+
+  await Promise.all([
+    page.waitForURL(new RegExp(`/${startedBooking.tenant.slug}/book/${startedBooking.bookingDraftId}/payment\\?sessionId=`)),
+    page.getByRole("button", { name: "Continue to payment" }).click(),
+  ]);
+
+  await Promise.all([
+    page.waitForURL(new RegExp(`/${startedBooking.tenant.slug}/book/${startedBooking.bookingDraftId}/success\\?bookingId=`)),
+    page.getByRole("button", { name: "Pay deposit" }).click(),
+  ]);
+
+  const bookingId = readBookingIdFromSuccessURL(page);
+  expect(bookingId).toBeTruthy();
+  if (!bookingId) throw new Error("Booking id missing.");
+
+  // Verify payment exists before cancellation
+  let booking = await getBooking(request, startedBooking.tenant.slug, bookingId);
+  expect(booking.payments).toBeDefined();
+  expect(booking.payments!.length).toBeGreaterThan(0);
+  const depositPayment = booking.payments!.find((p) => p.status === "succeeded");
+  expect(depositPayment).toBeDefined();
+
+  // Cancel from manage link
+  const managePanel = page.locator(".support-panel").filter({ has: page.getByText("Need to update this visit?") });
+  const manageLink = managePanel.getByRole("link", { name: "Manage booking" });
+  const manageHref = await manageLink.getAttribute("href");
+  expect(manageHref).toBeTruthy();
+  if (!manageHref) throw new Error("Manage link href missing.");
+
+  await page.goto(manageHref);
+  await expect(page.getByRole("heading", { name: "Manage your appointment." })).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("textbox", { name: "Reason for cancellation" }).fill("Testing payment trail.");
+
+  await Promise.all([
+    page.waitForURL(/canceled=1/),
+    page.getByRole("button", { name: "Cancel appointment" }).click(),
+  ]);
+
+  await expect(page.getByRole("heading", { name: "Your appointment is canceled." })).toBeVisible({ timeout: 15_000 });
+
+  // Verify payment was refunded
+  booking = await getBooking(request, startedBooking.tenant.slug, bookingId);
+  expect(booking.status).toBe("canceled");
+  expect(booking.depositStatus).toBe("refunded");
+  expect(booking.payments!.some((p) => p.status === "refunded")).toBeTruthy();
+});
