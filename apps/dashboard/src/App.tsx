@@ -6,7 +6,6 @@ import type {
   AuthenticatedUser,
   CreateTenantRequest,
   CreateTenantResponse,
-  DashboardReport,
   SessionResponse,
   TenantSummary,
 } from "@booking/shared-types";
@@ -91,16 +90,6 @@ const demoOwnerPassword = "DemoBooking123";
 const storefrontBaseUrl = import.meta.env.VITE_PUBLIC_STOREFRONT_BASE_URL ?? "http://127.0.0.1:3001";
 
 const routeDefinitions: RouteDefinition[] = [
-  {
-    path: "/dashboard",
-    title: "Overview",
-    eyebrow: "Command center",
-    description: "Daily operating signal for bookings, forms, payment exceptions, and follow-up work.",
-    metric: "Live shell",
-    tone: "ready",
-    workstreams: ["Today schedule", "Follow-up queue", "Payment exceptions"],
-    actions: ["Review day", "Open calendar", "Check API health"],
-  },
   {
     path: "/calendar",
     title: "Calendar",
@@ -284,7 +273,7 @@ function parseMoneyInput(value: string): number | null {
 
 const pageByPath = new Map(routeDefinitions.map((definition) => [definition.path.replace(/^\//, ""), definition]));
 const protectedRouteDefinitions = routeDefinitions.filter(
-  (definition) => definition.path !== "/dashboard" && definition.path !== "/onboarding",
+  (definition) => definition.path !== "/onboarding",
 );
 
 function hasPermission(user: AuthenticatedUser, key: string): boolean {
@@ -300,7 +289,7 @@ function getAuthNoticeMessage(): string | null {
 }
 
 function LoginRedirect() {
-  const redirectPathRef = useRef<string>(readStoredRedirectPath() ?? "/dashboard");
+  const redirectPathRef = useRef<string>(readStoredRedirectPath() ?? "/calendar");
 
   useEffect(() => {
     clearStoredRedirectPath();
@@ -327,11 +316,11 @@ function AuthenticatedLayout({
   onSignOut: () => void;
 }) {
   const location = useLocation();
-  const pathKey = location.pathname === "/" ? "dashboard" : location.pathname.replace(/^\//, "");
+  const pathKey = location.pathname === "/" ? "calendar" : location.pathname.replace(/^\//, "");
   const isCalendarRoute = pathKey === "calendar";
-  const currentDefinition = pageByPath.get(pathKey) ?? pageByPath.get("dashboard") ?? routeDefinitions[0];
+  const currentDefinition = pageByPath.get(pathKey) ?? pageByPath.get("calendar") ?? routeDefinitions[0];
 
-  const activePath = location.pathname === "/" ? "/dashboard" : location.pathname;
+  const activePath = location.pathname === "/" ? "/calendar" : location.pathname;
   const groupedPathsByGroup = useMemo(() => {
     const map = new Map<RouteGroupKey, RouteDefinition[]>();
     for (const definition of routeDefinitions) {
@@ -415,7 +404,7 @@ function AuthenticatedLayout({
             <NavLink
               key={definition.path}
               to={definition.path}
-              end={definition.path === "/dashboard"}
+              end={definition.path === "/calendar"}
               className={({ isActive }) => `ops-nav-link${isActive ? " ops-nav-link--active" : ""}`}
             >
               <span>{definition.title}</span>
@@ -666,7 +655,7 @@ export function App() {
 
   return (
     <Routes>
-      <Route path="/" element={<Navigate to={session === null ? "/login" : "/dashboard"} replace />} />
+      <Route path="/" element={<Navigate to={session === null ? "/login" : "/calendar"} replace />} />
       <Route path="/login" element={<LoginPage session={session} onSessionCreated={handleSessionCreated} />} />
       <Route
         path="/onboarding"
@@ -681,7 +670,6 @@ export function App() {
         <Route path="*" element={<RequireLoginRedirect />} />
       ) : (
         <Route element={<AuthenticatedLayout session={session} onSignOut={handleSignOut} />}>
-          <Route path="/dashboard" element={<DashboardHomePage tenantSlug={session.user.tenantSlug} />} />
           <Route
             path="/calendar"
             element={
@@ -727,112 +715,12 @@ export function App() {
             }
           />
           <Route path="/resources" element={<ResourcesPage definition={pageByPath.get("resources") ?? routeDefinitions[0]} currentUser={session.user} />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/calendar" replace />} />
         </Route>
       )}
     </Routes>
   );
 }
-
-function DashboardHomePage({ tenantSlug }: { tenantSlug: string }) {
-  const [report, setReport] = useState<DashboardReport | null>(null);
-  const [reportError, setReportError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    platformApi.getDashboardReport(tenantSlug)
-      .then((data) => { if (!cancelled) setReport(data); })
-      .catch((err) => { if (!cancelled) setReportError(err instanceof Error ? err.message : "Unable to load report."); });
-    return () => { cancelled = true; };
-  }, [tenantSlug]);
-
-  const currencyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
-  const formatMoney = (cents: number) => currencyFormatter.format(cents / 100);
-
-  const topPriorities = [
-    { label: "Upcoming", value: report ? String(report.upcomingBookings) : "—", detail: "Confirmed bookings on the calendar." },
-    { label: "Completed this month", value: report ? String(report.completedThisMonth) : "—", detail: "Visits finished this month." },
-    { label: "Revenue this month", value: report ? formatMoney(report.revenueThisMonthCents) : "—", detail: "Succeeded payments this month." },
-    { label: "No-shows this month", value: report ? String(report.noShowsThisMonth) : "—", detail: "Missed appointments this month." },
-  ];
-
-  const operatorQueues = [
-    { title: "Balance follow-up", count: report ? String(report.balanceFollowUpCount) : "—", detail: "Completed bookings with follow-up payment outcomes." },
-    { title: "Confirmed", count: report ? String(report.confirmedBookings) : "—", detail: "Active confirmed bookings." },
-    { title: "Completed", count: report ? String(report.completedBookings) : "—", detail: "Total completed bookings." },
-    { title: "Canceled", count: report ? String(report.canceledBookings) : "—", detail: "Total canceled bookings." },
-  ];
-
-  return (
-    <main className="ops-page-stack">
-      <section className="ops-hero">
-        <div className="ops-hero-copy">
-          <p className="eyebrow">Operator command center</p>
-          <h3>Keep the day moving before a client ever walks in.</h3>
-          <p>
-            The dashboard is now shaped around the work that protects revenue: booking coverage, intake completion,
-            payment exceptions, and follow-up momentum.
-          </p>
-        </div>
-        <div className="ops-hero-panel">
-          <p className="eyebrow">Primary tenant</p>
-          <strong>{tenantSlug}</strong>
-          <span>Operator views are now scoped to the signed-in tenant session.</span>
-        </div>
-      </section>
-
-      <section className="ops-metric-grid" aria-label="Operational priorities">
-        {topPriorities.map((priority) => (
-          <article key={priority.label} className="metric-card">
-            <span>{priority.label}</span>
-            <strong>{priority.value}</strong>
-            <p>{priority.detail}</p>
-          </article>
-        ))}
-      </section>
-
-      <section className="ops-dashboard-grid">
-        <article className="ops-panel ops-panel--wide">
-          <div className="panel-title-row">
-            <div>
-              <p className="eyebrow">Workflow map</p>
-              <h4>High-value surfaces</h4>
-            </div>
-            <NavLink to="/calendar" className="text-action">
-              Open calendar
-            </NavLink>
-          </div>
-          <div className="module-grid">
-            {routeDefinitions.slice(1, 6).map((definition) => (
-              <NavLink key={definition.path} to={definition.path} className="module-tile">
-                <span className={`status-dot status-dot--${definition.tone}`} />
-                <strong>{definition.title}</strong>
-                <p>{definition.description}</p>
-              </NavLink>
-            ))}
-          </div>
-        </article>
-
-        <aside className="ops-panel queue-panel">
-          <p className="eyebrow">Queues</p>
-          <h4>Operator attention</h4>
-          <div className="queue-list">
-            {operatorQueues.map((queue) => (
-              <article key={queue.title} className="queue-item">
-                <span>{queue.count}</span>
-                <div>
-                  <strong>{queue.title}</strong>
-                  <p>{queue.detail}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-        </aside>
-      </section>
-    </main>
-  );
-}
-
 
 function OnboardingPage({
   definition,
