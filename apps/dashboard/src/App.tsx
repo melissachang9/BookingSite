@@ -458,47 +458,6 @@ function AuthenticatedLayout({
         {isCalendarRoute ? (
           <div className="sidebar-filters">
             <div className="sidebar-filters__head">
-              <span>Service types</span>
-              <span>▾</span>
-            </div>
-            <label className="sidebar-filter-check">
-              <input type="checkbox" defaultChecked />
-              <span className="sidebar-filter-check__box">✓</span>
-              <span className="sidebar-filter-dot" style={{ background: "var(--ui-cat-pink-bar)" }} />
-              Facials
-            </label>
-            <label className="sidebar-filter-check">
-              <input type="checkbox" defaultChecked />
-              <span className="sidebar-filter-check__box">✓</span>
-              <span className="sidebar-filter-dot" style={{ background: "var(--ui-cat-blue-bar)" }} />
-              Injectables
-            </label>
-            <label className="sidebar-filter-check">
-              <input type="checkbox" defaultChecked />
-              <span className="sidebar-filter-check__box">✓</span>
-              <span className="sidebar-filter-dot" style={{ background: "var(--ui-cat-peach-bar)" }} />
-              Laser &amp; skin
-            </label>
-            <label className="sidebar-filter-check">
-              <input type="checkbox" defaultChecked />
-              <span className="sidebar-filter-check__box">✓</span>
-              <span className="sidebar-filter-dot" style={{ background: "var(--ui-cat-purple-bar)" }} />
-              Peels
-            </label>
-            <label className="sidebar-filter-check">
-              <input type="checkbox" defaultChecked />
-              <span className="sidebar-filter-check__box">✓</span>
-              <span className="sidebar-filter-dot" style={{ background: "var(--ui-cat-green-bar)" }} />
-              Massage
-            </label>
-            <label className="sidebar-filter-check">
-              <input type="checkbox" defaultChecked />
-              <span className="sidebar-filter-check__box">✓</span>
-              <span className="sidebar-filter-dot" style={{ background: "var(--ui-cat-teal-bar)" }} />
-              Consultation
-            </label>
-
-            <div className="sidebar-filters__head" style={{ marginTop: "0.5rem" }}>
               <span>Status</span>
             </div>
             <div className="sidebar-legend">
