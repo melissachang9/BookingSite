@@ -522,11 +522,6 @@ function AuthenticatedLayout({
           </div>
         ) : null}
 
-        <section className="ops-sidebar-panel">
-          <p className="eyebrow">Current route</p>
-          <strong>{currentDefinition.title}</strong>
-          <span>{currentDefinition.description}</span>
-        </section>
       </aside>
 
       <div className="ops-main">
