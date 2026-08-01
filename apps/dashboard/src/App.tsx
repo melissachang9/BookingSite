@@ -494,12 +494,7 @@ function AuthenticatedLayout({
         </button>
         <header className="ops-topbar">
           <div>
-            {isCalendarRoute ? (
-              <div className="ops-topbar-search">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
-                <input placeholder="Search appointments, customers…" />
-              </div>
-            ) : (
+            {isCalendarRoute ? null : (
               <>
                 {currentDefinition.eyebrow ? <p className="eyebrow">{currentDefinition.eyebrow}</p> : null}
                 <h2>{currentDefinition.title}</h2>
