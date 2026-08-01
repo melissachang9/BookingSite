@@ -524,13 +524,18 @@ function AuthenticatedLayout({
   );
 }
 
+type SearchResult =
+  | { kind: "customer"; id: string; name: string; email?: string | null; phone?: string | null }
+  | { kind: "booking"; id: string; serviceName: string; customerName: string; startsAt: string; status: string };
+
 function CalendarSearchBar({ tenantSlug }: { tenantSlug: string }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Array<{ id: string; name: string; email?: string | null; phone?: string | null }>>([]);
+  const [results, setResults] = useState<SearchResult[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [searching, setSearching] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     if (!showDropdown) return;
@@ -543,13 +548,47 @@ function CalendarSearchBar({ tenantSlug }: { tenantSlug: string }) {
     return () => document.removeEventListener("mousedown", handler);
   }, [showDropdown]);
 
-  const handleSearch = async () => {
-    const trimmed = query.trim();
-    if (!trimmed) return;
+  const doSearch = async (q: string) => {
+    const trimmed = q.trim();
+    if (trimmed.length < 2) {
+      setResults([]);
+      setShowDropdown(false);
+      return;
+    }
     setSearching(true);
     try {
-      const response = await platformApi.listCustomers(tenantSlug, trimmed);
-      setResults(response.items.slice(0, 8));
+      const [customers, bookings] = await Promise.all([
+        platformApi.listCustomers(tenantSlug, trimmed).catch(() => ({ items: [] })),
+        platformApi.listBookings(tenantSlug, { limit: 10 }).catch(() => ({ items: [] })),
+      ]);
+
+      const customerResults: SearchResult[] = (customers.items ?? []).slice(0, 5).map((c) => ({
+        kind: "customer" as const,
+        id: c.id,
+        name: c.name,
+        email: c.email,
+        phone: c.phone,
+      }));
+
+      const lowerQ = trimmed.toLowerCase();
+      const bookingResults: SearchResult[] = (bookings.items ?? [])
+        .filter((b) =>
+          b.customer.name.toLowerCase().includes(lowerQ) ||
+          b.service.name.toLowerCase().includes(lowerQ) ||
+          (b.customer.email ?? "").toLowerCase().includes(lowerQ) ||
+          (b.customer.phone ?? "").includes(trimmed)
+        )
+        .slice(0, 5)
+        .map((b) => ({
+          kind: "booking" as const,
+          id: b.id,
+          serviceName: b.service.name,
+          customerName: b.customer.name,
+          startsAt: b.startsAt,
+          status: b.status,
+        }));
+
+      setResults([...customerResults, ...bookingResults]);
       setShowDropdown(true);
     } catch {
       setResults([]);
@@ -557,45 +596,73 @@ function CalendarSearchBar({ tenantSlug }: { tenantSlug: string }) {
     setSearching(false);
   };
 
+  const handleChange = (value: string) => {
+    setQuery(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => doSearch(value), 250);
+  };
+
+  const timeFormatter = new Intl.DateTimeFormat("en-US", {
+    month: "short", day: "numeric",
+    hour: "numeric", minute: "2-digit",
+  });
+
   return (
     <div className="ops-topbar-search" ref={containerRef} style={{ position: "relative" }}>
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
       <input
-        placeholder="Search customers…"
+        placeholder="Search customers & appointments…"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
+        onChange={(e) => handleChange(e.target.value)}
         onFocus={() => { if (results.length > 0) setShowDropdown(true); }}
       />
-      {searching ? <span style={{ fontSize: "0.8rem", color: "var(--ui-ink-soft)" }}>Searching…</span> : null}
+      {searching ? <span style={{ fontSize: "0.8rem", color: "var(--ui-ink-soft)" }}>…</span> : null}
       {showDropdown && results.length > 0 ? (
         <div className="search-dropdown" style={{
           position: "absolute", top: "100%", left: 0, right: 0,
           background: "#fff", border: "1px solid var(--ui-border, #e5e7eb)",
           borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-          zIndex: 50, maxHeight: "320px", overflowY: "auto", marginTop: "4px",
+          zIndex: 50, maxHeight: "400px", overflowY: "auto", marginTop: "4px",
         }}>
-          {results.map((customer) => (
+          {results.map((r, i) => (
             <button
-              key={customer.id}
+              key={`${r.kind}-${r.id}-${i}`}
               type="button"
               style={{
-                display: "block", width: "100%", textAlign: "left",
+                display: "flex", alignItems: "center", gap: "0.5rem",
+                width: "100%", textAlign: "left",
                 padding: "0.6rem 0.75rem", border: "none", background: "none",
                 cursor: "pointer", fontSize: "0.9rem",
               }}
               onClick={() => {
                 setShowDropdown(false);
                 setQuery("");
-                navigate(`/customers?customerId=${customer.id}`);
+                if (r.kind === "customer") {
+                  navigate(`/customers?customerId=${r.id}`);
+                } else {
+                  navigate(`/calendar?bookingId=${r.id}`);
+                }
               }}
               onMouseEnter={(e) => { (e.target as HTMLElement).style.background = "var(--ui-sand, #f5f0eb)"; }}
               onMouseLeave={(e) => { (e.target as HTMLElement).style.background = "none"; }}
             >
-              <strong>{customer.name}</strong>
-              <span style={{ color: "var(--ui-ink-soft)", marginLeft: "0.5rem", fontSize: "0.85rem" }}>
-                {customer.email ?? customer.phone ?? ""}
+              <span style={{
+                fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase",
+                color: r.kind === "customer" ? "var(--ui-amber-deep, #b45309)" : "var(--ui-cat-pink-bar, #c2416c)",
+                minWidth: "3.5rem",
+              }}>
+                {r.kind === "customer" ? "Client" : "Appt"}
               </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <strong style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {r.kind === "customer" ? r.name : r.serviceName}
+                </strong>
+                <span style={{ color: "var(--ui-ink-soft)", fontSize: "0.8rem" }}>
+                  {r.kind === "customer"
+                    ? (r.email ?? r.phone ?? "")
+                    : `${r.customerName} · ${timeFormatter.format(new Date(r.startsAt))}`}
+                </span>
+              </div>
             </button>
           ))}
         </div>
