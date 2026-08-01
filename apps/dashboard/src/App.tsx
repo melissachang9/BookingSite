@@ -494,7 +494,9 @@ function AuthenticatedLayout({
         </button>
         <header className="ops-topbar">
           <div>
-            {isCalendarRoute ? null : (
+            {isCalendarRoute ? (
+              <CalendarSearchBar tenantSlug={session.user.tenantSlug} />
+            ) : (
               <>
                 {currentDefinition.eyebrow ? <p className="eyebrow">{currentDefinition.eyebrow}</p> : null}
                 <h2>{currentDefinition.title}</h2>
@@ -518,6 +520,86 @@ function AuthenticatedLayout({
 
         <Outlet />
       </div>
+    </div>
+  );
+}
+
+function CalendarSearchBar({ tenantSlug }: { tenantSlug: string }) {
+  const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Array<{ id: string; name: string; email?: string | null; phone?: string | null }>>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showDropdown) return;
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showDropdown]);
+
+  const handleSearch = async () => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    setSearching(true);
+    try {
+      const response = await platformApi.listCustomers(tenantSlug, trimmed);
+      setResults(response.items.slice(0, 8));
+      setShowDropdown(true);
+    } catch {
+      setResults([]);
+    }
+    setSearching(false);
+  };
+
+  return (
+    <div className="ops-topbar-search" ref={containerRef} style={{ position: "relative" }}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
+      <input
+        placeholder="Search customers…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
+        onFocus={() => { if (results.length > 0) setShowDropdown(true); }}
+      />
+      {searching ? <span style={{ fontSize: "0.8rem", color: "var(--ui-ink-soft)" }}>Searching…</span> : null}
+      {showDropdown && results.length > 0 ? (
+        <div className="search-dropdown" style={{
+          position: "absolute", top: "100%", left: 0, right: 0,
+          background: "#fff", border: "1px solid var(--ui-border, #e5e7eb)",
+          borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+          zIndex: 50, maxHeight: "320px", overflowY: "auto", marginTop: "4px",
+        }}>
+          {results.map((customer) => (
+            <button
+              key={customer.id}
+              type="button"
+              style={{
+                display: "block", width: "100%", textAlign: "left",
+                padding: "0.6rem 0.75rem", border: "none", background: "none",
+                cursor: "pointer", fontSize: "0.9rem",
+              }}
+              onClick={() => {
+                setShowDropdown(false);
+                setQuery("");
+                navigate(`/customers?customerId=${customer.id}`);
+              }}
+              onMouseEnter={(e) => { (e.target as HTMLElement).style.background = "var(--ui-sand, #f5f0eb)"; }}
+              onMouseLeave={(e) => { (e.target as HTMLElement).style.background = "none"; }}
+            >
+              <strong>{customer.name}</strong>
+              <span style={{ color: "var(--ui-ink-soft)", marginLeft: "0.5rem", fontSize: "0.85rem" }}>
+                {customer.email ?? customer.phone ?? ""}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
