@@ -127,6 +127,18 @@ export function CustomersPage({
   const [clientOwnershipEnabled, setClientOwnershipEnabled] = useState(false);
   const [sortMode, setSortMode] = useState<"alpha" | "recent">("alpha");
 
+  // Read customerId from URL query param on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const customerId = params.get("customerId");
+    if (customerId) {
+      setSelectedCustomerId(customerId);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("customerId");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
+
   useEffect(() => {
     if (!tenantSlug) return;
     platformApi.getTenantBySlug(tenantSlug).then((t) => {
