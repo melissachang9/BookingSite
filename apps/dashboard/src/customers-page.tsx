@@ -126,6 +126,12 @@ export function CustomersPage({
   });
   const [clientOwnershipEnabled, setClientOwnershipEnabled] = useState(false);
   const [sortMode, setSortMode] = useState<"alpha" | "recent">("alpha");
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addFormName, setAddFormName] = useState("");
+  const [addFormEmail, setAddFormEmail] = useState("");
+  const [addFormPhone, setAddFormPhone] = useState("");
+  const [addFormState, setAddFormState] = useState<"idle" | "submitting" | "error">("idle");
+  const [addFormError, setAddFormError] = useState("");
 
   // Read customerId from URL query param on mount
   useEffect(() => {
@@ -323,10 +329,62 @@ export function CustomersPage({
               Search
             </button>
           </div>
-          <button type="button" className="primary-action" disabled>
-            Add customer
+          <button
+            type="button"
+            className="primary-action"
+            onClick={() => setShowAddForm((prev) => !prev)}
+          >
+            {showAddForm ? "Cancel" : "Add customer"}
           </button>
         </div>
+        {showAddForm ? (
+          <div className="customer-notes-editor" style={{ marginTop: "0.75rem", padding: "0.75rem", background: "var(--ui-surface, #f9fafb)", borderRadius: "8px" }}>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
+              <label style={{ flex: "1", minWidth: "150px" }}>
+                <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Name *</span>
+                <input type="text" value={addFormName} onChange={(e) => setAddFormName(e.target.value)} placeholder="Full name" style={{ width: "100%" }} />
+              </label>
+              <label style={{ flex: "1", minWidth: "150px" }}>
+                <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Email</span>
+                <input type="email" value={addFormEmail} onChange={(e) => setAddFormEmail(e.target.value)} placeholder="Email address" style={{ width: "100%" }} />
+              </label>
+              <label style={{ flex: "1", minWidth: "150px" }}>
+                <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Phone</span>
+                <input type="tel" value={addFormPhone} onChange={(e) => setAddFormPhone(e.target.value)} placeholder="Phone number" style={{ width: "100%" }} />
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <button
+                type="button"
+                className="primary-action"
+                disabled={!addFormName.trim() || addFormState === "submitting"}
+                onClick={async () => {
+                  setAddFormState("submitting");
+                  setAddFormError("");
+                  try {
+                    await platformApi.createOrUpdateCustomer({
+                      name: addFormName.trim(),
+                      email: addFormEmail.trim() || undefined,
+                      phone: addFormPhone.trim() || undefined,
+                    });
+                    setAddFormName("");
+                    setAddFormEmail("");
+                    setAddFormPhone("");
+                    setShowAddForm(false);
+                    setAddFormState("idle");
+                    await loadCustomers();
+                  } catch (err) {
+                    setAddFormState("error");
+                    setAddFormError(err instanceof Error ? err.message : "Unable to add customer.");
+                  }
+                }}
+              >
+                {addFormState === "submitting" ? "Adding…" : "Save customer"}
+              </button>
+              {addFormState === "error" ? <span style={{ color: "var(--ui-danger)", fontSize: "0.85rem" }}>{addFormError}</span> : null}
+            </div>
+          </div>
+        ) : null}
         <div className="customers-page__filters">
           <span className="customers-page__count">{customers.length} total</span>
           <div className="customers-page__sort">
