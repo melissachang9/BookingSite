@@ -338,50 +338,56 @@ export function CustomersPage({
           </button>
         </div>
         {showAddForm ? (
-          <div className="customer-notes-editor" style={{ marginTop: "0.75rem", padding: "0.75rem", background: "var(--ui-surface, #f9fafb)", borderRadius: "8px" }}>
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
-              <label style={{ flex: "1", minWidth: "150px" }}>
-                <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Name *</span>
-                <input type="text" value={addFormName} onChange={(e) => setAddFormName(e.target.value)} placeholder="Full name" style={{ width: "100%" }} />
-              </label>
-              <label style={{ flex: "1", minWidth: "150px" }}>
-                <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Email</span>
-                <input type="email" value={addFormEmail} onChange={(e) => setAddFormEmail(e.target.value)} placeholder="Email address" style={{ width: "100%" }} />
-              </label>
-              <label style={{ flex: "1", minWidth: "150px" }}>
-                <span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Phone</span>
-                <input type="tel" value={addFormPhone} onChange={(e) => setAddFormPhone(e.target.value)} placeholder="Phone number" style={{ width: "100%" }} />
-              </label>
-            </div>
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-              <button
-                type="button"
-                className="primary-action"
-                disabled={!addFormName.trim() || addFormState === "submitting"}
-                onClick={async () => {
-                  setAddFormState("submitting");
-                  setAddFormError("");
-                  try {
-                    await platformApi.createOrUpdateCustomer({
-                      name: addFormName.trim(),
-                      email: addFormEmail.trim() || undefined,
-                      phone: addFormPhone.trim() || undefined,
-                    });
-                    setAddFormName("");
-                    setAddFormEmail("");
-                    setAddFormPhone("");
-                    setShowAddForm(false);
-                    setAddFormState("idle");
-                    await loadCustomers();
-                  } catch (err) {
-                    setAddFormState("error");
-                    setAddFormError(err instanceof Error ? err.message : "Unable to add customer.");
-                  }
-                }}
-              >
-                {addFormState === "submitting" ? "Adding…" : "Save customer"}
-              </button>
-              {addFormState === "error" ? <span style={{ color: "var(--ui-danger)", fontSize: "0.85rem" }}>{addFormError}</span> : null}
+          <div className="booking-rail-section" style={{ marginTop: "0.75rem" }}>
+            <p className="rail-section-kicker">New customer</p>
+            <div className="appointment-summary-card">
+              <div className="slot-action-grid">
+                <label>
+                  <span>Client name</span>
+                  <input type="text" value={addFormName} onChange={(e) => setAddFormName(e.target.value)} placeholder="Full name" autoComplete="off" />
+                </label>
+                <label>
+                  <span>Phone number</span>
+                  <input type="tel" value={addFormPhone} onChange={(e) => setAddFormPhone(e.target.value)} placeholder="Phone number" autoComplete="tel" />
+                </label>
+                <label>
+                  <span>Email</span>
+                  <input type="email" value={addFormEmail} onChange={(e) => setAddFormEmail(e.target.value)} placeholder="Email address" autoComplete="email" />
+                </label>
+              </div>
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.75rem" }}>
+                <button
+                  type="button"
+                  className="primary-action"
+                  disabled={!addFormName.trim() || addFormState === "submitting"}
+                  onClick={async () => {
+                    setAddFormState("submitting");
+                    setAddFormError("");
+                    try {
+                      await platformApi.createOrUpdateCustomer({
+                        name: addFormName.trim(),
+                        email: addFormEmail.trim() || undefined,
+                        phone: addFormPhone.trim() || undefined,
+                      });
+                      setAddFormName("");
+                      setAddFormEmail("");
+                      setAddFormPhone("");
+                      setShowAddForm(false);
+                      setAddFormState("idle");
+                      await loadCustomers();
+                    } catch (err) {
+                      setAddFormState("error");
+                      setAddFormError(err instanceof Error ? err.message : "Unable to add customer.");
+                    }
+                  }}
+                >
+                  {addFormState === "submitting" ? "Adding…" : "Save customer"}
+                </button>
+                <button type="button" className="text-action" onClick={() => { setShowAddForm(false); setAddFormError(""); }}>
+                  Cancel
+                </button>
+                {addFormState === "error" ? <span style={{ color: "var(--ui-danger)", fontSize: "0.85rem" }}>{addFormError}</span> : null}
+              </div>
             </div>
           </div>
         ) : null}
