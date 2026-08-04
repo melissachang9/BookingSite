@@ -130,6 +130,10 @@ export function CustomersPage({
   const [addFormName, setAddFormName] = useState("");
   const [addFormEmail, setAddFormEmail] = useState("");
   const [addFormPhone, setAddFormPhone] = useState("");
+  const [addFormStreet, setAddFormStreet] = useState("");
+  const [addFormCity, setAddFormCity] = useState("");
+  const [addFormStateField, setAddFormStateField] = useState("");
+  const [addFormZip, setAddFormZip] = useState("");
   const [addFormState, setAddFormState] = useState<"idle" | "submitting" | "error">("idle");
   const [addFormError, setAddFormError] = useState("");
 
@@ -354,6 +358,22 @@ export function CustomersPage({
                   <span>Email</span>
                   <input type="email" value={addFormEmail} onChange={(e) => setAddFormEmail(e.target.value)} placeholder="Email address" autoComplete="email" />
                 </label>
+                <label>
+                  <span>Street address</span>
+                  <input type="text" value={addFormStreet} onChange={(e) => setAddFormStreet(e.target.value)} placeholder="Street" autoComplete="off" />
+                </label>
+                <label>
+                  <span>City</span>
+                  <input type="text" value={addFormCity} onChange={(e) => setAddFormCity(e.target.value)} placeholder="City" autoComplete="off" />
+                </label>
+                <label>
+                  <span>State</span>
+                  <input type="text" value={addFormStateField} onChange={(e) => setAddFormStateField(e.target.value)} placeholder="State" autoComplete="off" />
+                </label>
+                <label>
+                  <span>ZIP</span>
+                  <input type="text" value={addFormZip} onChange={(e) => setAddFormZip(e.target.value)} placeholder="ZIP" autoComplete="off" />
+                </label>
               </div>
               <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.75rem" }}>
                 <button
@@ -368,10 +388,18 @@ export function CustomersPage({
                         name: addFormName.trim(),
                         email: addFormEmail.trim() || undefined,
                         phone: addFormPhone.trim() || undefined,
+                        addressStreet: addFormStreet.trim() || undefined,
+                        addressCity: addFormCity.trim() || undefined,
+                        addressState: addFormStateField.trim() || undefined,
+                        addressZip: addFormZip.trim() || undefined,
                       });
                       setAddFormName("");
                       setAddFormEmail("");
                       setAddFormPhone("");
+                      setAddFormStreet("");
+                      setAddFormCity("");
+                      setAddFormStateField("");
+                      setAddFormZip("");
                       setShowAddForm(false);
                       setAddFormState("idle");
                       await loadCustomers();

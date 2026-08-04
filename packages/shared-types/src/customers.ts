@@ -78,4 +78,8 @@ export type UpsertCustomerRequest = {
   email?: string;
   phone?: string;
   notes?: string;
+  addressStreet?: string;
+  addressCity?: string;
+  addressState?: string;
+  addressZip?: string;
 };
