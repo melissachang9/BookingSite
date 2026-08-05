@@ -25,7 +25,6 @@ import {
   writeStoredSession,
 } from "./platform-api";
 import { CalendarPage } from "./calendar-page";
-import { PaymentsPage } from "./payments-page";
 import { SettingsPage } from "./settings-page";
 import { StaffPage } from "./staff-page";
 import { ServicesPage } from "./services-page";
@@ -99,16 +98,6 @@ const routeDefinitions: RouteDefinition[] = [
     tone: "ready",
     workstreams: ["Provider week view", "Manual booking drawer", "Service and location filters"],
     actions: ["Select a slot", "Start customer search", "Send deposit link"],
-  },
-  {
-    path: "/payments",
-    title: "Payments",
-    eyebrow: "Checkout and balance",
-    description: "Deposits, hosted balance checkout, POS collection, corrections, and follow-up balances.",
-    metric: "Ledger model ready",
-    tone: "progress",
-    workstreams: ["Balance follow-up", "External POS exact amount", "Checkout audit events"],
-    actions: ["Collect balance", "Send checkout", "Review exceptions"],
   },
   {
     path: "/customers",
@@ -779,10 +768,6 @@ export function App() {
                 weekStartsOn={weekStartsOn}
               />
             }
-          />
-          <Route
-            path="/payments"
-            element={<PaymentsPage definition={pageByPath.get("payments") ?? routeDefinitions[0]} currentUser={session.user} />}
           />
           <Route
             path="/services"
