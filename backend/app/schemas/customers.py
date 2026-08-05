@@ -63,3 +63,18 @@ class UpdateCustomerRequest(CamelModel):
     address_city: str | None = None
     address_state: str | None = None
     address_zip: str | None = None
+
+
+class UpsertCustomerRequest(CamelModel):
+    name: str
+    email: str | None = None
+    phone: str | None = None
+    notes: str | None = None
+    address_street: str | None = None
+    address_city: str | None = None
+    address_state: str | None = None
+    address_zip: str | None = None
+
+
+class UpsertCustomerResponse(CamelModel):
+    customer_id: str

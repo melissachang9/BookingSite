@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
 from app.db.models import Booking, Customer, Payment, Tenant
-from app.schemas.customers import CustomerBookingEntry, CustomerListResponse, CustomerLookupResponse, CustomerPaymentEntry, CustomerProfileResponse, UpdateCustomerRequest
+from app.schemas.customers import CustomerBookingEntry, CustomerListResponse, CustomerLookupResponse, CustomerPaymentEntry, CustomerProfileResponse, UpdateCustomerRequest, UpsertCustomerRequest, UpsertCustomerResponse
 from app.schemas.bookings import PaginationMetaResponse
 from app.services.presenters import booking_amount_paid_cents, booking_balance_due_cents, customer_to_summary
 from app.services.tenants import get_tenant_by_slug
@@ -237,3 +237,50 @@ async def update_customer(
         )
     ).all()
     return _build_customer_profile(customer, list(bookings))
+
+
+async def create_or_update_customer(
+    session: AsyncSession,
+    payload: UpsertCustomerRequest,
+    tenant_id: str,
+) -> UpsertCustomerResponse:
+    """Create a new customer or update an existing one by email."""
+    customer = None
+    if payload.email:
+        customer = await session.scalar(
+            select(Customer).where(
+                Customer.tenant_id == tenant_id,
+                Customer.email == payload.email,
+            )
+        )
+
+    if customer is None:
+        customer = Customer(
+            tenant_id=tenant_id,
+            name=payload.name,
+            email=payload.email,
+            phone=payload.phone,
+            address_street=payload.address_street,
+            address_city=payload.address_city,
+            address_state=payload.address_state,
+            address_zip=payload.address_zip,
+            acquired_at=datetime.now(timezone.utc),
+            source_channel="staff_entered",
+        )
+        session.add(customer)
+    else:
+        customer.name = payload.name
+        if payload.phone is not None:
+            customer.phone = payload.phone
+        if payload.address_street is not None:
+            customer.address_street = payload.address_street
+        if payload.address_city is not None:
+            customer.address_city = payload.address_city
+        if payload.address_state is not None:
+            customer.address_state = payload.address_state
+        if payload.address_zip is not None:
+            customer.address_zip = payload.address_zip
+
+    await session.commit()
+    await session.refresh(customer)
+    return UpsertCustomerResponse(customer_id=customer.id)

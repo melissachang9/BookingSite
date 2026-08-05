@@ -7,12 +7,12 @@ from app.api.dependencies.auth import get_current_user, require_tenant_permissio
 from app.core.http import api_exception
 from app.db.models import User
 from app.db.session import get_db_session
-from app.schemas.customers import CustomerListResponse, CustomerLookupResponse, CustomerProfileResponse, UpdateCustomerRequest
+from app.schemas.customers import CustomerListResponse, CustomerLookupResponse, CustomerProfileResponse, UpdateCustomerRequest, UpsertCustomerRequest, UpsertCustomerResponse
 from app.schemas.forms import BookingFormResponseListResponse
 from app.schemas.catalog import TenantUserListResponse
 from app.services.auth import ROLE_PERMISSION_ALLOWLIST
 from app.services.booking_forms import list_customer_form_responses
-from app.services.customers import get_customer_profile, list_tenant_customers, lookup_tenant_customers, update_customer
+from app.services.customers import create_or_update_customer, get_customer_profile, list_tenant_customers, lookup_tenant_customers, update_customer
 from app.services.audit import record_audit
 from app.services.tenants import list_tenant_users
 
@@ -42,6 +42,22 @@ async def lookup_customers(
         current_user_id=current_user.id,
         current_user_role=current_user.role,
     )
+
+
+@router.post(
+    "/customers",
+    response_model=UpsertCustomerResponse,
+    summary="Create or update a customer for the authenticated tenant",
+)
+async def create_or_update_customer_route(
+    payload: UpsertCustomerRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> UpsertCustomerResponse:
+    if "customers.manage" not in ROLE_PERMISSION_ALLOWLIST.get(current_user.role, set()):
+        raise api_exception(403, "forbidden", "You do not have permission to manage customers.")
+
+    return await create_or_update_customer(session, payload, current_user.tenant_id)
 
 
 @router.get(
