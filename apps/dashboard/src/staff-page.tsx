@@ -500,17 +500,7 @@ export function StaffPage({
   );
 
   if (!canManage) {
-    return (
-      <main className="ops-page-stack">
-        <section className="ops-hero ops-hero--compact">
-          <div className="ops-hero-copy">
-            <p className="eyebrow">{definition.eyebrow}</p>
-            <h3>{definition.title}</h3>
-            <p>You do not have permission to view the team roster.</p>
-          </div>
-        </section>
-      </main>
-    );
+    return <main className="ops-page-stack"><p className="staff-list-empty">You do not have permission to view the team roster.</p></main>;
   }
 
   return (

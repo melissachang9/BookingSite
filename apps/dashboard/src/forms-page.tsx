@@ -111,16 +111,13 @@ export function FormsPage({
   const selectedForm = forms.find((f) => f.id === selectedFormId) ?? null;
 
   if (!currentUser) {
-    return <main className="ops-page-stack"><section className="ops-hero ops-hero--compact"><div className="ops-hero-copy"><h3>Sign in required</h3></div></section></main>;
+    return <main className="ops-page-stack"><p className="staff-list-empty">Sign in required</p></main>;
   }
   if (!canView) {
-    return <main className="ops-page-stack"><section className="ops-hero ops-hero--compact"><div className="ops-hero-copy"><p className="eyebrow">{definition.eyebrow}</p><h3>{definition.title}</h3><p>You do not have permission to view forms.</p></div></section></main>;
-  }
-  if (loadState.kind === "loading") {
-    return <main className="ops-page-stack"><section className="ops-hero ops-hero--compact"><div className="ops-hero-copy"><p className="eyebrow">{definition.eyebrow}</p><h3>{definition.title}</h3></div></section></main>;
+    return <main className="ops-page-stack"><p className="staff-list-empty">You do not have permission to view forms.</p></main>;
   }
   if (loadState.kind === "error") {
-    return <main className="ops-page-stack"><section className="ops-hero ops-hero--compact"><div className="ops-hero-copy"><p className="eyebrow">{definition.eyebrow}</p><h3>{definition.title}</h3><p>{loadState.message}</p></div></section></main>;
+    return <main className="ops-page-stack"><div className="message-banner message-banner--error" role="alert">{loadState.message}</div></main>;
   }
 
   return (
