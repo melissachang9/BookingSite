@@ -213,6 +213,8 @@ async def update_customer(
         customer.address_state = payload.address_state.strip() or None
     if payload.address_zip is not None:
         customer.address_zip = payload.address_zip.strip() or None
+    if payload.blocked_from_online_booking is not None:
+        customer.blocked_from_online_booking = payload.blocked_from_online_booking
     if payload.wallet_adjustment_cents is not None and payload.wallet_adjustment_cents != 0:
         await record_wallet_transaction(
             session,

@@ -79,6 +79,7 @@ class Customer(Base, IdMixin, TimestampMixin):
     address_city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     address_state: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     address_zip: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    blocked_from_online_booking: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
 
     tenant: Mapped[Tenant] = relationship(back_populates="customers")
     owner: Mapped[Optional["User"]] = relationship(foreign_keys=[owner_user_id])

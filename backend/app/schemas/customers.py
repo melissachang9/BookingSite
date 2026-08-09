@@ -63,6 +63,7 @@ class UpdateCustomerRequest(CamelModel):
     address_city: str | None = None
     address_state: str | None = None
     address_zip: str | None = None
+    blocked_from_online_booking: bool | None = None
 
 
 class UpsertCustomerRequest(CamelModel):
@@ -74,6 +75,7 @@ class UpsertCustomerRequest(CamelModel):
     address_city: str | None = None
     address_state: str | None = None
     address_zip: str | None = None
+    blocked_from_online_booking: bool = False
 
 
 class UpsertCustomerResponse(CamelModel):

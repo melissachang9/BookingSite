@@ -16,6 +16,7 @@ export type CustomerSummary = AuditFields &
     addressCity?: string | null;
     addressState?: string | null;
     addressZip?: string | null;
+    blockedFromOnlineBooking?: boolean;
   };
 
 export type CustomerProfile = CustomerSummary & {
@@ -71,6 +72,11 @@ export type UpdateCustomerRequest = {
   ownerUserId?: UUID | null;
   smsConsent?: boolean;
   smsPhone?: string | null;
+  addressStreet?: string | null;
+  addressCity?: string | null;
+  addressState?: string | null;
+  addressZip?: string | null;
+  blockedFromOnlineBooking?: boolean;
 };
 
 export type UpsertCustomerRequest = {
@@ -82,4 +88,5 @@ export type UpsertCustomerRequest = {
   addressCity?: string;
   addressState?: string;
   addressZip?: string;
+  blockedFromOnlineBooking?: boolean;
 };

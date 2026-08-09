@@ -48,6 +48,7 @@ class CustomerSummaryResponse(CamelModel):
     address_city: str | None = None
     address_state: str | None = None
     address_zip: str | None = None
+    blocked_from_online_booking: bool = False
 
 
 class CreateBookingDraftRequest(CamelModel):

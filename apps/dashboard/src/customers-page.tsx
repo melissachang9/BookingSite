@@ -134,6 +134,8 @@ export function CustomersPage({
   const [addFormCity, setAddFormCity] = useState("");
   const [addFormStateField, setAddFormStateField] = useState("");
   const [addFormZip, setAddFormZip] = useState("");
+  const [addFormNotes, setAddFormNotes] = useState("");
+  const [addFormBlocked, setAddFormBlocked] = useState(false);
   const [addFormState, setAddFormState] = useState<"idle" | "submitting" | "error">("idle");
   const [addFormError, setAddFormError] = useState("");
 
@@ -454,6 +456,30 @@ export function CustomersPage({
                   </div>
                 </div>
               </div>
+              <div className="booking-rail-section">
+                <p className="rail-section-kicker">Notes</p>
+                <div className="appointment-summary-card">
+                  <label className="time-block-notes-field">
+                    <textarea value={addFormNotes} onChange={(e) => setAddFormNotes(e.target.value)} placeholder="Add context for this client." rows={3} />
+                  </label>
+                </div>
+              </div>
+              <div className="booking-rail-section">
+                <p className="rail-section-kicker">Online booking</p>
+                <div className="appointment-summary-card">
+                  <label className="settings-toggle-field" style={{ padding: 0 }}>
+                    <input
+                      type="checkbox"
+                      checked={addFormBlocked}
+                      onChange={(e) => setAddFormBlocked(e.target.checked)}
+                    />
+                    <span>
+                      <strong>Block from online booking</strong>
+                      <small>Prevent this client from booking appointments through the storefront.</small>
+                    </span>
+                  </label>
+                </div>
+              </div>
             </div>
             <div className="appointment-drawer-footer">
               <div className="appointment-drawer-footer__finalize">
@@ -473,6 +499,8 @@ export function CustomersPage({
                         addressCity: addFormCity.trim() || undefined,
                         addressState: addFormStateField.trim() || undefined,
                         addressZip: addFormZip.trim() || undefined,
+                        notes: addFormNotes.trim() || undefined,
+                        blockedFromOnlineBooking: addFormBlocked || undefined,
                       });
                       setAddFormName("");
                       setAddFormEmail("");
@@ -481,6 +509,8 @@ export function CustomersPage({
                       setAddFormCity("");
                       setAddFormStateField("");
                       setAddFormZip("");
+                      setAddFormNotes("");
+                      setAddFormBlocked(false);
                       setShowAddForm(false);
                       setAddFormState("idle");
                       await loadCustomers();
@@ -967,6 +997,28 @@ function CustomerProfilePanel({
           ) : null}
         </div>
         {smsSaveState === "error" ? <p role="alert" className="settings-error" style={{ marginTop: "0.25rem" }}>Unable to save SMS settings.</p> : null}
+      </div>
+
+      <div className="booking-rail-section">
+        <p className="rail-section-kicker">Online booking</p>
+        <div className="appointment-summary-card">
+          <label className="settings-toggle-field" style={{ padding: 0 }}>
+            <input
+              type="checkbox"
+              checked={customer.blockedFromOnlineBooking ?? false}
+              onChange={async (e) => {
+                try {
+                  await platformApi.updateCustomer(tenantSlug, customer.id, { blockedFromOnlineBooking: e.target.checked });
+                  if (onCustomerUpdated) await onCustomerUpdated();
+                } catch {}
+              }}
+            />
+            <span>
+              <strong>Block from online booking</strong>
+              <small>Prevent this client from booking appointments through the storefront.</small>
+            </span>
+          </label>
+        </div>
       </div>
 
       <div className="booking-rail-section">
