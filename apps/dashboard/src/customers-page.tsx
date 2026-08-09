@@ -295,89 +295,11 @@ export function CustomersPage({
           <button
             type="button"
             className="primary-action"
-            onClick={() => setShowAddForm((prev) => !prev)}
+            onClick={() => setShowAddForm(true)}
           >
-            {showAddForm ? "Cancel" : "Add customer"}
+            Add customer
           </button>
         </div>
-        {showAddForm ? (
-          <div className="booking-rail-section" style={{ marginTop: "0.75rem" }}>
-            <p className="rail-section-kicker">New customer</p>
-            <div className="appointment-summary-card">
-              <div className="slot-action-grid">
-                <label>
-                  <span>Client name</span>
-                  <input type="text" value={addFormName} onChange={(e) => setAddFormName(e.target.value)} placeholder="Full name" autoComplete="off" />
-                </label>
-                <label>
-                  <span>Phone number</span>
-                  <input type="tel" value={addFormPhone} onChange={(e) => setAddFormPhone(e.target.value)} placeholder="Phone number" autoComplete="tel" />
-                </label>
-                <label>
-                  <span>Email</span>
-                  <input type="email" value={addFormEmail} onChange={(e) => setAddFormEmail(e.target.value)} placeholder="Email address" autoComplete="email" />
-                </label>
-                <label>
-                  <span>Street address</span>
-                  <input type="text" value={addFormStreet} onChange={(e) => setAddFormStreet(e.target.value)} placeholder="Street" autoComplete="off" />
-                </label>
-                <label>
-                  <span>City</span>
-                  <input type="text" value={addFormCity} onChange={(e) => setAddFormCity(e.target.value)} placeholder="City" autoComplete="off" />
-                </label>
-                <label>
-                  <span>State</span>
-                  <input type="text" value={addFormStateField} onChange={(e) => setAddFormStateField(e.target.value)} placeholder="State" autoComplete="off" />
-                </label>
-                <label>
-                  <span>ZIP</span>
-                  <input type="text" value={addFormZip} onChange={(e) => setAddFormZip(e.target.value)} placeholder="ZIP" autoComplete="off" />
-                </label>
-              </div>
-              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.75rem" }}>
-                <button
-                  type="button"
-                  className="primary-action"
-                  disabled={!addFormName.trim() || addFormState === "submitting"}
-                  onClick={async () => {
-                    setAddFormState("submitting");
-                    setAddFormError("");
-                    try {
-                      await platformApi.createOrUpdateCustomer({
-                        name: addFormName.trim(),
-                        email: addFormEmail.trim() || undefined,
-                        phone: addFormPhone.trim() || undefined,
-                        addressStreet: addFormStreet.trim() || undefined,
-                        addressCity: addFormCity.trim() || undefined,
-                        addressState: addFormStateField.trim() || undefined,
-                        addressZip: addFormZip.trim() || undefined,
-                      });
-                      setAddFormName("");
-                      setAddFormEmail("");
-                      setAddFormPhone("");
-                      setAddFormStreet("");
-                      setAddFormCity("");
-                      setAddFormStateField("");
-                      setAddFormZip("");
-                      setShowAddForm(false);
-                      setAddFormState("idle");
-                      await loadCustomers();
-                    } catch (err) {
-                      setAddFormState("error");
-                      setAddFormError(err instanceof Error ? err.message : "Unable to add customer.");
-                    }
-                  }}
-                >
-                  {addFormState === "submitting" ? "Adding…" : "Save customer"}
-                </button>
-                <button type="button" className="text-action" onClick={() => { setShowAddForm(false); setAddFormError(""); }}>
-                  Cancel
-                </button>
-                {addFormState === "error" ? <span style={{ color: "var(--ui-danger)", fontSize: "0.85rem" }}>{addFormError}</span> : null}
-              </div>
-            </div>
-          </div>
-        ) : null}
         <div className="customers-page__filters">
           <span className="customers-page__count">{customers.length} total</span>
           <div className="customers-page__sort">
@@ -471,6 +393,107 @@ export function CustomersPage({
                   }
                 }}
               />
+            </div>
+          </aside>
+        </>
+      ) : null}
+
+      {showAddForm ? (
+        <>
+          <div className="appointment-drawer-backdrop" onClick={() => { setShowAddForm(false); setAddFormError(""); }} />
+          <aside className="appointment-details-drawer" role="dialog" aria-label="Add customer" style={{ width: "min(100vw, 420px)" }}>
+            <header className="appointment-details-drawer__header">
+              <span className="appointment-status-chip">
+                <span aria-hidden="true" />
+                New customer
+              </span>
+              <button type="button" className="appointment-drawer-close" onClick={() => { setShowAddForm(false); setAddFormError(""); }} aria-label="Close">
+                ×
+              </button>
+            </header>
+            <div className="appointment-drawer-body">
+              <div className="booking-rail-section">
+                <p className="rail-section-kicker">Contact</p>
+                <div className="appointment-summary-card">
+                  <div className="slot-action-grid">
+                    <label>
+                      <span>Client name</span>
+                      <input type="text" value={addFormName} onChange={(e) => setAddFormName(e.target.value)} placeholder="Full name" autoComplete="off" />
+                    </label>
+                    <label>
+                      <span>Phone number</span>
+                      <input type="tel" value={addFormPhone} onChange={(e) => setAddFormPhone(e.target.value)} placeholder="Phone number" autoComplete="tel" />
+                    </label>
+                    <label>
+                      <span>Email</span>
+                      <input type="email" value={addFormEmail} onChange={(e) => setAddFormEmail(e.target.value)} placeholder="Email address" autoComplete="email" />
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div className="booking-rail-section">
+                <p className="rail-section-kicker">Address</p>
+                <div className="appointment-summary-card">
+                  <div className="slot-action-grid">
+                    <label>
+                      <span>Street</span>
+                      <input type="text" value={addFormStreet} onChange={(e) => setAddFormStreet(e.target.value)} placeholder="Street address" autoComplete="off" />
+                    </label>
+                    <label>
+                      <span>City</span>
+                      <input type="text" value={addFormCity} onChange={(e) => setAddFormCity(e.target.value)} placeholder="City" autoComplete="off" />
+                    </label>
+                    <label>
+                      <span>State</span>
+                      <input type="text" value={addFormStateField} onChange={(e) => setAddFormStateField(e.target.value)} placeholder="State" autoComplete="off" />
+                    </label>
+                    <label>
+                      <span>ZIP</span>
+                      <input type="text" value={addFormZip} onChange={(e) => setAddFormZip(e.target.value)} placeholder="ZIP" autoComplete="off" />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="appointment-drawer-footer">
+              <div className="appointment-drawer-footer__finalize">
+                <button
+                  type="button"
+                  className="primary-action"
+                  disabled={!addFormName.trim() || addFormState === "submitting"}
+                  onClick={async () => {
+                    setAddFormState("submitting");
+                    setAddFormError("");
+                    try {
+                      await platformApi.createOrUpdateCustomer({
+                        name: addFormName.trim(),
+                        email: addFormEmail.trim() || undefined,
+                        phone: addFormPhone.trim() || undefined,
+                        addressStreet: addFormStreet.trim() || undefined,
+                        addressCity: addFormCity.trim() || undefined,
+                        addressState: addFormStateField.trim() || undefined,
+                        addressZip: addFormZip.trim() || undefined,
+                      });
+                      setAddFormName("");
+                      setAddFormEmail("");
+                      setAddFormPhone("");
+                      setAddFormStreet("");
+                      setAddFormCity("");
+                      setAddFormStateField("");
+                      setAddFormZip("");
+                      setShowAddForm(false);
+                      setAddFormState("idle");
+                      await loadCustomers();
+                    } catch (err) {
+                      setAddFormState("error");
+                      setAddFormError(err instanceof Error ? err.message : "Unable to add customer.");
+                    }
+                  }}
+                >
+                  {addFormState === "submitting" ? "Adding…" : "Save customer"}
+                </button>
+                {addFormState === "error" ? <span style={{ color: "var(--ui-danger)", fontSize: "0.85rem" }}>{addFormError}</span> : null}
+              </div>
             </div>
           </aside>
         </>
