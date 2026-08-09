@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en" data-accent="amber">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard Redesign — Mockup</title>
+  <link rel="stylesheet" href="styles.css?v=11" />
+</head>
+<body data-view="calendar" data-cal="week" data-grain="15">
+  <div class="note-banner">
+    <span class="variant-switch"><a href="current-look.html">A · Current look</a><a href="index.html" class="is-current">B · Redesign</a></span>
+    &nbsp; Click an appointment for the side panel.
+    <span class="loc-mode">
+      <span class="accent-switch__label">Locations</span>
+      <button class="mode-btn" data-loc-count="1">1</button>
+      <button class="mode-btn is-active" data-loc-count="3">3</button>
+    </span>
+    <span class="loc-mode">
+      <span class="accent-switch__label">Slot</span>
+      <button class="mode-btn is-active" data-grain-btn="15">15m</button>
+      <button class="mode-btn" data-grain-btn="30">30m</button>
+    </span>
+    <span class="accent-switch">
+      <span class="accent-switch__label">Preview accent</span>
+      <button class="swatch swatch--amber is-active" data-accent-choice="amber" title="Amber"></button>
+      <button class="swatch swatch--teal" data-accent-choice="teal" title="Teal"></button>
+      <button class="swatch swatch--indigo" data-accent-choice="indigo" title="Indigo"></button>
+    </span>
+  </div>
+
+  <button class="nav-tab" data-toggle-nav title="Show menu">» Menu</button>
+
+  <div class="app app--twocol">
+    <!-- ============ Sidebar (brand + calendar + nav) ============ -->
+    <aside class="side">
+      <div class="side-brand">
+        <div class="side-brand__mark">B</div>
+        <div>
+          <div class="side-brand__name">Brow Beauty Lab</div>
+          <div class="side-brand__sub">Operator desk</div>
+        </div>
+        <button class="side__collapse" data-toggle-nav title="Hide menu · full-screen calendar" style="margin-left:auto">«</button>
+      </div>
+      <!-- Mini month -->
+      <div class="mini">
+        <div class="mini__head">
+          <div class="mini__month">June 2025</div>
+          <div class="mini__nav">
+            <button aria-label="Prev">‹</button>
+            <button aria-label="Next">›</button>
+          </div>
+        </div>
+        <div class="mini__grid">
+          <div class="mini__dow">S</div><div class="mini__dow">M</div><div class="mini__dow">T</div>
+          <div class="mini__dow">W</div><div class="mini__dow">T</div><div class="mini__dow">F</div><div class="mini__dow">S</div>
+          <button class="mini__day is-muted">1</button><button class="mini__day">2</button><button class="mini__day">3</button>
+          <button class="mini__day">4</button><button class="mini__day">5</button><button class="mini__day">6</button><button class="mini__day">7</button>
+          <button class="mini__day">8</button><button class="mini__day">9</button><button class="mini__day">10</button>
+          <button class="mini__day">11</button><button class="mini__day">12</button><button class="mini__day">13</button><button class="mini__day">14</button>
+          <button class="mini__day">15</button><button class="mini__day is-sel">16</button><button class="mini__day">17</button>
+          <button class="mini__day is-today">18</button><button class="mini__day">19</button><button class="mini__day">20</button><button class="mini__day">21</button>
+          <button class="mini__day">22</button><button class="mini__day">23</button><button class="mini__day">24</button>
+          <button class="mini__day">25</button><button class="mini__day">26</button><button class="mini__day">27</button><button class="mini__day">28</button>
+          <button class="mini__day">29</button><button class="mini__day">30</button>
+          <button class="mini__day is-muted">1</button><button class="mini__day is-muted">2</button>
+          <button class="mini__day is-muted">3</button><button class="mini__day is-muted">4</button><button class="mini__day is-muted">5</button>
+        </div>
+      </div>
+
+      <!-- Nav menu (listed under the monthly calendar) -->
+      <nav class="nav-menu">
+        <button class="nav-link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg> Overview</button>
+        <button class="nav-link is-active" data-view-target="calendar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg> Calendar</button>
+        <button class="nav-link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="5.5" width="19" height="13" rx="3"/><path d="M2.5 10h19"/></svg> Payments</button>
+        <button class="nav-link" data-view-target="customers">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.2 3-5 5.5-5s4.9 1.8 5.5 5"/><path d="M16 8.5a3 3 0 0 1 0 5M18.5 19c-.3-1.9-1.1-3.4-2.3-4.4"/></svg> Customers</button>
+        <button class="nav-link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 21s7-5.2 7-11a7 7 0 1 0-14 0c0 5.8 7 11 7 11Z"/><circle cx="12" cy="10" r="2.6"/></svg> Locations</button>
+        <button class="nav-link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 7h16M4 12h16M4 17h10"/></svg> Services</button>
+        <button class="nav-link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="3" width="14" height="18" rx="2.5"/><path d="M9 8h6M9 12h6M9 16h4"/></svg> Forms</button>
+        <button class="nav-link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="3.4"/><path d="M5 19c.7-3.5 3.4-5.4 7-5.4s6.3 1.9 7 5.4"/></svg> Staff</button>
+        <button class="nav-link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3.5" y="4" width="17" height="12" rx="2.5"/><path d="M8 20h8M12 16v4"/></svg> Resources</button>
+        <button class="nav-link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.2M12 18.8V21M4.2 7l1.9 1.1M17.9 15.9 19.8 17M4.2 17l1.9-1.1M17.9 8.1 19.8 7"/></svg> Settings &amp; management</button>
+      </nav>
+
+      <!-- Reminder card -->
+      <div class="reminder">
+        <div class="reminder__label">Next up</div>
+        <div class="reminder__title">Hydrafacial · Sarah J.</div>
+        <div class="reminder__meta">🕐 11:00 – 12:00 · Forms pending</div>
+        <div class="reminder__foot">
+          <div class="avatars">
+            <span class="av av--sm tone-a">SJ</span>
+            <span class="av av--sm tone-b">MK</span>
+          </div>
+          <div class="reminder__actions">
+            <button title="Dismiss">✕</button>
+            <button title="Confirm">✓</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Service types (event base color) -->
+      <div class="filters">
+        <div class="filters__head">
+          <div class="side__title">Service types</div>
+          <span style="color: var(--ink-faint)">▾</span>
+        </div>
+        <label class="check"><input type="checkbox" checked /><span class="box">✓</span><span class="dot" style="background: var(--cat-pink-bar)"></span> Facials</label>
+        <label class="check"><input type="checkbox" checked /><span class="box">✓</span><span class="dot" style="background: var(--cat-blue-bar)"></span> Injectables</label>
+        <label class="check"><input type="checkbox" checked /><span class="box">✓</span><span class="dot" style="background: var(--cat-peach-bar)"></span> Laser &amp; skin</label>
+        <label class="check"><input type="checkbox" checked /><span class="box">✓</span><span class="dot" style="background: var(--cat-purple-bar)"></span> Peels</label>
+        <label class="check"><input type="checkbox" checked /><span class="box">✓</span><span class="dot" style="background: var(--cat-green-bar)"></span> Massage</label>
+        <label class="check"><input type="checkbox" checked /><span class="box">✓</span><span class="dot" style="background: var(--cat-teal-bar)"></span> Consultation</label>
+      </div>
+
+      <!-- Status legend -->
+      <div class="filters">
+        <div class="filters__head">
+          <div class="side__title">Status</div>
+        </div>
+        <div class="legend">
+          <div class="legend__row"><span class="legend__swatch legend__swatch--service"></span> Booked · service-type color</div>
+          <div class="legend__row"><span class="legend__swatch legend__swatch--active"></span> In progress · checked in</div>
+          <div class="legend__row"><span class="legend__swatch legend__swatch--done"></span> Checked out · completed</div>          <div class="legend__row"><span class="legend__swatch legend__swatch--canceled"></span> Canceled · no-show</div>        </div>
+      </div>
+
+      <!-- Providers -->
+      <div class="filters">
+        <div class="filters__head">
+          <div class="side__title">Providers</div>
+          <span style="color: var(--ink-faint)">▾</span>
+        </div>
+        <label class="check"><input type="checkbox" checked /><span class="box">✓</span><img class="pfp pfp--sm" src="https://i.pravatar.cc/48?img=47" alt="" /> Dr. Alina Reyes</label>
+        <label class="check"><input type="checkbox" checked /><span class="box">✓</span><img class="pfp pfp--sm" src="https://i.pravatar.cc/48?img=45" alt="" /> Mia Kwon, RN</label>
+        <label class="check"><input type="checkbox" checked /><span class="box">✓</span><img class="pfp pfp--sm" src="https://i.pravatar.cc/48?img=13" alt="" /> Jordan Blake</label>
+      </div>
+    </aside>
+
+    <!-- ============ Main ============ -->
+    <div class="main">
+      <!-- Topbar -->
+      <header class="topbar">
+        <div class="topbar__titles">
+          <h2 class="topbar__title">Calendar</h2>
+        </div>
+        <div class="search">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
+          <input placeholder="Search appointments, customers…" />
+        </div>
+        <div class="topbar__spacer"></div>
+        <div class="topbar__actions">
+          <div class="seg">
+            <button data-cal-view="day">Day</button>
+            <button class="is-active" data-cal-view="week">Week</button>
+            <button data-cal-view="month">Month</button>
+          </div>
+          <div class="context">
+            <button class="chip chip--context" data-context-toggle>
+              <img class="pfp pfp--sm context__pfp" src="https://i.pravatar.cc/48?img=47" alt="" />
+              <span class="pfp pfp--sm pfp--all context__pfp-all" hidden>✦</span>
+              <span class="context__label">Downtown · Alina R.</span> ▾
+            </button>
+            <div class="context-menu" hidden>
+              <div class="context-menu__group context-menu__group--loc">
+                <div class="context-menu__label">Location</div>
+                <button class="context-opt is-selected" data-context-loc="Downtown">Downtown Studio</button>
+                <button class="context-opt" data-context-loc="Uptown">Uptown Loft</button>
+                <button class="context-opt" data-context-loc="Riverside">Riverside Spa</button>
+              </div>
+              <div class="context-menu__group">
+                <div class="context-menu__label">Provider</div>
+                <button class="context-opt" data-context-prov="All providers" data-pfp="" data-locs="Downtown,Uptown,Riverside"><span class="context-opt__id"><span class="pfp pfp--sm pfp--all">✦</span> All providers</span></button>
+                <button class="context-opt is-selected" data-context-prov="Alina R." data-pfp="https://i.pravatar.cc/48?img=47" data-locs="Downtown,Uptown"><span class="context-opt__id"><img class="pfp pfp--sm" src="https://i.pravatar.cc/48?img=47" alt="" /> Dr. Alina Reyes</span></button>
+                <button class="context-opt" data-context-prov="Mia K." data-pfp="https://i.pravatar.cc/48?img=45" data-locs="Downtown,Riverside"><span class="context-opt__id"><img class="pfp pfp--sm" src="https://i.pravatar.cc/48?img=45" alt="" /> Mia Kwon, RN</span></button>
+                <button class="context-opt" data-context-prov="Jordan B." data-pfp="https://i.pravatar.cc/48?img=13" data-locs="Uptown,Riverside"><span class="context-opt__id"><img class="pfp pfp--sm" src="https://i.pravatar.cc/48?img=13" alt="" /> Jordan Blake</span></button>
+              </div>
+            </div>
+          </div>
+          <button class="btn-primary">＋ Create booking</button>
+        </div>
+      </header>
+
+      <!-- Canvas -->
+      <div class="canvas">
+
+        <!-- ===== Calendar view ===== -->
+        <section class="view view--calendar">
+          <div class="cal cal--week">
+            <div class="cal__tz">GMT-07 · June 15 – 21, 2025</div>
+            <div class="cal__head">
+              <div class="cal__corner"></div>
+              <div class="cal__day-head"><div class="cal__dow">Sun</div><div class="cal__dnum">15</div></div>
+              <div class="cal__day-head"><div class="cal__dow">Mon</div><div class="cal__dnum">16</div></div>
+              <div class="cal__day-head"><div class="cal__dow">Tue</div><div class="cal__dnum">17</div></div>
+              <div class="cal__day-head is-today"><div class="cal__dow">Wed</div><div class="cal__dnum">18</div></div>
+              <div class="cal__day-head"><div class="cal__dow">Thu</div><div class="cal__dnum">19</div></div>
+              <div class="cal__day-head"><div class="cal__dow">Fri</div><div class="cal__dnum">20</div></div>
+              <div class="cal__day-head"><div class="cal__dow">Sat</div><div class="cal__dnum">21</div></div>
+            </div>
+
+            <div class="cal__body">
+              <!-- gutter -->
+              <div class="cal__gutter">
+                <div class="cal__hour">8 AM</div><div class="cal__hour">9 AM</div><div class="cal__hour">10 AM</div>
+                <div class="cal__hour">11 AM</div><div class="cal__hour">12 PM</div><div class="cal__hour">1 PM</div>
+                <div class="cal__hour">2 PM</div><div class="cal__hour">3 PM</div><div class="cal__hour">4 PM</div>
+                <div class="cal__hour">5 PM</div><div class="cal__hour">6 PM</div>
+              </div>
+
+              <!-- Sun -->
+              <div class="cal__col">
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <button class="event cat-teal" style="top:104px;height:39px">
+                  <span class="event__title">New Client Consult</span>
+                  <span class="event__time">10:00 – 10:45</span>
+                </button>
+              </div>
+
+              <!-- Mon -->
+              <div class="cal__col">
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <button class="event cat-pink" style="top:52px;height:39px">
+                  <span class="event__title">Botox Consultation</span>
+                  <span class="event__time">9:00 – 9:45</span>
+                </button>
+                <button class="event cat-blue" style="top:156px;height:52px" data-open-drawer>
+                  <span class="event__title">Hydrafacial</span>
+                  <span class="event__time">11:00 – 12:00 · Sarah J.</span>
+                  <span class="event__foot"><span class="intake intake--missing">Forms due</span></span>
+                </button>
+                <button class="event cat-peach" style="top:260px;height:65px">
+                  <span class="event__title">Dermaplaning</span>
+                  <span class="event__time">1:00 – 2:15</span>
+                </button>
+              </div>
+
+              <!-- Tue -->
+              <div class="cal__col">
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <button class="event cat-purple" style="top:91px;height:52px">
+                  <span class="event__title">Lip Filler</span>
+                  <span class="event__time">9:45 – 10:45</span>
+                  <span class="event__foot"><span class="intake intake--ok">Ready</span></span>
+                </button>
+                <button class="event cat-green" style="top:208px;height:52px">
+                  <span class="event__title">Chemical Peel</span>
+                  <span class="event__time">12:00 – 1:00</span>
+                </button>
+              </div>
+
+              <!-- Wed (today) -->
+              <div class="cal__col">
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="now-line" style="top:173px"><span class="now-line__label">11:20</span></div>
+                <button class="event cat-purple event--done" style="top:0px;height:39px">
+                  <span class="event__title">Chemical Peel</span>
+                  <span class="event__time">8:00 – 8:45</span>
+                  <span class="event__foot"><span class="event__status">Checked out</span></span>
+                </button>
+                <button class="event cat-teal event--done" style="top:52px;height:26px">
+                  <span class="event__title">Microneedling</span>
+                  <span class="event__time">9:00 – 9:30 · Checked out</span>
+                </button>
+                <button class="event cat-blue event--active" style="top:104px;height:39px">
+                  <span class="event__title">Laser Hair Removal</span>
+                  <span class="event__time">10:00 – 10:45</span>
+                  <span class="event__foot"><span class="event__status"><span class="live-dot"></span>In progress</span></span>
+                </button>
+                <button class="event cat-pink" style="top:312px;height:52px">
+                  <span class="event__title">Signature Facial</span>
+                  <span class="event__time">2:00 – 3:00</span>
+                  <span class="event__foot"><span class="intake intake--missing">Forms due</span></span>
+                </button>
+              </div>
+
+              <!-- Thu -->
+              <div class="cal__col">
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <button class="event cat-peach" style="top:104px;height:52px">
+                  <span class="event__title">New Client Consult</span>
+                  <span class="event__time">10:00 – 11:00</span>
+                  <span class="event__foot"><span class="intake intake--ok">Ready</span></span>
+                </button>
+                <button class="event cat-purple event--canceled" style="top:260px;height:26px">
+                  <span class="event__title">Follow-up</span>
+                  <span class="event__time">1:00 – 1:30 · Canceled</span>
+                </button>
+              </div>
+
+              <!-- Fri -->
+              <div class="cal__col">
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <button class="event cat-green" style="top:78px;height:52px">
+                  <span class="event__title">Lymphatic Massage</span>
+                  <span class="event__time">9:30 – 10:30</span>
+                </button>
+                <button class="event cat-pink" style="top:182px;height:52px">
+                  <span class="event__title">Botox Touch-up</span>
+                  <span class="event__time">11:30 – 12:30</span>
+                  <span class="event__foot"><span class="intake intake--missing">Forms due</span></span>
+                </button>
+              </div>
+
+              <!-- Sat -->
+              <div class="cal__col">
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <button class="event cat-pink" style="top:208px;height:52px">
+                  <span class="event__title">Signature Facial</span>
+                  <span class="event__time">12:00 – 1:00</span>
+                </button>
+                <button class="event cat-peach" style="top:338px;height:39px">
+                  <span class="event__title">Brow Wax &amp; Tint</span>
+                  <span class="event__time">2:30 – 3:15</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Day view (single day · provider columns with profile photos) -->
+          <div class="cal cal--day">
+            <div class="cal__tz">Wednesday, June 18, 2025</div>
+            <div class="cal-day__head">
+              <div class="cal__corner"></div>
+              <div class="cal-provider-head">
+                <img class="pfp" src="https://i.pravatar.cc/72?img=47" alt="" />
+                <div><div class="cal-provider-head__name">Dr. Alina Reyes</div><div class="cal-provider-head__sub">3 appointments</div></div>
+              </div>
+              <div class="cal-provider-head">
+                <img class="pfp" src="https://i.pravatar.cc/72?img=45" alt="" />
+                <div><div class="cal-provider-head__name">Mia Kwon, RN</div><div class="cal-provider-head__sub">3 appointments</div></div>
+              </div>
+              <div class="cal-provider-head">
+                <img class="pfp" src="https://i.pravatar.cc/72?img=13" alt="" />
+                <div><div class="cal-provider-head__name">Jordan Blake</div><div class="cal-provider-head__sub">3 appointments</div></div>
+              </div>
+            </div>
+            <div class="cal-day__body">
+              <div class="cal__gutter">
+                <div class="cal__hour">8 AM</div><div class="cal__hour">9 AM</div><div class="cal__hour">10 AM</div>
+                <div class="cal__hour">11 AM</div><div class="cal__hour">12 PM</div><div class="cal__hour">1 PM</div>
+                <div class="cal__hour">2 PM</div><div class="cal__hour">3 PM</div><div class="cal__hour">4 PM</div>
+                <div class="cal__hour">5 PM</div><div class="cal__hour">6 PM</div>
+              </div>
+
+              <!-- Alina -->
+              <div class="cal__col">
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="now-line" style="top:173px"><span class="now-line__label">11:20</span></div>
+                <button class="event cat-teal event--done" style="top:52px;height:26px">
+                  <span class="event__title">Microneedling</span>
+                  <span class="event__time">9:00 – 9:30 · Checked out</span>
+                </button>
+                <button class="event cat-blue event--active" style="top:104px;height:39px">
+                  <span class="event__title">Laser Hair Removal</span>
+                  <span class="event__time">10:00 – 10:45</span>
+                  <span class="event__foot"><span class="event__status"><span class="live-dot"></span>In progress</span></span>
+                </button>
+                <button class="event cat-pink" style="top:312px;height:52px">
+                  <span class="event__title">Signature Facial</span>
+                  <span class="event__time">2:00 – 3:00</span>
+                  <span class="event__foot"><span class="intake intake--missing">Forms due</span></span>
+                </button>
+              </div>
+
+              <!-- Mia -->
+              <div class="cal__col">
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <button class="event cat-purple event--done" style="top:0px;height:39px">
+                  <span class="event__title">Chemical Peel</span>
+                  <span class="event__time">8:00 – 8:45 · Checked out</span>
+                </button>
+                <button class="event cat-blue" style="top:156px;height:52px" data-open-drawer>
+                  <span class="event__title">Hydrafacial</span>
+                  <span class="event__time">11:00 – 12:00 · Sarah J.</span>
+                  <span class="event__foot"><span class="intake intake--missing">Forms due</span></span>
+                </button>
+                <button class="event cat-peach" style="top:260px;height:65px">
+                  <span class="event__title">Dermaplaning</span>
+                  <span class="event__time">1:00 – 2:15</span>
+                </button>
+              </div>
+
+              <!-- Jordan -->
+              <div class="cal__col">
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+                <button class="event cat-purple" style="top:91px;height:52px">
+                  <span class="event__title">Lip Filler</span>
+                  <span class="event__time">9:45 – 10:45</span>
+                  <span class="event__foot"><span class="intake intake--ok">Ready</span></span>
+                </button>
+                <button class="event cat-green" style="top:208px;height:52px">
+                  <span class="event__title">Chemical Peel</span>
+                  <span class="event__time">12:00 – 1:00</span>
+                </button>
+                <button class="event cat-peach" style="top:390px;height:39px">
+                  <span class="event__title">Brow Wax &amp; Tint</span>
+                  <span class="event__time">3:30 – 4:15</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== Customers view ===== -->
+        <section class="view view--customers">
+          <!-- list -->
+          <div class="cust-list">
+            <div class="cust-list__head">
+              <div class="side__title">Customers</div>
+              <div class="search" style="margin: 10px 0 0; min-width: 0;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
+                <input placeholder="Search customers…" />
+              </div>
+            </div>
+            <div class="cust-list__body">
+              <button class="cust-item is-active">
+                <span class="av tone-a">SJ</span>
+                <span class="cust-item__meta"><span class="cust-item__name">Sarah Jenkins</span><span class="cust-item__sub">sarah.j@example.com</span></span>
+                <span class="cust-item__date">Jun 16</span>
+              </button>
+              <button class="cust-item">
+                <span class="av tone-b">MO</span>
+                <span class="cust-item__meta"><span class="cust-item__name">Marcus Okafor</span><span class="cust-item__sub">(555) 204-1187</span></span>
+                <span class="cust-item__date">Jun 12</span>
+              </button>
+              <button class="cust-item">
+                <span class="av tone-c">EL</span>
+                <span class="cust-item__meta"><span class="cust-item__name">Elena Lombardi</span><span class="cust-item__sub">elena.l@example.com</span></span>
+                <span class="cust-item__date">Jun 09</span>
+              </button>
+              <button class="cust-item">
+                <span class="av tone-d">PR</span>
+                <span class="cust-item__meta"><span class="cust-item__name">Priya Raman</span><span class="cust-item__sub">(555) 771-9930</span></span>
+                <span class="cust-item__date">Jun 05</span>
+              </button>
+              <button class="cust-item">
+                <span class="av tone-e">TN</span>
+                <span class="cust-item__meta"><span class="cust-item__name">Theo Nguyen</span><span class="cust-item__sub">theo.n@example.com</span></span>
+                <span class="cust-item__date">May 28</span>
+              </button>
+              <button class="cust-item">
+                <span class="av tone-f">GA</span>
+                <span class="cust-item__meta"><span class="cust-item__name">Grace Adeyemi</span><span class="cust-item__sub">(555) 448-2261</span></span>
+                <span class="cust-item__date">May 21</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- profile -->
+          <div class="profile">
+            <div class="profile__head">
+              <span class="av av--lg tone-a">SJ</span>
+              <div>
+                <div class="profile__name">Sarah Jenkins</div>
+                <div class="profile__tags">
+                  <span class="tag">VIP</span>
+                  <span class="tag">12 visits</span>
+                  <span class="tag">Since 2023</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="cards">
+              <div class="card">
+                <div class="card__label">Contact</div>
+                <div class="field-line"><span>Email</span><span>sarah.j@example.com</span></div>
+                <div class="field-line"><span>Phone</span><span>(555) 012-3345</span></div>
+                <div class="field-line"><span>Preferred</span><span>SMS reminders</span></div>
+              </div>
+              <div class="card">
+                <div class="card__label">Lifetime value</div>
+                <div class="field-line"><span>Total spend</span><span>$2,340</span></div>
+                <div class="field-line"><span>Avg. ticket</span><span>$195</span></div>
+                <div class="field-line"><span>No-shows</span><span>0</span></div>
+              </div>
+
+              <div class="card card--full">
+                <div class="card__label">Notes</div>
+                <textarea class="notes" placeholder="Add a note…">Sensitive to lidocaine — use alternative numbing. Prefers afternoon appointments.</textarea>
+              </div>
+
+              <div class="card card--full">
+                <div class="card__label">Booking history</div>
+                <div class="history-row">
+                  <div><div class="history-row__svc">Hydrafacial</div><div class="history-row__date">Jun 16, 2025 · Dr. Alina Reyes</div></div>
+                  <span class="hchip hchip--confirmed">Confirmed</span>
+                </div>
+                <div class="history-row">
+                  <div><div class="history-row__svc">Chemical Peel</div><div class="history-row__date">May 02, 2025 · Mia Kwon, RN</div></div>
+                  <span class="hchip hchip--completed">Completed</span>
+                </div>
+                <div class="history-row">
+                  <div><div class="history-row__svc">Botox Touch-up</div><div class="history-row__date">Mar 18, 2025 · Dr. Alina Reyes</div></div>
+                  <span class="hchip hchip--completed">Completed</span>
+                </div>
+                <div class="history-row">
+                  <div><div class="history-row__svc">Lip Filler</div><div class="history-row__date">Feb 09, 2025 · Dr. Alina Reyes</div></div>
+                  <span class="hchip hchip--canceled">Canceled</span>
+                </div>
+              </div>
+
+              <div class="card card--full">
+                <div class="card__label">Form responses</div>
+                <div class="form-item">
+                  <div class="form-item__name">Medical History &amp; Consent <span class="intake-badge intake-badge--submitted">Submitted</span></div>
+                  <div class="form-item__date">Pre-booking · submitted Jun 14, 2025</div>
+                </div>
+                <div class="form-item">
+                  <div class="form-item__name">Pre-visit Skin Assessment <span class="intake-badge intake-badge--missing">Missing</span></div>
+                  <div class="form-item__date">Pre-visit · due before Jun 16</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Slide-out appointment side panel ============ -->
+  <div class="scrim" data-close-drawer></div>
+  <aside class="drawer" aria-label="Appointment details">
+    <div class="drawer__header">
+      <span class="status-chip status-chip--await">Awaiting forms</span>
+      <div class="drawer__hactions">
+        <button class="btn btn--accent">Check in</button>
+        <button class="btn btn--ghost" data-close-drawer>✕</button>
+      </div>
+    </div>
+
+    <div class="drawer__body">
+      <!-- When -->
+      <div class="rail-section">
+        <div class="rail-section__label">When</div>
+        <div class="when-block">
+          <div class="when-block__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>
+          </div>
+          <div>
+            <div class="when-block__date">Monday, Jun 16, 2025</div>
+            <div class="when-block__time">11:00 AM</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:16px; margin-top:12px;">
+          <button class="link-action">Reschedule</button>
+          <button class="link-action" style="color:#c05a4d">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Customer -->
+      <div class="rail-section">
+        <div class="rail-section__label">Customer <button class="link-action">Edit contact</button></div>
+        <div class="cust-row">
+          <span class="av av--lg tone-a">SJ</span>
+          <div class="cust-row__meta">
+            <span class="cust-row__name">Sarah Jenkins</span>
+            <span class="cust-row__sub">(555) 012-3345 · sarah.j@example.com</span>
+          </div>
+        </div>
+        <textarea class="notes" placeholder="Customer notes…">Sensitive to lidocaine — use alternative numbing.</textarea>
+      </div>
+
+      <!-- Service -->
+      <div class="rail-section">
+        <div class="rail-section__label">Service</div>
+        <div class="field-line"><span>Service</span><span>Hydrafacial</span></div>
+        <div class="field-line"><span>Duration</span><span>60 min</span></div>
+        <div class="field-line"><span>Provider</span><span class="prov-inline"><img class="pfp pfp--sm" src="https://i.pravatar.cc/48?img=47" alt="" /> Dr. Alina Reyes</span></div>
+        <div class="field-line"><span>Price</span><span>$180.00</span></div>
+      </div>
+
+      <!-- Payment -->
+      <div class="rail-section">
+        <div class="rail-section__label">Payment</div>
+        <table class="pay-table">
+          <tr class="muted"><td>Subtotal</td><td>$180.00</td></tr>
+          <tr class="muted"><td>Tax (8%)</td><td>$14.40</td></tr>
+          <tr class="muted"><td>Deposit</td><td>$50.00</td></tr>
+          <tr class="muted"><td>Amount paid</td><td>$50.00</td></tr>
+          <tr class="balance"><td>Balance due</td><td>$144.40</td></tr>
+        </table>
+      </div>
+
+      <!-- Forms -->
+      <div class="rail-section">
+        <div class="rail-section__label">Forms <span class="intake-badge intake-badge--missing">1 missing</span></div>
+        <div class="form-item">
+          <div class="form-item__name">Medical History &amp; Consent <span class="intake-badge intake-badge--submitted">Submitted</span></div>
+          <div class="form-item__date">Submitted Jun 14, 2025</div>
+        </div>
+        <div class="form-item">
+          <div class="form-item__name">Pre-visit Skin Assessment <span class="intake-badge intake-badge--missing">Missing</span></div>
+          <div class="form-item__date">Due before visit</div>
+        </div>
+        <button class="btn btn--block" style="margin-top:10px">Send form reminder</button>
+      </div>
+    </div>
+
+    <div class="drawer__footer">
+      <button class="btn btn--accent btn--block">Complete &amp; collect balance</button>
+      <button class="btn btn--danger">No-show</button>
+    </div>
+  </aside>
+
+  <script src="theme.js?v=11"></script>
+</body>
+</html>

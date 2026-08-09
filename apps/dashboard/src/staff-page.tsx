@@ -654,9 +654,7 @@ function StaffDetail({
     { key: "permissions", label: "Permissions" },
   ];
 
-  const directBookingLink = provider
-    ? `${storefrontBaseUrl}/${tenantSlug}?providerId=${provider.id}`
-    : null;
+  const bookingLinkBase = `${storefrontBaseUrl}/${tenantSlug}/p/`;
 
   return (
     <div className="staff-detail-inner">
@@ -702,7 +700,8 @@ function StaffDetail({
         <DetailsTab
           tenantSlug={tenantSlug}
           user={user}
-          directBookingLink={directBookingLink}
+          provider={provider}
+          bookingLinkBase={bookingLinkBase}
           onSaved={onSaved}
         />
       ) : null}
@@ -731,12 +730,14 @@ function StaffDetail({
 function DetailsTab({
   tenantSlug,
   user,
-  directBookingLink,
+  provider,
+  bookingLinkBase,
   onSaved,
 }: {
   tenantSlug: string;
   user: TenantUserSummary;
-  directBookingLink: string | null;
+  provider: ProviderSummary | null;
+  bookingLinkBase: string;
   onSaved: () => void;
 }) {
   const [form, setForm] = useState({
@@ -748,6 +749,16 @@ function DetailsTab({
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [bookingSlug, setBookingSlug] = useState(provider?.bookingSlug ?? "");
+  const [slugSubmitting, setSlugSubmitting] = useState(false);
+  const [slugError, setSlugError] = useState<string | null>(null);
+  const [slugCopied, setSlugCopied] = useState(false);
+
+  useEffect(() => {
+    setBookingSlug(provider?.bookingSlug ?? "");
+    setSlugError(null);
+    setSlugCopied(false);
+  }, [provider?.id, provider?.bookingSlug]);
 
   useEffect(() => {
     setForm({
@@ -855,13 +866,85 @@ function DetailsTab({
         </label>
       </div>
 
-      {directBookingLink ? (
+      {provider ? (
         <div className="staff-booking-link">
           <p className="eyebrow">Direct booking link</p>
-          <code>{directBookingLink}</code>
-          <a className="ghost-action" href={directBookingLink} target="_blank" rel="noreferrer">
-            Open
-          </a>
+          <div className="staff-booking-link-editor">
+            <span className="staff-booking-link-prefix">{bookingLinkBase}</span>
+            <input
+              type="text"
+              value={bookingSlug}
+              onChange={(event) => {
+                setBookingSlug(event.target.value);
+                setSlugError(null);
+                setSlugCopied(false);
+              }}
+              placeholder={provider.id}
+              maxLength={100}
+              spellCheck={false}
+              autoCapitalize="off"
+            />
+          </div>
+          <div className="staff-booking-link-actions">
+            <button
+              type="button"
+              className="ghost-action"
+              disabled={slugSubmitting || (bookingSlug.trim() === (provider.bookingSlug ?? ""))}
+              onClick={async () => {
+                const trimmed = bookingSlug.trim();
+                if (trimmed && !/^[a-z0-9-]+$/i.test(trimmed)) {
+                  setSlugError("Use letters, numbers, and hyphens only.");
+                  return;
+                }
+                setSlugSubmitting(true);
+                setSlugError(null);
+                try {
+                  await platformApi.updateProvider(tenantSlug, provider.id, {
+                    bookingSlug: trimmed || null,
+                  });
+                  onSaved();
+                } catch (err) {
+                  setSlugError(readErrorMessage(err, "Unable to update booking link."));
+                } finally {
+                  setSlugSubmitting(false);
+                }
+              }}
+            >
+              {slugSubmitting ? "Saving…" : "Save link"}
+            </button>
+            {provider.bookingUrl ? (
+              <>
+                <button
+                  type="button"
+                  className="ghost-action"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(provider.bookingUrl!);
+                      setSlugCopied(true);
+                      setTimeout(() => setSlugCopied(false), 2000);
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                >
+                  {slugCopied ? "Copied!" : "Copy link"}
+                </button>
+                <a
+                  className="ghost-action"
+                  href={provider.bookingUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open
+                </a>
+              </>
+            ) : null}
+          </div>
+          {slugError ? (
+            <p role="alert" className="settings-error">
+              {slugError}
+            </p>
+          ) : null}
         </div>
       ) : null}
 

@@ -928,6 +928,8 @@ async def update_tenant_provider(
         provider.is_active = payload.is_active
     if payload.is_bookable_online is not None:
         provider.is_bookable_online = payload.is_bookable_online
+    if payload.booking_slug is not None:
+        provider.booking_slug = payload.booking_slug.strip() or None
 
     if payload.location_ids is not None:
         await _validate_tenant_locations(session, tenant.id, payload.location_ids)
@@ -962,6 +964,27 @@ async def deactivate_tenant_provider(
     provider.is_active = False
     await session.commit()
     provider = await _load_provider_with_links(session, provider.id, tenant.id)
+    return provider_to_summary(provider, tenant)
+
+
+async def get_provider_by_slug(
+    session: AsyncSession, tenant_slug: str, provider_slug: str
+) -> ProviderSummaryResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    provider = await session.scalar(
+        select(Provider)
+        .options(
+            selectinload(Provider.service_links),
+            selectinload(Provider.location_links),
+        )
+        .where(
+            Provider.tenant_id == tenant.id,
+            Provider.booking_slug == provider_slug,
+            Provider.is_active.is_(True),
+        )
+    )
+    if provider is None:
+        raise api_exception(404, "not_found", "Provider was not found for this tenant.")
     return provider_to_summary(provider, tenant)
 
 

@@ -202,6 +202,18 @@ def service_to_summary(service: Service, tenant: Tenant | None = None) -> Servic
     )
 
 
+def _build_provider_booking_url(provider: Provider, tenant: Tenant | None = None) -> str | None:
+    from app.core.config import get_settings
+    settings = get_settings()
+    base = settings.storefront_public_base_url.rstrip("/")
+    if tenant is None:
+        return None
+    slug = getattr(provider, "booking_slug", None)
+    if slug:
+        return f"{base}/{tenant.slug}/p/{slug}"
+    return f"{base}/{tenant.slug}?providerId={provider.id}"
+
+
 def provider_to_summary(provider: Provider, tenant: Tenant | None = None) -> ProviderSummaryResponse:
     profile = _provider_profile_for(provider, tenant)
     image_url = profile["image_url"]
@@ -229,6 +241,8 @@ def provider_to_summary(provider: Provider, tenant: Tenant | None = None) -> Pro
         availability_label=profile["availability_label"],
         is_active=provider.is_active,
         is_bookable_online=getattr(provider, "is_bookable_online", True),
+        booking_slug=getattr(provider, "booking_slug", None),
+        booking_url=_build_provider_booking_url(provider, tenant),
         service_ids=[link.service_id for link in provider.service_links],
         location_ids=[link.location_id for link in provider.location_links],
         compensation_mode=provider.compensation_mode,

@@ -214,6 +214,8 @@ export type ProviderSummary = AuditFields &
     availabilityLabel?: string | null;
     isActive: boolean;
     isBookableOnline: boolean;
+    bookingSlug?: string | null;
+    bookingUrl?: string | null;
     serviceIds: UUID[];
     locationIds: UUID[];
     compensationMode?: string | null;
@@ -307,6 +309,7 @@ export type UpdateProviderRequest = {
   serviceIds?: string[];
   isActive?: boolean;
   isBookableOnline?: boolean;
+  bookingSlug?: string | null;
 };
 
 export type CreateStaffRequest = {

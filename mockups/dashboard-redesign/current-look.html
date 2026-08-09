@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Current Look — Mock-up A</title>
+  <link rel="stylesheet" href="current.css" />
+</head>
+<body>
+  <div class="note-banner">
+    <span class="variant-switch"><a href="current-look.html" class="is-current">A · Current look</a><a href="index.html">B · Redesign</a></span>
+    &nbsp; Your current dashboard, recreated — same espresso theme &amp; layout, with the monthly calendar upgraded to the cleaner style.
+  </div>
+
+  <div class="app">
+    <!-- ============ Sidebar ============ -->
+    <aside class="side">
+      <div class="brand">
+        <div class="brand__mark">B</div>
+        <div>
+          <div class="brand__name">BROW BEAUTY LAB</div>
+          <div class="brand__sub">Operator desk</div>
+        </div>
+      </div>
+
+      <!-- Upgraded monthly calendar -->
+      <div class="mini">
+        <div class="mini__head">
+          <div class="mini__month">July<small>2026</small></div>
+          <div class="mini__nav">
+            <button>Prev</button>
+            <button>Next</button>
+          </div>
+        </div>
+        <div class="mini__grid">
+          <div class="mini__dow">Sa</div><div class="mini__dow">Su</div><div class="mini__dow">Mo</div>
+          <div class="mini__dow">Tu</div><div class="mini__dow">We</div><div class="mini__dow">Th</div><div class="mini__dow">Fr</div>
+          <button class="mini__day is-muted">28</button><button class="mini__day is-muted">29</button><button class="mini__day is-muted">30</button>
+          <button class="mini__day">1</button><button class="mini__day">2</button><button class="mini__day">3</button><button class="mini__day">4</button>
+          <button class="mini__day">5</button><button class="mini__day">6</button><button class="mini__day">7</button>
+          <button class="mini__day">8</button><button class="mini__day">9</button><button class="mini__day">10</button><button class="mini__day">11</button>
+          <button class="mini__day">12</button><button class="mini__day">13</button><button class="mini__day">14</button>
+          <button class="mini__day">15</button><button class="mini__day">16</button><button class="mini__day">17</button><button class="mini__day">18</button>
+          <button class="mini__day">19</button><button class="mini__day">20</button><button class="mini__day">21</button>
+          <button class="mini__day">22</button><button class="mini__day">23</button><button class="mini__day">24</button><button class="mini__day is-today">25</button>
+          <button class="mini__day">26</button><button class="mini__day">27</button><button class="mini__day">28</button>
+          <button class="mini__day">29</button><button class="mini__day">30</button><button class="mini__day">31</button><button class="mini__day is-muted">1</button>
+          <button class="mini__day is-muted">2</button><button class="mini__day is-muted">3</button><button class="mini__day is-muted">4</button>
+          <button class="mini__day is-muted">5</button><button class="mini__day is-muted">6</button><button class="mini__day is-muted">7</button><button class="mini__day is-muted">8</button>
+        </div>
+      </div>
+
+      <!-- Nav menu (under the calendar, as today) -->
+      <nav class="nav">
+        <button class="nav__link">Overview</button>
+        <button class="nav__link is-active">Calendar</button>
+        <button class="nav__link">Payments</button>
+        <button class="nav__link">Customers</button>
+        <button class="nav__link">Locations</button>
+        <button class="nav__link">Forms</button>
+        <button class="nav__link">Settings &amp; management <span class="nav__plus">+</span></button>
+      </nav>
+    </aside>
+
+    <!-- ============ Main ============ -->
+    <div class="main">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">Calendar-first booking</div>
+          <h2 class="topbar__title">CALENDAR</h2>
+        </div>
+        <div class="topbar__spacer"></div>
+        <div class="owner">OWNER &nbsp;<strong>Melissa Chang</strong></div>
+        <button class="ghost-btn">Open storefront</button>
+        <button class="ghost-btn">Sign out</button>
+      </header>
+
+      <div class="controls">
+        <button class="pill-btn">Today</button>
+        <div class="stepper"><button>‹</button><button>›</button></div>
+        <span class="range">Sun, Jul 19 – Sat, Jul 25</span>
+        <div class="controls__spacer"></div>
+        <div class="control-field">
+          <label>Availability for</label>
+          <div class="select">Any service <span>▾</span></div>
+        </div>
+        <div class="seg">
+          <button>Day</button>
+          <button class="is-active">Week</button>
+        </div>
+        <div class="control-field">
+          <label>Show provider</label>
+          <div class="select">All providers <span>▾</span></div>
+        </div>
+      </div>
+
+      <div class="canvas">
+        <div class="cal">
+          <div class="cal__head">
+            <div class="cal__corner">Time</div>
+            <div class="cal__day-head"><div class="cal__dow">Sun</div><div class="cal__dnum">19</div></div>
+            <div class="cal__day-head"><div class="cal__dow">Mon</div><div class="cal__dnum">20</div></div>
+            <div class="cal__day-head"><div class="cal__dow">Tue</div><div class="cal__dnum">21</div></div>
+            <div class="cal__day-head"><div class="cal__dow">Wed</div><div class="cal__dnum">22</div></div>
+            <div class="cal__day-head"><div class="cal__dow">Thu</div><div class="cal__dnum">23</div></div>
+            <div class="cal__day-head"><div class="cal__dow">Fri</div><div class="cal__dnum">24</div></div>
+            <div class="cal__day-head is-today"><div class="cal__dow">Sat</div><div class="cal__dnum">25</div></div>
+          </div>
+
+          <div class="cal__body">
+            <div class="cal__gutter">
+              <div class="cal__hour">9 AM</div><div class="cal__hour">10 AM</div><div class="cal__hour">11 AM</div>
+              <div class="cal__hour">12 PM</div><div class="cal__hour">1 PM</div><div class="cal__hour">2 PM</div>
+              <div class="cal__hour">3 PM</div><div class="cal__hour">4 PM</div>
+            </div>
+
+            <!-- Sun 19 -->
+            <div class="cal__col">
+              <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+              <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+              <button class="event" style="top:64px;height:48px">
+                <span class="event__who">Melissa Chang</span>
+                <span class="event__svc">Brow Shape and Tint · 10:00 – 10:45 AM</span>
+              </button>
+            </div>
+            <!-- Mon 20 -->
+            <div class="cal__col">
+              <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+              <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+            </div>
+            <!-- Tue 21 -->
+            <div class="cal__col">
+              <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+              <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+            </div>
+            <!-- Wed 22 -->
+            <div class="cal__col">
+              <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+              <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+            </div>
+            <!-- Thu 23 -->
+            <div class="cal__col">
+              <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+              <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+            </div>
+            <!-- Fri 24 -->
+            <div class="cal__col">
+              <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+              <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+              <button class="event" style="top:384px;height:64px">
+                <span class="event__who">Melissa Chang</span>
+                <span class="event__svc">Signature Facial · 3:00 – 4:00 PM</span>
+                <span class="event__warn">Intake not submitted</span>
+              </button>
+            </div>
+            <!-- Sat 25 (today) -->
+            <div class="cal__col">
+              <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+              <div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div><div class="cal__slot"></div>
+              <button class="event" style="top:416px;height:64px">
+                <span class="event__who">Melissa Chang</span>
+                <span class="event__svc">Signature Facial · 3:30 – 4:30 PM</span>
+                <span class="event__warn">Intake not submitted</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,159 @@
+/* ============================================================
+   Mock-up A — "Current look" recreation (espresso theme)
+   Matches the live dashboard, with an upgraded monthly calendar.
+   Self-contained; does not depend on styles.css.
+   ============================================================ */
+:root {
+  --bg: #efe8dc;
+  --sidebar: #efe7db;
+  --card: #fbf7ef;
+  --ink: #3a2a20;
+  --ink-soft: #7c6a58;
+  --faint: #a9987f;
+  --border: #e3d8c6;
+  --border-soft: #ece3d4;
+  --espresso: #2a1d18;
+  --amber: #c89968;
+  --amber-deep: #b07e46;
+  --amber-soft: #f0e2cd;
+  --tan: #d9cbb2;
+  --tan-2: #cbb998;
+  --tan-ink: #5a4636;
+  --warn: #b3603a;
+
+  --radius-lg: 20px;
+  --radius-md: 13px;
+  --radius-sm: 9px;
+  --radius-pill: 999px;
+  --shadow-sm: 0 1px 2px rgba(58,42,32,.06);
+  --shadow-md: 0 8px 22px rgba(58,42,32,.12);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 14px; -webkit-font-smoothing: antialiased;
+}
+button { font-family: inherit; cursor: pointer; }
+
+.note-banner {
+  padding: 8px 16px; font-size: 12px; color: var(--ink-soft);
+  background: var(--amber-soft); text-align: center; border-bottom: 1px solid var(--border);
+}
+.variant-switch { display: inline-flex; gap: 6px; }
+.variant-switch a {
+  font-size: 12px; font-weight: 700; text-decoration: none; color: var(--ink-soft);
+  border: 1px solid var(--border); background: var(--card);
+  padding: 6px 12px; border-radius: var(--radius-pill);
+}
+.variant-switch a.is-current { background: var(--espresso); color: #f3ead9; border-color: var(--espresso); }
+
+.app { display: grid; grid-template-columns: 280px 1fr; height: calc(100vh - 33px); }
+
+/* ---------- Sidebar ---------- */
+.side {
+  background: var(--sidebar); border-right: 1px solid var(--border);
+  padding: 20px 18px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 20px;
+}
+.brand { display: flex; align-items: center; gap: 11px; }
+.brand__mark { width: 34px; height: 34px; border-radius: 10px; background: var(--espresso); display: grid; place-items: center; color: #f0e2cd; font-weight: 700; }
+.brand__name { font-weight: 800; letter-spacing: .04em; font-size: 13.5px; }
+.brand__sub { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--faint); }
+
+/* Upgraded mini month calendar (clean look, in a white card) */
+.mini {
+  background: var(--card); border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg); padding: 14px; box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.mini__head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 12px; }
+.mini__month { font-weight: 700; font-size: 15px; line-height: 1.1; }
+.mini__month small { display: block; font-size: 11px; color: var(--faint); font-weight: 600; }
+.mini__nav { display: flex; gap: 4px; flex: none; }
+.mini__nav button {
+  border: 1px solid var(--border); background: var(--card); color: var(--ink-soft);
+  border-radius: var(--radius-pill); font-size: 10px; font-weight: 700; letter-spacing: .06em;
+  padding: 5px 9px; text-transform: uppercase;
+}
+.mini__nav button:hover { background: var(--amber-soft); }
+.mini__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; width: 100%; }
+.mini__dow { text-align: center; font-size: 10px; color: var(--faint); padding: 3px 0; font-weight: 700; min-width: 0; }
+.mini__day {
+  aspect-ratio: 1; min-width: 0; display: grid; place-items: center; font-size: 12px;
+  border-radius: 9px; border: none; background: transparent; color: var(--ink); padding: 0;
+}
+.mini__day:hover { background: var(--amber-soft); }
+.mini__day.is-muted { color: var(--faint); }
+.mini__day.is-today { background: var(--amber); color: #3a2a12; font-weight: 800; }
+
+/* Nav menu */
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav__link {
+  text-align: left; border: none; background: transparent; color: var(--ink-soft);
+  font-size: 12.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  padding: 11px 14px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.nav__link:hover { background: var(--border-soft); color: var(--ink); }
+.nav__link.is-active { background: var(--espresso); color: #f3ead9; }
+.nav__plus { color: var(--faint); font-weight: 700; }
+
+/* ---------- Main ---------- */
+.main { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.topbar { display: flex; align-items: center; gap: 16px; padding: 18px 26px; }
+.eyebrow { font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--faint); }
+.topbar__title { font-size: 22px; font-weight: 800; letter-spacing: .06em; margin: 2px 0 0; }
+.topbar__spacer { flex: 1; }
+.owner { font-size: 12px; color: var(--ink-soft); }
+.owner strong { color: var(--ink); }
+.ghost-btn { border: none; background: transparent; color: var(--ink); font-weight: 700; font-size: 13px; padding: 8px 12px; border-radius: 10px; }
+.ghost-btn:hover { background: var(--border-soft); }
+
+/* Controls row */
+.controls { display: flex; align-items: center; gap: 14px; padding: 0 26px 16px; }
+.pill-btn {
+  border: 1px solid var(--border); background: var(--card); color: var(--ink);
+  border-radius: var(--radius-pill); padding: 8px 16px; font-weight: 700; font-size: 12.5px;
+}
+.stepper { display: inline-flex; gap: 4px; }
+.stepper button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border); background: var(--card); color: var(--ink-soft); }
+.range { font-size: 13px; color: var(--ink-soft); font-weight: 600; }
+.controls__spacer { flex: 1; }
+.control-field { display: flex; flex-direction: column; gap: 3px; }
+.control-field label { font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--faint); }
+.select {
+  border: 1px solid var(--border); background: var(--card); color: var(--ink);
+  border-radius: 10px; padding: 8px 12px; font-size: 12.5px; font-weight: 600; min-width: 150px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.seg { display: inline-flex; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 3px; }
+.seg button { border: none; background: transparent; padding: 7px 15px; border-radius: var(--radius-pill); font-size: 12.5px; font-weight: 700; color: var(--ink-soft); }
+.seg button.is-active { background: var(--espresso); color: #f3ead9; }
+
+/* ---------- Calendar (7-day) ---------- */
+.canvas { flex: 1; overflow: auto; padding: 0 26px 24px; }
+.cal { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
+.cal__head { display: grid; grid-template-columns: 66px repeat(7, 1fr); border-bottom: 1px solid var(--border); }
+.cal__corner { display: grid; place-items: center; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+.cal__day-head { padding: 12px 10px; text-align: center; border-left: 1px solid var(--border-soft); }
+.cal__dow { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+.cal__dnum { font-size: 20px; font-weight: 800; }
+.cal__day-head.is-today .cal__dnum { color: var(--amber-deep); }
+.cal__day-head.is-today { background: var(--amber-soft); }
+
+.cal__body { display: grid; grid-template-columns: 66px repeat(7, 1fr); }
+.cal__hour { height: 64px; border-bottom: 1px solid var(--border-soft); font-size: 11px; color: var(--faint); padding: 4px 8px 0; text-align: right; }
+.cal__col { border-left: 1px solid var(--border-soft); position: relative; }
+.cal__slot { height: 64px; border-bottom: 1px solid var(--border-soft); }
+
+.event {
+  position: absolute; left: 5px; right: 5px; border: 1px solid var(--tan-2);
+  background: var(--tan); color: var(--tan-ink); border-radius: 10px; padding: 7px 9px;
+  text-align: left; overflow: hidden; box-shadow: var(--shadow-sm);
+}
+.event__who { font-weight: 700; font-size: 12px; display: block; }
+.event__svc { font-size: 11px; opacity: .92; display: block; }
+.event__warn { display: block; margin-top: 4px; font-size: 9.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--warn); }

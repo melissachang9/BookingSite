@@ -480,6 +480,20 @@ async def list_providers_admin(
     return await list_tenant_providers_admin(session, tenant_slug)
 
 
+@router.get(
+    "/{tenant_slug}/providers/by-slug/{provider_slug}",
+    response_model=ProviderSummaryResponse,
+    summary="Get a provider by their booking slug (public)",
+)
+async def get_provider_by_slug_route(
+    tenant_slug: str,
+    provider_slug: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> ProviderSummaryResponse:
+    from app.services.tenants import get_provider_by_slug
+    return await get_provider_by_slug(session, tenant_slug, provider_slug)
+
+
 @router.post(
     "/{tenant_slug}/providers",
     response_model=ProviderSummaryResponse,

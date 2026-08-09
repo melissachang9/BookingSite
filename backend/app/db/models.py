@@ -211,6 +211,7 @@ class Provider(Base, IdMixin, TimestampMixin):
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_bookable_online: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="1")
+    booking_slug: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, unique=True)
     compensation_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     compensation_service_percent_bp: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     compensation_product_percent_bp: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

@@ -18,6 +18,7 @@ import type {
   CreateBookingDraftRequest,
   CreateCheckoutSessionRequest,
   CreateCheckoutSessionResponse,
+  ConfirmWithPaymentRequest,
   CreateFormRequest,
   CreateLocationRequest,
   CreateResourceRequest,
@@ -219,6 +220,8 @@ export const createPlatformApi = (client: ApiClient) => ({
     ),
   deactivateProvider: (tenantSlug: string, providerId: string) =>
     client.delete<ProviderSummary>(`tenants/${tenantSlug}/providers/${providerId}`),
+  getProviderBySlug: (tenantSlug: string, providerSlug: string) =>
+    client.get<ProviderSummary>(`tenants/${tenantSlug}/providers/by-slug/${providerSlug}`),
   getProviderSchedule: (tenantSlug: string, providerId: string) =>
     client.get<ProviderSchedule>(`tenants/${tenantSlug}/providers/${providerId}/schedule`),
   replaceProviderSchedule: (

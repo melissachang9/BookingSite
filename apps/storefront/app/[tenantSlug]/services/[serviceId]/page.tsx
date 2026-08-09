@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { storefrontApi, isApiClientError, isApiNotFoundError } from "../../../lib/storefront-api";
 import {
@@ -13,7 +13,7 @@ import {
 
 type ServicePageProps = {
   params: Promise<{ tenantSlug: string; serviceId: string }>;
-  searchParams: Promise<{ error?: string; locationId?: string; screening?: string }>;
+  searchParams: Promise<{ error?: string; locationId?: string; screening?: string; providerId?: string }>;
 };
 
 export const dynamic = "force-dynamic";
@@ -28,7 +28,7 @@ const initialsFor = (name: string) =>
 
 export default async function ServiceRoutePage({ params, searchParams }: ServicePageProps) {
   const { tenantSlug, serviceId } = await params;
-  const { error, locationId, screening } = await searchParams;
+  const { error, locationId, screening, providerId: preselectedProviderId } = await searchParams;
 
   try {
     const [tenant, serviceResponse, locationResponse] = await Promise.all([
@@ -54,6 +54,40 @@ export default async function ServiceRoutePage({ params, searchParams }: Service
     const selectionQuery = { locationId: selectedLocation?.id, screening };
     const providerStepNumber = (screening ? 1 : 0) + (selectedLocation ? 1 : 0) + 2;
     const today = isoDateForTimeZone(tenant.timezone);
+
+    // If a specific provider was pre-selected (via direct booking link),
+    // skip the provider chooser and jump straight to their availability.
+    if (preselectedProviderId) {
+      const providerListForCheck = await storefrontApi.listServiceProviders(
+        tenantSlug,
+        service.id,
+        { locationId: selectedLocation?.id },
+      );
+      const matched = providerListForCheck.providers.find((p) => p.id === preselectedProviderId);
+      if (matched) {
+        const preselectedAvailability = await storefrontApi.getAvailability({
+          tenantSlug,
+          serviceId: service.id,
+          providerId: matched.id,
+          locationId: selectedLocation?.id,
+          date: today,
+          windowDays: 31,
+        });
+        const nextSlot = preselectedAvailability.nextAvailableSlot?.startAt;
+        const nextDate = nextSlot
+          ? isoDateFromValueInTimeZone(nextSlot, tenant.timezone)
+          : undefined;
+        redirect(
+          pathWithQuery(availabilityPath, {
+            ...selectionQuery,
+            providerId: matched.id,
+            month: nextDate ? nextDate.slice(0, 7) : undefined,
+            date: nextDate,
+          }),
+        );
+      }
+    }
+
     const [providerResponse, noPreferenceAvailability] = await Promise.all([
       storefrontApi.listServiceProviders(tenantSlug, service.id, { locationId: selectedLocation?.id }),
       storefrontApi.getAvailability({
@@ -166,6 +200,12 @@ export default async function ServiceRoutePage({ params, searchParams }: Service
       </main>
     );
   } catch (error) {
+    // Re-throw Next.js redirect/notFound control-flow errors so they aren't
+    // swallowed by the "service unavailable" fallback below.
+    const digest = (error as { digest?: unknown } | null)?.digest;
+    if (typeof digest === "string" && (digest.startsWith("NEXT_REDIRECT") || digest === "NEXT_NOT_FOUND")) {
+      throw error;
+    }
     if (isApiNotFoundError(error)) {
       notFound();
     }

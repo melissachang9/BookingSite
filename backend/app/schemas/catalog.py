@@ -636,6 +636,8 @@ class ProviderSummaryResponse(CamelModel):
     availability_label: str | None = None
     is_active: bool
     is_bookable_online: bool = True
+    booking_slug: str | None = None
+    booking_url: str | None = None
     service_ids: list[str]
     location_ids: list[str]
     compensation_mode: str | None = None
@@ -789,6 +791,7 @@ class UpdateProviderRequest(CamelModel):
     service_ids: list[str] | None = None
     is_active: bool | None = None
     is_bookable_online: bool | None = None
+    booking_slug: str | None = Field(default=None, max_length=100)
 
     @model_validator(mode="after")
     def _validate(self) -> "UpdateProviderRequest":
