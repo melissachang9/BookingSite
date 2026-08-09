@@ -617,7 +617,7 @@ async def put_provider_schedule(
     session: AsyncSession = Depends(get_db_session),
 ) -> ProviderScheduleResponse:
     result = await replace_tenant_provider_schedule(session, tenant_slug, provider_id, payload)
-    await record_audit(session, tenant_id=result.provider.tenant_id, entity_type="provider_schedule", entity_id=provider_id, action="replace", actor=actor)
+    await record_audit(session, tenant_id=actor.tenant_id, entity_type="provider_schedule", entity_id=provider_id, action="replace", actor=actor)
     return result
 
 
@@ -727,7 +727,7 @@ async def post_copy_day(
     session: AsyncSession = Depends(get_db_session),
 ) -> WorkHoursResponse:
     result = await copy_provider_day(session, tenant_slug, provider_id, payload)
-    await record_audit(session, tenant_id=result.provider.tenant_id, entity_type="provider_schedule", entity_id=provider_id, action="copy_day", actor=actor)
+    await record_audit(session, tenant_id=actor.tenant_id, entity_type="provider_schedule", entity_id=provider_id, action="copy_day", actor=actor)
     return result
 
 

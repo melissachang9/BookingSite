@@ -2395,10 +2395,15 @@ function DayEditorDrawer({
 
   // Track which mode we initialized for so we can seed from the correct source when scope changes.
   const initializedForRef = useRef<string>("");
+  const lastDateRef = useRef<string>("");
   useEffect(() => {
     const key = `${dateStr}:${scope}:${dateOverride?.id || ""}`;
     if (initializedForRef.current === key) return;
     initializedForRef.current = key;
+
+    // When opening a new day, reset and seed from the correct source
+    const isNewDay = lastDateRef.current !== dateStr;
+    lastDateRef.current = dateStr;
 
     if (scope === "date" && dateOverride) {
       if (dateOverride.overrideType === "closed") {
@@ -2413,7 +2418,10 @@ function DayEditorDrawer({
     } else {
       const active = recurringShifts.filter((s) => s.isActive);
       setLocalShifts(active.map((s) => ({ startTime: s.startTime, endTime: s.endTime })));
-      setBlockedIds(recurringBlockedServices);
+      // Only seed blocked services when opening a new day; preserve user selections on scope switch
+      if (isNewDay) {
+        setBlockedIds(recurringBlockedServices);
+      }
     }
   }, [dateStr, scope, dateOverride, recurringShifts, recurringBlockedServices]);
 
