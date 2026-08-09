@@ -403,7 +403,7 @@ export function CustomersPage({
       {showAddForm ? (
         <>
           <div className="appointment-drawer-backdrop" onClick={() => { setShowAddForm(false); setAddFormError(""); }} />
-          <aside className="appointment-details-drawer" role="dialog" aria-label="Add customer" style={{ width: "min(100vw, 420px)" }}>
+          <aside className="appointment-details-drawer" role="dialog" aria-label="Add customer">
             <header className="appointment-details-drawer__header">
               <span className="appointment-status-chip">
                 <span aria-hidden="true" />
