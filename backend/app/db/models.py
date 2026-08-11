@@ -168,6 +168,7 @@ class Service(Base, IdMixin, TimestampMixin):
     booking_payment_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # none, partial_percent, partial_flat, full
     booking_payment_value_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     booking_payment_percent: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 0-100
+    provider_selection_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # client_choice, auto_assign, hide
 
     tenant: Mapped[Tenant] = relationship(back_populates="services")
     category: Mapped[Optional["ServiceCategory"]] = relationship(back_populates="services")
@@ -216,6 +217,7 @@ class Provider(Base, IdMixin, TimestampMixin):
     compensation_service_percent_bp: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     compensation_product_percent_bp: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     compensation_hourly_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    compensation_flat_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     compensation_sliding_scale: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="providers")

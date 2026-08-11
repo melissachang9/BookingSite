@@ -88,6 +88,29 @@ export default async function ServiceRoutePage({ params, searchParams }: Service
       }
     }
 
+    // If the service is configured to auto-assign or hide provider selection,
+    // skip the provider chooser and go straight to availability.
+    if (service.providerSelectionMode === "auto_assign" || service.providerSelectionMode === "hide") {
+      const noPrefAvailability = await storefrontApi.getAvailability({
+        tenantSlug,
+        serviceId: service.id,
+        locationId: selectedLocation?.id,
+        date: today,
+        windowDays: 31,
+      });
+      const nextSlot = noPrefAvailability.nextAvailableSlot?.startAt;
+      const nextDate = nextSlot
+        ? isoDateFromValueInTimeZone(nextSlot, tenant.timezone)
+        : undefined;
+      redirect(
+        pathWithQuery(availabilityPath, {
+          ...selectionQuery,
+          month: nextDate ? nextDate.slice(0, 7) : undefined,
+          date: nextDate,
+        }),
+      );
+    }
+
     const [providerResponse, noPreferenceAvailability] = await Promise.all([
       storefrontApi.listServiceProviders(tenantSlug, service.id, { locationId: selectedLocation?.id }),
       storefrontApi.getAvailability({

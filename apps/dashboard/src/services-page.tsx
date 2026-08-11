@@ -147,7 +147,6 @@ export function ServicesPage({
   const [activeTab, setActiveTab] = useState<ServiceTabKey>("details");
   const [drag, setDrag] = useState<DragState>({ kind: "none" });
   const [dragOverTarget, setDragOverTarget] = useState<DragOverTarget>({ kind: "none" });
-  const [showCreate, setShowCreate] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [categoryModal, setCategoryModal] = useState<
     | { kind: "none" }
@@ -256,6 +255,10 @@ export function ServicesPage({
     const resp = await platformApi.listServiceCategories(tenantSlug);
     setCategories(resp.categories);
   };
+  const refreshProviders = async () => {
+    const resp = await platformApi.listProvidersAdmin(tenantSlug);
+    setProviders(resp.providers);
+  };
 
   const handleCreateCategory = () => {
     if (!canManage) return;
@@ -315,7 +318,30 @@ export function ServicesPage({
                 <button
                   type="button"
                   className="primary-action"
-                  onClick={() => setShowCreate(true)}
+                  onClick={async () => {
+                    // Create a minimal draft service and select it so the full
+                    // ServiceDetail panel opens with all tabs available.
+                    const defaultDeposit = tenant?.settings.defaultDepositCents ?? 0;
+                    const firstLocationId = locations.length > 0 ? locations[0].id : null;
+                    if (!firstLocationId) {
+                      setStatus("Create a location first.");
+                      return;
+                    }
+                    try {
+                      const created = await platformApi.createService(tenantSlug, {
+                        name: "New Service",
+                        durationMinutes: 60,
+                        priceCents: 0,
+                        depositCents: 0,
+                        locationIds: [firstLocationId],
+                      });
+                      await refreshServices();
+                      setSelection({ kind: "service", serviceId: created.id });
+                      setStatus("New service created. Fill in the details below.");
+                    } catch (err) {
+                      setStatus(readErrorMessage(err, "Unable to create service."));
+                    }
+                  }}
                 >
                   Add service
                 </button>
@@ -439,6 +465,7 @@ export function ServicesPage({
                       if (msg) setStatus(msg);
                     }}
                     onDuplicate={handleDuplicateService}
+                    refreshProviders={refreshProviders}
                   />
                 );
               })()
@@ -448,28 +475,6 @@ export function ServicesPage({
           </div>
         </div>
       </section>
-
-      {showCreate && canManage ? (
-        <CreateServiceDialog
-          tenantSlug={tenantSlug}
-          defaultDepositCents={tenant?.settings.defaultDepositCents ?? 0}
-          categories={orderedCategories}
-          locations={locations}
-          initialCategoryId={
-            selection.kind === "category" &&
-            selection.categoryId !== UNCATEGORIZED_KEY
-              ? selection.categoryId
-              : null
-          }
-          onClose={() => setShowCreate(false)}
-          onCreated={async (created) => {
-            await refreshServices();
-            setSelection({ kind: "service", serviceId: created.id });
-            setStatus(`Service "${created.name}" created.`);
-            setShowCreate(false);
-          }}
-        />
-      ) : null}
 
       {categoryModal.kind === "create" ? (
         <CreateCategoryDialog
@@ -538,6 +543,7 @@ type ServiceCardState = {
   bookingPaymentMode: string; // '', 'partial_percent', 'partial_flat', 'full'
   bookingPaymentValueAmount: string; // dollar amount for partial_flat
   bookingPaymentPercent: string; // percentage for partial_percent
+  providerSelectionMode: string; // 'client_choice', 'auto_assign', 'hide'
 };
 
 function toCardState(service: ServiceSummary): ServiceCardState {
@@ -557,6 +563,7 @@ function toCardState(service: ServiceSummary): ServiceCardState {
     bookingPaymentMode: service.bookingPaymentMode ?? "",
     bookingPaymentValueAmount: service.bookingPaymentValueCents != null ? (service.bookingPaymentValueCents / 100).toFixed(2) : "",
     bookingPaymentPercent: service.bookingPaymentPercent != null ? String(service.bookingPaymentPercent) : "",
+    providerSelectionMode: service.providerSelectionMode ?? "client_choice",
   };
 }
 
@@ -571,6 +578,7 @@ function ServiceDetail({
   onTabChange,
   onSaved,
   onDuplicate,
+  refreshProviders,
 }: {
   service: ServiceSummary;
   categories: ServiceCategorySummary[];
@@ -582,6 +590,7 @@ function ServiceDetail({
   onTabChange: (tab: ServiceTabKey) => void;
   onSaved: (msg?: string) => void;
   onDuplicate: (service: ServiceSummary) => void;
+  refreshProviders: () => Promise<void>;
 }) {
   const [form, setForm] = useState<ServiceCardState>(() => toCardState(service));
   const [saving, setSaving] = useState(false);
@@ -659,6 +668,8 @@ function ServiceDetail({
       const pct = Number(form.bookingPaymentPercent);
       if (Number.isFinite(pct) && pct >= 0 && pct <= 100) body.bookingPaymentPercent = pct;
     }
+    // Provider selection mode
+    body.providerSelectionMode = form.providerSelectionMode || null;
     setSaving(true);
     try { await platformApi.updateService(tenantSlug, service.id, body); onSaved(`"${name}" saved.`); }
     catch (error) { onSaved(readErrorMessage(error, "Unable to save service.")); }
@@ -695,9 +706,30 @@ function ServiceDetail({
   };
 
   const eligibleProviders = useMemo(
-    () => providers.filter((p) => p.isActive && p.serviceIds.includes(service.id)),
+    () => providers.filter((p) => p.isActive),
+    [providers],
+  );
+
+  const assignedProviderIds = useMemo(
+    () => new Set(providers.filter((p) => p.serviceIds.includes(service.id)).map((p) => p.id)),
     [providers, service.id],
   );
+
+  const toggleProviderAssignment = async (providerId: string) => {
+    const provider = providers.find((p) => p.id === providerId);
+    if (!provider || !canManage) return;
+    const isAssigned = assignedProviderIds.has(providerId);
+    const newServiceIds = isAssigned
+      ? provider.serviceIds.filter((id) => id !== service.id)
+      : [...provider.serviceIds, service.id];
+    try {
+      await platformApi.updateProvider(tenantSlug, providerId, { serviceIds: newServiceIds });
+      await refreshProviders();
+      onSaved(isAssigned ? `Removed ${provider.name} from this service.` : `Added ${provider.name} to this service.`);
+    } catch (error) {
+      onSaved(readErrorMessage(error, "Unable to update provider assignment."));
+    }
+  };
 
   const isVariantsDirty = useMemo(() => {
     const normalize = (entries: ProviderServiceVariantEntry[]) => {
@@ -770,13 +802,16 @@ function ServiceDetail({
       ) : null}
       {activeTab === "staff" ? (
         <ServiceStaffTab service={service} eligibleProviders={eligibleProviders}
+          assignedProviderIds={assignedProviderIds}
+          toggleProviderAssignment={toggleProviderAssignment}
           variantByProvider={variantByProvider} updateVariant={updateVariant}
           canManage={canManage} variantsLoaded={variantsLoaded}
           isVariantsDirty={isVariantsDirty} variantsSaving={variantsSaving}
           handleSaveVariants={handleSaveVariants}
           baseDurationMinutes={baseDurationMinutes} basePriceCents={basePriceCents}
           baseDepositCents={baseDepositCents} tenantSlug={tenantSlug}
-          storefrontBaseUrl={storefrontBaseUrl} />
+          storefrontBaseUrl={storefrontBaseUrl}
+          form={form} setForm={setForm} />
       ) : null}
       {activeTab === "resources" ? (
         <div className="staff-detail-form"><p className="settings-form-help">Resources and attachments coming soon.</p></div>
@@ -854,37 +889,24 @@ function ServiceDetailsTab({
           </div>
         </div>
 
-        {/* Pricing & deposit card */}
+        {/* Pricing card */}
         <div className="svc-card">
           <div className="svc-card__row">
-            <span className="svc-card__eyebrow">Pricing &amp; deposit</span>
-            {(Number(form.priceAmount) !== service.priceCents / 100 || Number(form.depositAmount) !== service.depositCents / 100) && canManage ? (
+            <span className="svc-card__eyebrow">Pricing</span>
+            {Number(form.priceAmount) !== service.priceCents / 100 && canManage ? (
               <span className="svc-reset-link" onClick={() => setForm((c) => ({
                 ...c,
                 priceAmount: (service.priceCents / 100).toFixed(2),
-                depositAmount: (service.depositCents / 100).toFixed(2),
               }))}>Reset to default</span>
             ) : null}
           </div>
-          <div className="svc-grid-2">
-            <div>
-              <label className="svc-field-label">Price</label>
-              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <span style={{ fontSize: "13px", color: "#1F1612" }}>$</span>
-                <input className="svc-input" type="number" min={0} step="0.01"
-                  value={form.priceAmount}
-                  onChange={(e) => setForm((c) => ({ ...c, priceAmount: e.target.value }))} required />
-              </div>
-            </div>
-            <div>
-              <label className="svc-field-label">Deposit</label>
-              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <span style={{ fontSize: "13px", color: "#1F1612" }}>$</span>
-                <input className="svc-input" type="number" min={0} step="0.01"
-                  value={form.depositAmount}
-                  onChange={(e) => setForm((c) => ({ ...c, depositAmount: e.target.value }))} required />
-              </div>
-              <div className="svc-helper">Required to book online.</div>
+          <div>
+            <label className="svc-field-label">Price</label>
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <span style={{ fontSize: "13px", color: "#1F1612" }}>$</span>
+              <input className="svc-input" type="number" min={0} step="0.01"
+                value={form.priceAmount}
+                onChange={(e) => setForm((c) => ({ ...c, priceAmount: e.target.value }))} required />
             </div>
           </div>
         </div>
@@ -978,12 +1000,16 @@ function ServiceDetailsTab({
 }
 
 function ServiceStaffTab({
-  service, eligibleProviders, variantByProvider, updateVariant, canManage,
+  service, eligibleProviders, assignedProviderIds, toggleProviderAssignment,
+  variantByProvider, updateVariant, canManage,
   variantsLoaded, isVariantsDirty, variantsSaving, handleSaveVariants,
   baseDurationMinutes, basePriceCents, baseDepositCents, tenantSlug, storefrontBaseUrl,
+  form, setForm,
 }: {
   service: ServiceSummary;
   eligibleProviders: ProviderSummary[];
+  assignedProviderIds: Set<string>;
+  toggleProviderAssignment: (providerId: string) => Promise<void>;
   variantByProvider: Map<string, ProviderServiceVariantEntry>;
   updateVariant: (providerId: string, patch: Partial<ProviderServiceVariantEntry>) => void;
   canManage: boolean;
@@ -996,6 +1022,8 @@ function ServiceStaffTab({
   baseDepositCents: number;
   tenantSlug: string;
   storefrontBaseUrl: string;
+  form: ServiceCardState;
+  setForm: React.Dispatch<React.SetStateAction<ServiceCardState>>;
 }) {
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
 
@@ -1003,13 +1031,13 @@ function ServiceStaffTab({
     return (
       <div className="svc-detail-form">
         <div className="svc-card">
-          <p className="svc-helper">No providers offer this service yet.</p>
+          <p className="svc-helper">No active providers configured. Add staff in the Staff tab first.</p>
         </div>
       </div>
     );
   }
 
-  const enabledCount = eligibleProviders.filter((p) => p.isActive).length;
+  const enabledCount = eligibleProviders.filter((p) => assignedProviderIds.has(p.id)).length;
 
   return (
     <div className="svc-detail-form">
@@ -1032,8 +1060,18 @@ function ServiceStaffTab({
           </div>
           {canManage ? (
             <div style={{ display: "flex", gap: "14px", alignItems: "center" }}>
-              <button type="button" className="svc-text-btn">Enable all</button>
-              <button type="button" className="svc-text-btn">Disable all</button>
+              <button type="button" className="svc-text-btn"
+                onClick={() => {
+                  for (const p of eligibleProviders) {
+                    if (!assignedProviderIds.has(p.id)) toggleProviderAssignment(p.id);
+                  }
+                }}>Enable all</button>
+              <button type="button" className="svc-text-btn"
+                onClick={() => {
+                  for (const p of eligibleProviders) {
+                    if (assignedProviderIds.has(p.id)) toggleProviderAssignment(p.id);
+                  }
+                }}>Disable all</button>
             </div>
           ) : null}
         </div>
@@ -1050,7 +1088,7 @@ function ServiceStaffTab({
               entry.depositCents != null || entry.commissionFlatCents != null || entry.commissionBasisPoints != null;
             const commissionMode: "flat" | "percent" = entry.commissionFlatCents != null ? "flat" : "percent";
             const isExpanded = expandedProvider === provider.id;
-            const isActive = provider.isActive;
+            const isAssigned = assignedProviderIds.has(provider.id);
 
             const metaParts: string[] = [];
             if (hasAnyOverride) metaParts.push("Custom pricing");
@@ -1059,13 +1097,13 @@ function ServiceStaffTab({
             if (metaParts.length === 0) metaParts.push("Uses service defaults");
 
             return (
-              <div key={provider.id} className={`svc-staff-row${isActive ? "" : " svc-staff-row--dim"}`}>
+              <div key={provider.id} className={`svc-staff-row${isAssigned ? "" : " svc-staff-row--dim"}`}>
                 <button
                   type="button"
                   className="svc-staff-row__main"
                   onClick={() => setExpandedProvider(isExpanded ? null : provider.id)}
                 >
-                  <div className="svc-staff-avatar" style={{ background: isActive ? "#6B5A47" : "#8B7960" }}>
+                  <div className="svc-staff-avatar" style={{ background: isAssigned ? "#6B5A47" : "#8B7960" }}>
                     {provider.name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("")}
                   </div>
                   <div style={{ flex: 1 }}>
@@ -1074,11 +1112,13 @@ function ServiceStaffTab({
                   </div>
                   <span className="svc-chev">{isExpanded ? "▾" : "▸"}</span>
                 </button>
-                <label className={`svc-toggle${isActive ? "" : " svc-toggle--off"}`} aria-label={`Toggle ${provider.name}`}>
-                  <input type="checkbox" checked={isActive}
-                    onChange={() => {}} disabled={!canManage}
-                    style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
-                </label>
+                <button
+                  type="button"
+                  className={`svc-toggle${isAssigned ? "" : " svc-toggle--off"}`}
+                  aria-label={`Toggle ${provider.name}`}
+                  disabled={!canManage}
+                  onClick={() => toggleProviderAssignment(provider.id)}
+                />
 
                 {isExpanded ? (
                   <div className="svc-override-card">
@@ -1149,9 +1189,9 @@ function ServiceStaffTab({
                       <div className="svc-override-row">
                         <span className="svc-override-label">Enable in online booking</span>
                         <div className="svc-override-value">
-                          <label className={`svc-toggle${isActive ? "" : " svc-toggle--off"}`} aria-label={`Online booking for ${provider.name}`}>
-                            <input type="checkbox" checked={isActive} disabled={!canManage}
-                              onChange={() => {}}
+                          <label className={`svc-toggle${isAssigned ? "" : " svc-toggle--off"}`} aria-label={`Online booking for ${provider.name}`}>
+                            <input type="checkbox" checked={isAssigned} disabled={!canManage}
+                              onChange={() => toggleProviderAssignment(provider.id)}
                               style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
                           </label>
                         </div>
@@ -1194,27 +1234,36 @@ function ServiceStaffTab({
       <div className="svc-card" style={{ marginBottom: 0 }}>
         <span className="svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Client selection on booking</span>
 
-        <label className="svc-selection-opt svc-selection-opt--active">
-          <input type="radio" name="clientSelection" defaultChecked style={{ display: "none" }} />
-          <div className="svc-radio svc-radio--on" />
+        <label className={`svc-selection-opt${form.providerSelectionMode === "client_choice" ? " svc-selection-opt--active" : ""}`}>
+          <input type="radio" name="clientSelection" value="client_choice"
+            checked={form.providerSelectionMode === "client_choice"}
+            onChange={() => setForm((c) => ({ ...c, providerSelectionMode: "client_choice" }))}
+            disabled={!canManage} style={{ display: "none" }} />
+          <div className={`svc-radio${form.providerSelectionMode === "client_choice" ? " svc-radio--on" : ""}`} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: "13px", fontWeight: 500 }}>Let clients choose their artist</div>
             <div className="svc-helper">Clients see all eligible staff and pick one when booking online.</div>
           </div>
         </label>
 
-        <label className="svc-selection-opt">
-          <input type="radio" name="clientSelection" style={{ display: "none" }} />
-          <div className="svc-radio" />
+        <label className={`svc-selection-opt${form.providerSelectionMode === "auto_assign" ? " svc-selection-opt--active" : ""}`}>
+          <input type="radio" name="clientSelection" value="auto_assign"
+            checked={form.providerSelectionMode === "auto_assign"}
+            onChange={() => setForm((c) => ({ ...c, providerSelectionMode: "auto_assign" }))}
+            disabled={!canManage} style={{ display: "none" }} />
+          <div className={`svc-radio${form.providerSelectionMode === "auto_assign" ? " svc-radio--on" : ""}`} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: "13px", fontWeight: 500 }}>Assign automatically</div>
             <div className="svc-helper">Distribute bookings evenly across eligible staff. Best for fairness.</div>
           </div>
         </label>
 
-        <label className="svc-selection-opt" style={{ marginBottom: 0 }}>
-          <input type="radio" name="clientSelection" style={{ display: "none" }} />
-          <div className="svc-radio" />
+        <label className={`svc-selection-opt${form.providerSelectionMode === "hide" ? " svc-selection-opt--active" : ""}`} style={{ marginBottom: 0 }}>
+          <input type="radio" name="clientSelection" value="hide"
+            checked={form.providerSelectionMode === "hide"}
+            onChange={() => setForm((c) => ({ ...c, providerSelectionMode: "hide" }))}
+            disabled={!canManage} style={{ display: "none" }} />
+          <div className={`svc-radio${form.providerSelectionMode === "hide" ? " svc-radio--on" : ""}`} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: "13px", fontWeight: 500 }}>Hide artist selection</div>
             <div className="svc-helper">Clients book the service without seeing who'll perform it. Useful for new staff or training periods.</div>
@@ -1276,16 +1325,32 @@ function ServiceOnlineBookingTab({
 
       <div className="svc-card">
         <span className="svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Payment requirements</span>
-        <div className="svc-card__row" style={{ marginBottom: "10px" }}>
+
+        <div style={{ marginBottom: "12px" }}>
+          <label className="svc-field-label">Deposit required to book</label>
+          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            <span style={{ fontSize: "13px", color: "#1F1612" }}>$</span>
+            <input className="svc-input" type="number" min={0} step="0.01"
+              value={form.depositAmount}
+              onChange={(e) => setForm((c) => ({ ...c, depositAmount: e.target.value }))}
+              disabled={!canManage}
+              style={{ width: "100px" }} />
+          </div>
+          <div className="svc-helper" style={{ marginTop: "2px" }}>Amount the customer must pay upfront when booking online.</div>
+        </div>
+
+        <div className="svc-card__row" style={{ marginBottom: "10px", paddingTop: "10px", borderTop: "0.5px dashed #D9CBB1" }}>
           <div>
             <div style={{ fontSize: "13px", color: "#1F1612", fontWeight: 500 }}>Require a credit card on file to book</div>
             <div className="svc-helper" style={{ marginTop: "2px" }}>Clients must have a saved payment method before booking.</div>
           </div>
-          <label className={`svc-toggle${form.requireCardOnFile ? "" : " svc-toggle--off"}`} aria-label="Require card on file toggle">
-            <input type="checkbox" checked={form.requireCardOnFile} disabled={!canManage}
-              onChange={(e) => setForm((c) => ({ ...c, requireCardOnFile: e.target.checked }))}
-              style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
-          </label>
+          <button
+            type="button"
+            className={`svc-toggle${form.requireCardOnFile ? "" : " svc-toggle--off"}`}
+            aria-label="Require card on file toggle"
+            disabled={!canManage}
+            onClick={() => setForm((c) => ({ ...c, requireCardOnFile: !c.requireCardOnFile }))}
+          />
         </div>
 
         <div style={{ paddingTop: "10px", borderTop: "0.5px dashed #D9CBB1" }}>
@@ -1345,229 +1410,6 @@ function ServiceOnlineBookingTab({
 // ===========================================================================
 // Create dialog
 // ===========================================================================
-
-function CreateServiceDialog({
-  tenantSlug,
-  defaultDepositCents,
-  categories,
-  locations,
-  initialCategoryId,
-  onClose,
-  onCreated,
-}: {
-  tenantSlug: string;
-  defaultDepositCents: number;
-  categories: ServiceCategorySummary[];
-  locations: LocationSummary[];
-  initialCategoryId: string | null;
-  onClose: () => void;
-  onCreated: (service: ServiceSummary) => Promise<void> | void;
-}) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [durationMinutes, setDurationMinutes] = useState("60");
-  const [setupBufferMinutes, setSetupBufferMinutes] = useState("0");
-  const [cleanupBufferMinutes, setCleanupBufferMinutes] = useState("0");
-  const [priceAmount, setPriceAmount] = useState("");
-  const [depositAmount, setDepositAmount] = useState(
-    (defaultDepositCents / 100).toFixed(2),
-  );
-  const [categoryId, setCategoryId] = useState(initialCategoryId ?? "");
-  const [locationIds, setLocationIds] = useState<string[]>(() =>
-    locations.length > 0 ? [locations[0].id] : [],
-  );
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-    const trimmedName = name.trim();
-    const duration = Number(durationMinutes);
-    const priceCents = parseMoneyInput(priceAmount);
-    const depositCents = parseMoneyInput(depositAmount);
-    if (
-      !trimmedName ||
-      !Number.isInteger(duration) ||
-      duration < 15 ||
-      priceCents === null ||
-      depositCents === null
-    ) {
-      setError("Enter a name, duration ≥ 15 minutes, and valid price/deposit.");
-      return;
-    }
-    if (locationIds.length === 0) {
-      setError("Select at least one location.");
-      return;
-    }
-    const body: CreateServiceRequest = {
-      name: trimmedName,
-      description: description.trim() || undefined,
-      durationMinutes: duration,
-      setupBufferMinutes: Number(setupBufferMinutes) || 0,
-      cleanupBufferMinutes: Number(cleanupBufferMinutes) || 0,
-      priceCents,
-      depositCents,
-      locationIds,
-      categoryId: categoryId || undefined,
-    };
-    setSaving(true);
-    try {
-      const created = await platformApi.createService(tenantSlug, body);
-      await onCreated(created);
-    } catch (err) {
-      setError(readErrorMessage(err, "Unable to create service."));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Add service">
-      <div className="modal-panel">
-        <header className="modal-header">
-          <h4>Add service</h4>
-          <button type="button" className="ghost-action" onClick={onClose}>
-            Close
-          </button>
-        </header>
-        <form className="modal-form" onSubmit={handleSubmit}>
-          {error ? (
-            <div className="message-banner message-banner--error">{error}</div>
-          ) : null}
-          <div className="form-grid">
-            <label>
-              <span>Name</span>
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                required
-                autoFocus
-              />
-            </label>
-            <label>
-              <span>Category</span>
-              <select
-                value={categoryId}
-                onChange={(event) => setCategoryId(event.target.value)}
-              >
-                <option value="">Uncategorized</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Duration (minutes)</span>
-              <input
-                type="number"
-                min={15}
-                step={15}
-                value={durationMinutes}
-                onChange={(event) => setDurationMinutes(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              <span>Setup buffer (minutes)</span>
-              <input
-                type="number"
-                min={0}
-                step={5}
-                value={setupBufferMinutes}
-                onChange={(event) => setSetupBufferMinutes(event.target.value)}
-              />
-              <small className="field-help">Time blocked before the appointment for room prep.</small>
-            </label>
-            <label>
-              <span>Cleanup buffer (minutes)</span>
-              <input
-                type="number"
-                min={0}
-                step={5}
-                value={cleanupBufferMinutes}
-                onChange={(event) => setCleanupBufferMinutes(event.target.value)}
-              />
-              <small className="field-help">Time blocked after the appointment for turnover.</small>
-            </label>
-            <label>
-              <span>Price</span>
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                value={priceAmount}
-                onChange={(event) => setPriceAmount(event.target.value)}
-                placeholder="185.00"
-                required
-              />
-            </label>
-            <label>
-              <span>Deposit due today</span>
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                value={depositAmount}
-                onChange={(event) => setDepositAmount(event.target.value)}
-                required
-              />
-            </label>
-            <label className="form-grid__full">
-              <span>Description</span>
-              <textarea
-                rows={3}
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-              />
-            </label>
-            <fieldset className="form-grid__full service-locations-fieldset">
-              <legend>Locations</legend>
-              {locations.length === 0 ? (
-                <p className="settings-form-help">No active locations.</p>
-              ) : (
-                <ul className="service-location-checks">
-                  {locations.map((location) => {
-                    const checked = locationIds.includes(location.id);
-                    return (
-                      <li key={location.id}>
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(event) => {
-                              const next = event.target.checked;
-                              setLocationIds((current) =>
-                                next
-                                  ? [...current, location.id]
-                                  : current.filter((id) => id !== location.id),
-                              );
-                            }}
-                          />
-                          <span>{location.name}</span>
-                        </label>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </fieldset>
-          </div>
-          <div className="inline-meta">
-            <button type="button" className="ghost-action" onClick={onClose}>
-              Cancel
-            </button>
-            <button type="submit" className="primary-action" disabled={saving}>
-              {saving ? "Creating…" : "Create service"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
 
 // ===========================================================================
 // Create Category Dialog

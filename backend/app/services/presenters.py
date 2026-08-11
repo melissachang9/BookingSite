@@ -199,6 +199,7 @@ def service_to_summary(service: Service, tenant: Tenant | None = None) -> Servic
         booking_payment_mode=service.booking_payment_mode,
         booking_payment_value_cents=service.booking_payment_value_cents,
         booking_payment_percent=service.booking_payment_percent,
+        provider_selection_mode=service.provider_selection_mode,
     )
 
 
@@ -249,6 +250,7 @@ def provider_to_summary(provider: Provider, tenant: Tenant | None = None) -> Pro
         compensation_service_percent_bp=provider.compensation_service_percent_bp,
         compensation_product_percent_bp=provider.compensation_product_percent_bp,
         compensation_hourly_cents=provider.compensation_hourly_cents,
+        compensation_flat_cents=provider.compensation_flat_cents,
         compensation_sliding_scale=provider.compensation_sliding_scale,
     )
 

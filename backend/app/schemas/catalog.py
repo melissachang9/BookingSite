@@ -407,6 +407,7 @@ class ServiceSummaryResponse(CamelModel):
     booking_payment_mode: str | None = None
     booking_payment_value_cents: int | None = None
     booking_payment_percent: int | None = None
+    provider_selection_mode: str | None = None  # client_choice, auto_assign, hide
 
 
 class CreateServiceRequest(CamelModel):
@@ -426,6 +427,7 @@ class CreateServiceRequest(CamelModel):
     booking_payment_mode: str | None = Field(default=None, max_length=32)
     booking_payment_value_cents: int | None = Field(default=None, ge=0, le=500_000)
     booking_payment_percent: int | None = Field(default=None, ge=0, le=100)
+    provider_selection_mode: str | None = Field(default=None, max_length=32)
 
     @model_validator(mode="after")
     def validate_deposit(self) -> "CreateServiceRequest":
@@ -471,6 +473,7 @@ class UpdateServiceRequest(CamelModel):
     booking_payment_mode: str | None = Field(default=None, max_length=32)
     booking_payment_value_cents: int | None = Field(default=None, ge=0, le=500_000)
     booking_payment_percent: int | None = Field(default=None, ge=0, le=100)
+    provider_selection_mode: str | None = Field(default=None, max_length=32)
     clear_outcome_headline: bool = False
     clear_subheadline: bool = False
     clear_compare_at_price: bool = False
@@ -644,6 +647,7 @@ class ProviderSummaryResponse(CamelModel):
     compensation_service_percent_bp: int | None = None
     compensation_product_percent_bp: int | None = None
     compensation_hourly_cents: int | None = None
+    compensation_flat_cents: int | None = None
     compensation_sliding_scale: list[dict] | None = None
 
 
@@ -653,10 +657,11 @@ class SlidingScaleTier(CamelModel):
 
 
 class UpdateProviderCompensationRequest(CamelModel):
-    compensation_mode: str | None = None  # "service_percent" | "sliding_scale" | "product_percent" | "hourly" | None
+    compensation_mode: str | None = None  # "service_percent" | "sliding_scale" | "flat_per_booking" | "hourly" | None
     compensation_service_percent_bp: int | None = Field(default=None, ge=0, le=10_000)
     compensation_product_percent_bp: int | None = Field(default=None, ge=0, le=10_000)
     compensation_hourly_cents: int | None = Field(default=None, ge=0, le=100_000)
+    compensation_flat_cents: int | None = Field(default=None, ge=0, le=500_000)
     compensation_sliding_scale: list[SlidingScaleTier] | None = None
 
 

@@ -57,6 +57,7 @@ export type ServiceSummary = AuditFields &
     bookingPaymentMode?: string | null;
     bookingPaymentValueCents?: number | null;
     bookingPaymentPercent?: number | null;
+    providerSelectionMode?: string | null;
   };
 
 export type CreateServiceRequest = {
@@ -75,6 +76,7 @@ export type CreateServiceRequest = {
   bookingPaymentMode?: string | null;
   bookingPaymentValueCents?: number | null;
   bookingPaymentPercent?: number | null;
+  providerSelectionMode?: string | null;
 };
 
 export type UpdateServiceRequest = {
@@ -96,6 +98,7 @@ export type UpdateServiceRequest = {
   bookingPaymentMode?: string | null;
   bookingPaymentValueCents?: number | null;
   bookingPaymentPercent?: number | null;
+  providerSelectionMode?: string | null;
 };
 
 export type ValueStackItem = {
@@ -222,6 +225,7 @@ export type ProviderSummary = AuditFields &
     compensationServicePercentBp?: number | null;
     compensationProductPercentBp?: number | null;
     compensationHourlyCents?: number | null;
+    compensationFlatCents?: number | null;
     compensationSlidingScale?: SlidingScaleTier[] | null;
   };
 
@@ -235,6 +239,7 @@ export type UpdateProviderCompensationRequest = {
   compensationServicePercentBp?: number | null;
   compensationProductPercentBp?: number | null;
   compensationHourlyCents?: number | null;
+  compensationFlatCents?: number | null;
   compensationSlidingScale?: SlidingScaleTier[] | null;
 };
 

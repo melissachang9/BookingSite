@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import type {
   AuthenticatedUser,
   CreateProviderRequest,
@@ -444,6 +445,7 @@ export function StaffPage({
   currentUser: AuthenticatedUser;
 }) {
   const canManage = hasPermission(currentUser, "settings.manage");
+  const location = useLocation();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [users, setUsers] = useState<TenantUserSummary[]>([]);
   const [providers, setProviders] = useState<ProviderSummary[]>([]);
@@ -483,7 +485,7 @@ export function StaffPage({
     return () => {
       cancelled = true;
     };
-  }, [canManage, currentUser.tenantSlug, refreshKey]);
+  }, [canManage, currentUser.tenantSlug, refreshKey, location.pathname]);
 
   const handleSaved = () => {
     setModal({ kind: "none" });
@@ -985,6 +987,42 @@ function ServicesTab({
   const [locationQuery, setLocationQuery] = useState("");
   const [serviceQuery, setServiceQuery] = useState("");
 
+  // Per-service overrides (duration, price, commission)
+  const [serviceOverrides, setServiceOverrides] = useState<
+    Record<string, { durationMinutes: string; priceCents: string; flatCents: string; basisPoints: string }>
+  >({});
+  const [overridesLoaded, setOverridesLoaded] = useState(false);
+
+  // Load existing per-service overrides
+  useEffect(() => {
+    let cancelled = false;
+    const loadOverrides = async () => {
+      const map: Record<string, { durationMinutes: string; priceCents: string; flatCents: string; basisPoints: string }> = {};
+      for (const svcId of provider.serviceIds) {
+        try {
+          const resp = await platformApi.getServiceProviderVariants(tenantSlug, svcId);
+          const variant = resp.variants.find((v) => v.providerId === provider.id);
+          if (variant) {
+            map[svcId] = {
+              durationMinutes: variant.durationMinutes != null ? String(variant.durationMinutes) : "",
+              priceCents: variant.priceCents != null ? (variant.priceCents / 100).toFixed(2) : "",
+              flatCents: variant.commissionFlatCents != null ? (variant.commissionFlatCents / 100).toFixed(2) : "",
+              basisPoints: variant.commissionBasisPoints != null ? (variant.commissionBasisPoints / 100).toString() : "",
+            };
+          }
+        } catch {
+          // ignore — variant may not exist yet
+        }
+      }
+      if (!cancelled) {
+        setServiceOverrides(map);
+        setOverridesLoaded(true);
+      }
+    };
+    loadOverrides();
+    return () => { cancelled = true; };
+  }, [tenantSlug, provider.id, provider.serviceIds.join(",")]);
+
   useEffect(() => {
     setLocationIds(provider.locationIds);
     setServiceIds(provider.serviceIds);
@@ -1025,20 +1063,55 @@ function ServicesTab({
     !sameIds(locationIds, provider.locationIds) ||
     !sameIds(serviceIds, provider.serviceIds) ||
     isBookableOnline !== provider.isBookableOnline ||
-    isActive !== provider.isActive;
+    isActive !== provider.isActive ||
+    Object.keys(serviceOverrides).some((svcId) => {
+      const ov = serviceOverrides[svcId];
+      return ov.durationMinutes !== "" || ov.priceCents !== "" || ov.flatCents !== "" || ov.basisPoints !== "";
+    });
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
-    const payload: UpdateProviderRequest = {
-      locationIds,
-      serviceIds,
-      isBookableOnline,
-      isActive,
-    };
     try {
+      // Save provider-level settings
+      const payload: UpdateProviderRequest = {
+        locationIds,
+        serviceIds,
+        isBookableOnline,
+        isActive,
+      };
       await platformApi.updateProvider(tenantSlug, provider.id, payload);
+
+      // Save per-service overrides for assigned services
+      for (const svcId of serviceIds) {
+        const ov = serviceOverrides[svcId];
+        const durationMinutes = ov?.durationMinutes ? Number(ov.durationMinutes) : null;
+        const priceCents = ov?.priceCents ? Math.round(Number(ov.priceCents) * 100) : null;
+        const flatCents = ov?.flatCents ? Math.round(Number(ov.flatCents) * 100) : null;
+        const basisPoints = ov?.basisPoints ? Math.round(Number(ov.basisPoints) * 100) : null;
+        try {
+          const existing = await platformApi.getServiceProviderVariants(tenantSlug, svcId);
+          const merged = existing.variants.map((v) =>
+            v.providerId === provider.id
+              ? { ...v, durationMinutes, priceCents, commissionFlatCents: flatCents, commissionBasisPoints: basisPoints }
+              : v,
+          );
+          if (!merged.some((v) => v.providerId === provider.id)) {
+            merged.push({
+              providerId: provider.id,
+              durationMinutes,
+              priceCents,
+              commissionFlatCents: flatCents,
+              commissionBasisPoints: basisPoints,
+            });
+          }
+          await platformApi.replaceServiceProviderVariants(tenantSlug, svcId, { variants: merged });
+        } catch (err) {
+          if (!(err instanceof Error && err.message.includes("404"))) throw err;
+        }
+      }
+
       onSaved();
     } catch (err) {
       setError(readErrorMessage(err, "Unable to update provider."));
@@ -1046,6 +1119,8 @@ function ServicesTab({
       setSubmitting(false);
     }
   };
+
+  const assignedServices = services.filter((svc) => serviceIds.includes(svc.id));
 
   return (
     <form className="staff-detail-form" onSubmit={submit}>
@@ -1174,6 +1249,74 @@ function ServicesTab({
           </>
         )}
       </fieldset>
+
+      {assignedServices.length > 0 && overridesLoaded ? (
+        <fieldset className="staff-fieldset">
+          <legend>Per-service overrides</legend>
+          <p className="settings-form-help" style={{ marginBottom: "0.75rem" }}>
+            Override duration, price, or commission for specific services.
+            Leave blank to use the service default.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            {assignedServices.map((svc) => {
+              const ov = serviceOverrides[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" };
+              return (
+                <div key={svc.id} style={{
+                  padding: "0.6rem 0.7rem", background: "#FDF8F0", borderRadius: "6px",
+                  border: "1px solid #E5D7BB",
+                }}>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "#1F1612", marginBottom: "0.4rem" }}>
+                    {svc.name}
+                    <span style={{ fontSize: "0.7rem", fontWeight: 400, color: "#8B7960", marginLeft: "0.5rem" }}>
+                      {formatDurationMinutes(svc.durationMinutes)} · {formatPriceCents(svc.priceCents)}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: "0.75rem", color: "#8B7960", minWidth: "3.5rem" }}>Duration</span>
+                    <input className="settings-input" type="number" min={15} max={480} step={15}
+                      value={ov.durationMinutes}
+                      onChange={(e) => setServiceOverrides((prev) => ({
+                        ...prev, [svc.id]: { ...prev[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" }, durationMinutes: e.target.value },
+                      }))}
+                      placeholder={String(svc.durationMinutes)}
+                      style={{ width: "4rem" }} />
+                    <span style={{ fontSize: "0.7rem", color: "#8B7960" }}>min</span>
+                    <span style={{ fontSize: "0.75rem", color: "#8B7960", minWidth: "2rem", marginLeft: "0.5rem" }}>Price</span>
+                    <span style={{ fontSize: "0.75rem", color: "#8B7960" }}>$</span>
+                    <input className="settings-input" type="number" min={0} step="0.01"
+                      value={ov.priceCents}
+                      onChange={(e) => setServiceOverrides((prev) => ({
+                        ...prev, [svc.id]: { ...prev[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" }, priceCents: e.target.value },
+                      }))}
+                      placeholder={(svc.priceCents / 100).toFixed(2)}
+                      style={{ width: "5rem" }} />
+                    <span style={{ fontSize: "0.75rem", color: "#8B7960", minWidth: "2rem", marginLeft: "0.5rem" }}>Comm</span>
+                    <span style={{ fontSize: "0.75rem", color: "#8B7960" }}>$</span>
+                    <input className="settings-input" type="number" min={0} step="0.01"
+                      value={ov.flatCents}
+                      onChange={(e) => setServiceOverrides((prev) => ({
+                        ...prev, [svc.id]: { ...prev[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" }, flatCents: e.target.value, basisPoints: "" },
+                      }))}
+                      placeholder="Flat"
+                      disabled={!!ov.basisPoints}
+                      style={{ width: "4.5rem" }} />
+                    <span style={{ fontSize: "0.7rem", color: "#8B7960" }}>or</span>
+                    <input className="settings-input" type="number" min={0} max={100} step="0.1"
+                      value={ov.basisPoints}
+                      onChange={(e) => setServiceOverrides((prev) => ({
+                        ...prev, [svc.id]: { ...prev[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" }, flatCents: "", basisPoints: e.target.value },
+                      }))}
+                      placeholder="%"
+                      disabled={!!ov.flatCents}
+                      style={{ width: "3.5rem" }} />
+                    <span style={{ fontSize: "0.7rem", color: "#8B7960" }}>%</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </fieldset>
+      ) : null}
 
       <fieldset className="staff-fieldset">
         <legend>Visibility</legend>
@@ -3597,7 +3740,7 @@ type CompensationTabProps = {
   onSaved: () => void;
 };
 
-type CompensationMode = "service_percent" | "sliding_scale" | "product_percent" | "hourly" | "";
+type CompensationMode = "service_percent" | "sliding_scale" | "flat_per_booking" | "hourly" | "";
 
 function CompensationTab({ tenantSlug, provider, onSaved }: CompensationTabProps) {
   const [mode, setMode] = useState<CompensationMode>(
@@ -3613,9 +3756,17 @@ function CompensationTab({ tenantSlug, provider, onSaved }: CompensationTabProps
       ? (provider.compensationProductPercentBp / 100).toString()
       : "",
   );
+  const [productCommissionEnabled, setProductCommissionEnabled] = useState(
+    provider.compensationProductPercentBp != null,
+  );
   const [hourlyRate, setHourlyRate] = useState(
     provider.compensationHourlyCents != null
       ? (provider.compensationHourlyCents / 100).toFixed(2)
+      : "",
+  );
+  const [flatPerBooking, setFlatPerBooking] = useState(
+    provider.compensationFlatCents != null
+      ? (provider.compensationFlatCents / 100).toFixed(2)
       : "",
   );
   const [slidingTiers, setSlidingTiers] = useState<
@@ -3638,9 +3789,15 @@ function CompensationTab({ tenantSlug, provider, onSaved }: CompensationTabProps
         ? (provider.compensationProductPercentBp / 100).toString()
         : "",
     );
+    setProductCommissionEnabled(provider.compensationProductPercentBp != null);
     setHourlyRate(
       provider.compensationHourlyCents != null
         ? (provider.compensationHourlyCents / 100).toFixed(2)
+        : "",
+    );
+    setFlatPerBooking(
+      provider.compensationFlatCents != null
+        ? (provider.compensationFlatCents / 100).toFixed(2)
         : "",
     );
     setSlidingTiers(
@@ -3656,15 +3813,19 @@ function CompensationTab({ tenantSlug, provider, onSaved }: CompensationTabProps
       if (mode === "service_percent") {
         body.compensationServicePercentBp = servicePercent ? Math.round(Number(servicePercent) * 100) : null;
       }
-      if (mode === "product_percent") {
-        body.compensationProductPercentBp = productPercent ? Math.round(Number(productPercent) * 100) : null;
-      }
       if (mode === "hourly") {
         body.compensationHourlyCents = hourlyRate ? Math.round(Number(hourlyRate) * 100) : null;
+      }
+      if (mode === "flat_per_booking") {
+        body.compensationFlatCents = flatPerBooking ? Math.round(Number(flatPerBooking) * 100) : null;
       }
       if (mode === "sliding_scale") {
         body.compensationSlidingScale = slidingTiers.length > 0 ? slidingTiers : null;
       }
+      // Product commission is an add-on bonus that stacks on any primary mode
+      body.compensationProductPercentBp = productCommissionEnabled && productPercent
+        ? Math.round(Number(productPercent) * 100)
+        : null;
       const session = await ensureActiveStoredSession();
       const token = session?.accessToken ?? "";
       const resp = await fetch(
@@ -3805,25 +3966,59 @@ function CompensationTab({ tenantSlug, provider, onSaved }: CompensationTabProps
             </button>
           </div>
         ) : null}
-      </div>
 
-      <div className="staff-fieldset">
-        <h5 style={{ margin: "0 0 0.5rem" }}>Product Commission</h5>
-        <p className="settings-form-help" style={{ margin: "0 0 0.75rem" }}>
-          Compensation is calculated as a percentage of product sales
-        </p>
         <label className="settings-label" style={{ marginBottom: "0.5rem", display: "block" }}>
           <input
             type="radio"
             name="compensationMode"
-            value="product_percent"
-            checked={mode === "product_percent"}
-            onChange={() => setMode("product_percent")}
+            value="flat_per_booking"
+            checked={mode === "flat_per_booking"}
+            onChange={() => setMode("flat_per_booking")}
             style={{ marginRight: "0.5rem" }}
           />
-          Product Commission
+          Flat Per Booking
         </label>
-        {mode === "product_percent" ? (
+        <p className="settings-form-help" style={{ margin: "0 0 0.75rem 1.5rem" }}>
+          A fixed dollar amount paid for every completed booking
+        </p>
+        {mode === "flat_per_booking" ? (
+          <div style={{ marginLeft: "1.5rem", marginBottom: "0.75rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <span>$</span>
+              <input
+                className="settings-input"
+                type="number"
+                min={0}
+                step="0.01"
+                value={flatPerBooking}
+                onChange={(e) => setFlatPerBooking(e.target.value)}
+                placeholder="0.00"
+                style={{ width: "6rem" }}
+              />
+              <span>per booking</span>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="staff-fieldset">
+        <h5 style={{ margin: "0 0 0.5rem" }}>Product Commission Bonus</h5>
+        <p className="settings-form-help" style={{ margin: "0 0 0.75rem" }}>
+          An additional percentage of product sales paid on top of the primary compensation above.
+          Leave disabled if product sales are not part of this provider's pay.
+        </p>
+        <label className="settings-toggle" style={{ marginBottom: "0.75rem" }}>
+          <input
+            type="checkbox"
+            checked={productCommissionEnabled}
+            onChange={(e) => {
+              setProductCommissionEnabled(e.target.checked);
+              if (!e.target.checked) setProductPercent("");
+            }}
+          />
+          <span>Pay product commission</span>
+        </label>
+        {productCommissionEnabled ? (
           <div style={{ marginLeft: "1.5rem", marginBottom: "0.75rem" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
               <input
@@ -3837,7 +4032,7 @@ function CompensationTab({ tenantSlug, provider, onSaved }: CompensationTabProps
                 placeholder="0"
                 style={{ width: "6rem" }}
               />
-              <span>%</span>
+              <span>% of product sales</span>
             </div>
           </div>
         ) : null}

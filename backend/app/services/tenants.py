@@ -490,6 +490,7 @@ async def create_tenant_service(
         booking_payment_mode=payload.booking_payment_mode,
         booking_payment_value_cents=payload.booking_payment_value_cents,
         booking_payment_percent=payload.booking_payment_percent,
+        provider_selection_mode=getattr(payload, "provider_selection_mode", None),
     )
     service.location_links = [
         ServiceLocation(tenant_id=tenant.id, location_id=location_id)
@@ -1002,6 +1003,8 @@ async def update_provider_compensation(
         provider.compensation_product_percent_bp = payload.compensation_product_percent_bp or None
     if payload.compensation_hourly_cents is not None:
         provider.compensation_hourly_cents = payload.compensation_hourly_cents or None
+    if payload.compensation_flat_cents is not None:
+        provider.compensation_flat_cents = payload.compensation_flat_cents or None
     if payload.compensation_sliding_scale is not None:
         provider.compensation_sliding_scale = [t.model_dump() for t in payload.compensation_sliding_scale] if payload.compensation_sliding_scale else None
 
@@ -2190,6 +2193,8 @@ async def update_tenant_service(
         service.booking_payment_value_cents = payload.booking_payment_value_cents
     if getattr(payload, "booking_payment_percent", None) is not None:
         service.booking_payment_percent = payload.booking_payment_percent
+    if getattr(payload, "provider_selection_mode", None) is not None:
+        service.provider_selection_mode = payload.provider_selection_mode or None
 
     await session.commit()
     service = await _load_service_for_tenant(session, tenant.id, service.id)
