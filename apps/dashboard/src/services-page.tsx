@@ -811,7 +811,8 @@ function ServiceDetail({
           baseDurationMinutes={baseDurationMinutes} basePriceCents={basePriceCents}
           baseDepositCents={baseDepositCents} tenantSlug={tenantSlug}
           storefrontBaseUrl={storefrontBaseUrl}
-          form={form} setForm={setForm} />
+          form={form} setForm={setForm}
+          saving={saving} handleSave={handleSave} />
       ) : null}
       {activeTab === "resources" ? (
         <div className="staff-detail-form"><p className="settings-form-help">Resources and attachments coming soon.</p></div>
@@ -821,7 +822,8 @@ function ServiceDetail({
       ) : null}
       {activeTab === "onlineBooking" ? (
         <ServiceOnlineBookingTab form={form} setForm={setForm} canManage={canManage}
-          schedulingHref={schedulingHref} handleCopyLink={handleCopyLink} copyHint={copyHint} />
+          schedulingHref={schedulingHref} handleCopyLink={handleCopyLink} copyHint={copyHint}
+          saving={saving} handleSave={handleSave} />
       ) : null}
     </div>
   );
@@ -869,13 +871,6 @@ function ServiceDetailsTab({
             <input className="svc-input" value={form.name}
               onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))}
               placeholder="Service name" required />
-          </div>
-          <div style={{ marginBottom: "12px" }}>
-            <label className="svc-field-label">Description</label>
-            <textarea className="svc-input" rows={2} style={{ resize: "vertical" }}
-              value={form.description}
-              onChange={(e) => setForm((c) => ({ ...c, description: e.target.value }))}
-              placeholder="A 60-minute treatment with clean skin." />
           </div>
           <div>
             <label className="svc-field-label">Category</label>
@@ -945,27 +940,6 @@ function ServiceDetailsTab({
           </div>
         </div>
 
-        {/* Online booking card */}
-        <div className="svc-card">
-          <span className="svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Online booking</span>
-          <div className="svc-card__row" style={{ marginBottom: "10px" }}>
-            <div>
-              <div style={{ fontSize: "13px", color: "#1F1612", fontWeight: 500 }}>Enable in online booking</div>
-              <div className="svc-helper" style={{ marginTop: "2px" }}>Clients can self-book this service.</div>
-            </div>
-            <label className={`svc-toggle${form.isActive ? "" : " svc-toggle--off"}`} aria-label="Online booking toggle">
-              <input type="checkbox" checked={form.isActive}
-                onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.checked }))}
-                style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
-            </label>
-          </div>
-          <div className="svc-card__row" style={{ paddingTop: "10px", borderTop: "0.5px dashed #D9CBB1" }}>
-            <div style={{ fontSize: "12px", color: "#4A3D30" }}>Direct booking link</div>
-            <span className="svc-reset-link" onClick={handleCopyLink}>Copy link</span>
-          </div>
-          {copyHint ? <div className="svc-helper" style={{ color: "#2d6a4f" }}>{copyHint}</div> : null}
-        </div>
-
         {/* Locations card */}
         <div className="svc-card" style={{ marginBottom: 0 }}>
           <span className="svc-card__eyebrow" style={{ marginBottom: "12px", display: "block" }}>Available at locations</span>
@@ -1004,7 +978,7 @@ function ServiceStaffTab({
   variantByProvider, updateVariant, canManage,
   variantsLoaded, isVariantsDirty, variantsSaving, handleSaveVariants,
   baseDurationMinutes, basePriceCents, baseDepositCents, tenantSlug, storefrontBaseUrl,
-  form, setForm,
+  form, setForm, saving, handleSave,
 }: {
   service: ServiceSummary;
   eligibleProviders: ProviderSummary[];
@@ -1024,6 +998,8 @@ function ServiceStaffTab({
   storefrontBaseUrl: string;
   form: ServiceCardState;
   setForm: React.Dispatch<React.SetStateAction<ServiceCardState>>;
+  saving: boolean;
+  handleSave: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
 
@@ -1270,12 +1246,27 @@ function ServiceStaffTab({
           </div>
         </label>
       </div>
+
+      {canManage ? (
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "18px" }}>
+          {isVariantsDirty ? (
+            <button type="button" className="svc-save-btn" onClick={handleSaveVariants} disabled={variantsSaving}>
+              {variantsSaving ? "Saving…" : "Save overrides"}
+            </button>
+          ) : null}
+          <button type="button" className="svc-save-btn" disabled={saving}
+            onClick={() => handleSave({ preventDefault: () => {} } as FormEvent<HTMLFormElement>)}>
+            {saving ? "Saving…" : "Save settings"}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
 
 function ServiceOnlineBookingTab({
   form, setForm, canManage, schedulingHref, handleCopyLink, copyHint,
+  saving, handleSave,
 }: {
   form: ServiceCardState;
   setForm: React.Dispatch<React.SetStateAction<ServiceCardState>>;
@@ -1283,9 +1274,11 @@ function ServiceOnlineBookingTab({
   schedulingHref: string;
   handleCopyLink: () => Promise<void>;
   copyHint: string | null;
+  saving: boolean;
+  handleSave: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
   return (
-    <div className="svc-detail-form">
+    <form className="svc-detail-form" onSubmit={handleSave}>
       <div className="svc-card">
         <span className="svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Online booking</span>
         <div className="svc-card__row" style={{ marginBottom: "10px" }}>
@@ -1326,20 +1319,7 @@ function ServiceOnlineBookingTab({
       <div className="svc-card">
         <span className="svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Payment requirements</span>
 
-        <div style={{ marginBottom: "12px" }}>
-          <label className="svc-field-label">Deposit required to book</label>
-          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-            <span style={{ fontSize: "13px", color: "#1F1612" }}>$</span>
-            <input className="svc-input" type="number" min={0} step="0.01"
-              value={form.depositAmount}
-              onChange={(e) => setForm((c) => ({ ...c, depositAmount: e.target.value }))}
-              disabled={!canManage}
-              style={{ width: "100px" }} />
-          </div>
-          <div className="svc-helper" style={{ marginTop: "2px" }}>Amount the customer must pay upfront when booking online.</div>
-        </div>
-
-        <div className="svc-card__row" style={{ marginBottom: "10px", paddingTop: "10px", borderTop: "0.5px dashed #D9CBB1" }}>
+        <div className="svc-card__row" style={{ marginBottom: "10px" }}>
           <div>
             <div style={{ fontSize: "13px", color: "#1F1612", fontWeight: 500 }}>Require a credit card on file to book</div>
             <div className="svc-helper" style={{ marginTop: "2px" }}>Clients must have a saved payment method before booking.</div>
@@ -1403,7 +1383,15 @@ function ServiceOnlineBookingTab({
           </div>
         </div>
       </div>
-    </div>
+
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "18px" }}>
+        {canManage ? (
+          <button type="submit" className="svc-save-btn" disabled={saving}>
+            {saving ? "Saving…" : "Save changes"}
+          </button>
+        ) : null}
+      </div>
+    </form>
   );
 }
 
