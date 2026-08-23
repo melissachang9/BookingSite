@@ -172,6 +172,7 @@ export type CreateBookingDraftRequest = {
     name: string;
     email: string;
     phone: string;
+    referredBy?: string;
   };
   bookingMethod?: BookingMethod;
 };
@@ -182,6 +183,7 @@ export type UpdateBookingDraftRequest = {
     name: string;
     email: string;
     phone: string;
+    referredBy?: string;
   };
   intakeCompletionTiming?: IntakeCompletionTiming;
 };

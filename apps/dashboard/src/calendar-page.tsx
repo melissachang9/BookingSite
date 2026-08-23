@@ -141,9 +141,11 @@ type PendingCalendarSlot = {
 };
 
 type SlotCustomerForm = {
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string;
+  referredBy: string;
 };
 
 type DraftCreationState =
@@ -328,6 +330,22 @@ function getDurationMinutes(startAt: string, endAt: string): number {
   return Math.max(15, Math.round((endMs - startMs) / 60_000));
 }
 
+function splitCustomerName(fullName: string): { firstName: string; lastName: string } {
+  const trimmed = fullName.trim();
+  if (!trimmed) {
+    return { firstName: "", lastName: "" };
+  }
+  const spaceIndex = trimmed.indexOf(" ");
+  if (spaceIndex === -1) {
+    return { firstName: trimmed, lastName: "" };
+  }
+  return { firstName: trimmed.slice(0, spaceIndex), lastName: trimmed.slice(spaceIndex + 1).trim() };
+}
+
+function combineCustomerName(firstName: string, lastName: string): string {
+  return `${firstName.trim()} ${lastName.trim()}`.trim();
+}
+
 function formatDuration(minutes: number): string {
   if (minutes < 60) {
     return `${minutes} min`;
@@ -365,7 +383,7 @@ function toTenantDateTimeIso(date: string, minuteOfDay: number): string {
   const minute = safeMinute % 60;
   const hourText = String(hour).padStart(2, "0");
   const minuteText = String(minute).padStart(2, "0");
-  return new Date(`${date}T${hourText}:${minuteText}:00-07:00`).toISOString().replace(/\.\d{3}Z$/, "Z");
+  return new Date(`${date}T${hourText}:${minuteText}:00-07:00`).toISOString();
 }
 
 function formatTimeInputValue(value: string): string {
@@ -673,10 +691,24 @@ export function CalendarPage({
   const [selectedSlotServiceId, setSelectedSlotServiceId] = useState<string | null>(null);
   const [selectedSlotNotes, setSelectedSlotNotes] = useState("");
   const [selectedSlotBlockedServiceIds, setSelectedSlotBlockedServiceIds] = useState<string[]>([]);
-  const [selectedSlotCustomer, setSelectedSlotCustomer] = useState<SlotCustomerForm>({ name: "", email: "", phone: "" });
+  const [selectedSlotCustomer, setSelectedSlotCustomer] = useState<SlotCustomerForm>({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    referredBy: "",
+  });
   const [selectedSlotBlockDurationMinutes, setSelectedSlotBlockDurationMinutes] = useState(60);
   const [customerLookupState, setCustomerLookupState] = useState<CustomerLookupState>({ kind: "idle" });
-  const [viewMode, setViewMode] = useState<CalendarViewMode>("week");
+  const [viewMode, setViewMode] = useState<CalendarViewMode>(() => {
+    try {
+      const saved = window.localStorage.getItem("calendar.viewMode");
+      if (saved === "day" || saved === "week") return saved;
+    } catch {
+      // ignore storage access errors (e.g. private browsing)
+    }
+    return "week";
+  });
   const [focusedDate, setFocusedDate] = useState<string>(getUpcomingDate(1));
   const [monthCursorDate, setMonthCursorDate] = useState<string>(monthAnchor(getUpcomingDate(1)));
   const [sidebarRailHost, setSidebarRailHost] = useState<HTMLElement | null>(null);
@@ -693,6 +725,16 @@ export function CalendarPage({
   const [intakeStatusByBookingId, setIntakeStatusByBookingId] = useState<Record<string, IntakeStatus>>({});
   const [formReminderState, setFormReminderState] = useState<FormReminderState>({ kind: "idle" });
 
+  // Persist the selected calendar view (day/week) so returning to the calendar
+  // restores the last-used view.
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("calendar.viewMode", viewMode);
+    } catch {
+      // ignore storage access errors
+    }
+  }, [viewMode]);
+
   // Close context menu on outside click
   useEffect(() => {
     if (!contextMenuOpen) return;
@@ -703,19 +745,6 @@ export function CalendarPage({
     document.addEventListener("click", handler, true);
     return () => document.removeEventListener("click", handler, true);
   }, [contextMenuOpen]);
-
-  // Read bookingId from URL query param on mount
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const bookingId = params.get("bookingId");
-    if (bookingId) {
-      setSelectedAppointmentId(bookingId);
-      // Clean the URL without reloading
-      const url = new URL(window.location.href);
-      url.searchParams.delete("bookingId");
-      window.history.replaceState({}, "", url.toString());
-    }
-  }, []);
 
   const selectedAppointment = useMemo<SelectedCalendarAppointment | null>(() => {
     if (calendarState.kind !== "ready" || selectedAppointmentId === null) {
@@ -802,7 +831,7 @@ export function CalendarPage({
     setTimeBlocks([]);
     setSelectedTimeBlockId(null);
     setSelectedSlot(null);
-    setSelectedSlotCustomer({ name: "", email: "", phone: "" });
+    setSelectedSlotCustomer({ firstName: "", lastName: "", email: "", phone: "", referredBy: "" });
     setSelectedSlotBlockDurationMinutes(60);
     setCustomerLookupState({ kind: "idle" });
     setDraftCreationState({ kind: "idle" });
@@ -965,7 +994,7 @@ export function CalendarPage({
           return;
         }
 
-        const availabilityResponses = await Promise.allSettled(
+        const availabilityResponses = await Promise.all(
           services.flatMap((service) =>
             requestedDates.map((date) =>
               api.getAvailability({
@@ -984,9 +1013,7 @@ export function CalendarPage({
 
         const openingsByDate = new Map(requestedDates.map((date) => [date, [] as CalendarOpening[]]));
 
-        for (const result of availabilityResponses) {
-          if (result.status === "rejected") continue;
-          const { availability, requestedDate, service } = result.value;
+        for (const { availability, requestedDate, service } of availabilityResponses) {
           const resolvedDate = openingsByDate.has(availability.days[0]?.date ?? "") ? (availability.days[0]?.date ?? requestedDate) : requestedDate;
           openingsByDate.get(resolvedDate)?.push(
             ...availability.slots
@@ -1241,7 +1268,7 @@ export function CalendarPage({
       return;
     }
 
-    const search = selectedSlotCustomer.name.trim();
+    const search = combineCustomerName(selectedSlotCustomer.firstName, selectedSlotCustomer.lastName);
     if (search.length < 2) {
       setCustomerLookupState({ kind: "idle" });
       return;
@@ -1261,16 +1288,24 @@ export function CalendarPage({
         const matchingCustomer = response.items.find((customer) => customer.name.toLowerCase().startsWith(normalizedSearch));
         if (matchingCustomer) {
           setSelectedSlotCustomer((current) => {
-            if (current.name.trim().toLowerCase() !== normalizedSearch) {
+            if (combineCustomerName(current.firstName, current.lastName).toLowerCase() !== normalizedSearch) {
               return current;
             }
 
+            const { firstName, lastName } = splitCustomerName(matchingCustomer.name);
             const nextCustomer = {
-              name: matchingCustomer.name,
+              firstName,
+              lastName,
               email: matchingCustomer.email ?? "",
               phone: matchingCustomer.phone ?? "",
+              referredBy: current.referredBy,
             };
-            if (current.name === nextCustomer.name && current.email === nextCustomer.email && current.phone === nextCustomer.phone) {
+            if (
+              current.firstName === nextCustomer.firstName &&
+              current.lastName === nextCustomer.lastName &&
+              current.email === nextCustomer.email &&
+              current.phone === nextCustomer.phone
+            ) {
               return current;
             }
             return nextCustomer;
@@ -1291,7 +1326,7 @@ export function CalendarPage({
     return () => {
       isCancelled = true;
     };
-  }, [api, selectedSlot, selectedSlotCustomer.name]);
+  }, [api, selectedSlot, selectedSlotCustomer.firstName, selectedSlotCustomer.lastName]);
 
   const handleRequestCalendarSlot = (slot: PendingCalendarSlot) => {
     const provider = slot.providerId !== null
@@ -1307,7 +1342,7 @@ export function CalendarPage({
     setSelectedAppointmentId(null);
     setSelectedTimeBlockId(null);
     setSelectedSlotNotes("");
-    setSelectedSlotCustomer({ name: "", email: "", phone: "" });
+    setSelectedSlotCustomer({ firstName: "", lastName: "", email: "", phone: "", referredBy: "" });
     setSelectedSlotBlockDurationMinutes(getDurationMinutes(slot.startAt, slot.endAt));
     setCustomerLookupState({ kind: "idle" });
     setDraftCreationState({ kind: "idle" });
@@ -1400,11 +1435,14 @@ export function CalendarPage({
   };
 
   const handleApplySlotCustomer = (customer: CustomerSummary) => {
-    setSelectedSlotCustomer({
-      name: customer.name,
+    const { firstName, lastName } = splitCustomerName(customer.name);
+    setSelectedSlotCustomer((current) => ({
+      firstName,
+      lastName,
       email: customer.email ?? "",
       phone: customer.phone ?? "",
-    });
+      referredBy: current.referredBy,
+    }));
     setCustomerLookupState({ kind: "ready", items: [customer] });
     setDraftCreationState({ kind: "idle" });
   };
@@ -1518,10 +1556,12 @@ export function CalendarPage({
   };
 
   const handleCreateDraftFromSlot = async () => {
+    const referredBy = selectedSlotCustomer.referredBy.trim();
     const customer = {
-      name: selectedSlotCustomer.name.trim(),
+      name: combineCustomerName(selectedSlotCustomer.firstName, selectedSlotCustomer.lastName),
       email: selectedSlotCustomer.email.trim(),
       phone: selectedSlotCustomer.phone.trim(),
+      ...(referredBy ? { referredBy } : {}),
     };
     if (selectedSlot === null || selectedSlot.providerId === null || selectedSlotServiceId === null || !customer.name || !customer.email || !customer.phone) {
       return;
@@ -2315,11 +2355,6 @@ function CalendarBoard({
 
   const totalHours = Math.max(1, endHour - startHour);
   const scheduleHeightPx = totalHours * SCHEDULE_HOUR_HEIGHT_PX;
-  // Availability isn't returned by the backend for past dates, so we shouldn't gray
-  // out past columns as "unavailable" — that hides completed appointments behind a
-  // solid overlay. Past days should render as a plain hourly grid with any past
-  // bookings still visible.
-  const todayDateIso = toIsoDate(new Date());
   // Generate half-hour labels: "9 AM", "9:30", "10 AM", "10:30", etc.
   const halfHourLabels: string[] = [];
   for (let h = startHour; h < endHour; h++) {
@@ -2405,12 +2440,7 @@ function CalendarBoard({
               appointments: column.appointments,
               openings: column.openings,
               availableSegments: mergeMinuteSegments(column.openings),
-              emptyLabel:
-                focusedDay.date < todayDateIso
-                  ? ""
-                  : column.appointments.length === 0 && column.openings.length === 0
-                    ? "No scheduled hours"
-                    : "",
+              emptyLabel: column.appointments.length === 0 && column.openings.length === 0 ? "No scheduled hours" : "",
             }));
 
           return columns.length > 0
@@ -2527,15 +2557,8 @@ function CalendarBoard({
                   ? minutesInTenantDay(column.openings[0].startAt)
                   : scheduleStartMinute;
               const startMinute = Math.max(scheduleStartMinute, Math.min(scheduleEndMinute - 15, roundToQuarterHour(clickedMinutes)));
-              // Snap to the nearest actual opening slot
-              const snappedMinute = column.openings.length > 0
-                ? column.openings.reduce((best, opening) => {
-                    const openingMinute = minutesInTenantDay(opening.startAt);
-                    return Math.abs(openingMinute - startMinute) < Math.abs(best - startMinute) ? openingMinute : best;
-                  }, startMinute)
-                : startMinute;
               const durationMinutes = timeBlockDurationMinutes;
-              const endMinute = Math.min(scheduleEndMinute, snappedMinute + durationMinutes);
+              const endMinute = Math.min(scheduleEndMinute, startMinute + durationMinutes);
               const providerId = column.providerId ?? slotProviderOptions[0]?.id ?? null;
               const providerName = column.providerName ?? slotProviderOptions[0]?.name ?? null;
               const providerOpening = providerId ? column.openings.find((opening) => opening.providerId === providerId) : column.openings[0];
@@ -2545,7 +2568,7 @@ function CalendarBoard({
                 providerId,
                 providerName,
                 locationId: providerOpening?.locationId,
-                startAt: toTenantDateTimeIso(column.date, snappedMinute),
+                startAt: toTenantDateTimeIso(column.date, startMinute),
                 endAt: toTenantDateTimeIso(column.date, endMinute),
                 openings: column.openings,
                 providerOptions: slotProviderOptions,
@@ -2571,11 +2594,9 @@ function CalendarBoard({
                   heightPx: ((scheduleEndMinute - cursor) / 60) * SCHEDULE_HOUR_HEIGHT_PX,
                 });
               }
-            } else if (column.openings.length === 0 && column.date >= todayDateIso) {
+            } else if (column.openings.length === 0) {
               // Gray out the entire track when the provider has no working hours,
               // unless there's a time-off block already covering the date (which shows its own visual).
-              // Skip this for past dates — availability isn't returned for the past, and
-              // graying the whole column would hide completed/checked-out appointments.
               const hasTimeOffBlocks = column.providerId !== undefined && providerTimeOffs.some((to) => {
                 // Use UTC date to match how overrides were stored (T00:00:00Z boundaries)
                 const toDate = to.startsAt.split("T")[0];
@@ -2818,20 +2839,10 @@ function SlotActionDrawer({
   const [pickerMonth, setPickerMonth] = useState<string>(monthAnchor(getUpcomingDate(1)));
   const pickerGrid = useMemo(() => buildMonthGrid(pickerMonth), [pickerMonth]);
   const datePickerContainerRef = useRef<HTMLDivElement | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState("card");
-  const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentNote, setPaymentNote] = useState("");
-  const [confirmPaymentState, setConfirmPaymentState] = useState<"idle" | "submitting" | "error">("idle");
-  const [confirmPaymentError, setConfirmPaymentError] = useState("");
   useEffect(() => {
     setMode("appointment");
     setShowDatePopover(false);
     setShowTimeInput(false);
-    setPaymentMethod("card");
-    setPaymentAmount("");
-    setPaymentNote("");
-    setConfirmPaymentState("idle");
-    setConfirmPaymentError("");
   }, [slotKey]);
   useEffect(() => {
     if (!showDatePopover) return;
@@ -2854,7 +2865,7 @@ function SlotActionDrawer({
   const selectedService = serviceOptions.find((service) => service.id === selectedServiceId) ?? null;
   const appointmentEndAt = selectedService ? addMinutesToTenantIso(selectedSlot.startAt, selectedService.durationMinutes) : selectedSlot.endAt;
   const blockEndAt = addMinutesToTenantIso(selectedSlot.startAt, blockDurationMinutes);
-  const hasRequiredCustomer = Boolean(customer.name.trim() && customer.email.trim() && customer.phone.trim());
+  const hasRequiredCustomer = Boolean(customer.firstName.trim() && customer.lastName.trim() && customer.email.trim() && customer.phone.trim());
   const canCreateDraft = hasProvider && selectedServiceId !== null && hasRequiredCustomer && draftCreationState.kind !== "submitting";
   const canAddTimeBlock = hasProvider && blockedServiceIds.length > 0;
   const headingTimeRange = isAppointmentMode ? formatTimeRange(selectedSlot.startAt, appointmentEndAt) : formatTimeRange(selectedSlot.startAt, blockEndAt);
@@ -2992,8 +3003,12 @@ function SlotActionDrawer({
             <div className="appointment-summary-card">
               <div className="slot-action-grid">
                 <label>
-                  <span>Client name</span>
-                  <input value={customer.name} onChange={(event) => onCustomerFieldChange("name", event.target.value)} autoComplete="off" />
+                  <span>First name</span>
+                  <input value={customer.firstName} onChange={(event) => onCustomerFieldChange("firstName", event.target.value)} autoComplete="off" />
+                </label>
+                <label>
+                  <span>Last name</span>
+                  <input value={customer.lastName} onChange={(event) => onCustomerFieldChange("lastName", event.target.value)} autoComplete="off" />
                 </label>
                 <label>
                   <span>Phone number</span>
@@ -3002,6 +3017,10 @@ function SlotActionDrawer({
                 <label>
                   <span>Email</span>
                   <input value={customer.email} onChange={(event) => onCustomerFieldChange("email", event.target.value)} inputMode="email" autoComplete="email" />
+                </label>
+                <label>
+                  <span>Referred by</span>
+                  <input value={customer.referredBy} onChange={(event) => onCustomerFieldChange("referredBy", event.target.value)} autoComplete="off" />
                 </label>
               </div>
               <label className="time-block-notes-field">
@@ -3085,7 +3104,7 @@ function SlotActionDrawer({
                 {selectedService ? (
                   <div className="appointment-field-row"><span>Price</span><span>{formatPriceCents(selectedService.priceCents)}{selectedService.depositCents > 0 ? ` · $${(selectedService.depositCents / 100).toFixed(2)} deposit` : " · No deposit"}</span></div>
                 ) : null}
-                <div className="appointment-field-row"><span>Client</span><span>{customer.name || "Client required"}</span></div>
+                <div className="appointment-field-row"><span>Client</span><span>{combineCustomerName(customer.firstName, customer.lastName) || "Client required"}</span></div>
               </div>
             </div>
             {draftCreationState.kind === "error" ? (
@@ -3096,44 +3115,6 @@ function SlotActionDrawer({
             {draftCreationState.kind === "success" ? (
               <div className="message-banner" role="status">
                 Booking draft created and slot held for 15 minutes.
-              </div>
-            ) : null}
-            {draftCreationState.kind === "success" && selectedService && selectedService.depositCents > 0 ? (
-              <div className="appointment-summary-card" style={{ marginTop: "0.75rem" }}>
-                <p className="rail-section-kicker" style={{ marginBottom: "0.5rem" }}>Collect deposit</p>
-                <div className="slot-action-grid">
-                  <label>
-                    <span>Payment method</span>
-                    <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-                      <option value="card">Credit card (in-person)</option>
-                      <option value="cash">Cash</option>
-                      <option value="external_pos">External POS</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>Amount</span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={paymentAmount || `$${(selectedService.depositCents / 100).toFixed(2)}`}
-                      onChange={(e) => setPaymentAmount(e.target.value)}
-                      placeholder={`$${(selectedService.depositCents / 100).toFixed(2)}`}
-                    />
-                  </label>
-                </div>
-                <label className="time-block-notes-field" style={{ marginTop: "0.5rem" }}>
-                  <span>Payment note</span>
-                  <input
-                    type="text"
-                    value={paymentNote}
-                    onChange={(e) => setPaymentNote(e.target.value)}
-                    placeholder="e.g. Collected at front desk"
-                    style={{ width: "100%" }}
-                  />
-                </label>
-                {confirmPaymentState === "error" ? (
-                  <p role="alert" className="settings-error" style={{ marginTop: "0.5rem" }}>{confirmPaymentError}</p>
-                ) : null}
               </div>
             ) : null}
           </section>
@@ -3201,37 +3182,9 @@ function SlotActionDrawer({
           <div className="appointment-drawer-footer__finalize">
             {isAppointmentMode ? (
               <>
-                {draftCreationState.kind === "success" && selectedService && selectedService.depositCents > 0 ? (
-                  <button
-                    type="button"
-                    className="primary-action"
-                    disabled={confirmPaymentState === "submitting"}
-                    onClick={async () => {
-                      if (draftCreationState.kind !== "success") return;
-                      setConfirmPaymentState("submitting");
-                      setConfirmPaymentError("");
-                      try {
-                        const amountStr = paymentAmount.replace(/[^0-9.]/g, "") || `${selectedService!.depositCents / 100}`;
-                        const amountCents = Math.round(parseFloat(amountStr) * 100);
-                        await platformApi.confirmBookingDraftWithPayment(tenantSlug, draftCreationState.draftId, {
-                          paymentMethodType: paymentMethod,
-                          amountCents,
-                          notes: paymentNote.trim() || undefined,
-                        });
-                        onClose();
-                      } catch (err) {
-                        setConfirmPaymentState("error");
-                        setConfirmPaymentError(err instanceof Error ? err.message : "Unable to confirm booking.");
-                      }
-                    }}
-                  >
-                    {confirmPaymentState === "submitting" ? "Processing..." : `Confirm & collect deposit`}
-                  </button>
-                ) : (
-                  <button type="button" className="primary-action" onClick={onBookAppointment} disabled={!canCreateDraft || draftCreationState.kind === "success"}>
-                    {draftCreationState.kind === "submitting" ? "Creating draft..." : draftCreationState.kind === "success" ? "Draft created" : "Book appointment"}
-                  </button>
-                )}
+                <button type="button" className="primary-action" onClick={onBookAppointment} disabled={!canCreateDraft || draftCreationState.kind === "success"}>
+                  {draftCreationState.kind === "submitting" ? "Creating draft..." : draftCreationState.kind === "success" ? "Draft created" : "Book appointment"}
+                </button>
                 {draftHref ? (
                   <a className="secondary-action" href={draftHref}>
                     Open draft in storefront

@@ -71,6 +71,7 @@ class Customer(Base, IdMixin, TimestampMixin):
     wallet_balance_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     acquired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     source_channel: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    referred_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     notes_history: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     sms_consent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
     sms_phone: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)

@@ -17,6 +17,7 @@ class CustomerInput(CamelModel):
     name: str = Field(min_length=1)
     email: str = Field(min_length=1)
     phone: str = Field(min_length=1)
+    referred_by: str | None = None
 
 
 class IntakePlanResponse(CamelModel):
@@ -44,6 +45,7 @@ class CustomerSummaryResponse(CamelModel):
     sms_phone: str | None = None
     acquired_at: datetime | None = None
     source_channel: str | None = None
+    referred_by: str | None = None
     address_street: str | None = None
     address_city: str | None = None
     address_state: str | None = None

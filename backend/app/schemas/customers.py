@@ -54,6 +54,7 @@ class UpdateCustomerRequest(CamelModel):
     email: str | None = None
     phone: str | None = None
     notes: str | None = None
+    referred_by: str | None = None
     owner_user_id: str | None = None
     wallet_adjustment_cents: int | None = None
     wallet_adjustment_note: str | None = None

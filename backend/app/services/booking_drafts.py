@@ -63,6 +63,7 @@ async def _upsert_customer(
 ) -> Customer:
     email = payload.get("email")
     phone = payload.get("phone")
+    referred_by = payload.get("referred_by")
     query = select(Customer).where(Customer.tenant_id == tenant_id)
     if email:
         query = query.where(Customer.email == email)
@@ -78,6 +79,7 @@ async def _upsert_customer(
             name=payload["name"] or "Guest",
             email=email,
             phone=phone,
+            referred_by=referred_by or None,
             owner_user_id=assign_owner_user_id,
             acquired_at=now,
             source_channel="public_online",

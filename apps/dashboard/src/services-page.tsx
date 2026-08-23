@@ -10,6 +10,7 @@ import type {
   ProviderSummary,
   ReorderRequest,
   ReplaceProviderServiceVariantsRequest,
+  ResourceSummary,
   ServiceCategorySummary,
   ServiceSummary,
   SocialProof,
@@ -1577,7 +1578,7 @@ function ServiceResourcesTab({
           platformApi.getServiceResources(tenantSlug, service.id),
         ]);
         if (cancelled) return;
-        setAllResources(resList.resources.filter((r) => r.isActive));
+        setAllResources(resList.items.filter((r) => r.isActive));
         const map = new Map<string, number>();
         for (const entry of svcRes.resources) {
           map.set(entry.resourceId, entry.quantity);

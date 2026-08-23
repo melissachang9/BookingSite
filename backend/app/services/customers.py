@@ -188,6 +188,8 @@ async def update_customer(
         customer.email = payload.email.strip() or None
     if payload.phone is not None:
         customer.phone = payload.phone.strip() or None
+    if payload.referred_by is not None:
+        customer.referred_by = payload.referred_by.strip() or None
     if payload.notes is not None:
         # Track notes history for audit
         history = customer.notes_history or {}

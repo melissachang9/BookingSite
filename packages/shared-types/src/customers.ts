@@ -8,6 +8,7 @@ export type CustomerSummary = AuditFields &
     notes?: string | null;
     acquiredAt?: ISODateString | null;
     sourceChannel?: string | null;
+    referredBy?: string | null;
     ownerUserId?: UUID | null;
     ownerName?: string | null;
     smsConsent?: boolean;
@@ -69,6 +70,7 @@ export type UpdateCustomerRequest = {
   email?: string;
   phone?: string;
   notes?: string;
+  referredBy?: string | null;
   ownerUserId?: UUID | null;
   smsConsent?: boolean;
   smsPhone?: string | null;
