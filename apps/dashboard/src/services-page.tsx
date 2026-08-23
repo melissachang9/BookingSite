@@ -619,7 +619,9 @@ function ServiceDetail({
     return () => { if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current); };
   }, []);
 
-  const schedulingHref = `${storefrontBaseUrl}/${tenantSlug}?serviceId=${service.id}`;
+  // Direct link deep-links to the service page on the storefront so the client lands
+  // on this specific service instead of the generic tenant browse flow.
+  const schedulingHref = `${storefrontBaseUrl}/${tenantSlug}/services/${service.id}`;
 
   const handleCopyLink = async () => {
     try { await navigator.clipboard.writeText(schedulingHref); setCopyHint("Link copied!"); }
@@ -815,7 +817,8 @@ function ServiceDetail({
           saving={saving} handleSave={handleSave} />
       ) : null}
       {activeTab === "resources" ? (
-        <div className="staff-detail-form"><p className="settings-form-help">Resources and attachments coming soon.</p></div>
+        <ServiceResourcesTab service={service} tenantSlug={tenantSlug}
+          canManage={canManage} onSaved={onSaved} />
       ) : null}
       {activeTab === "customizations" ? (
         <div className="staff-detail-form"><p className="settings-form-help">Customizations coming soon.</p></div>
@@ -1001,8 +1004,6 @@ function ServiceStaffTab({
   saving: boolean;
   handleSave: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
-  const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
-
   if (eligibleProviders.length === 0) {
     return (
       <div className="svc-detail-form">
@@ -1025,69 +1026,71 @@ function ServiceStaffTab({
         </div>
       ) : null}
 
-      {/* Eligible staff card */}
-      <div className="svc-card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px" }}>
-          <div>
-            <span className="svc-card__eyebrow">Eligible staff</span>
-            <div className="svc-summary-row" style={{ marginTop: "4px" }}>
-              <span><strong style={{ fontWeight: 500 }}>{enabledCount}</strong> of {eligibleProviders.length} staff can perform this service</span>
-            </div>
-          </div>
-          {canManage ? (
-            <div style={{ display: "flex", gap: "14px", alignItems: "center" }}>
-              <button type="button" className="svc-text-btn"
-                onClick={() => {
-                  for (const p of eligibleProviders) {
-                    if (!assignedProviderIds.has(p.id)) toggleProviderAssignment(p.id);
-                  }
-                }}>Enable all</button>
-              <button type="button" className="svc-text-btn"
-                onClick={() => {
-                  for (const p of eligibleProviders) {
-                    if (assignedProviderIds.has(p.id)) toggleProviderAssignment(p.id);
-                  }
-                }}>Disable all</button>
-            </div>
-          ) : null}
+      {/* Base service defaults (read-only reference). Per-provider overrides are below. */}
+      <div className="svc-provider-card svc-provider-card--defaults">
+        <div className="svc-provider-row">
+          <span className="svc-provider-row__label">Duration</span>
+          <span className="svc-provider-row__value svc-provider-row__value--muted">
+            {formatDurationMinutes(baseDurationMinutes)}
+          </span>
         </div>
+        <div className="svc-provider-row">
+          <span className="svc-provider-row__label">Price</span>
+          <span className="svc-provider-row__value svc-provider-row__value--muted">
+            {formatMoney(basePriceCents)}
+          </span>
+        </div>
+      </div>
 
-        {!variantsLoaded ? (
-          <p className="svc-helper">Loading…</p>
-        ) : (
-          eligibleProviders.map((provider) => {
-            const entry = variantByProvider.get(provider.id) ?? {
-              providerId: provider.id, priceCents: null, durationMinutes: null,
-              depositCents: null, commissionFlatCents: null, commissionBasisPoints: null,
-            };
-            const hasAnyOverride = entry.priceCents != null || entry.durationMinutes != null ||
-              entry.depositCents != null || entry.commissionFlatCents != null || entry.commissionBasisPoints != null;
-            const commissionMode: "flat" | "percent" = entry.commissionFlatCents != null ? "flat" : "percent";
-            const isExpanded = expandedProvider === provider.id;
-            const isAssigned = assignedProviderIds.has(provider.id);
+      {canManage ? (
+        <div className="svc-staff-bulk-actions">
+          <span className="svc-helper">
+            {enabledCount} of {eligibleProviders.length} enabled
+          </span>
+          <div style={{ display: "flex", gap: "14px", alignItems: "center" }}>
+            <button type="button" className="svc-text-btn"
+              onClick={() => {
+                for (const p of eligibleProviders) {
+                  if (!assignedProviderIds.has(p.id)) toggleProviderAssignment(p.id);
+                }
+              }}>Enable all</button>
+            <button type="button" className="svc-text-btn"
+              onClick={() => {
+                for (const p of eligibleProviders) {
+                  if (assignedProviderIds.has(p.id)) toggleProviderAssignment(p.id);
+                }
+              }}>Disable all</button>
+          </div>
+        </div>
+      ) : null}
 
-            const metaParts: string[] = [];
-            if (hasAnyOverride) metaParts.push("Custom pricing");
-            if (entry.commissionBasisPoints != null) metaParts.push(`${entry.commissionBasisPoints / 100}% commission`);
-            if (entry.commissionFlatCents != null) metaParts.push(`$${(entry.commissionFlatCents / 100).toFixed(2)} commission`);
-            if (metaParts.length === 0) metaParts.push("Uses service defaults");
+      {/* Per-provider cards, always expanded */}
+      {!variantsLoaded ? (
+        <div className="svc-card"><p className="svc-helper">Loading…</p></div>
+      ) : (
+        eligibleProviders.map((provider) => {
+          const entry = variantByProvider.get(provider.id) ?? {
+            providerId: provider.id, priceCents: null, durationMinutes: null,
+            depositCents: null, commissionFlatCents: null, commissionBasisPoints: null,
+          };
+          const hasAnyOverride =
+            entry.priceCents != null ||
+            entry.durationMinutes != null ||
+            entry.depositCents != null ||
+            entry.commissionFlatCents != null ||
+            entry.commissionBasisPoints != null;
+          const commissionMode: "flat" | "percent" = entry.commissionFlatCents != null ? "flat" : "percent";
+          const isAssigned = assignedProviderIds.has(provider.id);
+          // Deep-link to this specific service preselected with this provider.
+          const directLink = `${storefrontBaseUrl}/${tenantSlug}/services/${service.id}?providerId=${provider.id}`;
 
-            return (
-              <div key={provider.id} className={`svc-staff-row${isAssigned ? "" : " svc-staff-row--dim"}`}>
-                <button
-                  type="button"
-                  className="svc-staff-row__main"
-                  onClick={() => setExpandedProvider(isExpanded ? null : provider.id)}
-                >
-                  <div className="svc-staff-avatar" style={{ background: isAssigned ? "#6B5A47" : "#8B7960" }}>
-                    {provider.name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("")}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <span className="svc-staff-name">{provider.name}</span>
-                    <div className="svc-staff-meta">{metaParts.join(" · ")}</div>
-                  </div>
-                  <span className="svc-chev">{isExpanded ? "▾" : "▸"}</span>
-                </button>
+          return (
+            <div
+              key={provider.id}
+              className={`svc-provider-card${isAssigned ? "" : " svc-provider-card--off"}`}
+            >
+              {/* Header: toggle + name */}
+              <div className="svc-provider-card__header">
                 <button
                   type="button"
                   className={`svc-toggle${isAssigned ? "" : " svc-toggle--off"}`}
@@ -1095,116 +1098,193 @@ function ServiceStaffTab({
                   disabled={!canManage}
                   onClick={() => toggleProviderAssignment(provider.id)}
                 />
-
-                {isExpanded ? (
-                  <div className="svc-override-card">
-                    <div className="svc-override-rows">
-                      <div className="svc-override-row">
-                        <span className="svc-override-label">Duration</span>
-                        <div className="svc-override-value">
-                          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                            <input className="svc-input" type="number" min={15} max={480} step={15} disabled={!canManage}
-                              placeholder={String(baseDurationMinutes)} value={entry.durationMinutes ?? ""}
-                              onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { durationMinutes: null }); return; } const n = Number(raw); updateVariant(provider.id, { durationMinutes: Number.isFinite(n) ? n : null }); }} />
-                            <span style={{ fontSize: "12px", color: "#6B5A47" }}>min</span>
-                          </div>
-                          {entry.durationMinutes != null && canManage ? (
-                            <button type="button" className="svc-text-btn"
-                              onClick={() => updateVariant(provider.id, { durationMinutes: null })}>
-                              Reset to default
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="svc-override-row">
-                        <span className="svc-override-label">Price</span>
-                        <div className="svc-override-value">
-                          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                            <span style={{ fontSize: "13px", color: "#1F1612" }}>$</span>
-                            <input className="svc-input" type="number" min={0} step="0.01" disabled={!canManage}
-                              placeholder={(basePriceCents / 100).toFixed(2)}
-                              value={entry.priceCents == null ? "" : (entry.priceCents / 100).toFixed(2)}
-                              onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { priceCents: null }); return; } const cents = parseMoneyInput(raw); updateVariant(provider.id, { priceCents: cents }); }} />
-                          </div>
-                          {entry.priceCents != null && canManage ? (
-                            <button type="button" className="svc-text-btn"
-                              onClick={() => updateVariant(provider.id, { priceCents: null })}>
-                              Reset to default
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="svc-override-row">
-                        <span className="svc-override-label">Commission</span>
-                        <div className="svc-override-value">
-                          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                            <div className="service-card__pill-toggle" role="group" aria-label="Commission type">
-                              <button type="button" className={`service-card__pill${commissionMode === "flat" ? " is-active" : ""}`} disabled={!canManage}
-                                onClick={() => { if (commissionMode === "flat") return; updateVariant(provider.id, { commissionBasisPoints: null, commissionFlatCents: entry.commissionFlatCents ?? 0 }); }}>$</button>
-                              <button type="button" className={`service-card__pill${commissionMode === "percent" ? " is-active" : ""}`} disabled={!canManage}
-                                onClick={() => { if (commissionMode === "percent") return; updateVariant(provider.id, { commissionFlatCents: null, commissionBasisPoints: entry.commissionBasisPoints ?? 0 }); }}>%</button>
-                            </div>
-                            {commissionMode === "flat" ? (
-                              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                                <span style={{ fontSize: "13px", color: "#1F1612" }}>$</span>
-                                <input className="svc-input" type="number" min={0} step="0.01" disabled={!canManage} placeholder="0.00" style={{ width: "5rem" }}
-                                  value={entry.commissionFlatCents == null ? "" : (entry.commissionFlatCents / 100).toFixed(2)}
-                                  onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { commissionFlatCents: null }); return; } const cents = parseMoneyInput(raw); updateVariant(provider.id, { commissionFlatCents: cents, commissionBasisPoints: null }); }} />
-                              </div>
-                            ) : (
-                              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                                <input className="svc-input" type="number" min={0} max={100} step="0.1" disabled={!canManage} placeholder="0" style={{ width: "4rem" }}
-                                  value={entry.commissionBasisPoints == null ? "" : (entry.commissionBasisPoints / 100).toString()}
-                                  onChange={(e) => { const raw = e.target.value; if (!raw) { updateVariant(provider.id, { commissionBasisPoints: null }); return; } const pct = Number(raw); if (!Number.isFinite(pct)) return; const bp = Math.round(pct * 100); updateVariant(provider.id, { commissionBasisPoints: Math.max(0, Math.min(10_000, bp)), commissionFlatCents: null }); }} />
-                                <span style={{ fontSize: "12px", color: "#6B5A47" }}>%</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="svc-override-row">
-                        <span className="svc-override-label">Enable in online booking</span>
-                        <div className="svc-override-value">
-                          <label className={`svc-toggle${isAssigned ? "" : " svc-toggle--off"}`} aria-label={`Online booking for ${provider.name}`}>
-                            <input type="checkbox" checked={isAssigned} disabled={!canManage}
-                              onChange={() => toggleProviderAssignment(provider.id)}
-                              style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
-                          </label>
-                        </div>
-                      </div>
-                      <div className="svc-override-row">
-                        <span className="svc-override-label">Online booking</span>
-                        <div className="svc-override-value">
-                          <a
-                            href={`${storefrontBaseUrl}/${tenantSlug}?serviceId=${service.id}&staffId=${provider.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="svc-reset-link"
-                            onClick={async (e) => {
-                              e.preventDefault();
-                              const link = `${storefrontBaseUrl}/${tenantSlug}?serviceId=${service.id}&staffId=${provider.id}`;
-                              try { await navigator.clipboard.writeText(link); } catch {}
-                              window.open(link, "_blank", "noopener,noreferrer");
-                            }}
-                          >
-                            Direct link
-                          </a>
-                        </div>
-                      </div>
-                    </div>
-                    {(entry.priceCents != null || entry.durationMinutes != null || entry.commissionFlatCents != null || entry.commissionBasisPoints != null) ? (
-                      <button type="button" className="svc-text-btn" style={{ marginTop: "10px" }}
-                        onClick={() => updateVariant(provider.id, { priceCents: null, durationMinutes: null, depositCents: null, commissionFlatCents: null, commissionBasisPoints: null })}>
-                        Reset to service defaults
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
+                <span className="svc-provider-card__name">{provider.name}</span>
               </div>
-            );
-          })
-        )}
-      </div>
+
+              {/* Duration */}
+              <div className="svc-provider-row">
+                <span className="svc-provider-row__label">Duration</span>
+                <div className="svc-provider-row__value">
+                  <input
+                    className="svc-input svc-provider-row__input"
+                    type="number" min={15} max={480} step={15}
+                    disabled={!canManage || !isAssigned}
+                    placeholder={String(baseDurationMinutes)}
+                    value={entry.durationMinutes ?? ""}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (!raw) { updateVariant(provider.id, { durationMinutes: null }); return; }
+                      const n = Number(raw);
+                      updateVariant(provider.id, { durationMinutes: Number.isFinite(n) ? n : null });
+                    }}
+                  />
+                  <span className="svc-provider-row__unit">min</span>
+                </div>
+              </div>
+              {entry.durationMinutes != null && canManage && isAssigned ? (
+                <div className="svc-provider-row__reset">
+                  <button type="button" className="svc-text-btn"
+                    onClick={() => updateVariant(provider.id, { durationMinutes: null })}>
+                    Reset to default
+                  </button>
+                </div>
+              ) : null}
+
+              {/* Price */}
+              <div className="svc-provider-row">
+                <span className="svc-provider-row__label">Price</span>
+                <div className="svc-provider-row__value">
+                  <span className="svc-provider-row__unit">$</span>
+                  <input
+                    className="svc-input svc-provider-row__input"
+                    type="number" min={0} step="0.01"
+                    disabled={!canManage || !isAssigned}
+                    placeholder={(basePriceCents / 100).toFixed(2)}
+                    value={entry.priceCents == null ? "" : (entry.priceCents / 100).toFixed(2)}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (!raw) { updateVariant(provider.id, { priceCents: null }); return; }
+                      const cents = parseMoneyInput(raw);
+                      updateVariant(provider.id, { priceCents: cents });
+                    }}
+                  />
+                </div>
+              </div>
+              {entry.priceCents != null && canManage && isAssigned ? (
+                <div className="svc-provider-row__reset">
+                  <button type="button" className="svc-text-btn"
+                    onClick={() => updateVariant(provider.id, { priceCents: null })}>
+                    Reset to default
+                  </button>
+                </div>
+              ) : null}
+
+              {/* Commission */}
+              <div className="svc-provider-row">
+                <span className="svc-provider-row__label">Commission</span>
+                <div className="svc-provider-row__value">
+                  <div className="service-card__pill-toggle" role="group" aria-label="Commission type">
+                    <button
+                      type="button"
+                      className={`service-card__pill${commissionMode === "flat" ? " is-active" : ""}`}
+                      disabled={!canManage || !isAssigned}
+                      onClick={() => {
+                        if (commissionMode === "flat") return;
+                        updateVariant(provider.id, { commissionBasisPoints: null, commissionFlatCents: entry.commissionFlatCents ?? 0 });
+                      }}
+                    >$</button>
+                    <button
+                      type="button"
+                      className={`service-card__pill${commissionMode === "percent" ? " is-active" : ""}`}
+                      disabled={!canManage || !isAssigned}
+                      onClick={() => {
+                        if (commissionMode === "percent") return;
+                        updateVariant(provider.id, { commissionFlatCents: null, commissionBasisPoints: entry.commissionBasisPoints ?? 0 });
+                      }}
+                    >%</button>
+                  </div>
+                  {commissionMode === "flat" ? (
+                    <>
+                      <span className="svc-provider-row__unit">$</span>
+                      <input
+                        className="svc-input svc-provider-row__input"
+                        type="number" min={0} step="0.01"
+                        disabled={!canManage || !isAssigned}
+                        placeholder="0.00"
+                        value={entry.commissionFlatCents == null ? "" : (entry.commissionFlatCents / 100).toFixed(2)}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (!raw) { updateVariant(provider.id, { commissionFlatCents: null }); return; }
+                          const cents = parseMoneyInput(raw);
+                          updateVariant(provider.id, { commissionFlatCents: cents, commissionBasisPoints: null });
+                        }}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        className="svc-input svc-provider-row__input"
+                        type="number" min={0} max={100} step="0.1"
+                        disabled={!canManage || !isAssigned}
+                        placeholder="0"
+                        value={entry.commissionBasisPoints == null ? "" : (entry.commissionBasisPoints / 100).toString()}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (!raw) { updateVariant(provider.id, { commissionBasisPoints: null }); return; }
+                          const pct = Number(raw);
+                          if (!Number.isFinite(pct)) return;
+                          const bp = Math.round(pct * 100);
+                          updateVariant(provider.id, {
+                            commissionBasisPoints: Math.max(0, Math.min(10_000, bp)),
+                            commissionFlatCents: null,
+                          });
+                        }}
+                      />
+                      <span className="svc-provider-row__unit">%</span>
+                    </>
+                  )}
+                </div>
+              </div>
+              {(entry.commissionFlatCents != null || entry.commissionBasisPoints != null) && canManage && isAssigned ? (
+                <div className="svc-provider-row__reset">
+                  <button type="button" className="svc-text-btn"
+                    onClick={() => updateVariant(provider.id, { commissionFlatCents: null, commissionBasisPoints: null })}>
+                    Reset to default
+                  </button>
+                </div>
+              ) : null}
+
+              <div className="svc-provider-card__divider" />
+
+              {/* Enable in online booking */}
+              <div className="svc-provider-row">
+                <span className="svc-provider-row__label">Enable in online booking</span>
+                <div className="svc-provider-row__value">
+                  <button
+                    type="button"
+                    className={`svc-toggle${isAssigned ? "" : " svc-toggle--off"}`}
+                    aria-label={`Online booking for ${provider.name}`}
+                    disabled={!canManage}
+                    onClick={() => toggleProviderAssignment(provider.id)}
+                  />
+                </div>
+              </div>
+
+              {/* Direct link */}
+              <div className="svc-provider-row">
+                <span className="svc-provider-row__label">Online booking</span>
+                <div className="svc-provider-row__value">
+                  <a
+                    href={directLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="svc-provider-card__link"
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      try { await navigator.clipboard.writeText(directLink); } catch {}
+                      window.open(directLink, "_blank", "noopener,noreferrer");
+                    }}
+                  >
+                    Direct link
+                  </a>
+                </div>
+              </div>
+
+              {hasAnyOverride && canManage && isAssigned ? (
+                <div className="svc-provider-card__reset-all">
+                  <button type="button" className="svc-text-btn"
+                    onClick={() => updateVariant(provider.id, {
+                      priceCents: null, durationMinutes: null, depositCents: null,
+                      commissionFlatCents: null, commissionBasisPoints: null,
+                    })}>
+                    Reset all to service defaults
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          );
+        })
+      )}
 
       {/* Client selection card */}
       <div className="svc-card" style={{ marginBottom: 0 }}>
@@ -1392,6 +1472,170 @@ function ServiceOnlineBookingTab({
         ) : null}
       </div>
     </form>
+  );
+}
+
+// ===========================================================================
+// Resources tab
+// ===========================================================================
+
+function ServiceResourcesTab({
+  service, tenantSlug, canManage, onSaved,
+}: {
+  service: ServiceSummary;
+  tenantSlug: string;
+  canManage: boolean;
+  onSaved: (msg?: string) => void;
+}) {
+  const [allResources, setAllResources] = useState<ResourceSummary[]>([]);
+  const [attached, setAttached] = useState<Map<string, number>>(new Map());
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [resList, svcRes] = await Promise.all([
+          platformApi.listResources(tenantSlug),
+          platformApi.getServiceResources(tenantSlug, service.id),
+        ]);
+        if (cancelled) return;
+        setAllResources(resList.resources.filter((r) => r.isActive));
+        const map = new Map<string, number>();
+        for (const entry of svcRes.resources) {
+          map.set(entry.resourceId, entry.quantity);
+        }
+        setAttached(map);
+        setLoaded(true);
+      } catch {
+        if (!cancelled) setLoaded(true);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [tenantSlug, service.id]);
+
+  const toggleResource = (resourceId: string) => {
+    setAttached((prev) => {
+      const next = new Map(prev);
+      if (next.has(resourceId)) {
+        next.delete(resourceId);
+      } else {
+        next.set(resourceId, 1);
+      }
+      return next;
+    });
+  };
+
+  const setQuantity = (resourceId: string, qty: number) => {
+    if (qty < 1) return;
+    setAttached((prev) => {
+      const next = new Map(prev);
+      next.set(resourceId, qty);
+      return next;
+    });
+  };
+
+  const handleSave = async () => {
+    if (!canManage) return;
+    setSaving(true);
+    try {
+      const resources = Array.from(attached.entries()).map(([resourceId, quantity]) => ({
+        resourceId,
+        quantity,
+      }));
+      await platformApi.replaceServiceResources(tenantSlug, service.id, { resources });
+      onSaved("Resources saved.");
+    } catch (err) {
+      onSaved(readErrorMessage(err, "Unable to save resources."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!loaded) {
+    return <div className="svc-detail-form"><p className="svc-helper">Loading…</p></div>;
+  }
+
+  if (allResources.length === 0) {
+    return (
+      <div className="svc-detail-form">
+        <div className="svc-card">
+          <p className="svc-helper">No resources configured. Add rooms or equipment in Settings &amp; Management → Resources.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const attachedCount = attached.size;
+
+  return (
+    <div className="svc-detail-form">
+      <div className="svc-card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px" }}>
+          <div>
+            <span className="svc-card__eyebrow">Required resources</span>
+            <div className="svc-summary-row" style={{ marginTop: "4px" }}>
+              <span><strong style={{ fontWeight: 500 }}>{attachedCount}</strong> of {allResources.length} resources attached</span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          {allResources.map((res) => {
+            const isAttached = attached.has(res.id);
+            const qty = attached.get(res.id) ?? 1;
+            return (
+              <div key={res.id} className={`svc-staff-row${isAttached ? "" : " svc-staff-row--dim"}`}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1 }}>
+                  <div className="svc-staff-avatar" style={{ background: isAttached ? "#6B5A47" : "#8B7960", fontSize: "11px" }}>
+                    {res.kind === "room" ? "🏠" : "🔧"}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <span className="svc-staff-name">{res.name}</span>
+                    <div className="svc-staff-meta">
+                      {res.kind === "room" ? "Room" : "Equipment"}
+                      {res.locationId ? " · Location-specific" : ""}
+                    </div>
+                  </div>
+                </div>
+                {isAttached ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ fontSize: "11px", color: "#8B7960" }}>Qty</span>
+                    <input
+                      className="svc-input"
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={qty}
+                      onChange={(e) => setQuantity(res.id, Number(e.target.value))}
+                      disabled={!canManage}
+                      style={{ width: "50px", textAlign: "center" }}
+                    />
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  className={`svc-toggle${isAttached ? "" : " svc-toggle--off"}`}
+                  aria-label={`Toggle ${res.name}`}
+                  disabled={!canManage}
+                  onClick={() => toggleResource(res.id)}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {canManage ? (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "18px" }}>
+          <button type="button" className="svc-save-btn" onClick={handleSave} disabled={saving}>
+            {saving ? "Saving…" : "Save resources"}
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

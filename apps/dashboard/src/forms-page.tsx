@@ -75,6 +75,57 @@ function generateFieldId(): string {
   return `field_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function formatCategoryTitle(raw: string): string {
+  const compact = raw.trim().replace(/\s+/g, " ");
+  if (!compact) {
+    return "";
+  }
+
+  if (compact === compact.toLowerCase()) {
+    if (/^[a-z]{1,5}$/.test(compact)) {
+      return compact.toUpperCase();
+    }
+    return compact
+      .split(/([\s\-/&]+)/)
+      .map((part) => (/^[\s\-/&]+$/.test(part) ? part : part.charAt(0).toUpperCase() + part.slice(1)))
+      .join("");
+  }
+
+  return compact;
+}
+
+function normalizeFormCategory(category: string | null | undefined): string {
+  const normalized = formatCategoryTitle(category ?? "");
+  return normalized.length > 0 ? normalized : "Uncategorized";
+}
+
+function groupFormsByCategory(forms: FormSummaryResponse[]): Array<{ category: string; items: FormSummaryResponse[] }> {
+  const groups = new Map<string, FormSummaryResponse[]>();
+  for (const form of forms) {
+    const category = normalizeFormCategory(form.category);
+    const next = groups.get(category) ?? [];
+    next.push(form);
+    groups.set(category, next);
+  }
+
+  return Array.from(groups.entries())
+    .sort(([left], [right]) => {
+      if (left === "Uncategorized") {
+        return 1;
+      }
+      if (right === "Uncategorized") {
+        return -1;
+      }
+      return left.localeCompare(right);
+    })
+    .map(([category, items]) => ({
+      category,
+      items: items.sort((left, right) => left.name.localeCompare(right.name)),
+    }));
+}
+
+const CATEGORY_FILTER_ALL = "__all__";
+
 export function FormsPage({
   definition,
   currentUser,
@@ -92,6 +143,7 @@ export function FormsPage({
   const [builder, setBuilder] = useState<BuilderModal>({ kind: "none" });
   const [status, setStatus] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<FormTabKey>("details");
+  const [categoryFilter, setCategoryFilter] = useState<string>(CATEGORY_FILTER_ALL);
 
   const loadForms = async () => {
     try {
@@ -109,6 +161,23 @@ export function FormsPage({
   }, [tenantSlug, canView]);
 
   const selectedForm = forms.find((f) => f.id === selectedFormId) ?? null;
+  const groupedForms = groupFormsByCategory(forms);
+  const categoryFilterOptions = [CATEGORY_FILTER_ALL, ...groupedForms.map((group) => group.category)];
+  const filteredForms =
+    categoryFilter === CATEGORY_FILTER_ALL
+      ? forms
+      : forms.filter((form) => normalizeFormCategory(form.category) === categoryFilter);
+  const groupedFilteredForms = groupFormsByCategory(filteredForms);
+
+  useEffect(() => {
+    if (selectedFormId === null) {
+      return;
+    }
+    const stillVisible = filteredForms.some((form) => form.id === selectedFormId);
+    if (!stillVisible) {
+      setSelectedFormId(filteredForms[0]?.id ?? null);
+    }
+  }, [filteredForms, selectedFormId]);
 
   if (!currentUser) {
     return <main className="ops-page-stack"><p className="staff-list-empty">Sign in required</p></main>;
@@ -131,7 +200,6 @@ export function FormsPage({
 
       {builder.kind !== "none" ? (
         <>
-          <h3>{definition.title}</h3>
           <section className="staff-master-detail">
             <div className="staff-grid">
               <aside className="staff-list-rail" aria-label="Form list">
@@ -143,28 +211,52 @@ export function FormsPage({
                     </button>
                   ) : null}
                 </div>
+                <label style={{ display: "grid", gap: "0.35rem", marginBottom: "0.75rem" }}>
+                  <span className="staff-list-empty" style={{ margin: 0, fontSize: "0.72rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                    Category filter
+                  </span>
+                  <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+                    {categoryFilterOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option === CATEGORY_FILTER_ALL ? "All categories" : option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 {forms.length === 0 ? (
                   <p className="staff-list-empty">No forms yet. Click "Build form" to create one.</p>
+                ) : groupedFilteredForms.length === 0 ? (
+                  <p className="staff-list-empty">No forms in this category.</p>
                 ) : (
                   <ul className="staff-list">
-                    {forms.map((form) => (
-                      <li key={form.id}>
-                        <button
-                          type="button"
-                          className={`staff-list-item${selectedFormId === form.id ? " is-active" : ""}`}
-                          onClick={() => setSelectedFormId(form.id)}
-                        >
-                          <span className="staff-avatar staff-avatar--initials" aria-hidden>
-                            {form.name.charAt(0)}
-                          </span>
-                          <span className="staff-list-meta">
-                            <span className="staff-list-name">{form.name}</span>
-                            <span className="staff-list-role">
-                              {form.schema?.fields.length ?? 0} field{(form.schema?.fields.length ?? 0) !== 1 ? "s" : ""}
-                              {!form.isActive ? " · Inactive" : ""}
-                            </span>
-                          </span>
-                        </button>
+                    {groupedFilteredForms.map((group) => (
+                      <li key={group.category}>
+                        <p className="staff-list-empty" style={{ margin: "0.6rem 0 0.35rem", fontSize: "0.72rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                          <strong style={{ color: "var(--ui-ink)" }}>{group.category}</strong>
+                          <span style={{ marginLeft: "0.35rem" }}>({group.items.length})</span>
+                        </p>
+                        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                          {group.items.map((form) => (
+                            <li key={form.id}>
+                              <button
+                                type="button"
+                                className={`staff-list-item${selectedFormId === form.id ? " is-active" : ""}`}
+                                onClick={() => setSelectedFormId(form.id)}
+                              >
+                                <span className="staff-avatar staff-avatar--initials" aria-hidden>
+                                  {form.name.charAt(0)}
+                                </span>
+                                <span className="staff-list-meta">
+                                  <span className="staff-list-name">{form.name}</span>
+                                  <span className="staff-list-role">
+                                    {form.schema?.fields.length ?? 0} field{(form.schema?.fields.length ?? 0) !== 1 ? "s" : ""}
+                                    {!form.isActive ? " · Inactive" : ""}
+                                  </span>
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
                       </li>
                     ))}
                   </ul>
@@ -187,8 +279,6 @@ export function FormsPage({
         </>
       ) : (
         <>
-          <h3>{definition.title}</h3>
-
           <section className="staff-master-detail">
             <div className="staff-grid">
               <aside className="staff-list-rail" aria-label="Form list">
@@ -200,28 +290,52 @@ export function FormsPage({
                     </button>
                   ) : null}
                 </div>
+                <label style={{ display: "grid", gap: "0.35rem", marginBottom: "0.75rem" }}>
+                  <span className="staff-list-empty" style={{ margin: 0, fontSize: "0.72rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                    Category filter
+                  </span>
+                  <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+                    {categoryFilterOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option === CATEGORY_FILTER_ALL ? "All categories" : option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 {forms.length === 0 ? (
                   <p className="staff-list-empty">No forms yet. Click "Build form" to create one.</p>
+                ) : groupedFilteredForms.length === 0 ? (
+                  <p className="staff-list-empty">No forms in this category.</p>
                 ) : (
                   <ul className="staff-list">
-                    {forms.map((form) => (
-                      <li key={form.id}>
-                        <button
-                          type="button"
-                          className={`staff-list-item${selectedFormId === form.id ? " is-active" : ""}`}
-                          onClick={() => setSelectedFormId(form.id)}
-                        >
-                          <span className="staff-avatar staff-avatar--initials" aria-hidden>
-                            {form.name.charAt(0)}
-                          </span>
-                          <span className="staff-list-meta">
-                            <span className="staff-list-name">{form.name}</span>
-                            <span className="staff-list-role">
-                              {form.schema?.fields.length ?? 0} field{(form.schema?.fields.length ?? 0) !== 1 ? "s" : ""}
-                              {!form.isActive ? " · Inactive" : ""}
-                            </span>
-                          </span>
-                        </button>
+                    {groupedFilteredForms.map((group) => (
+                      <li key={group.category}>
+                        <p className="staff-list-empty" style={{ margin: "0.6rem 0 0.35rem", fontSize: "0.72rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                          <strong style={{ color: "var(--ui-ink)" }}>{group.category}</strong>
+                          <span style={{ marginLeft: "0.35rem" }}>({group.items.length})</span>
+                        </p>
+                        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                          {group.items.map((form) => (
+                            <li key={form.id}>
+                              <button
+                                type="button"
+                                className={`staff-list-item${selectedFormId === form.id ? " is-active" : ""}`}
+                                onClick={() => setSelectedFormId(form.id)}
+                              >
+                                <span className="staff-avatar staff-avatar--initials" aria-hidden>
+                                  {form.name.charAt(0)}
+                                </span>
+                                <span className="staff-list-meta">
+                                  <span className="staff-list-name">{form.name}</span>
+                                  <span className="staff-list-role">
+                                    {form.schema?.fields.length ?? 0} field{(form.schema?.fields.length ?? 0) !== 1 ? "s" : ""}
+                                    {!form.isActive ? " · Inactive" : ""}
+                                  </span>
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
                       </li>
                     ))}
                   </ul>
@@ -239,6 +353,8 @@ export function FormsPage({
                     onEdit={() => setBuilder({ kind: "edit", form: selectedForm, initialStep: "fields" })}
                     onPreview={() => setBuilder({ kind: "edit", form: selectedForm, initialStep: "preview" })}
                     onToggleActive={() => handleToggleActive(selectedForm)}
+                    onFormPatched={handleFormPatched}
+                    onStatus={setStatus}
                     onDelete={() => {
                       if (window.confirm(`Delete "${selectedForm.name}"? This cannot be undone.`)) {
                         handleDeleteForm(selectedForm);
@@ -280,6 +396,10 @@ export function FormsPage({
       setStatus(readErrorMessage(error, "Unable to delete form."));
     }
   }
+
+  function handleFormPatched(updatedForm: FormSummaryResponse) {
+    setForms((current) => current.map((form) => (form.id === updatedForm.id ? updatedForm : form)));
+  }
 }
 
 // ===========================================================================
@@ -296,6 +416,8 @@ function FormDetail({
   onPreview,
   onToggleActive,
   onDelete,
+  onFormPatched,
+  onStatus,
 }: {
   form: FormSummaryResponse;
   tenantSlug: string;
@@ -306,7 +428,10 @@ function FormDetail({
   onPreview: () => void;
   onToggleActive: () => void;
   onDelete: () => void;
+  onFormPatched: (form: FormSummaryResponse) => void;
+  onStatus: (message: string | null) => void;
 }) {
+  const [category, setCategory] = useState(form.category ?? "");
   const [scope, setScope] = useState<FormScope>(form.scope);
   const [timing, setTiming] = useState<CustomerPromptTiming | "">(form.customerPromptTiming ?? "");
   const [reviewRequired, setReviewRequired] = useState(form.reviewRequired ?? false);
@@ -319,8 +444,10 @@ function FormDetail({
   const [editingFieldIndex, setEditingFieldIndex] = useState<number | null>(null);
   const [localFields, setLocalFields] = useState<FormField[]>(form.schema?.fields ?? []);
   const [showFieldPalette, setShowFieldPalette] = useState(false);
+  const [tabSaving, setTabSaving] = useState(false);
 
   useEffect(() => {
+    setCategory(form.category ?? "");
     setScope(form.scope);
     setTiming(form.customerPromptTiming ?? "");
     setReviewRequired(form.reviewRequired ?? false);
@@ -340,14 +467,47 @@ function FormDetail({
     }).catch(() => setServicesLoaded(true));
   }, [tenantSlug]);
 
-  const updateFormField = async (field: string, value: unknown) => {
-    if (!canManage) return;
-    setSaving(field);
+  const saveCurrentTab = async (tab: FormTabKey) => {
+    if (!canManage || tabSaving) return;
+    setTabSaving(true);
+    onStatus(null);
     try {
-      const body: UpdateFormRequest = { [field]: value };
-      await platformApi.updateForm(tenantSlug, form.id, body);
-    } catch { /* silently fail, state reverts via useEffect */ }
-    setSaving(null);
+      let body: UpdateFormRequest;
+
+      if (tab === "details") {
+        body = {
+          category: category.trim() || null,
+          scope,
+          customerPromptTiming: timing || null,
+          reviewRequired,
+          serviceIds,
+        };
+      } else {
+        const schema: FormSchema = {
+          title: form.schema?.title ?? form.name,
+          description: form.schema?.description ?? undefined,
+          fields: localFields,
+        };
+        body = { schema };
+      }
+
+      const updated = await platformApi.updateForm(tenantSlug, form.id, body);
+      onFormPatched(updated);
+      if (tab === "details") {
+        setCategory(updated.category ?? "");
+      }
+      onStatus(
+        tab === "details"
+          ? `Saved details for "${updated.name}".`
+          : tab === "fields"
+            ? `Saved field changes for "${updated.name}".`
+            : `Saved "${updated.name}".`,
+      );
+    } catch (error) {
+      onStatus(readErrorMessage(error, "Unable to save form changes."));
+    } finally {
+      setTabSaving(false);
+    }
   };
 
   const tabs: Array<{ key: FormTabKey; label: string }> = [
@@ -399,26 +559,39 @@ function FormDetail({
 
       {activeTab === "details" ? (
         <div className="staff-detail-form">
+          <div className="form-editor__card">
+            <h4>Form category</h4>
+            <label>
+              <span>Category</span>
+              <input
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+                placeholder="e.g. XERF, Injectables, Pre-care"
+                disabled={!canManage || tabSaving}
+              />
+            </label>
+          </div>
+
           {/* Who fills out this form? */}
           <div className="form-editor__card">
             <h4>Who fills out this form?</h4>
             <div className="form-editor__radio-group">
-              <label className={`settings-toggle${saving === "scope" ? " settings-toggle--saving" : ""}`}>
+              <label className="settings-toggle">
                 <input
                   type="radio" name="detail-scope" checked={scope === "customer"}
-                  onChange={() => { setScope("customer"); void updateFormField("scope", "customer"); }}
-                  disabled={!canManage || saving !== null}
+                  onChange={() => { setScope("customer"); }}
+                  disabled={!canManage || tabSaving}
                 />
                 <span>
                   <strong>Clients who book an appointment</strong>
                   <small>A link will be included in reminders and other automated messages</small>
                 </span>
               </label>
-              <label className={`settings-toggle${saving === "scope" ? " settings-toggle--saving" : ""}`}>
+              <label className="settings-toggle">
                 <input
                   type="radio" name="detail-scope" checked={scope === "internal"}
-                  onChange={() => { setScope("internal"); void updateFormField("scope", "internal"); }}
-                  disabled={!canManage || saving !== null}
+                  onChange={() => { setScope("internal"); }}
+                  disabled={!canManage || tabSaving}
                 />
                 <span>
                   <strong>Staff members</strong>
@@ -432,22 +605,22 @@ function FormDetail({
           <div className="form-editor__card">
             <h4>How often do clients need to fill it out?</h4>
             <div className="form-editor__radio-group">
-              <label className={`settings-toggle${saving === "customerPromptTiming" ? " settings-toggle--saving" : ""}`}>
+              <label className="settings-toggle">
                 <input
                   type="radio" name="detail-timing" checked={timing === "pre_booking"}
-                  onChange={() => { setTiming("pre_booking"); void updateFormField("customerPromptTiming", "pre_booking"); }}
-                  disabled={!canManage || saving !== null}
+                  onChange={() => { setTiming("pre_booking"); }}
+                  disabled={!canManage || tabSaving}
                 />
                 <span>
                   <strong>Every time they book an appointment</strong>
                   <small>Clients will be asked to submit the form every time they book</small>
                 </span>
               </label>
-              <label className={`settings-toggle${saving === "customerPromptTiming" ? " settings-toggle--saving" : ""}`}>
+              <label className="settings-toggle">
                 <input
                   type="radio" name="detail-timing" checked={timing === ""}
-                  onChange={() => { setTiming(""); void updateFormField("customerPromptTiming", null); }}
-                  disabled={!canManage || saving !== null}
+                  onChange={() => { setTiming(""); }}
+                  disabled={!canManage || tabSaving}
                 />
                 <span>
                   <strong>Only once for each client</strong>
@@ -461,22 +634,22 @@ function FormDetail({
           <div className="form-editor__card">
             <h4>Which appointments is it for?</h4>
             <div className="form-editor__radio-group">
-              <label className={`settings-toggle${saving === "serviceIds" ? " settings-toggle--saving" : ""}`}>
+              <label className="settings-toggle">
                 <input
                   type="radio" name="detail-services" checked={serviceIds.length === 0}
-                  onChange={() => { setServiceIds([]); void updateFormField("serviceIds", []); }}
-                  disabled={!canManage || saving !== null}
+                  onChange={() => { setServiceIds([]); }}
+                  disabled={!canManage || tabSaving}
                 />
                 <span>
                   <strong>For all appointments</strong>
                   <small>Regardless of which services were booked</small>
                 </span>
               </label>
-              <label className={`settings-toggle${saving === "serviceIds" ? " settings-toggle--saving" : ""}`}>
+              <label className="settings-toggle">
                 <input
                   type="radio" name="detail-services" checked={serviceIds.length > 0}
                   onChange={() => {}}
-                  disabled={!canManage || saving !== null}
+                  disabled={!canManage || tabSaving}
                 />
                 <span>
                   <strong>Only for appointments with specific services</strong>
@@ -496,7 +669,6 @@ function FormDetail({
                         <button type="button" className="ghost-action" onClick={() => {
                           const next = serviceIds.filter((id) => id !== svc.id);
                           setServiceIds(next);
-                          void updateFormField("serviceIds", next);
                         }}>✕</button>
                       </div>
                     ))}
@@ -522,7 +694,6 @@ function FormDetail({
                               ? serviceIds.filter((id) => !catIds.includes(id))
                               : [...new Set([...serviceIds, ...catIds])];
                             setServiceIds(next);
-                            void updateFormField("serviceIds", next);
                           }}
                         >
                           {allSelected ? "✓" : "+"} {cat.name} ({catServices.length})
@@ -560,7 +731,6 @@ function FormDetail({
                             onChange={() => {
                               const next = [...serviceIds, svc.id];
                               setServiceIds(next);
-                              void updateFormField("serviceIds", next);
                             }}
                           />
                           <span>
@@ -580,22 +750,22 @@ function FormDetail({
           <div className="form-editor__card">
             <h4>Does this form require review?</h4>
             <div className="form-editor__radio-group">
-              <label className={`settings-toggle${saving === "reviewRequired" ? " settings-toggle--saving" : ""}`}>
+              <label className="settings-toggle">
                 <input
                   type="radio" name="detail-review" checked={!reviewRequired}
-                  onChange={() => { setReviewRequired(false); void updateFormField("reviewRequired", false); }}
-                  disabled={!canManage || saving !== null}
+                  onChange={() => { setReviewRequired(false); }}
+                  disabled={!canManage || tabSaving}
                 />
                 <span>
                   <strong>No review needed</strong>
                   <small>Most common, for forms that don't need additional review</small>
                 </span>
               </label>
-              <label className={`settings-toggle${saving === "reviewRequired" ? " settings-toggle--saving" : ""}`}>
+              <label className="settings-toggle">
                 <input
                   type="radio" name="detail-review" checked={reviewRequired}
-                  onChange={() => { setReviewRequired(true); void updateFormField("reviewRequired", true); }}
-                  disabled={!canManage || saving !== null}
+                  onChange={() => { setReviewRequired(true); }}
+                  disabled={!canManage || tabSaving}
                 />
                 <span>
                   <strong>Review required</strong>
@@ -604,6 +774,19 @@ function FormDetail({
               </label>
             </div>
           </div>
+
+          {canManage ? (
+            <div className="form-editor__save-bar">
+              <button
+                type="button"
+                className="primary-action"
+                disabled={tabSaving}
+                onClick={() => { void saveCurrentTab("details"); }}
+              >
+                {tabSaving ? "Saving..." : "Save details"}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -669,6 +852,19 @@ function FormDetail({
           ) : (
             <p className="staff-list-empty">No schema defined.</p>
           )}
+
+          {canManage ? (
+            <div className="form-editor__save-bar">
+              <button
+                type="button"
+                className="primary-action"
+                disabled={tabSaving}
+                onClick={() => { void saveCurrentTab("fields"); }}
+              >
+                {tabSaving ? "Saving..." : "Save fields"}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -712,12 +908,37 @@ function FormDetail({
               <p className="settings-form-help">No fields defined yet.</p>
             )}
           </div>
+
+          {canManage ? (
+            <div className="form-editor__save-bar">
+              <button
+                type="button"
+                className="primary-action"
+                disabled={tabSaving}
+                onClick={() => { void saveCurrentTab("preview"); }}
+              >
+                {tabSaving ? "Saving..." : "Save form"}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
       {activeTab === "advanced" ? (
         <div className="staff-detail-form">
           <p className="settings-form-help">Advanced settings coming soon.</p>
+          {canManage ? (
+            <div className="form-editor__save-bar">
+              <button
+                type="button"
+                className="primary-action"
+                disabled={tabSaving}
+                onClick={() => { void saveCurrentTab("advanced"); }}
+              >
+                {tabSaving ? "Saving..." : "Save form"}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -746,6 +967,7 @@ function FormBuilderEditor({
   const [formId, setFormId] = useState<string | null>(existingForm?.id ?? null);
 
   const [name, setName] = useState(existingForm?.name ?? "");
+  const [category, setCategory] = useState(existingForm?.category ?? "");
   const [scope, setScope] = useState<FormScope>(existingForm?.scope ?? "customer");
   const [timing, setTiming] = useState<CustomerPromptTiming | "">(existingForm?.customerPromptTiming ?? "");
   const [reviewRequired, setReviewRequired] = useState(existingForm?.reviewRequired ?? false);
@@ -791,6 +1013,7 @@ function FormBuilderEditor({
       if (formId) {
         const body: UpdateFormRequest = {
           name: trimmedName,
+          category: category.trim() || null,
           scope,
           customerPromptTiming: timing || null,
           reviewRequired,
@@ -801,6 +1024,7 @@ function FormBuilderEditor({
       } else {
         const body: CreateFormRequest = {
           name: trimmedName,
+          category: category.trim() || null,
           scope,
           customerPromptTiming: timing || undefined,
           reviewRequired,
@@ -813,11 +1037,26 @@ function FormBuilderEditor({
       await onSaved(msg);
     } catch (err) {
       onStatus(readErrorMessage(err, "Unable to save form."));
-      onClose();
     } finally {
       setSaving(false);
     }
   };
+
+  const saveLabel =
+    step === "details"
+      ? "Save details"
+      : step === "fields"
+        ? "Save fields"
+        : "Save form";
+
+  const saveMessage =
+    formId
+      ? step === "details"
+        ? `"${name.trim()}" details updated.`
+        : step === "fields"
+          ? `"${name.trim()}" fields updated.`
+          : `"${name.trim()}" updated.`
+      : `"${name.trim()}" created.`;
 
   const steps: Array<{ key: EditorStep; label: string; disabled: boolean }> = [
     { key: "details", label: "Details", disabled: false },
@@ -858,6 +1097,7 @@ function FormBuilderEditor({
         {step === "details" ? (
           <DetailsStep
             name={name} setName={setName}
+            category={category} setCategory={setCategory}
             description={description} setDescription={setDescription}
             scope={scope} setScope={setScope}
             timing={timing} setTiming={setTiming}
@@ -898,9 +1138,9 @@ function FormBuilderEditor({
             type="button"
             className="primary-action"
             disabled={saving || !name.trim()}
-            onClick={() => saveForm(formId ? `"${name.trim()}" updated.` : `"${name.trim()}" created.`)}
+            onClick={() => saveForm(saveMessage)}
           >
-            {saving ? "Saving…" : formId ? "Save form" : "Create form"}
+            {saving ? "Saving..." : formId ? saveLabel : "Create form"}
           </button>
         </div>
       </div>
@@ -914,6 +1154,7 @@ function FormBuilderEditor({
 
 function DetailsStep({
   name, setName,
+  category, setCategory,
   description, setDescription,
   scope, setScope,
   timing, setTiming,
@@ -924,6 +1165,7 @@ function DetailsStep({
   selectKey, setSelectKey,
 }: {
   name: string; setName: (v: string) => void;
+  category: string; setCategory: (v: string) => void;
   description: string; setDescription: (v: string) => void;
   scope: FormScope; setScope: (v: FormScope) => void;
   timing: CustomerPromptTiming | ""; setTiming: (v: CustomerPromptTiming | "") => void;
@@ -967,6 +1209,10 @@ function DetailsStep({
         <label>
           <span>Description</span>
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Instructions shown at the top of the form" />
+        </label>
+        <label>
+          <span>Category</span>
+          <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. XERF, Injectables, Wellness" />
         </label>
       </div>
 
@@ -1295,14 +1541,16 @@ function FieldInlineEditor({
               placeholder="Optional hint"
             />
           </label>
-          <label style={{ flex: 1 }}>
-            <span>Placeholder</span>
-            <input
-              value={field.placeholder ?? ""}
-              onChange={(e) => onUpdate({ placeholder: e.target.value || undefined })}
-              placeholder="Placeholder text"
-            />
-          </label>
+          {field.type === "short_text" || field.type === "long_text" || field.type === "select" || field.type === "number" ? (
+            <label style={{ flex: 1 }}>
+              <span>Placeholder</span>
+              <input
+                value={field.placeholder ?? ""}
+                onChange={(e) => onUpdate({ placeholder: e.target.value || undefined })}
+                placeholder="Placeholder text"
+              />
+            </label>
+          ) : null}
         </div>
       ) : null}
 

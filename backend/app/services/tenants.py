@@ -17,9 +17,11 @@ from app.db.models import (
     ProviderSchedule,
     ProviderService,
     ProviderTimeOff,
+    Resource,
     Service,
     ServiceCategory,
     ServiceLocation,
+    ServiceResource,
     Tenant,
     User,
     UserPermissionOverride,
@@ -2424,3 +2426,59 @@ async def list_tenant_provider_service_variants(
             for svc in services
         ],
     )
+
+
+async def list_service_resources(
+    session: AsyncSession, tenant_slug: str, service_id: str
+):
+    from app.schemas.catalog import ServiceResourceEntry, ServiceResourceListResponse
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    service = await _load_service_for_tenant(session, tenant.id, service_id)
+    rows = (
+        await session.scalars(
+            select(ServiceResource)
+            .where(ServiceResource.service_id == service.id, ServiceResource.tenant_id == tenant.id)
+        )
+    ).all()
+    return ServiceResourceListResponse(
+        service_id=service.id,
+        resources=[ServiceResourceEntry(resource_id=r.resource_id, quantity=r.quantity) for r in rows],
+    )
+
+
+async def replace_service_resources(
+    session: AsyncSession, tenant_slug: str, service_id: str, payload
+):
+    from app.schemas.catalog import ServiceResourceEntry, ServiceResourceListResponse
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    service = await _load_service_for_tenant(session, tenant.id, service_id)
+
+    # Delete existing links
+    existing = (
+        await session.scalars(
+            select(ServiceResource).where(
+                ServiceResource.service_id == service.id, ServiceResource.tenant_id == tenant.id
+            )
+        )
+    ).all()
+    for row in existing:
+        await session.delete(row)
+    await session.flush()
+
+    # Insert new links
+    for entry in payload.resources:
+        # Verify resource belongs to tenant
+        resource = await session.scalar(
+            select(Resource).where(Resource.id == entry.resource_id, Resource.tenant_id == tenant.id)
+        )
+        if resource is None:
+            raise api_exception(404, "not_found", f"Resource not found: {entry.resource_id}")
+        session.add(ServiceResource(
+            tenant_id=tenant.id,
+            service_id=service.id,
+            resource_id=entry.resource_id,
+            quantity=entry.quantity,
+        ))
+
+    await session.commit()
+    return await list_service_resources(session, tenant_slug, service_id)

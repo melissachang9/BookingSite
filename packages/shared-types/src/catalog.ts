@@ -206,6 +206,20 @@ export type ReplaceProviderServiceVariantsRequest = {
   variants: ProviderServiceVariantEntry[];
 };
 
+export type ServiceResourceEntry = {
+  resourceId: UUID;
+  quantity: number;
+};
+
+export type ServiceResourceListResponse = {
+  serviceId: UUID;
+  resources: ServiceResourceEntry[];
+};
+
+export type ReplaceServiceResourcesRequest = {
+  resources: ServiceResourceEntry[];
+};
+
 export type ProviderSummary = AuditFields &
   TenantScoped & {
     userId?: UUID | null;

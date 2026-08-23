@@ -52,6 +52,7 @@ export type FormSchema = {
 export type FormSummary = AuditFields &
   TenantScoped & {
     name: string;
+    category?: string | null;
     scope: FormScope;
     customerPromptTiming?: CustomerPromptTiming | null;
     isActive: boolean;
@@ -109,6 +110,7 @@ export type FormRequirement = AuditFields & {
 export type FormSummaryResponse = AuditFields &
   TenantScoped & {
     name: string;
+    category?: string | null;
     scope: FormScope;
     customerPromptTiming?: CustomerPromptTiming | null;
     reviewRequired: boolean;
@@ -126,6 +128,7 @@ export type FormListResponse = {
 
 export type CreateFormRequest = {
   name: string;
+  category?: string | null;
   scope?: FormScope;
   customerPromptTiming?: CustomerPromptTiming | null;
   reviewRequired?: boolean;
@@ -135,6 +138,7 @@ export type CreateFormRequest = {
 
 export type UpdateFormRequest = {
   name?: string;
+  category?: string | null;
   scope?: FormScope;
   customerPromptTiming?: CustomerPromptTiming | null;
   reviewRequired?: boolean;

@@ -625,6 +625,20 @@ class ReplaceProviderServiceVariantsWithServiceRequest(CamelModel):
     variants: list[ProviderServiceVariantWithService]
 
 
+class ServiceResourceEntry(CamelModel):
+    resource_id: str
+    quantity: int = Field(default=1, ge=1, le=100)
+
+
+class ServiceResourceListResponse(CamelModel):
+    service_id: str
+    resources: list[ServiceResourceEntry]
+
+
+class ReplaceServiceResourcesRequest(CamelModel):
+    resources: list[ServiceResourceEntry]
+
+
 class ProviderSummaryResponse(CamelModel):
     id: str
     tenant_id: str

@@ -37,6 +37,7 @@ class FormSummaryResponse(CamelModel):
     created_at: datetime
     updated_at: datetime
     name: str
+    category: str | None = None
     scope: str
     customer_prompt_timing: str | None = None
     review_required: bool = False
@@ -54,6 +55,7 @@ class FormListResponse(CamelModel):
 
 class CreateFormRequest(CamelModel):
     name: str = Field(min_length=1, max_length=255)
+    category: str | None = Field(default=None, max_length=100)
     scope: str = Field(default="customer")
     customer_prompt_timing: str | None = None
     review_required: bool = False
@@ -63,6 +65,7 @@ class CreateFormRequest(CamelModel):
 
 class UpdateFormRequest(CamelModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
+    category: str | None = Field(default=None, max_length=100)
     scope: str | None = None
     customer_prompt_timing: str | None = None
     review_required: bool | None = None

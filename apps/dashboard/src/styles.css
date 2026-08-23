@@ -4552,8 +4552,9 @@ body {
   .staff-grid { grid-template-columns: 1fr; }
 }
 .staff-list-rail { border-right: 1px solid var(--color-border, rgba(0,0,0,0.08)); background: rgba(0,0,0,0.02); display: flex; flex-direction: column; }
-.staff-list-rail-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.1rem; border-bottom: 1px solid var(--color-border, rgba(0,0,0,0.08)); gap: 0.5rem; }
+.staff-list-rail-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.1rem 1rem 1.5rem; border-bottom: 1px solid var(--color-border, rgba(0,0,0,0.08)); gap: 0.5rem; }
 .staff-list-rail-header h4 { margin: 0; }
+.staff-list-rail > label { padding-left: 1.5rem; padding-right: 1.1rem; }
 .staff-list { list-style: none; margin: 0; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; overflow-y: auto; }
 .staff-list-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.6rem; border: 1px solid transparent; border-radius: 8px; background: transparent; text-align: left; cursor: pointer; width: 100%; font: inherit; color: inherit; }
 .staff-list-item:hover { background: rgba(0,0,0,0.05); }
@@ -4792,7 +4793,6 @@ body {
   padding: 1rem;
   color: var(--text-muted, #6b7280);
   font-size: 0.85rem;
-  font-style: italic;
 }
 .staff-detail-panel {
   padding: 1.25rem 1.5rem;
@@ -7402,6 +7402,163 @@ body {
   border-top: 0.5px solid #E3D9C7;
   flex-wrap: wrap;
 }
+
+/* Staff tab: eligible summary (name/count on left, enable/disable all on right) */
+.svc-staff-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 4px 10px;
+}
+
+/* Staff tab: base defaults reference card (muted read-only Duration + Price) */
+.svc-provider-card--defaults {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.svc-provider-row__value--muted {
+  color: var(--ui-muted, #8B7960);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Provider card subtitle (e.g., "1 hr · $145.00" under service name) */
+.svc-provider-card__subtitle {
+  font-size: 12px;
+  color: var(--ui-muted, #8B7960);
+  margin-top: 2px;
+  font-weight: 400;
+}
+
+/* Staff profile: per-service overrides list wrapper */
+.staff-overrides-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Staff profile Services tab: category-grouped card list */
+.staff-services-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.staff-services-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.staff-services-group__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 4px 4px;
+}
+.staff-services-group__title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ui-ink, #1F1612);
+}
+
+/* Staff tab: bulk enable/disable actions row */
+.svc-staff-bulk-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 6px 10px;
+}
+
+/* Staff tab: per-provider card (always expanded, matches screenshot) */
+.svc-provider-card {
+  background: var(--ui-ivory, #fff);
+  border: 0.5px solid var(--ui-sand, #E3D9C7);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  transition: opacity 0.15s ease;
+}
+.svc-provider-card--off {
+  opacity: 0.55;
+}
+.svc-provider-card__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 0.5px solid #E3D9C7;
+  margin-bottom: 4px;
+}
+.svc-provider-card__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ui-ink, #1F1612);
+}
+.svc-provider-card--off .svc-provider-card__name {
+  color: var(--ui-muted, #8B7960);
+  font-weight: 500;
+}
+.svc-provider-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 0.5px solid #F0E8D8;
+}
+.svc-provider-row:last-of-type {
+  border-bottom: none;
+}
+.svc-provider-row__label {
+  font-size: 13px;
+  color: var(--ui-ink, #1F1612);
+  font-weight: 400;
+}
+.svc-provider-row__value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.svc-provider-row__input {
+  width: 5.5rem;
+  text-align: right;
+  padding: 6px 9px;
+}
+.svc-provider-row__unit {
+  font-size: 12px;
+  color: var(--ui-muted, #6B5A47);
+}
+.svc-provider-row__reset {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 0 8px;
+  margin-top: -6px;
+}
+.svc-provider-card__divider {
+  height: 0.5px;
+  background: #E3D9C7;
+  margin: 8px 0 4px;
+}
+.svc-provider-card__link {
+  font-size: 13px;
+  color: var(--ui-accent, #b8896b);
+  text-decoration: none;
+  font-weight: 500;
+}
+.svc-provider-card__link:hover {
+  text-decoration: underline;
+}
+.svc-provider-card__reset-all {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
 .svc-staff-row:first-of-type {
   border-top: none;
   padding-top: 4px;

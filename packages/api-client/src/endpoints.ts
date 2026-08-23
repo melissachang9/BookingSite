@@ -57,9 +57,11 @@ import type {
   PublicCategoryPayload,
   ReorderRequest,
   ReplaceProviderServiceVariantsRequest,
+  ReplaceServiceResourcesRequest,
   ReplaceUserPermissionsRequest,
   ResourceListResponse,
   ResourceSummary,
+  ServiceResourceListResponse,
   UpdateFormRequest,
   UserPermissionsResponse,
   LocationSummary,
@@ -187,6 +189,19 @@ export const createPlatformApi = (client: ApiClient) => ({
   ) =>
     client.put<ProviderServiceVariantListResponse, ReplaceProviderServiceVariantsRequest>(
       `tenants/${tenantSlug}/services/${serviceId}/provider-variants`,
+      body,
+    ),
+  getServiceResources: (tenantSlug: string, serviceId: string) =>
+    client.get<ServiceResourceListResponse>(
+      `tenants/${tenantSlug}/services/${serviceId}/resources`,
+    ),
+  replaceServiceResources: (
+    tenantSlug: string,
+    serviceId: string,
+    body: ReplaceServiceResourcesRequest,
+  ) =>
+    client.put<ServiceResourceListResponse, ReplaceServiceResourcesRequest>(
+      `tenants/${tenantSlug}/services/${serviceId}/resources`,
       body,
     ),
   listLocations: (tenantSlug: string) => client.get<LocationListResponse>(`tenants/${tenantSlug}/locations`),

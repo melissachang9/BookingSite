@@ -123,7 +123,18 @@ async def list_availability(
     service = await _load_service(session, tenant.id, service_id)
     provider_contexts = await _load_providers(session, tenant.id, service, provider_id, location_id)
     if not provider_contexts:
-        raise api_exception(404, "not_found", "No active providers are available for this service.")
+        # Return empty availability instead of 404 so the calendar renders
+        # gracefully when a service has no assigned providers.
+        try:
+            requested_date = date.fromisoformat(requested_date_text)
+        except ValueError:
+            requested_date = date.today()
+        resolved_window_days = max(1, min(window_days, 45))
+        days: list[AvailabilityDayResponse] = []
+        for i in range(resolved_window_days):
+            day_date = requested_date + timedelta(days=i)
+            days.append(AvailabilityDayResponse(date=day_date.isoformat(), slotCount=0))
+        return AvailabilityResponse(days=days, slots=[], nextAvailableSlot=None)
 
     try:
         requested_date = date.fromisoformat(requested_date_text)

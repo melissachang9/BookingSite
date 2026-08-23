@@ -420,6 +420,21 @@ async def _ensure_postgres_schema_compatibility() -> None:
                 text("ALTER TABLE forms ADD COLUMN applies_to_all_services BOOLEAN NOT NULL DEFAULT FALSE")
             )
 
+        form_category_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'forms'
+                  AND column_name = 'category'
+                """
+            )
+        )
+        if not form_category_exists:
+            await connection.execute(
+                text("ALTER TABLE forms ADD COLUMN category VARCHAR(100)")
+            )
+
         # Backfill: forms with no service attachments should be "applies to all"
         # This runs every startup (idempotent) to catch forms configured before the column existed
         await connection.execute(

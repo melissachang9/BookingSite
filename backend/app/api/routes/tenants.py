@@ -973,3 +973,38 @@ async def put_service_provider_variants(
     return await replace_tenant_service_provider_variants(
         session, tenant_slug, service_id, payload
     )
+
+
+# === Service resources ===
+
+from app.schemas.catalog import ServiceResourceListResponse, ReplaceServiceResourcesRequest
+from app.services.tenants import list_service_resources, replace_service_resources
+
+
+@router.get(
+    "/{tenant_slug}/services/{service_id}/resources",
+    response_model=ServiceResourceListResponse,
+    summary="List resources attached to a service",
+)
+async def get_service_resources(
+    tenant_slug: str,
+    service_id: str,
+    _: object = Depends(require_tenant_permission("services.view")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ServiceResourceListResponse:
+    return await list_service_resources(session, tenant_slug, service_id)
+
+
+@router.put(
+    "/{tenant_slug}/services/{service_id}/resources",
+    response_model=ServiceResourceListResponse,
+    summary="Replace resources attached to a service",
+)
+async def put_service_resources(
+    tenant_slug: str,
+    service_id: str,
+    payload: ReplaceServiceResourcesRequest,
+    _: object = Depends(require_tenant_permission("services.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ServiceResourceListResponse:
+    return await replace_service_resources(session, tenant_slug, service_id, payload)

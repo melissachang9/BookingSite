@@ -177,6 +177,7 @@ class Service(Base, IdMixin, TimestampMixin):
     bookings: Mapped[list[Booking]] = relationship(back_populates="service")
     booking_drafts: Mapped[list[BookingDraft]] = relationship(back_populates="service")
     form_attachments: Mapped[list[ServiceFormAttachment]] = relationship(back_populates="service", cascade="all, delete-orphan")
+    resource_links: Mapped[list["ServiceResource"]] = relationship(back_populates="service", cascade="all, delete-orphan")
 
 
 class ServiceCategory(Base, IdMixin, TimestampMixin):
@@ -268,6 +269,19 @@ class ServiceLocation(Base, IdMixin, TimestampMixin):
 
     service: Mapped[Service] = relationship(back_populates="location_links")
     location: Mapped[Location] = relationship(back_populates="service_links")
+
+
+class ServiceResource(Base, IdMixin, TimestampMixin):
+    __tablename__ = "service_resources"
+    __table_args__ = (UniqueConstraint("service_id", "resource_id", name="uq_service_resource"),)
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    service_id: Mapped[str] = mapped_column(String(36), ForeignKey("services.id"), index=True, nullable=False)
+    resource_id: Mapped[str] = mapped_column(String(36), ForeignKey("resources.id"), index=True, nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    service: Mapped[Service] = relationship(back_populates="resource_links")
+    resource: Mapped[Resource] = relationship(back_populates="service_links")
 
 
 class ProviderSchedule(Base, IdMixin, TimestampMixin):
@@ -474,6 +488,7 @@ class FormDefinition(Base, IdMixin, TimestampMixin):
     review_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     applies_to_all_services: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     versions: Mapped[list[FormVersion]] = relationship(back_populates="form", cascade="all, delete-orphan")
     service_attachments: Mapped[list[ServiceFormAttachment]] = relationship(
@@ -555,6 +570,8 @@ class Resource(Base, IdMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     location_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("locations.id"), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    service_links: Mapped[list[ServiceResource]] = relationship(back_populates="resource", cascade="all, delete-orphan")
 
 
 class AuditEvent(Base, IdMixin, TimestampMixin):

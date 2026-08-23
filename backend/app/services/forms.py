@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,6 +16,23 @@ from app.schemas.forms import (
     UpdateFormRequest,
 )
 from app.services.tenants import get_tenant_by_slug
+
+
+def _normalize_category(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = " ".join(value.strip().split())
+    if not normalized:
+        return None
+
+    if normalized == normalized.lower():
+        if re.fullmatch(r"[a-z]{1,5}", normalized):
+            return normalized.upper()
+
+        parts = re.split(r"([\s\-/&]+)", normalized)
+        return "".join(part.capitalize() if not re.fullmatch(r"[\s\-/&]+", part) else part for part in parts)
+
+    return normalized
 
 
 async def list_tenant_forms(
@@ -48,6 +67,7 @@ async def create_tenant_form(
     form = FormDefinition(
         tenant_id=tenant.id,
         name=payload.name.strip(),
+        category=_normalize_category(payload.category),
         scope=payload.scope,
         customer_prompt_timing=payload.customer_prompt_timing,
         review_required=payload.review_required,
@@ -93,6 +113,8 @@ async def update_tenant_form(
 
     if payload.name is not None:
         form.name = payload.name.strip()
+    if "category" in payload.model_fields_set:
+        form.category = _normalize_category(payload.category)
     if payload.scope is not None:
         form.scope = payload.scope
     if payload.customer_prompt_timing is not None:
@@ -155,6 +177,7 @@ def _form_to_summary(
         created_at=form.created_at,
         updated_at=form.updated_at,
         name=form.name,
+        category=form.category,
         scope=form.scope,
         customer_prompt_timing=form.customer_prompt_timing,
         review_required=form.review_required,

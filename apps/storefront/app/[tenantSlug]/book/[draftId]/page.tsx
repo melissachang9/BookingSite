@@ -218,8 +218,8 @@ function renderRequirementPanel(
   tenantId: string,
 ) {
   const timingLabel = formatTimingLabel(requirement.customerPromptTiming);
-  const title = requirement.formTitle ?? `Required form ${requirement.formVersionId}`;
-  const description = requirement.formDescription ?? `Version ${requirement.formVersionId}`;
+  const title = requirement.formTitle?.trim() ? requirement.formTitle : "Required form";
+  const description = requirement.formDescription?.trim() ? requirement.formDescription : null;
   const draftAnswers = requirement.draftAnswers as FormAnswers | null | undefined;
 
   if (requirement.status !== "pending" || lockedUntilContactDetails || !requirement.schema) {
@@ -246,7 +246,7 @@ function renderRequirementPanel(
         <span className="panel-badge">Pending</span>
       </div>
 
-      <p className="requirement-form-description">{description}</p>
+      {description ? <p className="requirement-form-description">{description}</p> : null}
 
       <form action={submitBookingRequirementAction} className="requirement-form">
         <input type="hidden" name="tenantSlug" value={tenantSlug} />

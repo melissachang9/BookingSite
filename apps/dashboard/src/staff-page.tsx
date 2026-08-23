@@ -16,6 +16,7 @@ import type {
   ReplaceProviderScheduleRequest,
   ReplaceUserPermissionsRequest,
   ServiceSummary,
+  ServiceCategorySummary,
   TenantUserSummary,
   UpdateProviderRequest,
   WorkHoursSummary,
@@ -451,6 +452,7 @@ export function StaffPage({
   const [providers, setProviders] = useState<ProviderSummary[]>([]);
   const [locations, setLocations] = useState<LocationSummary[]>([]);
   const [services, setServices] = useState<ServiceSummary[]>([]);
+  const [categories, setCategories] = useState<ServiceCategorySummary[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("details");
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
@@ -465,13 +467,15 @@ export function StaffPage({
       platformApi.listProvidersAdmin(currentUser.tenantSlug),
       platformApi.listLocationsAdmin(currentUser.tenantSlug),
       platformApi.listServices(currentUser.tenantSlug),
+      platformApi.listServiceCategories(currentUser.tenantSlug),
     ])
-      .then(([usersRes, providersRes, locationsRes, servicesRes]) => {
+      .then(([usersRes, providersRes, locationsRes, servicesRes, categoriesRes]) => {
         if (cancelled) return;
         setUsers(usersRes.users);
         setProviders(providersRes.providers);
         setLocations(locationsRes.locations);
         setServices(servicesRes.services);
+        setCategories(categoriesRes.categories);
         setState({ kind: "ready" });
         setSelectedUserId((prev) => prev ?? usersRes.users[0]?.id ?? null);
       })
@@ -582,6 +586,7 @@ export function StaffPage({
                   provider={selectedProvider}
                   locations={locations}
                   services={services}
+                  categories={categories}
                   activeTab={activeTab}
                   onTabChange={setActiveTab}
                   onResetPassword={() => setModal({ kind: "password", user: selectedUser })}
@@ -631,6 +636,7 @@ function StaffDetail({
   provider,
   locations,
   services,
+  categories,
   activeTab,
   onTabChange,
   onResetPassword,
@@ -642,6 +648,7 @@ function StaffDetail({
   provider: ProviderSummary | null;
   locations: LocationSummary[];
   services: ServiceSummary[];
+  categories: ServiceCategorySummary[];
   activeTab: TabKey;
   onTabChange: (tab: TabKey) => void;
   onResetPassword: () => void;
@@ -713,6 +720,7 @@ function StaffDetail({
           provider={provider}
           locations={locations}
           services={services}
+          categories={categories}
           onSaved={onSaved}
         />
       ) : null}
@@ -970,12 +978,14 @@ function ServicesTab({
   provider,
   locations,
   services,
+  categories,
   onSaved,
 }: {
   tenantSlug: string;
   provider: ProviderSummary;
   locations: LocationSummary[];
   services: ServiceSummary[];
+  categories: ServiceCategorySummary[];
   onSaved: () => void;
 }) {
   const [locationIds, setLocationIds] = useState<string[]>(provider.locationIds);
@@ -1120,8 +1130,6 @@ function ServicesTab({
     }
   };
 
-  const assignedServices = services.filter((svc) => serviceIds.includes(svc.id));
-
   return (
     <form className="staff-detail-form" onSubmit={submit}>
       <fieldset className="staff-fieldset">
@@ -1189,7 +1197,7 @@ function ServicesTab({
 
       <fieldset className="staff-fieldset">
         <legend>
-          Services performed <span className="staff-fieldset-count">{serviceIds.length} of {services.length}</span>
+          Services <span className="staff-fieldset-count">{serviceIds.length} of {services.length}</span>
         </legend>
         {services.length === 0 ? (
           <p className="settings-form-help">No services configured.</p>
@@ -1204,119 +1212,222 @@ function ServicesTab({
                 onChange={(event) => setServiceQuery(event.target.value)}
                 aria-label="Search services"
               />
-              <button
-                type="button"
-                className="ghost-action"
-                onClick={() => selectAll(serviceIds, setServiceIds, filteredServices)}
-                disabled={filteredServices.length === 0}
-              >
-                Select all{serviceQuery ? " shown" : ""}
-              </button>
-              <button
-                type="button"
-                className="ghost-action"
-                onClick={() => clearFiltered(serviceIds, setServiceIds, filteredServices)}
-                disabled={filteredServices.length === 0}
-              >
-                Clear{serviceQuery ? " shown" : ""}
-              </button>
             </div>
             {filteredServices.length === 0 ? (
               <p className="settings-form-help">No services match that search.</p>
+            ) : !overridesLoaded ? (
+              <p className="settings-form-help">Loading…</p>
             ) : (
-              <div className="staff-checkbox-grid">
-                {filteredServices.map((svc) => (
-                  <label
-                    key={svc.id}
-                    className={`settings-toggle staff-pickable${svc.isActive ? "" : " is-inactive"}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={serviceIds.includes(svc.id)}
-                      onChange={() => setServiceIds(toggle(serviceIds, svc.id))}
-                    />
-                    <span>
-                      <strong>{svc.name}</strong>
-                      <span className="staff-pickable-meta">
-                        {formatDurationMinutes(svc.durationMinutes)} · {formatPriceCents(svc.priceCents)}
-                        {svc.isActive ? "" : " · Inactive"}
-                      </span>
-                    </span>
-                  </label>
-                ))}
-              </div>
+              (() => {
+                // Group filtered services by categoryId. Categories with services this
+                // staff can be assigned to are ordered by sortOrder; "Uncategorized" last.
+                const servicesByCategory = new Map<string | null, ServiceSummary[]>();
+                for (const svc of filteredServices) {
+                  const key = svc.categoryId ?? null;
+                  if (!servicesByCategory.has(key)) servicesByCategory.set(key, []);
+                  servicesByCategory.get(key)!.push(svc);
+                }
+                const groups: Array<{ id: string | null; name: string; services: ServiceSummary[] }> = [];
+                for (const cat of [...categories].sort((a, b) => a.sortOrder - b.sortOrder)) {
+                  const list = servicesByCategory.get(cat.id);
+                  if (list && list.length > 0) {
+                    groups.push({ id: cat.id, name: cat.name, services: list });
+                  }
+                }
+                const uncategorized = servicesByCategory.get(null);
+                if (uncategorized && uncategorized.length > 0) {
+                  groups.push({ id: null, name: "Uncategorized", services: uncategorized });
+                }
+                const providerBookingSlug = provider.bookingSlug ?? provider.id;
+                return (
+                  <div className="staff-services-groups">
+                    {groups.map((group) => {
+                      const groupIds = group.services.map((s) => s.id);
+                      const allEnabled = groupIds.every((id) => serviceIds.includes(id));
+                      const noneEnabled = groupIds.every((id) => !serviceIds.includes(id));
+                      return (
+                        <section key={group.id ?? "uncategorized"} className="staff-services-group">
+                          <header className="staff-services-group__header">
+                            <h4 className="staff-services-group__title">{group.name}</h4>
+                            <button
+                              type="button"
+                              className="svc-text-btn"
+                              onClick={() => {
+                                if (allEnabled) {
+                                  setServiceIds(serviceIds.filter((id) => !groupIds.includes(id)));
+                                } else {
+                                  const next = new Set(serviceIds);
+                                  for (const id of groupIds) next.add(id);
+                                  setServiceIds(Array.from(next));
+                                }
+                              }}
+                            >
+                              {allEnabled ? "Disable all" : noneEnabled ? "Enable all" : "Enable all"}
+                            </button>
+                          </header>
+
+                          {group.services.map((svc) => {
+                            const isAssigned = serviceIds.includes(svc.id);
+                            const ov = serviceOverrides[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" };
+                            const commissionMode: "flat" | "percent" = ov.basisPoints ? "percent" : "flat";
+                            const patch = (partial: Partial<typeof ov>) =>
+                              setServiceOverrides((prev) => ({
+                                ...prev,
+                                [svc.id]: { ...(prev[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" }), ...partial },
+                              }));
+                            const directLink = `${storefrontBaseUrl}/${tenantSlug}/services/${svc.id}?providerId=${provider.id}`;
+                            return (
+                              <div
+                                key={svc.id}
+                                className={`svc-provider-card${isAssigned ? "" : " svc-provider-card--off"}`}
+                              >
+                                <div className="svc-provider-card__header">
+                                  <button
+                                    type="button"
+                                    className={`svc-toggle${isAssigned ? "" : " svc-toggle--off"}`}
+                                    aria-label={`Toggle ${svc.name}`}
+                                    onClick={() => setServiceIds(toggle(serviceIds, svc.id))}
+                                  />
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div className="svc-provider-card__name">{svc.name}</div>
+                                    {svc.description ? (
+                                      <div className="svc-provider-card__subtitle">{svc.description}</div>
+                                    ) : null}
+                                  </div>
+                                </div>
+
+                                <div className="svc-provider-row">
+                                  <span className="svc-provider-row__label">Duration</span>
+                                  <div className="svc-provider-row__value">
+                                    <input
+                                      className="svc-input svc-provider-row__input"
+                                      type="number" min={15} max={480} step={15}
+                                      disabled={!isAssigned}
+                                      placeholder={String(svc.durationMinutes)}
+                                      value={ov.durationMinutes}
+                                      onChange={(e) => patch({ durationMinutes: e.target.value })}
+                                    />
+                                    <span className="svc-provider-row__unit">min</span>
+                                  </div>
+                                </div>
+                                {ov.durationMinutes && isAssigned ? (
+                                  <div className="svc-provider-row__reset">
+                                    <button type="button" className="svc-text-btn"
+                                      onClick={() => patch({ durationMinutes: "" })}>
+                                      Reset to default
+                                    </button>
+                                  </div>
+                                ) : null}
+
+                                <div className="svc-provider-row">
+                                  <span className="svc-provider-row__label">Price</span>
+                                  <div className="svc-provider-row__value">
+                                    <span className="svc-provider-row__unit">$</span>
+                                    <input
+                                      className="svc-input svc-provider-row__input"
+                                      type="number" min={0} step="0.01"
+                                      disabled={!isAssigned}
+                                      placeholder={(svc.priceCents / 100).toFixed(2)}
+                                      value={ov.priceCents}
+                                      onChange={(e) => patch({ priceCents: e.target.value })}
+                                    />
+                                  </div>
+                                </div>
+                                {ov.priceCents && isAssigned ? (
+                                  <div className="svc-provider-row__reset">
+                                    <button type="button" className="svc-text-btn"
+                                      onClick={() => patch({ priceCents: "" })}>
+                                      Reset to default
+                                    </button>
+                                  </div>
+                                ) : null}
+
+                                <div className="svc-provider-row">
+                                  <span className="svc-provider-row__label">Commission</span>
+                                  <div className="svc-provider-row__value">
+                                    <div className="service-card__pill-toggle" role="group" aria-label="Commission type">
+                                      <button
+                                        type="button"
+                                        className={`service-card__pill${commissionMode === "flat" ? " is-active" : ""}`}
+                                        disabled={!isAssigned}
+                                        onClick={() => { if (commissionMode !== "flat") patch({ basisPoints: "" }); }}
+                                      >$</button>
+                                      <button
+                                        type="button"
+                                        className={`service-card__pill${commissionMode === "percent" ? " is-active" : ""}`}
+                                        disabled={!isAssigned}
+                                        onClick={() => { if (commissionMode !== "percent") patch({ flatCents: "" }); }}
+                                      >%</button>
+                                    </div>
+                                    {commissionMode === "flat" ? (
+                                      <>
+                                        <span className="svc-provider-row__unit">$</span>
+                                        <input
+                                          className="svc-input svc-provider-row__input"
+                                          type="number" min={0} step="0.01"
+                                          disabled={!isAssigned}
+                                          placeholder="0.00"
+                                          value={ov.flatCents}
+                                          onChange={(e) => patch({ flatCents: e.target.value, basisPoints: "" })}
+                                        />
+                                      </>
+                                    ) : (
+                                      <>
+                                        <input
+                                          className="svc-input svc-provider-row__input"
+                                          type="number" min={0} max={100} step="0.1"
+                                          disabled={!isAssigned}
+                                          placeholder="0"
+                                          value={ov.basisPoints}
+                                          onChange={(e) => patch({ flatCents: "", basisPoints: e.target.value })}
+                                        />
+                                        <span className="svc-provider-row__unit">%</span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                                {(ov.flatCents || ov.basisPoints) && isAssigned ? (
+                                  <div className="svc-provider-row__reset">
+                                    <button type="button" className="svc-text-btn"
+                                      onClick={() => patch({ flatCents: "", basisPoints: "" })}>
+                                      Reset to default
+                                    </button>
+                                  </div>
+                                ) : null}
+
+                                <div className="svc-provider-card__divider" />
+
+                                <div className="svc-provider-row">
+                                  <span className="svc-provider-row__label">Online booking</span>
+                                  <div className="svc-provider-row__value">
+                                    <a
+                                      href={directLink}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="svc-provider-card__link"
+                                      onClick={async (e) => {
+                                        e.preventDefault();
+                                        try { await navigator.clipboard.writeText(directLink); } catch {}
+                                        window.open(directLink, "_blank", "noopener,noreferrer");
+                                      }}
+                                    >
+                                      Direct link
+                                    </a>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </section>
+                      );
+                    })}
+                  </div>
+                );
+              })()
             )}
           </>
         )}
       </fieldset>
-
-      {assignedServices.length > 0 && overridesLoaded ? (
-        <fieldset className="staff-fieldset">
-          <legend>Per-service overrides</legend>
-          <p className="settings-form-help" style={{ marginBottom: "0.75rem" }}>
-            Override duration, price, or commission for specific services.
-            Leave blank to use the service default.
-          </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            {assignedServices.map((svc) => {
-              const ov = serviceOverrides[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" };
-              return (
-                <div key={svc.id} style={{
-                  padding: "0.6rem 0.7rem", background: "#FDF8F0", borderRadius: "6px",
-                  border: "1px solid #E5D7BB",
-                }}>
-                  <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "#1F1612", marginBottom: "0.4rem" }}>
-                    {svc.name}
-                    <span style={{ fontSize: "0.7rem", fontWeight: 400, color: "#8B7960", marginLeft: "0.5rem" }}>
-                      {formatDurationMinutes(svc.durationMinutes)} · {formatPriceCents(svc.priceCents)}
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-                    <span style={{ fontSize: "0.75rem", color: "#8B7960", minWidth: "3.5rem" }}>Duration</span>
-                    <input className="settings-input" type="number" min={15} max={480} step={15}
-                      value={ov.durationMinutes}
-                      onChange={(e) => setServiceOverrides((prev) => ({
-                        ...prev, [svc.id]: { ...prev[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" }, durationMinutes: e.target.value },
-                      }))}
-                      placeholder={String(svc.durationMinutes)}
-                      style={{ width: "4rem" }} />
-                    <span style={{ fontSize: "0.7rem", color: "#8B7960" }}>min</span>
-                    <span style={{ fontSize: "0.75rem", color: "#8B7960", minWidth: "2rem", marginLeft: "0.5rem" }}>Price</span>
-                    <span style={{ fontSize: "0.75rem", color: "#8B7960" }}>$</span>
-                    <input className="settings-input" type="number" min={0} step="0.01"
-                      value={ov.priceCents}
-                      onChange={(e) => setServiceOverrides((prev) => ({
-                        ...prev, [svc.id]: { ...prev[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" }, priceCents: e.target.value },
-                      }))}
-                      placeholder={(svc.priceCents / 100).toFixed(2)}
-                      style={{ width: "5rem" }} />
-                    <span style={{ fontSize: "0.75rem", color: "#8B7960", minWidth: "2rem", marginLeft: "0.5rem" }}>Comm</span>
-                    <span style={{ fontSize: "0.75rem", color: "#8B7960" }}>$</span>
-                    <input className="settings-input" type="number" min={0} step="0.01"
-                      value={ov.flatCents}
-                      onChange={(e) => setServiceOverrides((prev) => ({
-                        ...prev, [svc.id]: { ...prev[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" }, flatCents: e.target.value, basisPoints: "" },
-                      }))}
-                      placeholder="Flat"
-                      disabled={!!ov.basisPoints}
-                      style={{ width: "4.5rem" }} />
-                    <span style={{ fontSize: "0.7rem", color: "#8B7960" }}>or</span>
-                    <input className="settings-input" type="number" min={0} max={100} step="0.1"
-                      value={ov.basisPoints}
-                      onChange={(e) => setServiceOverrides((prev) => ({
-                        ...prev, [svc.id]: { ...prev[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" }, flatCents: "", basisPoints: e.target.value },
-                      }))}
-                      placeholder="%"
-                      disabled={!!ov.flatCents}
-                      style={{ width: "3.5rem" }} />
-                    <span style={{ fontSize: "0.7rem", color: "#8B7960" }}>%</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </fieldset>
-      ) : null}
 
       <fieldset className="staff-fieldset">
         <legend>Visibility</legend>

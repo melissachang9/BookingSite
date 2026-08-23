@@ -965,7 +965,7 @@ export function CalendarPage({
           return;
         }
 
-        const availabilityResponses = await Promise.all(
+        const availabilityResponses = await Promise.allSettled(
           services.flatMap((service) =>
             requestedDates.map((date) =>
               api.getAvailability({
@@ -984,7 +984,9 @@ export function CalendarPage({
 
         const openingsByDate = new Map(requestedDates.map((date) => [date, [] as CalendarOpening[]]));
 
-        for (const { availability, requestedDate, service } of availabilityResponses) {
+        for (const result of availabilityResponses) {
+          if (result.status === "rejected") continue;
+          const { availability, requestedDate, service } = result.value;
           const resolvedDate = openingsByDate.has(availability.days[0]?.date ?? "") ? (availability.days[0]?.date ?? requestedDate) : requestedDate;
           openingsByDate.get(resolvedDate)?.push(
             ...availability.slots
@@ -2313,6 +2315,11 @@ function CalendarBoard({
 
   const totalHours = Math.max(1, endHour - startHour);
   const scheduleHeightPx = totalHours * SCHEDULE_HOUR_HEIGHT_PX;
+  // Availability isn't returned by the backend for past dates, so we shouldn't gray
+  // out past columns as "unavailable" — that hides completed appointments behind a
+  // solid overlay. Past days should render as a plain hourly grid with any past
+  // bookings still visible.
+  const todayDateIso = toIsoDate(new Date());
   // Generate half-hour labels: "9 AM", "9:30", "10 AM", "10:30", etc.
   const halfHourLabels: string[] = [];
   for (let h = startHour; h < endHour; h++) {
@@ -2398,7 +2405,12 @@ function CalendarBoard({
               appointments: column.appointments,
               openings: column.openings,
               availableSegments: mergeMinuteSegments(column.openings),
-              emptyLabel: column.appointments.length === 0 && column.openings.length === 0 ? "No scheduled hours" : "",
+              emptyLabel:
+                focusedDay.date < todayDateIso
+                  ? ""
+                  : column.appointments.length === 0 && column.openings.length === 0
+                    ? "No scheduled hours"
+                    : "",
             }));
 
           return columns.length > 0
@@ -2559,9 +2571,11 @@ function CalendarBoard({
                   heightPx: ((scheduleEndMinute - cursor) / 60) * SCHEDULE_HOUR_HEIGHT_PX,
                 });
               }
-            } else if (column.openings.length === 0) {
+            } else if (column.openings.length === 0 && column.date >= todayDateIso) {
               // Gray out the entire track when the provider has no working hours,
               // unless there's a time-off block already covering the date (which shows its own visual).
+              // Skip this for past dates — availability isn't returned for the past, and
+              // graying the whole column would hide completed/checked-out appointments.
               const hasTimeOffBlocks = column.providerId !== undefined && providerTimeOffs.some((to) => {
                 // Use UTC date to match how overrides were stored (T00:00:00Z boundaries)
                 const toDate = to.startsAt.split("T")[0];
