@@ -4,6 +4,61 @@ The visual language for the storefront and operator dashboard. Built to match th
 
 ---
 
+## 0. Current Visual Direction (2026)
+
+> **This section supersedes the espresso palette in §2 for the operator dashboard.** The dashboard has moved to a **light, minimal, glanceable** direction. The storefront keeps its own warm editorial treatment and remains independently brandable per tenant. When the two disagree, this section wins for the dashboard.
+
+### Goals
+
+1. **Light and airy, not dark.** Soft mint page background, white cards, dark-slate ink. No espresso surfaces on the dashboard.
+2. **Minimal and decluttered.** "Subtract until it breaks" — remove any element that doesn't support the operator's task. Whitespace and type hierarchy do the grouping, not borders and dividers.
+3. **Glanceable.** The most important thing on any screen (appointment time, balance due, missing forms) should be readable in under a second.
+4. **One accent, used sparingly.** Amber is the single attention color, reserved for primary actions, active states, "today", and focus rings. The less it's used, the more it stands out.
+5. **Color carries meaning, never decoration.** Pastel fills encode service type; status overrides encode lifecycle. No color exists purely for looks.
+
+### Dashboard palette (light + amber)
+
+```css
+:root {
+  --ui-ink:        #1f2a30; /* dark slate — primary text */
+  --ui-ink-soft:   #66757d; /* secondary text */
+  --ui-muted:      #9aa7ad; /* tertiary / labels */
+  --ui-canvas:     #e7efe9; /* soft mint page background */
+  --ui-canvas-raised: #ffffff; /* white cards */
+  --ui-amber:      #f2c14e; /* accent */
+  --ui-amber-deep: #e0a72e; /* accent hover / border */
+  --ui-amber-ink:  #6b4e12; /* text on amber */
+  --ui-amber-soft: #fdf3d8; /* subtle amber tint */
+}
+```
+
+### Service-type pastels (event base color)
+
+| Category | Background | Text |
+| --- | --- | --- |
+| Facials | `#fbe1ea` | `#9c3d64` |
+| Injectables | `#dceafb` | `#2f5b9b` |
+| Laser & skin | `#fbe7d3` | `#8a5015` |
+| Peels | `#eae2fb` | `#6a4bb0` |
+| Massage | `#d9f0df` | `#1f6b40` |
+| Consultation | `#d3eef0` | `#1a5960` |
+
+### Appointment status overrides (on top of service color)
+
+- **Booked** → service-type pastel.
+- **In progress / checked in** → amber highlight + pulsing dot.
+- **Checked out / completed** → grey, desaturated.
+- **Canceled / no-show** → grey with diagonal hatch + strikethrough title.
+
+### Non-negotiables
+
+- **WCAG AA**: body text ≥ 4.5:1, large text ≥ 3:1, non-text UI ≥ 3:1. Pastel text tones must clear 4.5:1 on their fill.
+- **Never rely on color alone** — status is always paired with a label/badge.
+- **Accent only on interactive/primary** — never as decoration.
+- **Visual anchor**: `mockups/dashboard-redesign/index.html` (Redesign B) is the reference for the dashboard. Open it to resolve any ambiguity.
+
+---
+
 ## 1. Design Principles
 
 1. **Warm, cinematic, editorial.** Deep espresso surfaces, cream cards floating in soft amber light. Think golden-hour lamplight on dark wood, not sterile SaaS dashboards.
@@ -15,6 +70,8 @@ The visual language for the storefront and operator dashboard. Built to match th
 ---
 
 ## 2. Color Tokens
+
+> **Storefront only.** The espresso/cinematic palette below applies to the **customer-facing storefront**. The operator dashboard uses the light + amber palette in §0. Do not apply espresso tokens to the dashboard.
 
 Drop these CSS custom properties at the root of every app (`apps/storefront/app/globals.css`, `apps/dashboard/src/styles.css`).
 

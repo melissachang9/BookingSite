@@ -4155,8 +4155,8 @@ body {
 
 .settings-panel-help {
   margin: 0 0 0.75rem;
-  color: var(--ui-muted);
-  font-size: 11px;
+  color: var(--ui-ink-soft);
+  font-size: 12px;
 }
 .settings-form-row {
   display: flex;
@@ -4181,7 +4181,7 @@ body {
 .settings-input {
   padding: 9px 11px;
   border-radius: 8px;
-  border: 0.5px solid var(--ui-sand);
+  border: 1px solid var(--ui-border);
   background: var(--ui-ivory);
   font-family: 'DM Sans', system-ui, sans-serif;
   font-size: 13px;
@@ -4192,8 +4192,8 @@ body {
 .settings-field input:focus,
 .settings-field textarea:focus,
 .settings-input:focus {
-  border-color: var(--ui-ink);
-  box-shadow: 0 0 0 2px rgba(31,22,18,0.08);
+  border-color: var(--ui-amber-deep);
+  box-shadow: 0 0 0 2px var(--ui-ring);
 }
 .settings-actions {
   margin-top: 0.75rem;
@@ -4206,8 +4206,8 @@ body {
 }
 .settings-permission-note {
   margin-top: 0.5rem;
-  color: var(--ui-muted);
-  font-size: 11px;
+  color: var(--ui-ink-soft);
+  font-size: 12px;
 }
 
 .ops-nav-group {
@@ -4276,14 +4276,14 @@ body {
   flex-direction: column;
   gap: 1.25rem;
   padding: 1rem 0.5rem;
-  border-right: 0.5px solid var(--ui-sand);
+  border-right: 1px solid var(--ui-border);
   background: transparent;
 }
 @media (max-width: 880px) {
   .settings-anchor-nav {
     position: static;
     border-right: none;
-    border-bottom: 0.5px solid var(--ui-sand);
+    border-bottom: 1px solid var(--ui-border);
   }
 }
 .settings-anchor-group {
@@ -4317,12 +4317,12 @@ body {
   font-size: 0.9rem;
 }
 .settings-anchor-link:hover {
-  background: rgba(31,22,18,0.05);
+  background: var(--ui-sand);
 }
 .settings-anchor-link--active {
-  background: rgba(31,22,18,0.08);
+  background: var(--ui-amber-soft);
   font-weight: 600;
-  color: var(--ui-ink);
+  color: var(--ui-amber-ink);
 }
 .settings-content {
   display: flex;
@@ -4330,8 +4330,8 @@ body {
   gap: 1.5rem;
 }
 .settings-section {
-  background: var(--ui-amber-soft);
-  border: 0.5px solid var(--ui-sand);
+  background: var(--ui-ivory);
+  border: 1px solid var(--ui-border);
   border-radius: 12px;
   padding: 1.5rem;
   scroll-margin-top: 1.5rem;
@@ -4353,9 +4353,9 @@ body {
 }
 .settings-placeholder {
   padding: 1.25rem;
-  border: 0.5px dashed var(--ui-sand);
+  border: 1px dashed var(--ui-border);
   border-radius: 8px;
-  color: var(--ui-muted);
+  color: var(--ui-ink-soft);
   background: var(--ui-ivory);
 }
 .settings-placeholder p {
@@ -4371,7 +4371,7 @@ body {
   user-select: none;
 }
 .settings-toggle--disabled {
-  color: var(--color-fg-muted, #5a5a64);
+  color: var(--ui-ink-soft);
 }
 .business-hours-grid {
   display: flex;
@@ -4390,7 +4390,7 @@ body {
 }
 .business-hours-row__field input[type="time"] {
   padding: 0.35rem 0.5rem;
-  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.15));
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
 }
 .business-hours-row__closed {
@@ -4414,30 +4414,30 @@ body {
 
 .locations-section { display: flex; flex-direction: column; gap: 1rem; }
 .locations-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
-.locations-list__item { border: 1px solid var(--color-border, #e5e7eb); border-radius: 0.5rem; padding: 0.75rem 1rem; }
+.locations-list__item { border: 1px solid var(--ui-border); border-radius: 0.5rem; padding: 0.75rem 1rem; }
 .locations-list__row { display: flex; gap: 1rem; justify-content: space-between; align-items: flex-start; }
 .locations-list__actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
-.locations-default-tag { color: var(--color-muted, #6b7280); font-size: 0.85em; }
+.locations-default-tag { color: var(--ui-ink-soft); font-size: 0.85em; }
 
-.branding-section .settings-field-help { color: var(--color-muted, #6b7280); font-size: 0.85em; margin-top: 0.25rem; }
+.branding-section .settings-field-help { color: var(--ui-ink-soft); font-size: 0.85em; margin-top: 0.25rem; }
 .branding-color-field .branding-color-input { display: flex; gap: 0.5rem; align-items: center; }
-.branding-color-field .branding-color-input input[type="color"] { width: 2.5rem; height: 2.25rem; padding: 0; border: 1px solid var(--color-border, #e5e7eb); border-radius: 0.25rem; background: transparent; cursor: pointer; }
+.branding-color-field .branding-color-input input[type="color"] { width: 2.5rem; height: 2.25rem; padding: 0; border: 1px solid var(--ui-border); border-radius: 0.25rem; background: transparent; cursor: pointer; }
 .branding-color-field .branding-color-input input[type="text"] { flex: 1; }
-.branding-preview { display: flex; gap: 0.75rem; align-items: center; padding: 0.5rem 0.75rem; background: var(--color-surface-muted, #f9fafb); border-radius: 0.375rem; }
-.branding-preview__label { font-weight: 600; color: var(--color-muted, #6b7280); font-size: 0.85em; }
-.branding-preview__swatch { display: inline-block; width: 1.75rem; height: 1.75rem; border-radius: 50%; border: 1px solid var(--color-border, #e5e7eb); }
-.branding-preview__count { color: var(--color-muted, #6b7280); font-size: 0.9em; }
+.branding-preview { display: flex; gap: 0.75rem; align-items: center; padding: 0.5rem 0.75rem; background: var(--ui-sand); border-radius: 0.375rem; }
+.branding-preview__label { font-weight: 600; color: var(--ui-ink-soft); font-size: 0.85em; }
+.branding-preview__swatch { display: inline-block; width: 1.75rem; height: 1.75rem; border-radius: 50%; border: 1px solid var(--ui-border); }
+.branding-preview__count { color: var(--ui-ink-soft); font-size: 0.9em; }
 
 .payroll-section { display: flex; flex-direction: column; gap: 0.75rem; }
 .payroll-section__lead { margin: 0; }
-.payroll-section__bullets { margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.25rem; color: var(--color-muted, #4b5563); }
+.payroll-section__bullets { margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.25rem; color: var(--ui-ink-soft); }
 .payroll-section__cta { display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-start; margin-top: 0.5rem; }
 
-.client-ownership-section .settings-form-help { margin: 0 0 0.5rem; color: var(--color-muted, #4b5563); }
+.client-ownership-section .settings-form-help { margin: 0 0 0.5rem; color: var(--ui-ink-soft); }
 .settings-toggle-field { display: flex; align-items: flex-start; gap: 0.65rem; padding: 0.5rem 0; }
 .settings-toggle-field input[type="checkbox"] { margin-top: 0.25rem; }
 .settings-toggle-field span { display: flex; flex-direction: column; gap: 0.15rem; }
-.settings-toggle-field small { color: var(--color-muted, #6b7280); font-size: 0.85em; }
+.settings-toggle-field small { color: var(--ui-ink-soft); font-size: 0.85em; }
 .settings-toggle-field--disabled { opacity: 0.5; pointer-events: none; }
 
 /* Staff roster (Phase A) */
@@ -4447,12 +4447,12 @@ body {
 .staff-roster-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
 .settings-table { width: 100%; border-collapse: collapse; }
 .settings-table th,
-.settings-table td { text-align: left; padding: 0.55rem 0.65rem; border-bottom: 0.5px solid var(--ui-sand); font-size: 0.92rem; }
-.settings-table th { font-weight: 700; color: var(--ui-ink); background: rgba(31,22,18,0.04); }
+.settings-table td { text-align: left; padding: 0.55rem 0.65rem; border-bottom: 1px solid var(--ui-border); font-size: 0.92rem; }
+.settings-table th { font-weight: 700; color: var(--ui-ink); background: var(--ui-sand); }
 .settings-table tbody tr:last-child td { border-bottom: 0; }
 
 .settings-fieldset {
-  border: 0.5px solid var(--ui-sand);
+  border: 1px solid var(--ui-border);
   border-radius: 8px;
   padding: 0.75rem 1rem;
   background: var(--ui-ivory);
@@ -4468,8 +4468,27 @@ body {
 }
 .settings-fieldset-help {
   margin: 0;
-  color: var(--ui-muted);
-  font-size: 11px;
+  color: var(--ui-ink-soft);
+  font-size: 12px;
+}
+
+/* Checkbox rows (Business Policies) */
+.settings-field--checkbox {
+  gap: 0.4rem;
+}
+.settings-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 13px;
+  color: var(--ui-ink);
+  cursor: pointer;
+}
+.settings-checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--ui-amber-deep);
+  cursor: pointer;
 }
 
 .rail-section-kicker {

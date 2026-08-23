@@ -598,6 +598,13 @@ function ServiceDetail({
   const [savedVariants, setSavedVariants] = useState<ProviderServiceVariantEntry[]>([]);
   const [variantsLoaded, setVariantsLoaded] = useState(false);
   const [variantsSaving, setVariantsSaving] = useState(false);
+  // Raw text the operator is typing for each provider's override inputs. Storing
+  // the display string directly (rather than re-deriving it from cents on every
+  // render) preserves the caret position and lets them type decimals like "9."
+  // or trailing zeros without the value getting reformatted mid-keystroke.
+  const [variantTexts, setVariantTexts] = useState<
+    Record<string, { duration: string; price: string; flat: string; percent: string }>
+  >({});
   const [copyHint, setCopyHint] = useState<string | null>(null);
   const copyTimerRef = useRef<number | null>(null);
 
@@ -610,6 +617,18 @@ function ServiceDetail({
       if (cancelled) return;
       setVariants(resp.variants);
       setSavedVariants(resp.variants);
+      // Seed the display text map so the initial render shows exactly what the
+      // backend returned, without .toFixed(2) fighting the operator's typing.
+      const seed: Record<string, { duration: string; price: string; flat: string; percent: string }> = {};
+      for (const v of resp.variants) {
+        seed[v.providerId] = {
+          duration: v.durationMinutes != null ? String(v.durationMinutes) : "",
+          price: v.priceCents != null ? (v.priceCents / 100).toFixed(2) : "",
+          flat: v.commissionFlatCents != null ? (v.commissionFlatCents / 100).toFixed(2) : "",
+          percent: v.commissionBasisPoints != null ? (v.commissionBasisPoints / 100).toString() : "",
+        };
+      }
+      setVariantTexts(seed);
       setVariantsLoaded(true);
     }).catch(() => { if (!cancelled) setVariantsLoaded(true); });
     return () => { cancelled = true; };
@@ -693,6 +712,50 @@ function ServiceDetail({
     });
   };
 
+  // Update the per-provider text state (what the operator is actively typing)
+  // and best-effort-mirror it into the cents-based `variants` state so the save
+  // button / dirty tracking observe the change. We intentionally do NOT bounce
+  // the parsed value back into the input's `value` prop, which is what caused
+  // typing to feel broken before (each keystroke replaced "9." with "9").
+  const patchVariantText = (
+    providerId: string,
+    field: "duration" | "price" | "flat" | "percent",
+    raw: string,
+  ) => {
+    setVariantTexts((prev) => {
+      const current = prev[providerId] ?? { duration: "", price: "", flat: "", percent: "" };
+      return { ...prev, [providerId]: { ...current, [field]: raw } };
+    });
+    if (field === "duration") {
+      if (!raw) { updateVariant(providerId, { durationMinutes: null }); return; }
+      const n = Number(raw);
+      updateVariant(providerId, { durationMinutes: Number.isFinite(n) ? n : null });
+      return;
+    }
+    if (field === "price") {
+      if (!raw) { updateVariant(providerId, { priceCents: null }); return; }
+      const cents = parseMoneyInput(raw);
+      updateVariant(providerId, { priceCents: cents });
+      return;
+    }
+    if (field === "flat") {
+      if (!raw) { updateVariant(providerId, { commissionFlatCents: null }); return; }
+      const cents = parseMoneyInput(raw);
+      updateVariant(providerId, { commissionFlatCents: cents, commissionBasisPoints: null });
+      return;
+    }
+    if (field === "percent") {
+      if (!raw) { updateVariant(providerId, { commissionBasisPoints: null }); return; }
+      const pct = Number(raw);
+      if (!Number.isFinite(pct)) return;
+      const bp = Math.round(pct * 100);
+      updateVariant(providerId, {
+        commissionBasisPoints: Math.max(0, Math.min(10_000, bp)),
+        commissionFlatCents: null,
+      });
+    }
+  };
+
   const handleSaveVariants = async () => {
     if (!canManage) return;
     const payload: ProviderServiceVariantEntry[] = variants
@@ -705,6 +768,16 @@ function ServiceDetail({
       onSaved("Per-provider pricing saved.");
     } catch (error) { onSaved(readErrorMessage(error, "Unable to save variants.")); }
     finally { setVariantsSaving(false); }
+  };
+
+  // Single save action for the Staff tab: persist per-provider overrides (if any
+  // were edited) and the client-selection setting in one click.
+  const handleSaveStaffTab = async () => {
+    if (!canManage) return;
+    if (isVariantsDirty) {
+      await handleSaveVariants();
+    }
+    await handleSave({ preventDefault: () => {} } as FormEvent<HTMLFormElement>);
   };
 
   const eligibleProviders = useMemo(
@@ -807,9 +880,11 @@ function ServiceDetail({
           assignedProviderIds={assignedProviderIds}
           toggleProviderAssignment={toggleProviderAssignment}
           variantByProvider={variantByProvider} updateVariant={updateVariant}
+          variantTexts={variantTexts} patchVariantText={patchVariantText}
           canManage={canManage} variantsLoaded={variantsLoaded}
           isVariantsDirty={isVariantsDirty} variantsSaving={variantsSaving}
           handleSaveVariants={handleSaveVariants}
+          handleSaveStaffTab={handleSaveStaffTab}
           baseDurationMinutes={baseDurationMinutes} basePriceCents={basePriceCents}
           baseDepositCents={baseDepositCents} tenantSlug={tenantSlug}
           storefrontBaseUrl={storefrontBaseUrl}
@@ -978,8 +1053,9 @@ function ServiceDetailsTab({
 
 function ServiceStaffTab({
   service, eligibleProviders, assignedProviderIds, toggleProviderAssignment,
-  variantByProvider, updateVariant, canManage,
+  variantByProvider, updateVariant, variantTexts, patchVariantText, canManage,
   variantsLoaded, isVariantsDirty, variantsSaving, handleSaveVariants,
+  handleSaveStaffTab,
   baseDurationMinutes, basePriceCents, baseDepositCents, tenantSlug, storefrontBaseUrl,
   form, setForm, saving, handleSave,
 }: {
@@ -989,11 +1065,18 @@ function ServiceStaffTab({
   toggleProviderAssignment: (providerId: string) => Promise<void>;
   variantByProvider: Map<string, ProviderServiceVariantEntry>;
   updateVariant: (providerId: string, patch: Partial<ProviderServiceVariantEntry>) => void;
+  variantTexts: Record<string, { duration: string; price: string; flat: string; percent: string }>;
+  patchVariantText: (
+    providerId: string,
+    field: "duration" | "price" | "flat" | "percent",
+    raw: string,
+  ) => void;
   canManage: boolean;
   variantsLoaded: boolean;
   isVariantsDirty: boolean;
   variantsSaving: boolean;
   handleSaveVariants: () => Promise<void>;
+  handleSaveStaffTab: () => Promise<void>;
   baseDurationMinutes: number;
   basePriceCents: number;
   baseDepositCents: number;
@@ -1018,14 +1101,6 @@ function ServiceStaffTab({
 
   return (
     <div className="svc-detail-form">
-      {canManage && isVariantsDirty ? (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "8px" }}>
-          <button type="button" className="svc-save-btn" onClick={handleSaveVariants} disabled={variantsSaving}>
-            {variantsSaving ? "Saving…" : "Save overrides"}
-          </button>
-        </div>
-      ) : null}
-
       {/* Base service defaults (read-only reference). Per-provider overrides are below. */}
       <div className="svc-provider-card svc-provider-card--defaults">
         <div className="svc-provider-row">
@@ -1081,6 +1156,16 @@ function ServiceStaffTab({
             entry.commissionBasisPoints != null;
           const commissionMode: "flat" | "percent" = entry.commissionFlatCents != null ? "flat" : "percent";
           const isAssigned = assignedProviderIds.has(provider.id);
+          const text = variantTexts[provider.id] ?? { duration: "", price: "", flat: "", percent: "" };
+          // Auto-assign this provider to the service if the operator focuses/edits
+          // any override — without this the inputs feel dead ("clicked but nothing
+          // happens") whenever the provider isn't already assigned.
+          const ensureAssigned = () => {
+            if (!canManage) return;
+            if (!assignedProviderIds.has(provider.id)) {
+              void toggleProviderAssignment(provider.id);
+            }
+          };
           // Deep-link to this specific service preselected with this provider.
           const directLink = `${storefrontBaseUrl}/${tenantSlug}/services/${service.id}?providerId=${provider.id}`;
 
@@ -1107,24 +1192,21 @@ function ServiceStaffTab({
                 <div className="svc-provider-row__value">
                   <input
                     className="svc-input svc-provider-row__input"
-                    type="number" min={15} max={480} step={15}
-                    disabled={!canManage || !isAssigned}
+                    type="text" inputMode="numeric"
+                    disabled={!canManage}
                     placeholder={String(baseDurationMinutes)}
-                    value={entry.durationMinutes ?? ""}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      if (!raw) { updateVariant(provider.id, { durationMinutes: null }); return; }
-                      const n = Number(raw);
-                      updateVariant(provider.id, { durationMinutes: Number.isFinite(n) ? n : null });
-                    }}
+                    value={text.duration !== "" ? text.duration : String(baseDurationMinutes)}
+                    onFocus={(e) => { ensureAssigned(); e.target.select(); }}
+                    onMouseUp={(e) => e.preventDefault()}
+                    onChange={(e) => patchVariantText(provider.id, "duration", e.target.value)}
                   />
                   <span className="svc-provider-row__unit">min</span>
                 </div>
               </div>
-              {entry.durationMinutes != null && canManage && isAssigned ? (
+              {entry.durationMinutes != null && canManage ? (
                 <div className="svc-provider-row__reset">
                   <button type="button" className="svc-text-btn"
-                    onClick={() => updateVariant(provider.id, { durationMinutes: null })}>
+                    onClick={() => { patchVariantText(provider.id, "duration", ""); }}>
                     Reset to default
                   </button>
                 </div>
@@ -1137,23 +1219,20 @@ function ServiceStaffTab({
                   <span className="svc-provider-row__unit">$</span>
                   <input
                     className="svc-input svc-provider-row__input"
-                    type="number" min={0} step="0.01"
-                    disabled={!canManage || !isAssigned}
+                    type="text" inputMode="decimal"
+                    disabled={!canManage}
                     placeholder={(basePriceCents / 100).toFixed(2)}
-                    value={entry.priceCents == null ? "" : (entry.priceCents / 100).toFixed(2)}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      if (!raw) { updateVariant(provider.id, { priceCents: null }); return; }
-                      const cents = parseMoneyInput(raw);
-                      updateVariant(provider.id, { priceCents: cents });
-                    }}
+                    value={text.price !== "" ? text.price : (basePriceCents / 100).toFixed(2)}
+                    onFocus={(e) => { ensureAssigned(); e.target.select(); }}
+                    onMouseUp={(e) => e.preventDefault()}
+                    onChange={(e) => patchVariantText(provider.id, "price", e.target.value)}
                   />
                 </div>
               </div>
-              {entry.priceCents != null && canManage && isAssigned ? (
+              {entry.priceCents != null && canManage ? (
                 <div className="svc-provider-row__reset">
                   <button type="button" className="svc-text-btn"
-                    onClick={() => updateVariant(provider.id, { priceCents: null })}>
+                    onClick={() => { patchVariantText(provider.id, "price", ""); }}>
                     Reset to default
                   </button>
                 </div>
@@ -1167,18 +1246,22 @@ function ServiceStaffTab({
                     <button
                       type="button"
                       className={`service-card__pill${commissionMode === "flat" ? " is-active" : ""}`}
-                      disabled={!canManage || !isAssigned}
+                      disabled={!canManage}
                       onClick={() => {
+                        ensureAssigned();
                         if (commissionMode === "flat") return;
+                        patchVariantText(provider.id, "percent", "");
                         updateVariant(provider.id, { commissionBasisPoints: null, commissionFlatCents: entry.commissionFlatCents ?? 0 });
                       }}
                     >$</button>
                     <button
                       type="button"
                       className={`service-card__pill${commissionMode === "percent" ? " is-active" : ""}`}
-                      disabled={!canManage || !isAssigned}
+                      disabled={!canManage}
                       onClick={() => {
+                        ensureAssigned();
                         if (commissionMode === "percent") return;
+                        patchVariantText(provider.id, "flat", "");
                         updateVariant(provider.id, { commissionFlatCents: null, commissionBasisPoints: entry.commissionBasisPoints ?? 0 });
                       }}
                     >%</button>
@@ -1188,47 +1271,39 @@ function ServiceStaffTab({
                       <span className="svc-provider-row__unit">$</span>
                       <input
                         className="svc-input svc-provider-row__input"
-                        type="number" min={0} step="0.01"
-                        disabled={!canManage || !isAssigned}
+                        type="text" inputMode="decimal"
+                        disabled={!canManage}
                         placeholder="0.00"
-                        value={entry.commissionFlatCents == null ? "" : (entry.commissionFlatCents / 100).toFixed(2)}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          if (!raw) { updateVariant(provider.id, { commissionFlatCents: null }); return; }
-                          const cents = parseMoneyInput(raw);
-                          updateVariant(provider.id, { commissionFlatCents: cents, commissionBasisPoints: null });
-                        }}
+                        value={text.flat !== "" ? text.flat : "0.00"}
+                        onFocus={(e) => { ensureAssigned(); e.target.select(); }}
+                        onMouseUp={(e) => e.preventDefault()}
+                        onChange={(e) => patchVariantText(provider.id, "flat", e.target.value)}
                       />
                     </>
                   ) : (
                     <>
                       <input
                         className="svc-input svc-provider-row__input"
-                        type="number" min={0} max={100} step="0.1"
-                        disabled={!canManage || !isAssigned}
+                        type="text" inputMode="decimal"
+                        disabled={!canManage}
                         placeholder="0"
-                        value={entry.commissionBasisPoints == null ? "" : (entry.commissionBasisPoints / 100).toString()}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          if (!raw) { updateVariant(provider.id, { commissionBasisPoints: null }); return; }
-                          const pct = Number(raw);
-                          if (!Number.isFinite(pct)) return;
-                          const bp = Math.round(pct * 100);
-                          updateVariant(provider.id, {
-                            commissionBasisPoints: Math.max(0, Math.min(10_000, bp)),
-                            commissionFlatCents: null,
-                          });
-                        }}
+                        value={text.percent !== "" ? text.percent : "0"}
+                        onFocus={(e) => { ensureAssigned(); e.target.select(); }}
+                        onMouseUp={(e) => e.preventDefault()}
+                        onChange={(e) => patchVariantText(provider.id, "percent", e.target.value)}
                       />
                       <span className="svc-provider-row__unit">%</span>
                     </>
                   )}
                 </div>
               </div>
-              {(entry.commissionFlatCents != null || entry.commissionBasisPoints != null) && canManage && isAssigned ? (
+              {(entry.commissionFlatCents != null || entry.commissionBasisPoints != null) && canManage ? (
                 <div className="svc-provider-row__reset">
                   <button type="button" className="svc-text-btn"
-                    onClick={() => updateVariant(provider.id, { commissionFlatCents: null, commissionBasisPoints: null })}>
+                    onClick={() => {
+                      patchVariantText(provider.id, "flat", "");
+                      patchVariantText(provider.id, "percent", "");
+                    }}>
                     Reset to default
                   </button>
                 </div>
@@ -1270,13 +1345,19 @@ function ServiceStaffTab({
                 </div>
               </div>
 
-              {hasAnyOverride && canManage && isAssigned ? (
+              {hasAnyOverride && canManage ? (
                 <div className="svc-provider-card__reset-all">
                   <button type="button" className="svc-text-btn"
-                    onClick={() => updateVariant(provider.id, {
-                      priceCents: null, durationMinutes: null, depositCents: null,
-                      commissionFlatCents: null, commissionBasisPoints: null,
-                    })}>
+                    onClick={() => {
+                      patchVariantText(provider.id, "duration", "");
+                      patchVariantText(provider.id, "price", "");
+                      patchVariantText(provider.id, "flat", "");
+                      patchVariantText(provider.id, "percent", "");
+                      updateVariant(provider.id, {
+                        priceCents: null, durationMinutes: null, depositCents: null,
+                        commissionFlatCents: null, commissionBasisPoints: null,
+                      });
+                    }}>
                     Reset all to service defaults
                   </button>
                 </div>
@@ -1329,14 +1410,9 @@ function ServiceStaffTab({
 
       {canManage ? (
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "18px" }}>
-          {isVariantsDirty ? (
-            <button type="button" className="svc-save-btn" onClick={handleSaveVariants} disabled={variantsSaving}>
-              {variantsSaving ? "Saving…" : "Save overrides"}
-            </button>
-          ) : null}
-          <button type="button" className="svc-save-btn" disabled={saving}
-            onClick={() => handleSave({ preventDefault: () => {} } as FormEvent<HTMLFormElement>)}>
-            {saving ? "Saving…" : "Save settings"}
+          <button type="button" className="svc-save-btn" disabled={saving || variantsSaving}
+            onClick={handleSaveStaffTab}>
+            {saving || variantsSaving ? "Saving…" : "Save"}
           </button>
         </div>
       ) : null}

@@ -1100,22 +1100,42 @@ function ServicesTab({
         const priceCents = ov?.priceCents ? Math.round(Number(ov.priceCents) * 100) : null;
         const flatCents = ov?.flatCents ? Math.round(Number(ov.flatCents) * 100) : null;
         const basisPoints = ov?.basisPoints ? Math.round(Number(ov.basisPoints) * 100) : null;
+        const hasOverride =
+          durationMinutes != null || priceCents != null || flatCents != null || basisPoints != null;
         try {
           const existing = await platformApi.getServiceProviderVariants(tenantSlug, svcId);
-          const merged = existing.variants.map((v) =>
+          const hadEntry = existing.variants.some((v) => v.providerId === provider.id);
+          // Nothing to save and nothing to update — skip the write entirely so we
+          // don't create phantom all-null variant rows that show up as spurious
+          // entries in the services-page view of the same data.
+          if (!hasOverride && !hadEntry) continue;
+          // Preserve depositCents and any other field we don't manage here so the
+          // services-page ProviderCard can still round-trip its own overrides.
+          let merged = existing.variants.map((v) =>
             v.providerId === provider.id
               ? { ...v, durationMinutes, priceCents, commissionFlatCents: flatCents, commissionBasisPoints: basisPoints }
               : v,
           );
-          if (!merged.some((v) => v.providerId === provider.id)) {
+          if (!hadEntry) {
             merged.push({
               providerId: provider.id,
               durationMinutes,
               priceCents,
+              depositCents: null,
               commissionFlatCents: flatCents,
               commissionBasisPoints: basisPoints,
             });
           }
+          // Drop entries where every override field is null so we match the
+          // services-page save behavior and keep the two views in sync.
+          merged = merged.filter(
+            (v) =>
+              v.durationMinutes != null ||
+              v.priceCents != null ||
+              v.depositCents != null ||
+              v.commissionFlatCents != null ||
+              v.commissionBasisPoints != null,
+          );
           await platformApi.replaceServiceProviderVariants(tenantSlug, svcId, { variants: merged });
         } catch (err) {
           if (!(err instanceof Error && err.message.includes("404"))) throw err;
@@ -1270,11 +1290,18 @@ function ServicesTab({
                             const isAssigned = serviceIds.includes(svc.id);
                             const ov = serviceOverrides[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" };
                             const commissionMode: "flat" | "percent" = ov.basisPoints ? "percent" : "flat";
-                            const patch = (partial: Partial<typeof ov>) =>
+                            // Auto-enable the service if the operator starts editing any override
+                            // so the value they type will actually persist on save.
+                            const ensureAssigned = () => {
+                              if (!serviceIds.includes(svc.id)) setServiceIds([...serviceIds, svc.id]);
+                            };
+                            const patch = (partial: Partial<typeof ov>) => {
+                              ensureAssigned();
                               setServiceOverrides((prev) => ({
                                 ...prev,
                                 [svc.id]: { ...(prev[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" }), ...partial },
                               }));
+                            };
                             const directLink = `${storefrontBaseUrl}/${tenantSlug}/services/${svc.id}?providerId=${provider.id}`;
                             return (
                               <div
@@ -1301,16 +1328,17 @@ function ServicesTab({
                                   <div className="svc-provider-row__value">
                                     <input
                                       className="svc-input svc-provider-row__input"
-                                      type="number" min={15} max={480} step={15}
-                                      disabled={!isAssigned}
+                                      type="text" inputMode="numeric"
                                       placeholder={String(svc.durationMinutes)}
-                                      value={ov.durationMinutes}
+                                      value={ov.durationMinutes !== "" ? ov.durationMinutes : String(svc.durationMinutes)}
+                                      onFocus={(e) => { ensureAssigned(); e.target.select(); }}
+                                      onMouseUp={(e) => e.preventDefault()}
                                       onChange={(e) => patch({ durationMinutes: e.target.value })}
                                     />
                                     <span className="svc-provider-row__unit">min</span>
                                   </div>
                                 </div>
-                                {ov.durationMinutes && isAssigned ? (
+                                {ov.durationMinutes ? (
                                   <div className="svc-provider-row__reset">
                                     <button type="button" className="svc-text-btn"
                                       onClick={() => patch({ durationMinutes: "" })}>
@@ -1325,15 +1353,16 @@ function ServicesTab({
                                     <span className="svc-provider-row__unit">$</span>
                                     <input
                                       className="svc-input svc-provider-row__input"
-                                      type="number" min={0} step="0.01"
-                                      disabled={!isAssigned}
+                                      type="text" inputMode="decimal"
                                       placeholder={(svc.priceCents / 100).toFixed(2)}
-                                      value={ov.priceCents}
+                                      value={ov.priceCents !== "" ? ov.priceCents : (svc.priceCents / 100).toFixed(2)}
+                                      onFocus={(e) => { ensureAssigned(); e.target.select(); }}
+                                      onMouseUp={(e) => e.preventDefault()}
                                       onChange={(e) => patch({ priceCents: e.target.value })}
                                     />
                                   </div>
                                 </div>
-                                {ov.priceCents && isAssigned ? (
+                                {ov.priceCents ? (
                                   <div className="svc-provider-row__reset">
                                     <button type="button" className="svc-text-btn"
                                       onClick={() => patch({ priceCents: "" })}>
@@ -1349,14 +1378,12 @@ function ServicesTab({
                                       <button
                                         type="button"
                                         className={`service-card__pill${commissionMode === "flat" ? " is-active" : ""}`}
-                                        disabled={!isAssigned}
-                                        onClick={() => { if (commissionMode !== "flat") patch({ basisPoints: "" }); }}
+                                        onClick={() => { ensureAssigned(); if (commissionMode !== "flat") patch({ basisPoints: "" }); }}
                                       >$</button>
                                       <button
                                         type="button"
                                         className={`service-card__pill${commissionMode === "percent" ? " is-active" : ""}`}
-                                        disabled={!isAssigned}
-                                        onClick={() => { if (commissionMode !== "percent") patch({ flatCents: "" }); }}
+                                        onClick={() => { ensureAssigned(); if (commissionMode !== "percent") patch({ flatCents: "" }); }}
                                       >%</button>
                                     </div>
                                     {commissionMode === "flat" ? (
@@ -1364,10 +1391,11 @@ function ServicesTab({
                                         <span className="svc-provider-row__unit">$</span>
                                         <input
                                           className="svc-input svc-provider-row__input"
-                                          type="number" min={0} step="0.01"
-                                          disabled={!isAssigned}
+                                          type="text" inputMode="decimal"
                                           placeholder="0.00"
-                                          value={ov.flatCents}
+                                          value={ov.flatCents !== "" ? ov.flatCents : "0.00"}
+                                          onFocus={(e) => { ensureAssigned(); e.target.select(); }}
+                                          onMouseUp={(e) => e.preventDefault()}
                                           onChange={(e) => patch({ flatCents: e.target.value, basisPoints: "" })}
                                         />
                                       </>
@@ -1375,10 +1403,11 @@ function ServicesTab({
                                       <>
                                         <input
                                           className="svc-input svc-provider-row__input"
-                                          type="number" min={0} max={100} step="0.1"
-                                          disabled={!isAssigned}
+                                          type="text" inputMode="decimal"
                                           placeholder="0"
-                                          value={ov.basisPoints}
+                                          value={ov.basisPoints !== "" ? ov.basisPoints : "0"}
+                                          onFocus={(e) => { ensureAssigned(); e.target.select(); }}
+                                          onMouseUp={(e) => e.preventDefault()}
                                           onChange={(e) => patch({ flatCents: "", basisPoints: e.target.value })}
                                         />
                                         <span className="svc-provider-row__unit">%</span>
@@ -1386,7 +1415,7 @@ function ServicesTab({
                                     )}
                                   </div>
                                 </div>
-                                {(ov.flatCents || ov.basisPoints) && isAssigned ? (
+                                {(ov.flatCents || ov.basisPoints) ? (
                                   <div className="svc-provider-row__reset">
                                     <button type="button" className="svc-text-btn"
                                       onClick={() => patch({ flatCents: "", basisPoints: "" })}>
