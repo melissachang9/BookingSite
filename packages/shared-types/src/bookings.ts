@@ -175,6 +175,7 @@ export type CreateBookingDraftRequest = {
     referredBy?: string;
   };
   bookingMethod?: BookingMethod;
+  overrideAvailability?: boolean;
 };
 
 export type UpdateBookingDraftRequest = {

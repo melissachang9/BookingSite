@@ -61,6 +61,7 @@ class CreateBookingDraftRequest(CamelModel):
     starts_at: datetime
     customer: CustomerInput | None = None
     booking_method: str | None = "public_online"
+    override_availability: bool = False
 
 
 class UpdateBookingDraftRequest(CamelModel):

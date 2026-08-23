@@ -541,7 +541,50 @@ async def create_booking_draft(
         ),
         None,
     )
-    if matching_slot is None:
+
+    resolved_start_at = start_at
+    resolved_end_at = start_at + timedelta(minutes=service.duration_minutes)
+    resolved_location_id = payload.location_id
+
+    if matching_slot is not None:
+        resolved_start_at = matching_slot.start_at
+        resolved_end_at = matching_slot.end_at
+        resolved_location_id = matching_slot.location_id
+    elif payload.override_availability and payload.booking_method == "staff_entered":
+        # Staff can knowingly book outside the provider's usual scheduled hours,
+        # but a real conflict (an existing booking or an active hold on this
+        # provider) must still block the booking regardless of override.
+        setup_buffer = timedelta(minutes=service.setup_buffer_minutes)
+        cleanup_buffer = timedelta(minutes=service.cleanup_buffer_minutes)
+        block_start = resolved_start_at - setup_buffer
+        block_end = resolved_end_at + cleanup_buffer
+        conflicting_booking = await session.scalar(
+            select(Booking.id)
+            .where(
+                Booking.tenant_id == tenant.id,
+                Booking.provider_id == payload.provider_id,
+                Booking.status.in_(("confirmed", "completed")),
+                Booking.starts_at < block_end,
+                Booking.ends_at > block_start,
+            )
+            .limit(1)
+        )
+        conflicting_hold = None
+        if conflicting_booking is None:
+            conflicting_hold = await session.scalar(
+                select(SlotHold.id)
+                .where(
+                    SlotHold.tenant_id == tenant.id,
+                    SlotHold.provider_id == payload.provider_id,
+                    SlotHold.expires_at > datetime.now(timezone.utc),
+                    SlotHold.starts_at < block_end,
+                    SlotHold.ends_at > block_start,
+                )
+                .limit(1)
+            )
+        if conflicting_booking is not None or conflicting_hold is not None:
+            raise api_exception(409, "conflict", "This provider already has a conflicting appointment or hold at this time.")
+    else:
         raise api_exception(409, "conflict", "The selected slot is no longer available.")
 
     customer = None
@@ -563,11 +606,11 @@ async def create_booking_draft(
         customer_id=customer.id if customer is not None else None,
         service_id=service.id,
         provider_id=provider.id,
-        location_id=matching_slot.location_id,
+        location_id=resolved_location_id,
         status="slot_held",
         booking_method=payload.booking_method or "public_online",
-        starts_at=matching_slot.start_at,
-        ends_at=matching_slot.end_at,
+        starts_at=resolved_start_at,
+        ends_at=resolved_end_at,
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
         price_cents=service.price_cents,
         deposit_cents=service.deposit_cents,
