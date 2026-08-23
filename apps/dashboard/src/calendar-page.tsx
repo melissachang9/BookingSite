@@ -1414,6 +1414,7 @@ export function CalendarPage({
         endAt: addMinutesToTenantIso(startAt, appointmentDurationMinutes),
       };
     });
+    setFocusedDate(dateValue);
     setDraftCreationState({ kind: "idle" });
   };
 
