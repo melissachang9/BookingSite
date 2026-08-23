@@ -2866,7 +2866,17 @@ function SlotActionDrawer({
   const appointmentEndAt = selectedService ? addMinutesToTenantIso(selectedSlot.startAt, selectedService.durationMinutes) : selectedSlot.endAt;
   const blockEndAt = addMinutesToTenantIso(selectedSlot.startAt, blockDurationMinutes);
   const hasRequiredCustomer = Boolean(customer.firstName.trim() && customer.lastName.trim() && customer.email.trim() && customer.phone.trim());
-  const canCreateDraft = hasProvider && selectedServiceId !== null && hasRequiredCustomer && draftCreationState.kind !== "submitting";
+  const requestedStartMs = new Date(selectedSlot.startAt).getTime();
+  const isSlotAvailableForService =
+    selectedServiceId !== null &&
+    selectedSlot.openings.some(
+      (opening) =>
+        opening.providerId === selectedSlot.providerId &&
+        opening.serviceId === selectedServiceId &&
+        new Date(opening.startAt).getTime() === requestedStartMs,
+    );
+  const canCreateDraft =
+    hasProvider && selectedServiceId !== null && hasRequiredCustomer && isSlotAvailableForService && draftCreationState.kind !== "submitting";
   const canAddTimeBlock = hasProvider && blockedServiceIds.length > 0;
   const headingTimeRange = isAppointmentMode ? formatTimeRange(selectedSlot.startAt, appointmentEndAt) : formatTimeRange(selectedSlot.startAt, blockEndAt);
 
@@ -3107,6 +3117,11 @@ function SlotActionDrawer({
                 <div className="appointment-field-row"><span>Client</span><span>{combineCustomerName(customer.firstName, customer.lastName) || "Client required"}</span></div>
               </div>
             </div>
+            {selectedServiceId !== null && !isSlotAvailableForService ? (
+              <div className="message-banner message-banner--error" role="alert">
+                {selectedSlot.providerName ?? "This provider"} is not available for {selectedService?.name ?? "the selected service"} at this time. Choose a different time, date, provider, or appointment type.
+              </div>
+            ) : null}
             {draftCreationState.kind === "error" ? (
               <div className="message-banner message-banner--error" role="alert">
                 {draftCreationState.message}
