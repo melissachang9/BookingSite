@@ -3223,7 +3223,7 @@ function SlotActionDrawer({
                   {draftCreationState.kind === "submitting" ? "Creating draft..." : draftCreationState.kind === "success" ? "Draft created" : "Book appointment"}
                 </button>
                 {draftHref ? (
-                  <a className="secondary-action" href={draftHref}>
+                  <a className="secondary-action" href={draftHref} target="_blank" rel="noopener noreferrer">
                     Open draft in storefront
                   </a>
                 ) : null}
@@ -3534,7 +3534,7 @@ function TimeBlockDetailsDrawer({
             {draftCreationState.kind === "submitting" ? "Creating draft..." : draftCreated ? "Draft created" : "Create draft from time block"}
           </button>
           {draftHref ? (
-            <a className="secondary-action" href={draftHref}>
+            <a className="secondary-action" href={draftHref} target="_blank" rel="noopener noreferrer">
               Open draft in storefront
             </a>
           ) : null}
