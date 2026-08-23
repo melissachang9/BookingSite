@@ -35,6 +35,7 @@ def _normalize_settings(settings_json: dict[str, object]) -> dict[str, int | boo
 
 
 _WEEKDAY_KEYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+_SLOT_GRANULARITY = timedelta(minutes=15)
 
 
 def _business_window_for_weekday(
@@ -308,19 +309,19 @@ async def list_availability(
                         block_start = (cursor - setup_buffer).astimezone(timezone.utc)
                         block_end = (cursor + duration + cleanup_buffer).astimezone(timezone.utc)
                         if slot_start < min_start or slot_start > max_start:
-                            cursor += timedelta(minutes=30)
+                            cursor += _SLOT_GRANULARITY
                             continue
                         if _overlaps(block_start, block_end, blocked_map.get((context.provider.id, resolved_location_id), [])) or _overlaps(block_start, block_end, blocked_map.get((context.provider.id, None), [])):
-                            cursor += timedelta(minutes=30)
+                            cursor += _SLOT_GRANULARITY
                             continue
                         # Check service-specific blocks from time off
                         svc_blocks = service_blocked_map.get((context.provider.id, resolved_location_id), {}).get(service.id, []) + service_blocked_map.get((context.provider.id, None), {}).get(service.id, [])
                         if _overlaps(block_start, block_end, svc_blocks):
-                            cursor += timedelta(minutes=30)
+                            cursor += _SLOT_GRANULARITY
                             continue
                         # Check if this schedule entry blocks this service
                         if schedule.blocked_service_ids and service.id in schedule.blocked_service_ids:
-                            cursor += timedelta(minutes=30)
+                            cursor += _SLOT_GRANULARITY
                             continue
                         response = SlotAvailabilityResponse(
                             start_at=slot_start,
@@ -333,7 +334,7 @@ async def list_availability(
                         day_slots.append(response)
                         if earliest_slot is None or response.start_at < earliest_slot.start_at:
                             earliest_slot = response
-                        cursor += timedelta(minutes=30)
+                        cursor += _SLOT_GRANULARITY
         day_slots.sort(key=lambda slot: (slot.start_at, slot.provider_name))
         all_slots_by_day.append(day_slots)
 
