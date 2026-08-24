@@ -569,6 +569,34 @@
 }
 .cs-input::placeholder { color: var(--cs-label); }
 .cs-input:focus { background: var(--cs-surface); box-shadow: inset 0 0 0 1px rgba(20, 17, 15, .12); }
+textarea.cs-input, input.cs-input {
+  font: inherit; font-weight: 500; font-size: 13px;
+}
+
+/* select variant of cs-input */
+.cs-input--select { position: relative; padding: 0; }
+.cs-input--select > select {
+  appearance: none; -webkit-appearance: none;
+  width: 100%; border: 0; outline: 0; background: transparent;
+  padding: 12px 40px 12px 18px;
+  font: 500 13px var(--cs-font); color: var(--cs-ink); cursor: pointer;
+}
+.cs-input--select > select:disabled { color: var(--cs-label); cursor: not-allowed; }
+.cs-input__chevron {
+  position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+  font-size: 12px; color: var(--cs-label); pointer-events: none;
+}
+
+/* editable note variant */
+textarea.cs-note.cs-note--input,
+.cs-note--input {
+  width: 100%; resize: vertical; border: 0; outline: 0;
+  font-style: normal; color: var(--cs-ink);
+  min-height: 72px;
+}
+textarea.cs-note.cs-note--input:focus,
+.cs-note--input:focus { box-shadow: inset 0 0 0 1px rgba(20, 17, 15, .12); }
+textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-style: normal; }
 
 .cs-choice {
   display: flex; align-items: center; gap: 12px;
@@ -577,8 +605,20 @@
 }
 .cs-choice:hover { background: var(--cs-hover); }
 .cs-choice--selected { background: var(--cs-peach); }
+.cs-choice--selected:hover { background: var(--cs-peach); }
 .cs-choice__name { font: 600 13px var(--cs-font); color: var(--cs-ink); }
 .cs-choice__meta { font: 500 11px var(--cs-font); color: var(--cs-secondary); }
+.cs-choice__avatar {
+  width: 34px; height: 34px; border-radius: var(--cs-r-pill); flex: none;
+  background: var(--cs-block);
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 700 12px var(--cs-font); color: var(--cs-ink);
+}
+.cs-choice__avatar--new {
+  background: var(--cs-canvas);
+  border: 1.5px dashed rgba(20, 17, 15, .2);
+  color: var(--cs-label); font-weight: 400; font-size: 15px;
+}
 
 .cs-tag {
   background: var(--cs-hover); border-radius: var(--cs-r-pill);
@@ -610,6 +650,51 @@
 }
 .cs-money--total > span:first-child { font: 600 13px var(--cs-font); color: var(--cs-ink); }
 .cs-money--total > span:last-child { font: 800 22px var(--cs-font); letter-spacing: -.035em; }
+
+/* Drawer shim — makes the legacy .appointment-details-drawer host our design contract layout */
+.cs-drawer-shim { background: var(--cs-surface); box-shadow: -18px 0 38px rgba(18, 42, 36, 0.22); }
+.cs-drawer-shim .cs-drawer__inner {
+  flex: 1; min-height: 0; padding: 24px 24px 16px; overflow-y: auto;
+}
+.cs-drawer__foot {
+  padding: 14px 24px 22px; border-top: 1px solid rgba(20, 17, 15, .06);
+  background: var(--cs-surface); flex: none;
+}
+.cs-drawer__foot .cs-actions { align-items: stretch; }
+.cs-drawer__foot .cs-btn { flex: none; }
+.cs-drawer__foot .cs-btn--primary { flex: 1; text-align: center; }
+
+/* Today / time card (details drawer) */
+.cs-when-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.cs-when-card__kicker {
+  font: 600 10px var(--cs-font); letter-spacing: .1em;
+  text-transform: uppercase; color: var(--cs-label);
+}
+.cs-when-card__time {
+  font: 700 18px var(--cs-font); letter-spacing: -.03em; color: var(--cs-ink); margin-top: 3px;
+}
+
+/* Alert icon (pink consent card) */
+.cs-alert__icon {
+  width: 18px; height: 18px; border-radius: var(--cs-r-pill);
+  background: var(--cs-ink); color: #fff;
+  font: 700 11px var(--cs-font);
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: none;
+}
+
+/* Client identity row (details drawer) */
+.cs-clientrow { display: flex; align-items: center; gap: 12px; }
+.cs-clientrow__avatar {
+  width: 44px; height: 44px; border-radius: 16px; flex: none;
+  background: var(--cs-block);
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 700 13px var(--cs-font); color: var(--cs-ink);
+}
+.cs-clientrow__name { font: 600 14px var(--cs-font); color: var(--cs-ink); }
+.cs-clientrow__meta { font: 500 11px var(--cs-font); color: var(--cs-label); margin-top: 2px; }
 
 /* ------------------------------------------------------------ status pills */
 .cs-pill {

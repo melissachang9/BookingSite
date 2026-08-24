@@ -65,6 +65,7 @@ type CalendarServiceOption = {
   id: string;
   name: string;
   durationMinutes: number;
+  priceCents: number;
 };
 
 type CalendarAppointment = {
@@ -704,10 +705,12 @@ function getServiceOptionsFromOpenings(openings: CalendarOpening[], providerId: 
     if (providerId !== null && opening.providerId !== providerId) {
       continue;
     }
+    const fallback = fallbackServices.find((s) => s.id === opening.serviceId);
     services.set(opening.serviceId, {
       id: opening.serviceId,
       name: opening.serviceName,
       durationMinutes: opening.durationMinutes,
+      priceCents: fallback?.priceCents ?? 0,
     });
   }
 
@@ -717,6 +720,7 @@ function getServiceOptionsFromOpenings(openings: CalendarOpening[], providerId: 
         id: service.id,
         name: service.name,
         durationMinutes: service.durationMinutes,
+        priceCents: service.priceCents,
       });
     }
   }
@@ -2262,6 +2266,7 @@ export function CalendarPage({
           onSendFormReminder={handleSendFormReminder}
           services={calendarState.kind === "ready" ? calendarState.services : []}
           providers={calendarState.kind === "ready" ? calendarState.providers : []}
+          categoryNameById={calendarState.kind === "ready" ? calendarState.categoryNameById : undefined}
           onClose={handleCloseAppointmentDrawer}
           onComplete={handleCompleteAppointment}
           onNoShow={handleNoShowAppointment}
@@ -3318,334 +3323,269 @@ function SlotActionDrawer({
   return (
     <>
       <button type="button" className="appointment-drawer-backdrop" aria-label="Close calendar slot actions" onClick={onClose} />
-      <aside className="appointment-details-drawer slot-action-drawer" role="dialog" aria-label="Calendar slot actions">
-        <header className="appointment-details-drawer__header">
-          <span className="appointment-status-chip">
-            <span aria-hidden="true" />
-            {isAppointmentMode ? "New appointment" : "New time block"}
-          </span>
-          <div className="slot-action-drawer__header-actions">
-            <button
-              type="button"
-              className="appointment-drawer-outline-action"
-              aria-pressed={!isAppointmentMode}
-              onClick={() => setMode(isAppointmentMode ? "time-block" : "appointment")}
-            >
-              {isAppointmentMode ? "Create time block" : "Create appointment"}
-            </button>
-            <button type="button" className="appointment-drawer-close" onClick={onClose} aria-label="Close">
-              ×
-            </button>
-          </div>
-        </header>
-
-        <div className="appointment-drawer-body">
-          {/* When */}
-          <div className="booking-rail-section">
-            <p className="rail-section-kicker">When</p>
-            <div className="appointment-drawer-when" aria-label="Calendar slot timing">
-              <div className="appointment-drawer-when__block">
-                <div className="appointment-drawer-when__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>
-                </div>
-                <div>
-                  <div className="appointment-drawer-when__date">{getDateLabel(selectedSlot.date)}</div>
-                  <div className="appointment-drawer-when__time">{headingTimeRange}</div>
-                </div>
+      <aside className="appointment-details-drawer slot-action-drawer cs-drawer-shim" role="dialog" aria-label="Calendar slot actions">
+        <div className="cs-drawer__inner">
+          {/* Header */}
+          <div className="cs-drawer__head">
+            <div>
+              <div className="cs-drawer__kicker">{isAppointmentMode ? "New booking" : "New time block"}</div>
+              <div className="cs-drawer__title">
+                {getDateLabel(selectedSlot.date)} · {timeFormatter.format(new Date(selectedSlot.startAt))}
               </div>
-              <div className="appointment-drawer-when__links">
-                <div style={{ position: "relative" }} ref={datePickerContainerRef}>
-                  <button
-                    type="button"
-                    className="link-action"
-                    onClick={() => {
-                      setPickerMonth(monthAnchor(selectedSlot.date));
-                      setShowDatePopover((prev) => !prev);
-                    }}
-                    aria-expanded={showDatePopover}
-                  >
-                    Change date
-                  </button>
-                  {showDatePopover ? (
-                    <div className="appointment-drawer-date-popover">
-                      <div className="month-rail__header">
-                        <h5>{monthLabelFormatter.format(parseIsoDate(pickerMonth))}</h5>
-                        <div className="month-rail__controls">
-                          <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, -1))}>
-                            Prev
+              <div className="cs-drawer__meta">
+                {[
+                  selectedSlot.providerName ?? "Any provider",
+                  isAppointmentMode ? headingTimeRange : `${formatDuration(blockDurationMinutes)} block`,
+                ].filter(Boolean).join(" · ")}
+              </div>
+            </div>
+            <button type="button" className="cs-drawer__close" onClick={onClose} aria-label="Close">×</button>
+          </div>
+
+          {/* Mode toggle */}
+          <div className="cs-seg" role="tablist" aria-label="Slot action mode">
+            <button type="button" aria-pressed={isAppointmentMode} onClick={() => setMode("appointment")}>Appointment</button>
+            <button type="button" aria-pressed={!isAppointmentMode} onClick={() => setMode("time-block")}>Time block</button>
+          </div>
+
+          {isAppointmentMode ? (
+            <>
+              {/* Client */}
+              <div>
+                <div className="cs-section__label">Client</div>
+                <input
+                  className="cs-input"
+                  placeholder="Search or add — type name"
+                  value={customer.firstName}
+                  onChange={(event) => onCustomerFieldChange("firstName", event.target.value)}
+                  autoComplete="off"
+                />
+                {(customerLookupState.kind === "ready" && customerLookupState.items.length > 0) || customer.firstName.trim().length > 0 ? (
+                  <div style={{ marginTop: 8, background: "var(--cs-canvas)", borderRadius: 20, padding: 6 }}>
+                    {customerLookupState.kind === "ready" ? (
+                      customerLookupState.items.slice(0, 4).map((lookupCustomer) => {
+                        const isSelected = combineCustomerName(customer.firstName, customer.lastName) === lookupCustomer.name;
+                        return (
+                          <button
+                            key={lookupCustomer.id}
+                            type="button"
+                            className={`cs-choice${isSelected ? " cs-choice--selected" : ""}`}
+                            onClick={() => onApplyCustomer(lookupCustomer)}
+                          >
+                            <span className="cs-choice__avatar" aria-hidden="true">{getInitials(lookupCustomer.name)}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div className="cs-choice__name">{lookupCustomer.name}</div>
+                              <div className="cs-choice__meta">{lookupCustomer.email ?? lookupCustomer.phone ?? "Client record"}</div>
+                            </div>
                           </button>
-                          <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, 1))}>
-                            Next
-                          </button>
-                        </div>
-                      </div>
-                      <div className="month-grid-labels" role="presentation">
-                        {monthDayLabel.map((label) => (
-                          <span key={label}>{label}</span>
-                        ))}
-                      </div>
-                      <div className="month-grid" role="grid">
-                        {pickerGrid.map((date) => {
-                          const isInCurrentMonth = date.slice(0, 7) === pickerMonth.slice(0, 7);
-                          const isSelected = date === selectedSlot.date;
-                          return (
-                            <button
-                              key={date}
-                              type="button"
-                              role="gridcell"
-                              disabled={!isInCurrentMonth}
-                              aria-pressed={isSelected}
-                              aria-label={getDateLabel(date)}
-                              className={[
-                                "month-day",
-                                !isInCurrentMonth ? "month-day--outside" : "",
-                                isSelected ? "month-day--focused" : "",
-                              ]
-                                .filter(Boolean)
-                                .join(" ")}
-                              onClick={() => {
-                                onStartDateChange(date);
-                                setShowDatePopover(false);
-                              }}
-                            >
-                              <span>{parseIsoDate(date).getUTCDate()}</span>
-                            </button>
-                          );
-                        })}
+                        );
+                      })
+                    ) : null}
+                    <div className="cs-choice" style={{ cursor: "default" }}>
+                      <span className="cs-choice__avatar cs-choice__avatar--new" aria-hidden="true">+</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="cs-choice__name">New client</div>
+                        <div className="cs-choice__meta">Fill in name, phone, and email below</div>
                       </div>
                     </div>
-                  ) : null}
+                  </div>
+                ) : null}
+                {customerLookupState.kind === "loading" ? <div className="slot-customer-lookup-note" role="status">Searching clients…</div> : null}
+                {customerLookupState.kind === "error" ? (
+                  <div className="message-banner message-banner--error" role="alert" style={{ marginTop: 8 }}>{customerLookupState.message}</div>
+                ) : null}
+
+                <div className="cs-slot-fields" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+                  <input className="cs-input" placeholder="Last name" value={customer.lastName} onChange={(event) => onCustomerFieldChange("lastName", event.target.value)} autoComplete="off" />
+                  <input className="cs-input" placeholder="Phone" value={customer.phone} onChange={(event) => onCustomerFieldChange("phone", event.target.value)} inputMode="tel" autoComplete="tel" />
+                  <input className="cs-input" placeholder="Email" value={customer.email} onChange={(event) => onCustomerFieldChange("email", event.target.value)} inputMode="email" autoComplete="email" style={{ gridColumn: "span 2" }} />
                 </div>
-                {showTimeInput ? (
-                  <input
-                    type="time"
-                    className="appointment-drawer-time-input"
-                    value={formatTimeInputValue(selectedSlot.startAt)}
-                    onChange={(event) => {
-                      onStartTimeChange(event.target.value);
-                      setShowTimeInput(false);
-                    }}
-                    autoFocus
-                    onBlur={() => setShowTimeInput(false)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        setShowTimeInput(false);
-                      }
-                    }}
-                  />
-                ) : (
-                  <button type="button" className="link-action" onClick={() => setShowTimeInput(true)}>
-                    Change time
-                  </button>
-                )}
               </div>
-            </div>
-          </div>
 
-        {isAppointmentMode ? (
-          <section className="booking-rail-section" aria-label="Customer info">
-            <p className="rail-section-kicker">Customer</p>
-            <div className="appointment-summary-card">
-              <div className="slot-action-grid">
-                <label>
-                  <span>First name</span>
-                  <input value={customer.firstName} onChange={(event) => onCustomerFieldChange("firstName", event.target.value)} autoComplete="off" />
-                </label>
-                <label>
-                  <span>Last name</span>
-                  <input value={customer.lastName} onChange={(event) => onCustomerFieldChange("lastName", event.target.value)} autoComplete="off" />
-                </label>
-                <label>
-                  <span>Phone number</span>
-                  <input value={customer.phone} onChange={(event) => onCustomerFieldChange("phone", event.target.value)} inputMode="tel" autoComplete="tel" />
-                </label>
-                <label>
-                  <span>Email</span>
-                  <input value={customer.email} onChange={(event) => onCustomerFieldChange("email", event.target.value)} inputMode="email" autoComplete="email" />
-                </label>
-                <label>
-                  <span>Referred by</span>
-                  <input value={customer.referredBy} onChange={(event) => onCustomerFieldChange("referredBy", event.target.value)} autoComplete="off" />
-                </label>
-              </div>
-              <label className="time-block-notes-field">
-                <span>Notes</span>
-                <textarea value={notes} onChange={(event) => onNotesChange(event.target.value)} placeholder="Add context for this client or appointment." rows={3} />
-              </label>
-            </div>
-            {customerLookupState.kind === "loading" ? <div className="slot-customer-lookup-note" role="status">Searching clients...</div> : null}
-            {customerLookupState.kind === "ready" && customerLookupState.items.length > 0 ? (
-              <div className="slot-customer-results" aria-label="Matching clients">
-                {customerLookupState.items.map((lookupCustomer) => (
-                  <button key={lookupCustomer.id} type="button" onClick={() => onApplyCustomer(lookupCustomer)}>
-                    <strong>{lookupCustomer.name}</strong>
-                    <span>{lookupCustomer.email ?? lookupCustomer.phone ?? "Client record"}</span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            {customerLookupState.kind === "error" ? (
-              <div className="message-banner message-banner--error" role="alert">
-                {customerLookupState.message}
-              </div>
-            ) : null}
-          </section>
-        ) : null}
-
-        <section className="booking-rail-section" aria-label="Slot setup">
-          <p className="rail-section-kicker">Setup</p>
-          <div className="appointment-summary-card">
-            <div className="slot-action-grid">
-              <label>
-                <span>Provider</span>
-                {selectedSlot.providerOptions.length > 1 ? (
-                  <select value={selectedSlot.providerId ?? ""} onChange={(event) => onSelectProvider(event.target.value)}>
-                    {selectedSlot.providerOptions.map((provider) => (
-                      <option key={provider.id} value={provider.id}>
-                        {provider.name}
-                      </option>
+              {/* Treatment (dropdown) */}
+              <div>
+                <div className="cs-section__label">Treatment</div>
+                <div className="cs-input cs-input--select">
+                  <select
+                    value={selectedServiceId ?? ""}
+                    onChange={(event) => onSelectService(event.target.value)}
+                    disabled={serviceOptions.length === 0}
+                    aria-label="Treatment"
+                  >
+                    {serviceOptions.length === 0 ? <option value="">No appointment types available</option> : null}
+                    {selectedServiceId === null ? <option value="">Choose a treatment…</option> : null}
+                    {serviceOptions.map((service) => (
+                      <option key={service.id} value={service.id}>{service.name}</option>
                     ))}
                   </select>
-                ) : (
-                  <input value={selectedSlot.providerName ?? "No provider available"} readOnly />
-                )}
-              </label>
-              {isAppointmentMode ? (
-                <label>
-                  <span>Start time</span>
-                  <input type="time" value={formatTimeInputValue(selectedSlot.startAt)} onChange={(event) => onStartTimeChange(event.target.value)} />
-                </label>
-              ) : null}
-              {isAppointmentMode ? (
-                <>
-                  <label>
-                    <span>Appointment type</span>
-                    <select value={selectedServiceId ?? ""} onChange={(event) => onSelectService(event.target.value)} disabled={serviceOptions.length === 0}>
-                      {serviceOptions.length === 0 ? <option value="">No appointment types available</option> : null}
-                      {serviceOptions.map((service) => (
-                        <option key={service.id} value={service.id}>
-                          {service.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span>Appointment duration</span>
-                    <input value={selectedService ? formatDuration(selectedService.durationMinutes) : "Choose appointment type"} readOnly />
-                  </label>
-                </>
-              ) : null}
-            </div>
-          </div>
-        </section>
+                  <span className="cs-input__chevron" aria-hidden="true">▾</span>
+                </div>
 
-        {isAppointmentMode ? (
-          <section className="booking-rail-section" aria-label="Book appointment from slot">
-            <p className="rail-section-kicker">Summary</p>
-            <div className="appointment-summary-card">
-              <div className="appointment-field-list">
-                <div className="appointment-field-row"><span>Service</span><span>{selectedService?.name ?? "Choose an appointment type"}</span></div>
-                <div className="appointment-field-row"><span>Time</span><span>{formatTimeRange(selectedSlot.startAt, appointmentEndAt)}</span></div>
-                {selectedService ? (
-                  <div className="appointment-field-row"><span>Price</span><span>{formatPriceCents(selectedService.priceCents)}{selectedService.depositCents > 0 ? ` · $${(selectedService.depositCents / 100).toFixed(2)} deposit` : " · No deposit"}</span></div>
-                ) : null}
-                <div className="appointment-field-row"><span>Client</span><span>{combineCustomerName(customer.firstName, customer.lastName) || "Client required"}</span></div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 12 }}>
+                  <div className="cs-stat">
+                    <div className="cs-stat__label">Duration</div>
+                    <div className="cs-stat__value">{selectedService ? formatDuration(selectedService.durationMinutes) : "—"}</div>
+                  </div>
+                  <div className="cs-stat">
+                    <div className="cs-stat__label">Ends</div>
+                    <div className="cs-stat__value">{selectedService ? timeFormatter.format(new Date(appointmentEndAt)) : "—"}</div>
+                  </div>
+                  <div className="cs-stat">
+                    <div className="cs-stat__label">Price</div>
+                    <div className="cs-stat__value">{selectedService ? formatPriceCents(selectedService.priceCents) : "—"}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes for the team */}
+              <div>
+                <div className="cs-section__label">Notes for the team</div>
+                <textarea
+                  className="cs-note cs-note--input"
+                  value={notes}
+                  onChange={(event) => onNotesChange(event.target.value)}
+                  placeholder="Add context for this client or appointment."
+                  rows={3}
+                />
+              </div>
+
+              {/* Alerts */}
+              {selectedServiceId !== null && !isSlotAvailableForService ? (
+                <div className="message-banner message-banner--warning" role="alert">
+                  {selectedSlot.providerName ?? "This provider"} is not usually available for {selectedService?.name ?? "the selected service"} at this time. You can still book it, but you'll be asked to confirm the override.
+                </div>
+              ) : null}
+              {draftCreationState.kind === "error" ? (
+                <div className="message-banner message-banner--error" role="alert">{draftCreationState.message}</div>
+              ) : null}
+              {draftCreationState.kind === "success" ? (
+                <div className="message-banner" role="status">Booking draft created and slot held for 15 minutes.</div>
+              ) : null}
+            </>
+          ) : (
+            <>
+              {/* Time block — minimal styling, functional */}
+              <div>
+                <div className="cs-section__label">Block window</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <label className="cs-slot-field">
+                    <span>Start date</span>
+                    <input type="date" className="cs-input" value={getTenantDate(selectedSlot.startAt)} onChange={(event) => onStartDateChange(event.target.value)} />
+                  </label>
+                  <label className="cs-slot-field">
+                    <span>Start time</span>
+                    <input type="time" className="cs-input" value={formatTimeInputValue(selectedSlot.startAt)} onChange={(event) => onStartTimeChange(event.target.value)} />
+                  </label>
+                  <label className="cs-slot-field">
+                    <span>End date</span>
+                    <input type="date" className="cs-input" value={getTenantDate(blockEndAt)} onChange={(event) => onBlockEndChange(event.target.value, formatTimeInputValue(blockEndAt))} />
+                  </label>
+                  <label className="cs-slot-field">
+                    <span>End time</span>
+                    <input type="time" className="cs-input" value={formatTimeInputValue(blockEndAt)} onChange={(event) => onBlockEndChange(getTenantDate(blockEndAt), event.target.value)} />
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <div className="cs-section__label">Notes for the team</div>
+                <textarea className="cs-note cs-note--input" value={notes} onChange={(event) => onNotesChange(event.target.value)} placeholder="Add staff-facing context for this block." rows={3} />
+              </div>
+
+              <div>
+                <div className="cs-section__label">Appointment types to block</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {serviceOptions.map((service) => {
+                    const active = blockedServiceIds.includes(service.id);
+                    return (
+                      <button key={service.id} type="button" className={`cs-tag${active ? " cs-tag--selected" : ""}`} onClick={() => onToggleBlockedService(service.id)}>
+                        {service.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Change-date popover (unchanged UX) */}
+          {showDatePopover ? (
+            <div ref={datePickerContainerRef} className="appointment-drawer-date-popover">
+              <div className="month-rail__header">
+                <h5>{monthLabelFormatter.format(parseIsoDate(pickerMonth))}</h5>
+                <div className="month-rail__controls">
+                  <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, -1))}>Prev</button>
+                  <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, 1))}>Next</button>
+                </div>
+              </div>
+              <div className="month-grid-labels" role="presentation">{monthDayLabel.map((label) => (<span key={label}>{label}</span>))}</div>
+              <div className="month-grid" role="grid">
+                {pickerGrid.map((date) => {
+                  const isInCurrentMonth = date.slice(0, 7) === pickerMonth.slice(0, 7);
+                  const isSelected = date === selectedSlot.date;
+                  return (
+                    <button
+                      key={date}
+                      type="button"
+                      role="gridcell"
+                      disabled={!isInCurrentMonth}
+                      aria-pressed={isSelected}
+                      aria-label={getDateLabel(date)}
+                      className={["month-day", !isInCurrentMonth ? "month-day--outside" : "", isSelected ? "month-day--focused" : ""].filter(Boolean).join(" ")}
+                      onClick={() => { onStartDateChange(date); setShowDatePopover(false); }}
+                    >
+                      <span>{parseIsoDate(date).getUTCDate()}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
-            {selectedServiceId !== null && !isSlotAvailableForService ? (
-              <div className="message-banner message-banner--warning" role="alert">
-                {selectedSlot.providerName ?? "This provider"} is not usually available for {selectedService?.name ?? "the selected service"} at this time. You can still book it, but you'll be asked to confirm the override.
-              </div>
-            ) : null}
-            {draftCreationState.kind === "error" ? (
-              <div className="message-banner message-banner--error" role="alert">
-                {draftCreationState.message}
-              </div>
-            ) : null}
-            {draftCreationState.kind === "success" ? (
-              <div className="message-banner" role="status">
-                Booking draft created and slot held for 15 minutes.
-              </div>
-            ) : null}
-          </section>
-        ) : (
-          <section className="booking-rail-section" aria-label="Add time block from slot">
-            <p className="rail-section-kicker">Time block</p>
-            <div className="appointment-summary-card">
-            <div className="slot-action-grid">
-              <label>
-                <span>Start date</span>
-                <input
-                  type="date"
-                  value={getTenantDate(selectedSlot.startAt)}
-                  onChange={(event) => onStartDateChange(event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Start time</span>
-                <input
-                  type="time"
-                  value={formatTimeInputValue(selectedSlot.startAt)}
-                  onChange={(event) => onStartTimeChange(event.target.value)}
-                />
-              </label>
-              <label>
-                <span>End date</span>
-                <input
-                  type="date"
-                  value={getTenantDate(blockEndAt)}
-                  onChange={(event) => onBlockEndChange(event.target.value, formatTimeInputValue(blockEndAt))}
-                />
-              </label>
-              <label>
-                <span>End time</span>
-                <input
-                  type="time"
-                  value={formatTimeInputValue(blockEndAt)}
-                  onChange={(event) => onBlockEndChange(getTenantDate(blockEndAt), event.target.value)}
-                />
-              </label>
-            </div>
-            <label className="time-block-notes-field">
-              <span>Notes</span>
-              <textarea value={notes} onChange={(event) => onNotesChange(event.target.value)} placeholder="Add staff-facing context for this block." rows={4} />
-            </label>
-            <div className="time-block-service-options" aria-label="Appointment types to block">
-              <span>Appointment types to block</span>
-              {serviceOptions.map((service) => (
-                <label key={service.id}>
-                  <input
-                    type="checkbox"
-                    checked={blockedServiceIds.includes(service.id)}
-                    onChange={() => onToggleBlockedService(service.id)}
-                  />
-                  {service.name}
-                </label>
-              ))}
-            </div>
-            </div>
-          </section>
-        )}
+          ) : null}
+          {showTimeInput ? (
+            <input
+              type="time"
+              className="appointment-drawer-time-input"
+              value={formatTimeInputValue(selectedSlot.startAt)}
+              onChange={(event) => { onStartTimeChange(event.target.value); setShowTimeInput(false); }}
+              autoFocus
+              onBlur={() => setShowTimeInput(false)}
+              onKeyDown={(event) => { if (event.key === "Enter") setShowTimeInput(false); }}
+            />
+          ) : null}
         </div>
 
-        <div className="appointment-drawer-footer">
-          <div className="appointment-drawer-footer__finalize">
+        {/* Footer */}
+        <div className="cs-drawer__foot">
+          <div className="cs-actions">
+            <button type="button" className="cs-btn" onClick={onClose}>Cancel</button>
             {isAppointmentMode ? (
-              <>
-                <button type="button" className="primary-action" onClick={onBookAppointment} disabled={!canCreateDraft || draftCreationState.kind === "success"}>
-                  {draftCreationState.kind === "submitting" ? "Creating draft..." : draftCreationState.kind === "success" ? "Draft created" : "Book appointment"}
-                </button>
-                {draftHref ? (
-                  <a className="secondary-action" href={draftHref} target="_blank" rel="noopener noreferrer">
-                    Open draft in storefront
-                  </a>
-                ) : null}
-              </>
+              <button
+                type="button"
+                className="cs-btn cs-btn--primary"
+                onClick={onBookAppointment}
+                disabled={!canCreateDraft || draftCreationState.kind === "success"}
+              >
+                {draftCreationState.kind === "submitting"
+                  ? "Creating draft…"
+                  : draftCreationState.kind === "success"
+                  ? "Draft created"
+                  : "Book & send confirmation"}
+              </button>
             ) : (
-              <button type="button" className="primary-action" onClick={onAddTimeBlock} disabled={!canAddTimeBlock}>
+              <button type="button" className="cs-btn cs-btn--primary" onClick={onAddTimeBlock} disabled={!canAddTimeBlock}>
                 Add time block
               </button>
             )}
+          </div>
+          {draftHref && draftCreationState.kind === "success" ? (
+            <a className="cs-btn cs-btn--ghost" href={draftHref} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", marginTop: 8, textDecoration: "none" }}>
+              Open draft in storefront
+            </a>
+          ) : null}
+          {/* Hidden button to trigger date/time popovers from the drawer header */}
+          <div style={{ display: "flex", gap: 12, marginTop: 8, justifyContent: "flex-end" }}>
+            <button type="button" className="cs-btn cs-btn--ghost" style={{ padding: "6px 10px", fontSize: 11 }} onClick={() => { setPickerMonth(monthAnchor(selectedSlot.date)); setShowDatePopover((prev) => !prev); }}>Change date</button>
+            <button type="button" className="cs-btn cs-btn--ghost" style={{ padding: "6px 10px", fontSize: 11 }} onClick={() => setShowTimeInput(true)}>Change time</button>
           </div>
         </div>
       </aside>
@@ -3965,6 +3905,7 @@ type AppointmentDetailsDrawerProps = {
   onSendFormReminder?: (appointment: SelectedCalendarAppointment) => void;
   services: ServiceSummary[];
   providers: CalendarProviderOption[];
+  categoryNameById?: Record<string, string>;
   onClose: () => void;
   onComplete: (appointment: SelectedCalendarAppointment, resolution?: "collected" | "waived") => Promise<void>;
   onNoShow: (appointment: SelectedCalendarAppointment) => Promise<void>;
@@ -3991,6 +3932,7 @@ function AppointmentDetailsDrawer({
   onSendFormReminder,
   services,
   providers,
+  categoryNameById,
   onClose,
   onComplete,
   onNoShow,
@@ -4084,6 +4026,23 @@ function AppointmentDetailsDrawer({
     );
   }
 
+  const bookedService = services.find((s) => s.id === selectedAppointment.serviceId);
+  const categoryName = bookedService?.categoryId ? categoryNameById?.[bookedService.categoryId] ?? null : null;
+  const chipFamily = getChipFamily(selectedAppointment.serviceName, categoryName);
+  const familyBg = FAMILY_SWATCH[chipFamily] ?? "#F0EDEA";
+  const familyLabel = (categoryName ?? statusLabel).toUpperCase();
+  const timeRangeLabel = formatTimeRange(selectedAppointment.startAt, selectedAppointment.endAt);
+  const showConsentAlert = isConfirmed && (intakeStatus === "missing" || intakeStatus === "partial");
+  const consentTitle = intakeStatus === "missing" ? "Intake forms unsigned" : "Intake needs review";
+  const consentBody =
+    intakeStatus === "missing"
+      ? "Client has not submitted the required intake forms yet."
+      : "Some responses need staff attention before the visit.";
+  const providerRecord = providers.find((p) => p.id === selectedAppointment.providerId);
+  const subtitleParts = [selectedAppointment.serviceName];
+  if (selectedAppointment.providerName) subtitleParts.push(selectedAppointment.providerName);
+  const subtitle = subtitleParts.join(" · ");
+
   return (
     <>
       <button
@@ -4092,250 +4051,243 @@ function AppointmentDetailsDrawer({
         aria-label="Close appointment details"
         onClick={onClose}
       />
-      <aside className="appointment-details-drawer" role="dialog" aria-label="Appointment details">
-        <header className="appointment-details-drawer__header">
-          <span className="appointment-status-chip">
-            <span aria-hidden="true" />
-            {statusLabel}
-          </span>
-          <div className="slot-action-drawer__header-actions">
-            {isConfirmed ? (
-              <button type="button" className="appointment-drawer-outline-action">
-                Check in
-              </button>
-            ) : null}
-            <button type="button" className="appointment-drawer-close" onClick={onClose} aria-label="Close">
-              ×
-            </button>
+      <aside className="appointment-details-drawer cs-drawer-shim" role="dialog" aria-label="Appointment details">
+        <div className="cs-drawer__inner">
+          {/* Header */}
+          <div className="cs-drawer__head">
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <span className="cs-pill" style={{ background: familyBg, color: "var(--cs-ink)" }}>{familyLabel}</span>
+              <div className="cs-drawer__title" style={{ marginTop: 10 }}>{selectedAppointment.customerName}</div>
+              <div className="cs-drawer__meta">{subtitle}</div>
+            </div>
+            <button type="button" className="cs-drawer__close" onClick={onClose} aria-label="Close">×</button>
           </div>
-        </header>
 
-        <div className="appointment-drawer-body">
-          {/* When */}
-          <div className="booking-rail-section">
-            <p className="rail-section-kicker">When</p>
-            <div className="appointment-drawer-when" aria-label="Appointment timing">
-              <div className="appointment-drawer-when__block">
-                <div className="appointment-drawer-when__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>
-                </div>
-                <div>
-                  <div className="appointment-drawer-when__date">{selectedAppointment.dayLabel}</div>
-                  <div className="appointment-drawer-when__time">
-                    {showRescheduleTimeInput ? (
-                      <input
-                        type="time"
-                        className="appointment-drawer-time-input"
-                        defaultValue={new Date(selectedAppointment.startAt).toTimeString().slice(0, 5)}
-                        autoFocus
-                        disabled={rescheduleSaveState === "submitting"}
-                        onBlur={() => setShowRescheduleTimeInput(false)}
-                        onKeyDown={(event) => { if (event.key === "Enter") { setShowRescheduleTimeInput(false); } }}
-                        onChange={async (event) => {
-                          if (!onUpdate) return;
-                          const newTime = event.target.value;
-                          if (!newTime) return;
-                          const current = new Date(selectedAppointment.startAt);
-                          const dateStr = current.toISOString().slice(0, 10);
-                          setRescheduleSaveState("submitting"); setRescheduleErrorMessage("");
-                          try {
-                            const newStartsAt = new Date(`${dateStr}T${newTime}:00`).toISOString();
-                            await onUpdate(selectedAppointment, { startsAt: newStartsAt, sendConfirmation: true });
-                            setRescheduleSaveState("idle");
-                            setShowRescheduleTimeInput(false);
-                          } catch (err) {
-                            setRescheduleSaveState("error");
-                            setRescheduleErrorMessage(err instanceof Error ? err.message : "Unable to reschedule.");
-                          }
-                        }}
-                      />
-                    ) : (
-                      selectedAppointmentClockLabel
-                    )}
-                  </div>
-                </div>
+          {/* Today / time card with actions */}
+          <div className="cs-panel cs-when-card">
+            <div>
+              <div className="cs-when-card__kicker">{selectedAppointment.dayLabel}</div>
+              <div className="cs-when-card__time">
+                {showRescheduleTimeInput ? (
+                  <input
+                    type="time"
+                    className="appointment-drawer-time-input"
+                    defaultValue={new Date(selectedAppointment.startAt).toTimeString().slice(0, 5)}
+                    autoFocus
+                    disabled={rescheduleSaveState === "submitting"}
+                    onBlur={() => setShowRescheduleTimeInput(false)}
+                    onKeyDown={(event) => { if (event.key === "Enter") setShowRescheduleTimeInput(false); }}
+                    onChange={async (event) => {
+                      if (!onUpdate) return;
+                      const newTime = event.target.value;
+                      if (!newTime) return;
+                      const current = new Date(selectedAppointment.startAt);
+                      const dateStr = current.toISOString().slice(0, 10);
+                      setRescheduleSaveState("submitting"); setRescheduleErrorMessage("");
+                      try {
+                        const newStartsAt = new Date(`${dateStr}T${newTime}:00`).toISOString();
+                        await onUpdate(selectedAppointment, { startsAt: newStartsAt, sendConfirmation: true });
+                        setRescheduleSaveState("idle");
+                        setShowRescheduleTimeInput(false);
+                      } catch (err) {
+                        setRescheduleSaveState("error");
+                        setRescheduleErrorMessage(err instanceof Error ? err.message : "Unable to reschedule.");
+                      }
+                    }}
+                  />
+                ) : (
+                  timeRangeLabel
+                )}
               </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
               {isConfirmed ? (
-                <div className="appointment-drawer-when__links">
-                  <div style={{ position: "relative" }} ref={datePickerContainerRef}>
-                    <button
-                      type="button"
-                      className="link-action"
-                      disabled={rescheduleSaveState === "submitting"}
-                      onClick={() => {
-                        setPickerMonth(monthAnchor(new Date(selectedAppointment.startAt).toISOString().slice(0, 10)));
-                        setShowRescheduleDatePopover((prev) => !prev);
-                      }}
-                      aria-expanded={showRescheduleDatePopover}
-                    >
-                      Reschedule date
-                    </button>
-                    {showRescheduleDatePopover ? (
-                      <div className="appointment-drawer-date-popover">
-                        <div className="month-rail__header">
-                          <h5>{monthLabelFormatter.format(parseIsoDate(pickerMonth))}</h5>
-                          <div className="month-rail__controls">
-                            <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, -1))}>
-                              Prev
-                            </button>
-                            <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, 1))}>
-                              Next
-                            </button>
-                          </div>
-                        </div>
-                        <div className="month-grid-labels" role="presentation">
-                          {monthDayLabel.map((label) => (
-                            <span key={label}>{label}</span>
-                          ))}
-                        </div>
-                        <div className="month-grid" role="grid">
-                          {pickerGrid.map((date) => {
-                            const isInCurrentMonth = date.slice(0, 7) === pickerMonth.slice(0, 7);
-                            const currentDate = new Date(selectedAppointment.startAt).toISOString().slice(0, 10);
-                            const isSelected = date === currentDate;
-                            return (
-                              <button
-                                key={date}
-                                type="button"
-                                role="gridcell"
-                                disabled={!isInCurrentMonth}
-                                aria-pressed={isSelected}
-                                aria-label={getDateLabel(date)}
-                                className={["month-day", !isInCurrentMonth ? "month-day--outside" : "", isSelected ? "month-day--focused" : ""].filter(Boolean).join(" ")}
-                                onClick={async () => {
-                                  if (!onUpdate) return;
-                                  setShowRescheduleDatePopover(false);
-                                  const current = new Date(selectedAppointment.startAt);
-                                  const timeStr = current.toTimeString().slice(0, 5);
-                                  setRescheduleSaveState("submitting"); setRescheduleErrorMessage("");
-                                  try {
-                                    const newStartsAt = new Date(`${date}T${timeStr}:00`).toISOString();
-                                    await onUpdate(selectedAppointment, { startsAt: newStartsAt, sendConfirmation: true });
-                                    setRescheduleSaveState("idle");
-                                  } catch (err) {
-                                    setRescheduleSaveState("error");
-                                    setRescheduleErrorMessage(err instanceof Error ? err.message : "Unable to reschedule.");
-                                  }
-                                }}
-                              >
-                                <span>{parseIsoDate(date).getUTCDate()}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
+                <div style={{ position: "relative" }} ref={datePickerContainerRef}>
                   <button
                     type="button"
-                    className="link-action"
+                    className="cs-btn cs-btn--sm"
                     disabled={rescheduleSaveState === "submitting"}
-                    onClick={() => setShowRescheduleTimeInput(true)}
+                    onClick={() => {
+                      setPickerMonth(monthAnchor(new Date(selectedAppointment.startAt).toISOString().slice(0, 10)));
+                      setShowRescheduleDatePopover((prev) => !prev);
+                    }}
+                    aria-expanded={showRescheduleDatePopover}
                   >
-                    Reschedule time
+                    Reschedule
                   </button>
-                  {onCancel ? (
-                    <button
-                      type="button"
-                      className="link-action link-action--danger"
-                      onClick={() => { if (window.confirm("Cancel this booking?")) { void onCancel(selectedAppointment); } }}
-                      disabled={completionState?.kind === "submitting" || rescheduleSaveState === "submitting"}
-                    >
-                      Cancel
-                    </button>
+                  {showRescheduleDatePopover ? (
+                    <div className="appointment-drawer-date-popover" style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 50 }}>
+                      <div className="month-rail__header">
+                        <h5>{monthLabelFormatter.format(parseIsoDate(pickerMonth))}</h5>
+                        <div className="month-rail__controls">
+                          <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, -1))}>Prev</button>
+                          <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, 1))}>Next</button>
+                        </div>
+                      </div>
+                      <div className="month-grid-labels" role="presentation">{monthDayLabel.map((label) => (<span key={label}>{label}</span>))}</div>
+                      <div className="month-grid" role="grid">
+                        {pickerGrid.map((date) => {
+                          const isInCurrentMonth = date.slice(0, 7) === pickerMonth.slice(0, 7);
+                          const currentDate = new Date(selectedAppointment.startAt).toISOString().slice(0, 10);
+                          const isSelected = date === currentDate;
+                          return (
+                            <button
+                              key={date}
+                              type="button"
+                              role="gridcell"
+                              disabled={!isInCurrentMonth}
+                              aria-pressed={isSelected}
+                              aria-label={getDateLabel(date)}
+                              className={["month-day", !isInCurrentMonth ? "month-day--outside" : "", isSelected ? "month-day--focused" : ""].filter(Boolean).join(" ")}
+                              onClick={async () => {
+                                if (!onUpdate) return;
+                                setShowRescheduleDatePopover(false);
+                                const current = new Date(selectedAppointment.startAt);
+                                const timeStr = current.toTimeString().slice(0, 5);
+                                setRescheduleSaveState("submitting"); setRescheduleErrorMessage("");
+                                try {
+                                  const newStartsAt = new Date(`${date}T${timeStr}:00`).toISOString();
+                                  await onUpdate(selectedAppointment, { startsAt: newStartsAt, sendConfirmation: true });
+                                  setRescheduleSaveState("idle");
+                                } catch (err) {
+                                  setRescheduleSaveState("error");
+                                  setRescheduleErrorMessage(err instanceof Error ? err.message : "Unable to reschedule.");
+                                }
+                              }}
+                            >
+                              <span>{parseIsoDate(date).getUTCDate()}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   ) : null}
                 </div>
               ) : null}
-              {rescheduleSaveState === "error" ? <p role="alert" className="settings-error">{rescheduleErrorMessage}</p> : null}
+              {isConfirmed ? (
+                <button type="button" className="cs-btn cs-btn--sm" disabled={rescheduleSaveState === "submitting"} onClick={() => setShowRescheduleTimeInput(true)}>Change time</button>
+              ) : null}
+              {isConfirmed ? (
+                <button type="button" className="cs-btn cs-btn--sm">Check in</button>
+              ) : null}
             </div>
           </div>
+          {rescheduleSaveState === "error" ? <p role="alert" className="settings-error">{rescheduleErrorMessage}</p> : null}
 
-          {/* Customer */}
-          <div className="booking-rail-section" aria-label="Customer details">
-            <p className="rail-section-kicker">Customer</p>
+          {/* Consent alert (pink) */}
+          {showConsentAlert ? (
+            <div className="cs-panel cs-panel--tint">
+              <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                <span className="cs-alert__icon" aria-hidden="true">!</span>
+                <span style={{ font: "700 13px var(--cs-font)", color: "var(--cs-ink)" }}>{consentTitle}</span>
+              </div>
+              <div style={{ font: "500 12px/1.6 var(--cs-font)", color: "rgba(20,17,15,.6)", marginTop: 8 }}>{consentBody}</div>
+              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                <button
+                  type="button"
+                  className="cs-btn cs-btn--primary"
+                  style={{ flex: "none", padding: "10px 16px", fontSize: 11 }}
+                  onClick={() => {
+                    const el = document.querySelector('[data-forms-panel="true"]');
+                    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                >
+                  Review form
+                </button>
+                {onSendFormReminder ? (
+                  <button
+                    type="button"
+                    className="cs-btn cs-btn--sm cs-btn--onTint"
+                    onClick={() => onSendFormReminder(selectedAppointment)}
+                    disabled={formReminderState?.kind === "sending"}
+                  >
+                    {formReminderState?.kind === "sending" ? "Sending…" : "Resend link"}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Client */}
+          <div>
+            <div className="cs-section__label">Client</div>
             {isEditingCustomerContact ? (
               <div className="customer-notes-editor">
                 <label style={{ display: "block", marginBottom: "0.5rem" }}><span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Name</span><input type="text" value={customerContactDraft.name} onChange={(e) => setCustomerContactDraft((d) => ({ ...d, name: e.target.value }))} disabled={customerContactSaveState === "submitting"} style={{ width: "100%" }} /></label>
                 <label style={{ display: "block", marginBottom: "0.5rem" }}><span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Email</span><input type="email" value={customerContactDraft.email} onChange={(e) => setCustomerContactDraft((d) => ({ ...d, email: e.target.value }))} disabled={customerContactSaveState === "submitting"} style={{ width: "100%" }} /></label>
                 <label style={{ display: "block", marginBottom: "0.5rem" }}><span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Phone</span><input type="tel" value={customerContactDraft.phone} onChange={(e) => setCustomerContactDraft((d) => ({ ...d, phone: e.target.value }))} disabled={customerContactSaveState === "submitting"} style={{ width: "100%" }} /></label>
                 <div className="customer-notes-editor__actions">
-                  <button type="button" className="text-action" onClick={() => { setIsEditingCustomerContact(false); setCustomerContactError(""); }} disabled={customerContactSaveState === "submitting"}>Cancel</button>
-                  <button type="button" className="primary-action" onClick={async () => { if (!onUpdateCustomerContact) return; if (!customerContactDraft.name.trim()) { setCustomerContactSaveState("error"); setCustomerContactError("Name is required."); return; } setCustomerContactSaveState("submitting"); setCustomerContactError(""); try { await onUpdateCustomerContact(selectedAppointment, { name: customerContactDraft.name.trim(), email: customerContactDraft.email.trim(), phone: customerContactDraft.phone.trim() }); setIsEditingCustomerContact(false); setCustomerContactSaveState("idle"); } catch (err) { setCustomerContactSaveState("error"); setCustomerContactError(err instanceof Error ? err.message : "Unable to save contact."); } }} disabled={customerContactSaveState === "submitting"}>{customerContactSaveState === "submitting" ? "Saving…" : "Save"}</button>
+                  <button type="button" className="cs-btn cs-btn--ghost" onClick={() => { setIsEditingCustomerContact(false); setCustomerContactError(""); }} disabled={customerContactSaveState === "submitting"}>Cancel</button>
+                  <button type="button" className="cs-btn cs-btn--primary" onClick={async () => { if (!onUpdateCustomerContact) return; if (!customerContactDraft.name.trim()) { setCustomerContactSaveState("error"); setCustomerContactError("Name is required."); return; } setCustomerContactSaveState("submitting"); setCustomerContactError(""); try { await onUpdateCustomerContact(selectedAppointment, { name: customerContactDraft.name.trim(), email: customerContactDraft.email.trim(), phone: customerContactDraft.phone.trim() }); setIsEditingCustomerContact(false); setCustomerContactSaveState("idle"); } catch (err) { setCustomerContactSaveState("error"); setCustomerContactError(err instanceof Error ? err.message : "Unable to save contact."); } }} disabled={customerContactSaveState === "submitting"}>{customerContactSaveState === "submitting" ? "Saving…" : "Save"}</button>
                 </div>
                 {customerContactSaveState === "error" ? <p role="alert" className="settings-error">{customerContactError}</p> : null}
               </div>
             ) : (
               <>
-                <div className="appointment-customer-card">
-                  <span className="appointment-customer-avatar" aria-hidden="true">{getInitials(selectedAppointment.customerName)}</span>
-                  <div>
-                    <button type="button" className="appointment-customer-name" onClick={() => { if (!onUpdateCustomerContact) return; setCustomerContactDraft({ name: selectedAppointment.customerName, email: selectedAppointment.customerEmail ?? "", phone: selectedAppointment.customerPhone ?? "" }); setIsEditingCustomerContact(true); }} title="Click to edit contact">
-                      {selectedAppointment.customerName}
-                    </button>
-                    {selectedAppointment.customerPhone ? <span className="appointment-customer-detail">{selectedAppointment.customerPhone}</span> : null}
-                    {selectedAppointment.customerEmail ? <span className="appointment-customer-detail">{selectedAppointment.customerEmail}</span> : null}
-                  </div>
-                </div>
-                <div className="appointment-customer-notes">
-                  {isEditingCustomerNotes ? (
-                    <div className="customer-notes-editor">
-                      <textarea value={customerNotesDraft} onChange={(e) => setCustomerNotesDraft(e.target.value)} rows={3} placeholder="Add notes about this client..." disabled={customerNotesSaveState === "submitting"} />
-                      <div className="customer-notes-editor__actions">
-                        <button type="button" className="text-action" onClick={() => { setIsEditingCustomerNotes(false); setCustomerNotesError(""); }} disabled={customerNotesSaveState === "submitting"}>Cancel</button>
-                        <button type="button" className="primary-action" onClick={async () => { if (!onUpdateCustomerNotes) return; setCustomerNotesSaveState("submitting"); setCustomerNotesError(""); try { await onUpdateCustomerNotes(selectedAppointment, customerNotesDraft); setIsEditingCustomerNotes(false); setCustomerNotesSaveState("idle"); } catch (err) { setCustomerNotesSaveState("error"); setCustomerNotesError(err instanceof Error ? err.message : "Unable to save notes."); } }} disabled={customerNotesSaveState === "submitting"}>{customerNotesSaveState === "submitting" ? "Saving…" : "Save"}</button>
-                      </div>
-                      {customerNotesSaveState === "error" ? <p role="alert" className="settings-error">{customerNotesError}</p> : null}
+                <div className="cs-clientrow">
+                  <span className="cs-clientrow__avatar" aria-hidden="true">
+                    {providerRecord?.imageUrl ? null : getInitials(selectedAppointment.customerName)}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="cs-clientrow__name">{selectedAppointment.customerName}</div>
+                    <div className="cs-clientrow__meta">
+                      {[selectedAppointment.customerPhone, selectedAppointment.customerEmail].filter(Boolean).join(" · ") || "No contact on file"}
                     </div>
-                  ) : (
+                  </div>
+                  {onUpdateCustomerContact ? (
                     <button
                       type="button"
-                      className="appointment-customer-notes-box"
-                      onClick={() => { setCustomerNotesDraft(selectedAppointment.customerNotes ?? ""); setIsEditingCustomerNotes(true); }}
+                      className="cs-btn cs-btn--sm"
+                      onClick={() => { setCustomerContactDraft({ name: selectedAppointment.customerName, email: selectedAppointment.customerEmail ?? "", phone: selectedAppointment.customerPhone ?? "" }); setIsEditingCustomerContact(true); }}
                     >
-                      {selectedAppointment.customerNotes || "Add a note…"}
+                      Profile
                     </button>
-                  )}
+                  ) : null}
                 </div>
+                {isEditingCustomerNotes ? (
+                  <div className="customer-notes-editor" style={{ marginTop: 12 }}>
+                    <textarea value={customerNotesDraft} onChange={(e) => setCustomerNotesDraft(e.target.value)} rows={3} placeholder="Add notes about this client..." disabled={customerNotesSaveState === "submitting"} />
+                    <div className="customer-notes-editor__actions">
+                      <button type="button" className="cs-btn cs-btn--ghost" onClick={() => { setIsEditingCustomerNotes(false); setCustomerNotesError(""); }} disabled={customerNotesSaveState === "submitting"}>Cancel</button>
+                      <button type="button" className="cs-btn cs-btn--primary" onClick={async () => { if (!onUpdateCustomerNotes) return; setCustomerNotesSaveState("submitting"); setCustomerNotesError(""); try { await onUpdateCustomerNotes(selectedAppointment, customerNotesDraft); setIsEditingCustomerNotes(false); setCustomerNotesSaveState("idle"); } catch (err) { setCustomerNotesSaveState("error"); setCustomerNotesError(err instanceof Error ? err.message : "Unable to save notes."); } }} disabled={customerNotesSaveState === "submitting"}>{customerNotesSaveState === "submitting" ? "Saving…" : "Save"}</button>
+                    </div>
+                    {customerNotesSaveState === "error" ? <p role="alert" className="settings-error">{customerNotesError}</p> : null}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="cs-note"
+                    style={{ marginTop: 12, width: "100%", border: 0, textAlign: "left", cursor: "pointer" }}
+                    onClick={() => { setCustomerNotesDraft(selectedAppointment.customerNotes ?? ""); setIsEditingCustomerNotes(true); }}
+                  >
+                    {selectedAppointment.customerNotes ? `"${selectedAppointment.customerNotes}"` : "Add a note…"}
+                  </button>
+                )}
               </>
             )}
           </div>
 
-          {/* Service */}
-          <div className="booking-rail-section" aria-label="Service details">
-            <p className="rail-section-kicker">Service</p>
-            <div className="appointment-summary-card">
-              <div className="appointment-field-list">
-                <div className="appointment-field-row"><span>Service</span><span>{selectedAppointment.serviceName}</span></div>
-                <div className="appointment-field-row"><span>Duration</span><span>{selectedAppointment.durationMinutes} min</span></div>
-                <div className="appointment-field-row">
-                  <span>Provider</span>
-                  <span className="appointment-field-row__provider">
-                    {(() => {
-                      const prov = providers.find((p) => p.id === selectedAppointment.providerId);
-                      return prov?.imageUrl ? <img className="pfp pfp--sm" src={prov.imageUrl} alt="" /> : null;
-                    })()}
-                    {selectedAppointment.providerName}
-                  </span>
-                </div>
-                <div className="appointment-field-row"><span>Price</span><span>{formatMoney(selectedAppointment.priceCents)}</span></div>
-              </div>
-            </div>
-          </div>
-
           {/* Payment */}
-          <div className="booking-rail-section" aria-label="Payment summary">
-            <p className="rail-section-kicker">Payment</p>
-            <div className="appointment-payment-summary">
-              <div className="appointment-payment-row"><span>Subtotal</span><span>{formatMoney(selectedAppointment.priceCents)}</span></div>
-              {selectedAppointment.taxCents > 0 ? <div className="appointment-payment-row"><span>Tax</span><span>{formatMoney(selectedAppointment.taxCents)}</span></div> : null}
-              {selectedAppointment.depositCents > 0 ? <div className="appointment-payment-row"><span>Deposit</span><span>{formatMoney(selectedAppointment.depositCents)}</span></div> : null}
-              <div className="appointment-payment-row"><span>Paid</span><span>{formatMoney(selectedAppointment.amountPaidCents)}</span></div>
-              {selectedAppointment.balanceDueCents > 0 ? <div className="appointment-payment-row appointment-payment-row--due"><span>Balance due</span><span>{formatMoney(selectedAppointment.balanceDueCents)}</span></div> : null}
+          <div>
+            <div className="cs-section__label">Payment</div>
+            <div className="cs-money"><span>{selectedAppointment.serviceName}</span><span>{formatMoney(selectedAppointment.priceCents)}</span></div>
+            {selectedAppointment.taxCents > 0 ? (
+              <div className="cs-money"><span>Tax</span><span>{formatMoney(selectedAppointment.taxCents)}</span></div>
+            ) : null}
+            {selectedAppointment.depositCents > 0 ? (
+              <div className="cs-money cs-money--credit"><span>Deposit paid</span><span>−{formatMoney(selectedAppointment.depositCents)}</span></div>
+            ) : null}
+            {selectedAppointment.amountPaidCents > 0 && selectedAppointment.amountPaidCents !== selectedAppointment.depositCents ? (
+              <div className="cs-money cs-money--credit"><span>Paid</span><span>−{formatMoney(selectedAppointment.amountPaidCents)}</span></div>
+            ) : null}
+            <div className="cs-money cs-money--total">
+              <span>{selectedAppointment.balanceDueCents > 0 ? "Due at checkout" : "Paid in full"}</span>
+              <span>{formatMoney(Math.max(0, selectedAppointment.balanceDueCents))}</span>
             </div>
           </div>
 
-          {/* Forms */}
-          <div className="booking-rail-section booking-rail-section--forms" aria-label="Intake forms">
+          {/* Forms panel — kept as operator tool for detailed review */}
+          <div data-forms-panel="true" className="booking-rail-section booking-rail-section--forms" aria-label="Intake forms">
             <FormResponsesPanel
               selectedAppointment={selectedAppointment}
               state={formResponsesState}
@@ -4347,22 +4299,44 @@ function AppointmentDetailsDrawer({
           </div>
         </div>
 
+        {/* Footer */}
         {showFooter ? (
-          <div className="appointment-drawer-footer">
-            <div className="appointment-drawer-footer__finalize">
-              {isCompleted || isNoShow ? (
-                <button type="button" className="primary-action" onClick={() => setDrawerView("checkout")}>View Sale</button>
-              ) : (
+          <div className="cs-drawer__foot">
+            <div className="cs-actions">
+              {isConfirmed ? (
                 <>
-                  <button type="button" className="primary-action" onClick={() => setDrawerView("checkout")} disabled={completionState?.kind === "submitting"}>Checkout</button>
-                  <button type="button" className="secondary-action" onClick={() => void onNoShow(selectedAppointment)} disabled={completionState?.kind === "submitting"}>{completionState?.kind === "submitting" ? "Saving..." : "No-show"}</button>
+                  <button
+                    type="button"
+                    className="cs-btn"
+                    onClick={() => { if (onCancel && window.confirm("Cancel this booking?")) void onCancel(selectedAppointment); }}
+                    disabled={!onCancel || completionState?.kind === "submitting"}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="cs-btn cs-btn--primary"
+                    onClick={() => setDrawerView("checkout")}
+                    disabled={completionState?.kind === "submitting"}
+                  >
+                    Complete & check out
+                  </button>
                 </>
+              ) : (
+                <button type="button" className="cs-btn cs-btn--primary" onClick={() => setDrawerView("checkout")}>View sale</button>
               )}
             </div>
+            {isConfirmed ? (
+              <div style={{ marginTop: 8, textAlign: "right" }}>
+                <button type="button" className="cs-btn cs-btn--ghost" style={{ padding: "6px 10px", fontSize: 11 }} onClick={() => void onNoShow(selectedAppointment)} disabled={completionState?.kind === "submitting"}>
+                  {completionState?.kind === "submitting" ? "Saving…" : "Mark no-show"}
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
         {completionState?.kind === "error" ? (
-          <div className="message-banner message-banner--error" role="alert">{completionState.message}</div>
+          <div className="message-banner message-banner--error" role="alert" style={{ margin: "0 24px 12px" }}>{completionState.message}</div>
         ) : null}
       </aside>
       {createPortal(
