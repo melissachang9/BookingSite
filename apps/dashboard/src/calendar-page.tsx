@@ -3284,14 +3284,30 @@ function SlotActionDrawer({
   const [mode, setMode] = useState<"appointment" | "time-block">("appointment");
   const [showDatePopover, setShowDatePopover] = useState(false);
   const [showTimeInput, setShowTimeInput] = useState(false);
+  const [manualNewClient, setManualNewClient] = useState(false);
+  const [showTreatmentMenu, setShowTreatmentMenu] = useState(false);
   const [pickerMonth, setPickerMonth] = useState<string>(monthAnchor(getUpcomingDate(1)));
   const pickerGrid = useMemo(() => buildMonthGrid(pickerMonth), [pickerMonth]);
   const datePickerContainerRef = useRef<HTMLDivElement | null>(null);
+  const treatmentMenuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     setMode("appointment");
     setShowDatePopover(false);
     setShowTimeInput(false);
+    setManualNewClient(false);
+    setShowTreatmentMenu(false);
   }, [slotKey]);
+  useEffect(() => {
+    if (!showTreatmentMenu) return;
+    const handler = (event: Event) => {
+      const target = event.target as Node;
+      if (treatmentMenuRef.current && !treatmentMenuRef.current.contains(target)) {
+        setShowTreatmentMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showTreatmentMenu]);
   useEffect(() => {
     if (!showDatePopover) return;
     const handler = (event: Event) => {
@@ -3351,74 +3367,126 @@ function SlotActionDrawer({
           {isAppointmentMode ? (
             <>
               {/* Client */}
-              <div>
-                <div className="cs-section__label">Client</div>
-                <input
-                  className="cs-input"
-                  placeholder="Search or add — type name"
-                  value={customer.firstName}
-                  onChange={(event) => onCustomerFieldChange("firstName", event.target.value)}
-                  autoComplete="off"
-                />
-                {(customerLookupState.kind === "ready" && customerLookupState.items.length > 0) || customer.firstName.trim().length > 0 ? (
-                  <div style={{ marginTop: 8, background: "var(--cs-canvas)", borderRadius: 20, padding: 6 }}>
-                    {customerLookupState.kind === "ready" ? (
-                      customerLookupState.items.slice(0, 4).map((lookupCustomer) => {
-                        const isSelected = combineCustomerName(customer.firstName, customer.lastName) === lookupCustomer.name;
-                        return (
+              {(() => {
+                const searchValue = customer.firstName;
+                const trimmedSearch = searchValue.trim();
+                const hasSearchQuery = trimmedSearch.length > 0;
+                const lookupReady = customerLookupState.kind === "ready";
+                const lookupItems = lookupReady ? customerLookupState.items : [];
+                const selectedCustomerName = combineCustomerName(customer.firstName, customer.lastName);
+                const hasSelectedExistingClient =
+                  lookupReady && lookupItems.some((item) => item.name === selectedCustomerName);
+                const noMatches = lookupReady && lookupItems.length === 0 && trimmedSearch.length >= 2;
+                const showNewClientFields =
+                  !hasSelectedExistingClient && (manualNewClient || noMatches);
+                return (
+                  <div>
+                    <div className="cs-section__label">Client</div>
+                    <input
+                      className="cs-input"
+                      placeholder="Search or add — type name"
+                      value={searchValue}
+                      onChange={(event) => {
+                        setManualNewClient(false);
+                        onCustomerFieldChange("firstName", event.target.value);
+                      }}
+                      autoComplete="off"
+                    />
+                    {hasSearchQuery && lookupItems.length > 0 ? (
+                      <div style={{ marginTop: 8, background: "var(--cs-canvas)", borderRadius: 20, padding: 6 }}>
+                        {lookupItems.slice(0, 4).map((lookupCustomer) => {
+                          const isSelected = selectedCustomerName === lookupCustomer.name;
+                          return (
+                            <button
+                              key={lookupCustomer.id}
+                              type="button"
+                              className={`cs-choice${isSelected ? " cs-choice--selected" : ""}`}
+                              onClick={() => {
+                                setManualNewClient(false);
+                                onApplyCustomer(lookupCustomer);
+                              }}
+                            >
+                              <span className="cs-choice__avatar" aria-hidden="true">{getInitials(lookupCustomer.name)}</span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div className="cs-choice__name">{lookupCustomer.name}</div>
+                                <div className="cs-choice__meta">{lookupCustomer.email ?? lookupCustomer.phone ?? "Client record"}</div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                        {!hasSelectedExistingClient && !manualNewClient ? (
                           <button
-                            key={lookupCustomer.id}
                             type="button"
-                            className={`cs-choice${isSelected ? " cs-choice--selected" : ""}`}
-                            onClick={() => onApplyCustomer(lookupCustomer)}
+                            className="cs-choice"
+                            onClick={() => setManualNewClient(true)}
                           >
-                            <span className="cs-choice__avatar" aria-hidden="true">{getInitials(lookupCustomer.name)}</span>
+                            <span className="cs-choice__avatar cs-choice__avatar--new" aria-hidden="true">+</span>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div className="cs-choice__name">{lookupCustomer.name}</div>
-                              <div className="cs-choice__meta">{lookupCustomer.email ?? lookupCustomer.phone ?? "Client record"}</div>
+                              <div className="cs-choice__name">New client</div>
+                              <div className="cs-choice__meta">Fill in name, phone, and email below</div>
                             </div>
                           </button>
-                        );
-                      })
-                    ) : null}
-                    <div className="cs-choice" style={{ cursor: "default" }}>
-                      <span className="cs-choice__avatar cs-choice__avatar--new" aria-hidden="true">+</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="cs-choice__name">New client</div>
-                        <div className="cs-choice__meta">Fill in name, phone, and email below</div>
+                        ) : null}
                       </div>
-                    </div>
+                    ) : null}
+                    {customerLookupState.kind === "loading" ? (
+                      <div className="slot-customer-lookup-note" role="status" style={{ marginTop: 8 }}>Searching clients…</div>
+                    ) : null}
+                    {customerLookupState.kind === "error" ? (
+                      <div className="message-banner message-banner--error" role="alert" style={{ marginTop: 8 }}>{customerLookupState.message}</div>
+                    ) : null}
+
+                    {showNewClientFields ? (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+                        <input className="cs-input" placeholder="Last name" value={customer.lastName} onChange={(event) => onCustomerFieldChange("lastName", event.target.value)} autoComplete="off" />
+                        <input className="cs-input" placeholder="Phone" value={customer.phone} onChange={(event) => onCustomerFieldChange("phone", event.target.value)} inputMode="tel" autoComplete="tel" />
+                        <input className="cs-input" placeholder="Email" value={customer.email} onChange={(event) => onCustomerFieldChange("email", event.target.value)} inputMode="email" autoComplete="email" style={{ gridColumn: "span 2" }} />
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
-                {customerLookupState.kind === "loading" ? <div className="slot-customer-lookup-note" role="status">Searching clients…</div> : null}
-                {customerLookupState.kind === "error" ? (
-                  <div className="message-banner message-banner--error" role="alert" style={{ marginTop: 8 }}>{customerLookupState.message}</div>
-                ) : null}
+                );
+              })()}
 
-                <div className="cs-slot-fields" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
-                  <input className="cs-input" placeholder="Last name" value={customer.lastName} onChange={(event) => onCustomerFieldChange("lastName", event.target.value)} autoComplete="off" />
-                  <input className="cs-input" placeholder="Phone" value={customer.phone} onChange={(event) => onCustomerFieldChange("phone", event.target.value)} inputMode="tel" autoComplete="tel" />
-                  <input className="cs-input" placeholder="Email" value={customer.email} onChange={(event) => onCustomerFieldChange("email", event.target.value)} inputMode="email" autoComplete="email" style={{ gridColumn: "span 2" }} />
-                </div>
-              </div>
-
-              {/* Treatment (dropdown) */}
+              {/* Treatment (custom dropdown with sage-green active state) */}
               <div>
                 <div className="cs-section__label">Treatment</div>
-                <div className="cs-input cs-input--select">
-                  <select
-                    value={selectedServiceId ?? ""}
-                    onChange={(event) => onSelectService(event.target.value)}
+                <div className="cs-select-wrap" ref={treatmentMenuRef}>
+                  <button
+                    type="button"
+                    className={`cs-select-trigger${selectedService ? " cs-select-trigger--active" : ""}`}
+                    onClick={() => setShowTreatmentMenu((prev) => !prev)}
                     disabled={serviceOptions.length === 0}
+                    aria-haspopup="listbox"
+                    aria-expanded={showTreatmentMenu}
                     aria-label="Treatment"
                   >
-                    {serviceOptions.length === 0 ? <option value="">No appointment types available</option> : null}
-                    {selectedServiceId === null ? <option value="">Choose a treatment…</option> : null}
-                    {serviceOptions.map((service) => (
-                      <option key={service.id} value={service.id}>{service.name}</option>
-                    ))}
-                  </select>
-                  <span className="cs-input__chevron" aria-hidden="true">▾</span>
+                    <span className="cs-select-trigger__label">
+                      {selectedService?.name ?? (serviceOptions.length === 0 ? "No appointment types available" : "Choose a treatment…")}
+                    </span>
+                    <span className="cs-select-trigger__chevron" aria-hidden="true">▾</span>
+                  </button>
+                  {showTreatmentMenu && serviceOptions.length > 0 ? (
+                    <div className="cs-select-menu" role="listbox">
+                      {serviceOptions.map((service) => {
+                        const isSelected = service.id === selectedServiceId;
+                        return (
+                          <button
+                            key={service.id}
+                            type="button"
+                            role="option"
+                            aria-selected={isSelected}
+                            className={`cs-select-option${isSelected ? " cs-select-option--selected" : ""}`}
+                            onClick={() => {
+                              onSelectService(service.id);
+                              setShowTreatmentMenu(false);
+                            }}
+                          >
+                            {service.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 12 }}>
@@ -3451,8 +3519,11 @@ function SlotActionDrawer({
 
               {/* Alerts */}
               {selectedServiceId !== null && !isSlotAvailableForService ? (
-                <div className="message-banner message-banner--warning" role="alert">
-                  {selectedSlot.providerName ?? "This provider"} is not usually available for {selectedService?.name ?? "the selected service"} at this time. You can still book it, but you'll be asked to confirm the override.
+                <div className="cs-panel cs-panel--peach cs-alert" role="alert">
+                  <span className="cs-alert__icon" aria-hidden="true">!</span>
+                  <div className="cs-alert__body">
+                    {selectedSlot.providerName ?? "This provider"} is not usually available for {selectedService?.name ?? "the selected service"} at this time. You can still book it, but you'll be asked to confirm the override.
+                  </div>
                 </div>
               ) : null}
               {draftCreationState.kind === "error" ? (

@@ -545,6 +545,13 @@
 .cs-panel { background: var(--cs-canvas); border-radius: var(--cs-r-inner); padding: 16px 18px; }
 .cs-panel--tint { background: var(--cs-pink); }
 .cs-panel--credit { background: var(--cs-mint); }
+.cs-panel--peach { background: var(--cs-peach); }
+
+/* Alert row layout used inside .cs-panel--tint / .cs-panel--peach */
+.cs-alert { display: flex; gap: 10px; align-items: flex-start; }
+.cs-alert__body {
+  font: 500 12px/1.55 var(--cs-font); color: var(--cs-ink); flex: 1;
+}
 .cs-note {
   background: var(--cs-canvas); border-radius: 18px; padding: 14px 16px;
   font: 500 12px/1.7 var(--cs-font); color: rgba(20, 17, 15, .7); font-style: italic;
@@ -585,6 +592,49 @@ textarea.cs-input, input.cs-input {
 .cs-input__chevron {
   position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
   font-size: 12px; color: var(--cs-label); pointer-events: none;
+}
+
+/* Custom dropdown (treatment picker) — uses .cs-choice-like affordance
+   with sage-green active/selected state to match design contract. */
+.cs-select-wrap { position: relative; }
+.cs-select-trigger {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; padding: 12px 18px;
+  background: var(--cs-canvas); color: var(--cs-ink);
+  border: 0; border-radius: var(--cs-r-16);
+  font: 500 13px var(--cs-font); cursor: pointer; text-align: left;
+}
+.cs-select-trigger:hover:not(:disabled) { background: var(--cs-hover); }
+.cs-select-trigger:disabled { color: var(--cs-label); cursor: not-allowed; }
+.cs-select-trigger--active,
+.cs-select-trigger--active:hover:not(:disabled) {
+  background: var(--cs-mint); color: var(--cs-ink); font-weight: 700;
+}
+.cs-select-trigger__label {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cs-select-trigger__chevron {
+  font-size: 12px; color: var(--cs-label); flex: none;
+}
+.cs-select-trigger--active .cs-select-trigger__chevron { color: var(--cs-ink); }
+
+.cs-select-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+  background: var(--cs-surface); border-radius: var(--cs-r-16);
+  padding: 6px;
+  box-shadow: 0 18px 44px rgba(20, 17, 15, .14), 0 0 0 1px rgba(20, 17, 15, .04);
+  z-index: 40; max-height: 280px; overflow-y: auto;
+}
+.cs-select-option {
+  display: block; width: 100%; text-align: left;
+  padding: 10px 14px; border: 0; background: none; border-radius: 12px;
+  font: 500 13px var(--cs-font); color: var(--cs-ink); cursor: pointer;
+}
+.cs-select-option:hover { background: var(--cs-hover); }
+.cs-select-option--selected,
+.cs-select-option--selected:hover {
+  background: var(--cs-mint); font-weight: 700;
 }
 
 /* editable note variant */
