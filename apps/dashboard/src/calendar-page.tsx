@@ -3376,23 +3376,43 @@ function SlotActionDrawer({
                 const selectedCustomerName = combineCustomerName(customer.firstName, customer.lastName);
                 const hasSelectedExistingClient =
                   lookupReady && lookupItems.some((item) => item.name === selectedCustomerName);
-                const noMatches = lookupReady && lookupItems.length === 0 && trimmedSearch.length >= 2;
-                const showNewClientFields =
-                  !hasSelectedExistingClient && (manualNewClient || noMatches);
+                const showEmptyState = lookupReady && lookupItems.length === 0 && trimmedSearch.length >= 2;
+                if (manualNewClient) {
+                  return (
+                    <div>
+                      <div className="cs-section__label">Add new client</div>
+                      <div className="cs-panel" style={{ padding: 14 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                          <div style={{ fontWeight: 600, fontSize: 12, color: "var(--cs-ink)" }}>Client details</div>
+                          <button
+                            type="button"
+                            className="cs-btn cs-btn--sm cs-btn--ghost"
+                            onClick={() => setManualNewClient(false)}
+                          >
+                            Back to search
+                          </button>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                          <input className="cs-input" placeholder="First name" value={customer.firstName} onChange={(event) => onCustomerFieldChange("firstName", event.target.value)} autoComplete="off" />
+                          <input className="cs-input" placeholder="Last name" value={customer.lastName} onChange={(event) => onCustomerFieldChange("lastName", event.target.value)} autoComplete="off" />
+                          <input className="cs-input" placeholder="Phone" value={customer.phone} onChange={(event) => onCustomerFieldChange("phone", event.target.value)} inputMode="tel" autoComplete="tel" />
+                          <input className="cs-input" placeholder="Email" value={customer.email} onChange={(event) => onCustomerFieldChange("email", event.target.value)} inputMode="email" autoComplete="email" />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
                 return (
                   <div>
                     <div className="cs-section__label">Client</div>
                     <input
                       className="cs-input"
-                      placeholder="Search or add — type name"
+                      placeholder="Search clients — type a name"
                       value={searchValue}
-                      onChange={(event) => {
-                        setManualNewClient(false);
-                        onCustomerFieldChange("firstName", event.target.value);
-                      }}
+                      onChange={(event) => onCustomerFieldChange("firstName", event.target.value)}
                       autoComplete="off"
                     />
-                    {hasSearchQuery && lookupItems.length > 0 ? (
+                    {hasSearchQuery ? (
                       <div style={{ marginTop: 8, background: "var(--cs-canvas)", borderRadius: 20, padding: 6 }}>
                         {lookupItems.slice(0, 4).map((lookupCustomer) => {
                           const isSelected = selectedCustomerName === lookupCustomer.name;
@@ -3401,10 +3421,7 @@ function SlotActionDrawer({
                               key={lookupCustomer.id}
                               type="button"
                               className={`cs-choice${isSelected ? " cs-choice--selected" : ""}`}
-                              onClick={() => {
-                                setManualNewClient(false);
-                                onApplyCustomer(lookupCustomer);
-                              }}
+                              onClick={() => onApplyCustomer(lookupCustomer)}
                             >
                               <span className="cs-choice__avatar" aria-hidden="true">{getInitials(lookupCustomer.name)}</span>
                               <div style={{ flex: 1, minWidth: 0 }}>
@@ -3414,7 +3431,14 @@ function SlotActionDrawer({
                             </button>
                           );
                         })}
-                        {!hasSelectedExistingClient && !manualNewClient ? (
+                        {showEmptyState ? (
+                          <div className="cs-choice" style={{ cursor: "default" }} aria-live="polite">
+                            <div style={{ flex: 1, minWidth: 0, padding: "2px 6px" }}>
+                              <div className="cs-choice__meta">No clients match &ldquo;{trimmedSearch}&rdquo;.</div>
+                            </div>
+                          </div>
+                        ) : null}
+                        {!hasSelectedExistingClient ? (
                           <button
                             type="button"
                             className="cs-choice"
@@ -3422,8 +3446,8 @@ function SlotActionDrawer({
                           >
                             <span className="cs-choice__avatar cs-choice__avatar--new" aria-hidden="true">+</span>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div className="cs-choice__name">New client</div>
-                              <div className="cs-choice__meta">Fill in name, phone, and email below</div>
+                              <div className="cs-choice__name">Add new client</div>
+                              <div className="cs-choice__meta">Enter name, phone, and email</div>
                             </div>
                           </button>
                         ) : null}
@@ -3434,14 +3458,6 @@ function SlotActionDrawer({
                     ) : null}
                     {customerLookupState.kind === "error" ? (
                       <div className="message-banner message-banner--error" role="alert" style={{ marginTop: 8 }}>{customerLookupState.message}</div>
-                    ) : null}
-
-                    {showNewClientFields ? (
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
-                        <input className="cs-input" placeholder="Last name" value={customer.lastName} onChange={(event) => onCustomerFieldChange("lastName", event.target.value)} autoComplete="off" />
-                        <input className="cs-input" placeholder="Phone" value={customer.phone} onChange={(event) => onCustomerFieldChange("phone", event.target.value)} inputMode="tel" autoComplete="tel" />
-                        <input className="cs-input" placeholder="Email" value={customer.email} onChange={(event) => onCustomerFieldChange("email", event.target.value)} inputMode="email" autoComplete="email" style={{ gridColumn: "span 2" }} />
-                      </div>
                     ) : null}
                   </div>
                 );
