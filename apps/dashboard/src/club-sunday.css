@@ -57,14 +57,14 @@
   --cs-menu-shadow: 0 12px 40px rgba(20, 17, 15, .14);
 
   /* time scale — week and day differ */
-  --cs-row-h:       64px;
+  --cs-row-h:       72px;
   --cs-hours:       9;
   --cs-gutter:      88px;
   --cs-chip-inset:  3px;
   --cs-chip-r:      var(--cs-r-14);
   --cs-chip-pad:    8px 10px;
 
-  --cs-sidebar-w: 244px;
+  --cs-sidebar-w: 260px;
   --cs-drawer-w:  440px;
 
   --cs-font: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
@@ -110,13 +110,13 @@
 .cs-nav { display: flex; flex-direction: column; gap: 4px; }
 .cs-nav__item {
   display: flex; align-items: center; gap: 12px;
-  padding: 12px 14px; border-radius: var(--cs-r-14);
-  font: 500 13px var(--cs-font); color: rgba(20, 17, 15, .6);
+  padding: 13px 14px; border-radius: var(--cs-r-14);
+  font: 500 14px var(--cs-font); color: rgba(20, 17, 15, .6);
   text-decoration: none; cursor: pointer; border: 0; background: none; text-align: left;
 }
 .cs-nav__item:hover { background: var(--cs-hover); color: var(--cs-ink); }
 .cs-nav__item--active { background: var(--cs-peach); color: var(--cs-ink); font-weight: 600; }
-.cs-nav__item svg { width: 18px; height: 18px; flex: none; }
+.cs-nav__item svg { width: 19px; height: 19px; flex: none; }
 .cs-nav__label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cs-nav__count {
   margin-left: auto; font: 700 10px var(--cs-font);
@@ -126,7 +126,7 @@
 
 .cs-minical { background: var(--cs-canvas); border-radius: var(--cs-r-inner); padding: 16px 14px; margin-top: 22px; }
 .cs-minical__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.cs-minical__month { font: 700 13px var(--cs-font); letter-spacing: -.01em; }
+.cs-minical__month { font: 700 14px var(--cs-font); letter-spacing: -.01em; }
 .cs-minical__nav { display: flex; gap: 4px; }
 .cs-minical__nav button {
   width: 22px; height: 22px; border: 0; cursor: pointer; border-radius: var(--cs-r-pill);
@@ -135,8 +135,8 @@
 }
 .cs-minical__nav button:hover { background: var(--cs-grey); color: var(--cs-ink); }
 .cs-minical__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
-.cs-minical__dow { font: 600 10px var(--cs-font); color: var(--cs-label); padding: 4px 0; }
-.cs-minical__day { font: 500 11px var(--cs-font); color: var(--cs-ink); padding: 6px 0; border: 0; background: none; cursor: pointer; }
+.cs-minical__dow { font: 600 11px var(--cs-font); color: var(--cs-label); padding: 4px 0; }
+.cs-minical__day { font: 500 12px var(--cs-font); color: var(--cs-ink); padding: 7px 0; border: 0; background: none; cursor: pointer; }
 .cs-minical__day--out { color: rgba(20, 17, 15, .38); }
 .cs-minical__day--inweek { background: var(--cs-peach); font-weight: 600; }
 .cs-minical__day--today { background: var(--cs-ink); color: #fff; font-weight: 700; border-radius: 8px; }
@@ -155,9 +155,9 @@
 
 /* ------------------------------------------------------------------ main - */
 .cs-main {
-  padding: 18px;
+  padding: 12px 18px 18px;
   background: var(--cs-canvas);
-  display: flex; flex-direction: column; gap: 14px;
+  display: flex; flex-direction: column; gap: 10px;
   min-width: 0;
 }
 .cs-main > * { min-width: 0; }
@@ -190,45 +190,57 @@
 /* --------------------------------------------------------------- toolbar - */
 .cs-toolbar {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 14px; flex-wrap: wrap; row-gap: 12px; margin-bottom: 14px;
+  gap: 14px; flex-wrap: wrap; row-gap: 12px; margin-bottom: 6px;
 }
-.cs-toolbar__title-group { display: flex; align-items: center; gap: 10px; }
-.cs-range { font: 800 20px var(--cs-font); letter-spacing: -.035em; color: var(--cs-ink); white-space: nowrap; }
+.cs-toolbar__title-group { display: flex; align-items: center; gap: 12px; }
+.cs-range { font: 800 24px var(--cs-font); letter-spacing: -.035em; color: var(--cs-ink); white-space: nowrap; }
 .cs-todaytag {
   background: var(--cs-peach); border-radius: var(--cs-r-pill);
   padding: 5px 12px; font: 600 11px var(--cs-font); color: var(--cs-ink);
 }
 .cs-stepper { display: flex; align-items: center; gap: 6px; }
 .cs-stepper button {
-  width: 32px; height: 32px; border: 0; cursor: pointer; border-radius: var(--cs-r-pill);
-  background: var(--cs-surface); color: var(--cs-label); font: 500 13px var(--cs-font);
+  width: 36px; height: 36px; border: 0; cursor: pointer; border-radius: var(--cs-r-pill);
+  background: var(--cs-surface); color: var(--cs-label); font: 500 15px var(--cs-font);
   display: flex; align-items: center; justify-content: center;
 }
 .cs-stepper button:hover { background: var(--cs-grey); color: var(--cs-ink); }
-.cs-stepper .cs-today { width: auto; padding: 8px 16px; font: 600 12px var(--cs-font); color: var(--cs-ink); }
+.cs-stepper .cs-today { width: auto; padding: 9px 18px; font: 600 13px var(--cs-font); color: var(--cs-ink); }
 .cs-toolbar__controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 .cs-select {
   position: relative; /* positioning context for the invisible <select> overlay */
   display: flex; align-items: center; gap: 8px;
   background: var(--cs-surface); border: 0; border-radius: var(--cs-r-pill);
-  padding: 11px 16px 11px 20px; cursor: pointer; white-space: nowrap;
+  padding: 12px 18px 12px 22px; cursor: pointer; white-space: nowrap;
 }
 .cs-select:hover { background: var(--cs-hover); }
-.cs-select--ink { background: var(--cs-ink); }
+.cs-select--ink { background: var(--cs-ink); color: #fff; padding: 10px 10px 10px 22px; }
+.cs-select--ink:hover { background: var(--cs-ink-hover); }
 .cs-select--ink .cs-select__value { color: #fff; }
 .cs-select--ink .cs-select__meta,
 .cs-select--ink .cs-select__caret { color: rgba(255, 255, 255, .6); }
-.cs-select__label { font: 700 10px var(--cs-font); letter-spacing: .1em; text-transform: uppercase; color: var(--cs-label); }
-.cs-select__value { font: 600 12px var(--cs-font); color: var(--cs-ink); }
-.cs-select__meta  { font: 500 11px var(--cs-font); color: var(--cs-label); }
-.cs-select__caret { font-size: 10px; color: var(--cs-label); margin-left: auto; }
+.cs-select__label { font: 700 11px var(--cs-font); letter-spacing: .1em; text-transform: uppercase; color: var(--cs-label); }
+.cs-select__value { font: 600 13px var(--cs-font); color: var(--cs-ink); }
+.cs-select__meta  { font: 500 12px var(--cs-font); color: var(--cs-label); }
+.cs-select__caret { font-size: 11px; color: var(--cs-label); margin-left: auto; }
+/* Staff-count badge and "+" affordance on the ink pill trigger */
+.cs-staff-count {
+  font: 600 12px var(--cs-font); color: rgba(255, 255, 255, .72);
+  margin-left: 4px;
+}
+.cs-select__plus {
+  width: 24px; height: 24px; margin-left: 6px; border-radius: var(--cs-r-pill);
+  background: rgba(255, 255, 255, .16); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 500 15px var(--cs-font); line-height: 1;
+}
 
 .cs-viewswitch { display: flex; background: var(--cs-surface); border-radius: var(--cs-r-pill); padding: 5px; }
 .cs-viewswitch button {
   border: 0; cursor: pointer; background: none;
-  padding: 7px 16px; border-radius: var(--cs-r-pill);
-  font: 600 11px var(--cs-font); color: rgba(20, 17, 15, .55);
+  padding: 8px 18px; border-radius: var(--cs-r-pill);
+  font: 600 13px var(--cs-font); color: rgba(20, 17, 15, .55);
 }
 .cs-viewswitch button:hover { background: var(--cs-hover); color: var(--cs-ink); }
 .cs-viewswitch button[aria-pressed="true"] { background: var(--cs-ink); color: #fff; }
@@ -237,14 +249,14 @@
 .cs-cta {
   display: flex; align-items: center; gap: 10px;
   background: var(--cs-ink); color: #fff; border: 0; cursor: pointer;
-  border-radius: var(--cs-r-pill); padding: 10px 10px 10px 20px;
-  font: 600 12px var(--cs-font); white-space: nowrap;
+  border-radius: var(--cs-r-pill); padding: 11px 12px 11px 22px;
+  font: 600 13px var(--cs-font); white-space: nowrap;
 }
 .cs-cta:hover { background: var(--cs-ink-hover); }
 .cs-cta__plus {
-  width: 24px; height: 24px; border-radius: var(--cs-r-pill);
+  width: 26px; height: 26px; border-radius: var(--cs-r-pill);
   background: rgba(255, 255, 255, .16);
-  display: flex; align-items: center; justify-content: center; font-size: 12px;
+  display: flex; align-items: center; justify-content: center; font-size: 13px;
 }
 
 /* ============================================================ THE BOARD ===
@@ -270,24 +282,24 @@
 }
 
 /* week day headers */
-.cs-daylabel { padding: 16px 6px 12px; text-align: center; min-width: 0; }
+.cs-daylabel { padding: 10px 6px 10px; text-align: center; min-width: 0; }
 .cs-daylabel__dow {
-  font: 600 10px var(--cs-font); letter-spacing: .1em;
+  font: 600 12px var(--cs-font); letter-spacing: .1em;
   text-transform: uppercase; color: var(--cs-label);
 }
-.cs-daylabel__date { font: 700 19px var(--cs-font); letter-spacing: -.03em; color: var(--cs-ink); margin-top: 4px; }
+.cs-daylabel__date { font: 700 23px var(--cs-font); letter-spacing: -.03em; color: var(--cs-ink); margin-top: 4px; }
 .cs-daylabel--today .cs-daylabel__dow { color: var(--cs-secondary); }
 .cs-daylabel--today .cs-daylabel__date {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px; border-radius: var(--cs-r-pill);
-  background: var(--cs-ink); color: #fff; font-size: 17px; margin-top: 2px;
+  width: 38px; height: 38px; border-radius: var(--cs-r-pill);
+  background: var(--cs-ink); color: #fff; font-size: 19px; margin-top: 2px;
 }
 
 /* time gutter */
 .cs-gutter { min-width: 0; }
 .cs-gutter__hour {
   height: var(--cs-row-h); padding-right: 14px; text-align: right;
-  font: 600 11px var(--cs-font); color: var(--cs-label);
+  font: 600 12px var(--cs-font); color: var(--cs-label);
 }
 
 /* --- day column: the positioning context --------------------------------- */
@@ -348,15 +360,15 @@
 .cs-chip:hover { filter: brightness(.97); }
 .cs-chip:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--cs-ink); }
 
-.cs-chip__time { font: 700 10px var(--cs-font); color: var(--cs-secondary); display: block; }
+.cs-chip__time { font: 700 11px var(--cs-font); color: var(--cs-secondary); display: block; }
 .cs-chip__client {
   display: block;
-  font: 600 12px var(--cs-font); color: var(--cs-ink); margin-top: 2px;
+  font: 600 13px var(--cs-font); color: var(--cs-ink); margin-top: 2px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .cs-chip__treatment {
   display: block;
-  font: 500 10px var(--cs-font); color: var(--cs-secondary);
+  font: 500 11px var(--cs-font); color: var(--cs-secondary);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .cs-chip__badge {
@@ -445,7 +457,7 @@
    component; above 6 providers add .cs-board--scroll so this ONE grid scrolls. */
 .cs-board--day {
   --provider-count: 3;
-  --cs-row-h: 72px;
+  --cs-row-h: 80px;
   --cs-hours: 7;
   --cs-gutter: 76px;
   --cs-chip-inset: 4px;

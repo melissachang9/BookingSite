@@ -222,9 +222,9 @@ select:disabled {
 /* Search bar in topbar (calendar route) */
 .ops-topbar-search {
   display: flex; align-items: center; gap: 8px;
-  background: var(--ui-sand); border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-pill); padding: 8px 14px; color: var(--ui-muted);
-  min-width: 280px;
+  background: var(--ui-sand); border: 0;
+  border-radius: 999px; padding: 9px 18px; color: var(--ui-muted);
+  min-width: 300px;
 }
 .ops-topbar-search input {
   border: none; background: transparent; outline: none; color: var(--ui-ink); width: 100%; font-size: 13px;

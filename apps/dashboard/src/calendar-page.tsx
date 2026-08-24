@@ -287,8 +287,8 @@ const nowTimeFormatter = new Intl.DateTimeFormat("en-US", {
 });
 
 const SCHEDULE_MIN_VISIBLE_HOURS = 8;
-const SCHEDULE_HOUR_HEIGHT_PX = 64;         // week view; must match --cs-row-h default
-const SCHEDULE_DAY_HOUR_HEIGHT_PX = 72;     // day view; must match .cs-board--day --cs-row-h
+const SCHEDULE_HOUR_HEIGHT_PX = 72;         // week view; must match --cs-row-h default
+const SCHEDULE_DAY_HOUR_HEIGHT_PX = 80;     // day view; must match .cs-board--day --cs-row-h
 const SCHEDULE_CHIP_GAP_PX = 4;             // STRUCTURE.md §1: 4px breath between stacked chips
 const SCHEDULE_QUARTER_HEIGHT_PX = SCHEDULE_HOUR_HEIGHT_PX / 4;
 const SCHEDULE_MIN_EVENT_HEIGHT_PX = 26;
@@ -795,6 +795,7 @@ export function CalendarPage({
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [selectedWeekProviderId, setSelectedWeekProviderId] = useState<string | null>(null);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const [availMenuOpen, setAvailMenuOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<PendingCalendarSlot | null>(null);
   const [selectedSlotServiceId, setSelectedSlotServiceId] = useState<string | null>(null);
   const [selectedSlotNotes, setSelectedSlotNotes] = useState("");
@@ -853,6 +854,17 @@ export function CalendarPage({
     document.addEventListener("click", handler, true);
     return () => document.removeEventListener("click", handler, true);
   }, [contextMenuOpen]);
+
+  // Close availability filter menu on outside click
+  useEffect(() => {
+    if (!availMenuOpen) return;
+    const handler = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".avail-context")) setAvailMenuOpen(false);
+    };
+    document.addEventListener("click", handler, true);
+    return () => document.removeEventListener("click", handler, true);
+  }, [availMenuOpen]);
 
   const selectedAppointment = useMemo<SelectedCalendarAppointment | null>(() => {
     if (calendarState.kind !== "ready" || selectedAppointmentId === null) {
@@ -1277,6 +1289,21 @@ export function CalendarPage({
   const selectedWeekProvider = useMemo(
     () => weekProviderOptions.find((provider) => provider.id === selectedWeekProviderId) ?? null,
     [selectedWeekProviderId, weekProviderOptions],
+  );
+
+  // Per-provider appointment counts across the current view (for filter badges).
+  const providerAppointmentCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const day of viewDays) {
+      for (const appointment of day.appointments) {
+        map.set(appointment.providerId, (map.get(appointment.providerId) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [viewDays]);
+  const totalProviderAppointmentCount = useMemo(
+    () => Array.from(providerAppointmentCounts.values()).reduce((sum, n) => sum + n, 0),
+    [providerAppointmentCounts],
   );
 
   useEffect(() => {
@@ -1985,53 +2012,102 @@ export function CalendarPage({
 
           <div className="cs-toolbar__controls">
             {calendarState.kind === "ready" && calendarState.services.length > 0 ? (
-              <label className="cs-select">
-                <span className="cs-select__label">Availability for</span>
-                <span className="cs-select__value">
-                  {selectedServiceId
-                    ? calendarState.services.find((s) => s.id === selectedServiceId)?.name ?? "Any service"
-                    : "Any service"}
-                </span>
-                <span className="cs-select__caret" aria-hidden="true">▾</span>
-                <select
-                  value={selectedServiceId ?? ""}
-                  onChange={(event) => setSelectedServiceId(event.target.value || null)}
-                  aria-label="Availability for"
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    opacity: 0,
-                    cursor: "pointer",
-                  }}
-                >
-                  <option value="">Any service</option>
-                  {calendarState.services.map((service) => (
-                    <option key={service.id} value={service.id}>
-                      {service.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-
-            {viewMode === "week" && weekProviderOptions.length > 0 ? (
-              <div style={{ position: "relative" }}>
+              <div className="avail-context" style={{ position: "relative" }}>
                 <button
                   type="button"
                   className="cs-select"
-                  onClick={() => setContextMenuOpen((prev) => !prev)}
-                  aria-expanded={contextMenuOpen}
+                  onClick={() => setAvailMenuOpen((prev) => !prev)}
+                  aria-expanded={availMenuOpen}
+                  aria-label="Availability for"
                 >
-                  <span className="cs-select__label">Provider</span>
+                  <span className="cs-select__label">Availability for</span>
                   <span className="cs-select__value">
-                    {selectedWeekProviderId
-                      ? weekProviderOptions.find((x) => x.id === selectedWeekProviderId)?.name ?? "All providers"
-                      : "All providers"}
+                    {selectedServiceId
+                      ? calendarState.services.find((s) => s.id === selectedServiceId)?.name ?? "Any service"
+                      : "Any service"}
                   </span>
                   <span className="cs-select__caret" aria-hidden="true">▾</span>
                 </button>
+                {availMenuOpen ? (
+                  <div
+                    className="cs-menu"
+                    role="menu"
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      left: 0,
+                      zIndex: 40,
+                      minWidth: 280,
+                    }}
+                  >
+                    <div className="cs-menu__label">Availability for</div>
+                    <button
+                      type="button"
+                      className={`cs-menu__item${!selectedServiceId ? " cs-menu__item--selected" : ""}`}
+                      role="menuitemradio"
+                      aria-checked={!selectedServiceId}
+                      onClick={() => { setSelectedServiceId(null); setAvailMenuOpen(false); }}
+                    >
+                      <span>Any service</span>
+                    </button>
+                    <div className="cs-menu__rule" aria-hidden="true" />
+                    {calendarState.services.map((service) => {
+                      const checked = selectedServiceId === service.id;
+                      return (
+                        <button
+                          key={service.id}
+                          type="button"
+                          className={`cs-menu__item${checked ? " cs-menu__item--selected" : ""}`}
+                          role="menuitemradio"
+                          aria-checked={checked}
+                          onClick={() => { setSelectedServiceId(service.id); setAvailMenuOpen(false); }}
+                        >
+                          <span
+                            className="cs-menu__swatch"
+                            style={{ background: swatchForService(service.name, null) }}
+                            aria-hidden="true"
+                          />
+                          <span>{service.name}</span>
+                          <span className="cs-menu__count">{service.durationMinutes}m</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {viewMode === "week" && weekProviderOptions.length > 0 ? (
+              <div className="context" style={{ position: "relative" }}>
+                <button
+                  type="button"
+                  className="cs-select cs-select--ink"
+                  onClick={() => setContextMenuOpen((prev) => !prev)}
+                  aria-expanded={contextMenuOpen}
+                  aria-label="Staff filter"
+                >
+                  <span className="cs-select__value">
+                    {selectedWeekProviderId
+                      ? weekProviderOptions.find((x) => x.id === selectedWeekProviderId)?.name ?? "All staff"
+                      : "All staff"}
+                  </span>
+                  <span className="cs-staff-count" aria-hidden="true">
+                    {weekProviderOptions.length}
+                  </span>
+                  <span className="cs-select__plus" aria-hidden="true">+</span>
+                </button>
                 {contextMenuOpen ? (
-                  <div className="cs-menu" role="menu">
+                  <div
+                    className="cs-menu"
+                    role="menu"
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 40,
+                      minWidth: 260,
+                    }}
+                  >
                     <button
                       type="button"
                       className={`cs-menu__item${!selectedWeekProviderId ? " cs-menu__item--selected" : ""}`}
@@ -2039,20 +2115,48 @@ export function CalendarPage({
                       aria-checked={!selectedWeekProviderId}
                       onClick={() => { handleSelectWeekProvider(null); setContextMenuOpen(false); }}
                     >
-                      All providers
+                      <span className="cs-menu__check" aria-checked={!selectedWeekProviderId} aria-hidden="true">
+                        {!selectedWeekProviderId ? "✓" : null}
+                      </span>
+                      <span>All staff</span>
+                      <span className="cs-menu__count">{totalProviderAppointmentCount}</span>
                     </button>
-                    {weekProviderOptions.map((provider) => (
-                      <button
-                        key={provider.id}
-                        type="button"
-                        className={`cs-menu__item${selectedWeekProviderId === provider.id ? " cs-menu__item--selected" : ""}`}
-                        role="menuitemradio"
-                        aria-checked={selectedWeekProviderId === provider.id}
-                        onClick={() => { handleSelectWeekProvider(provider.id); setContextMenuOpen(false); }}
-                      >
-                        {provider.name}
-                      </button>
-                    ))}
+                    <div className="cs-menu__rule" aria-hidden="true" />
+                    {weekProviderOptions.map((provider) => {
+                      const checked = selectedWeekProviderId === provider.id;
+                      const count = providerAppointmentCounts.get(provider.id) ?? 0;
+                      return (
+                        <button
+                          key={provider.id}
+                          type="button"
+                          className={`cs-menu__item${checked ? " cs-menu__item--selected" : ""}`}
+                          role="menuitemradio"
+                          aria-checked={checked}
+                          onClick={() => { handleSelectWeekProvider(provider.id); setContextMenuOpen(false); }}
+                        >
+                          <span className="cs-menu__check" aria-checked={checked} aria-hidden="true">
+                            {checked ? "✓" : null}
+                          </span>
+                          <span
+                            className="cs-menu__swatch"
+                            style={{ background: swatchForProvider(provider.id) }}
+                            aria-hidden="true"
+                          />
+                          <span>{provider.name}</span>
+                          <span className="cs-menu__count">{count}</span>
+                        </button>
+                      );
+                    })}
+                    <div className="cs-menu__rule" aria-hidden="true" />
+                    <button
+                      type="button"
+                      className="cs-menu__item"
+                      role="menuitem"
+                      onClick={() => setContextMenuOpen(false)}
+                    >
+                      <span className="cs-menu__check" aria-hidden="true" />
+                      <span>Unassigned &amp; blocks</span>
+                    </button>
                   </div>
                 ) : null}
               </div>
@@ -2519,6 +2623,28 @@ function getChipFamily(serviceName: string | null | undefined, categoryName: str
   if (svc.includes("facial") || svc.includes("glow") || svc.includes("hydration")) return "cs-chip--facial";
 
   return "cs-chip--facial";
+}
+
+// Family swatch hex (matches --cs-mint / --cs-lilac / --cs-pink / --cs-blue /
+// --cs-peach in club-sunday.css). Used by the filter dropdowns for the small
+// colored dot next to a service or provider name.
+const FAMILY_SWATCH: Record<string, string> = {
+  "cs-chip--facial": "#DFEBE1",
+  "cs-chip--advanced": "#E8E3F5",
+  "cs-chip--laser": "#F7E0E4",
+  "cs-chip--consult": "#DEE7F3",
+  "cs-chip--studio": "#F6DFCE",
+};
+function swatchForService(name: string, category?: string | null): string {
+  return FAMILY_SWATCH[getChipFamily(name, category)] ?? "#F0EDEA";
+}
+const PROVIDER_SWATCH_PALETTE = ["#DFEBE1", "#F7E0E4", "#E8E3F5", "#DEE7F3", "#F6DFCE"];
+function swatchForProvider(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i += 1) {
+    h = (h * 31 + id.charCodeAt(i)) | 0;
+  }
+  return PROVIDER_SWATCH_PALETTE[Math.abs(h) % PROVIDER_SWATCH_PALETTE.length];
 }
 
 function CalendarBoard({
