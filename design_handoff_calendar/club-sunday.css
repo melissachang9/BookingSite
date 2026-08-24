@@ -1,0 +1,687 @@
+/* ============================================================================
+   Club Sunday — operator calendar
+   Transcribed from "Club Sunday Console - Soft v4.dc.html" (options 2a/2b/2c/2d/2e).
+   Every value here is lifted from that file. If a number here disagrees with
+   the design, the design wins — tell me and I'll correct this file.
+
+   Two things CSS cannot compute; the component must supply them (STRUCTURE.md):
+     - --top / --h on every .cs-chip, .cs-slot, .cs-now   (time geometry)
+     - --provider-count on .cs-board--day
+   ========================================================================= */
+
+/* ---------------------------------------------------------------- tokens - */
+:root {
+  --cs-ink:        #14110F;
+  --cs-ink-hover:  #2E2825;
+  --cs-secondary:  rgba(20, 17, 15, .62);
+  --cs-muted:      rgba(20, 17, 15, .55);   /* block/secondary chip text */
+  --cs-label:      #6E6862;
+  --cs-ground:     #E9E6E3;
+  --cs-surface:    #FFFFFF;
+  --cs-canvas:     #FBFAF9;
+  --cs-hover:      #F5F3F1;
+  --cs-hover-2:    #EDE9E6;
+  --cs-hairline:   rgba(20, 17, 15, .07);
+  --cs-hairline-2: rgba(20, 17, 15, .05);
+  --cs-gridline:   rgba(20, 17, 15, .06);
+  --cs-scrim:      rgba(20, 17, 15, .32);
+
+  --cs-peach:  #F6DFCE;
+  --cs-mint:   #DFEBE1;
+  --cs-lilac:  #E8E3F5;
+  --cs-pink:   #F7E0E4;
+  --cs-blue:   #DEE7F3;
+  --cs-grey:   #F0EDEA;
+  --cs-block:  #EDEAE6;
+  --cs-today-tint: #FDFBF8;
+  --cs-closed:     #F7F5F3;
+  --cs-credit: #5E8F6E;   /* payment credit line only */
+  --cs-now:    #E8896F;   /* current-time indicator only */
+
+  /* semantic status — pastel fill + ink-tinted text, always with a label */
+  --cs-ok-fill:    #DFEBE1;  --cs-ok-text:    #2F5138;
+  --cs-warn-fill:  #F6DFCE;  --cs-warn-text:  #7A4A2B;
+  --cs-risk-fill:  #F4DAD3;  --cs-risk-text:  #8A3B2E;
+  --cs-info-fill:  #DEE7F3;  --cs-info-text:  #2E4C63;
+  --cs-note-fill:  #E8E3F5;  --cs-note-text:  #443B63;
+  --cs-quiet-fill: #F0EDEA;  --cs-quiet-text: #6E6862;
+
+  --cs-r-desk:  36px;
+  --cs-r-panel: 28px;
+  --cs-r-card:  24px;
+  --cs-r-inner: 20px;
+  --cs-r-16:    16px;
+  --cs-r-14:    14px;
+  --cs-r-12:    12px;
+  --cs-r-pill:  999px;
+  --cs-menu-shadow: 0 12px 40px rgba(20, 17, 15, .14);
+
+  /* time scale — week and day differ */
+  --cs-row-h:       64px;
+  --cs-hours:       9;
+  --cs-gutter:      88px;
+  --cs-chip-inset:  3px;
+  --cs-chip-r:      var(--cs-r-14);
+  --cs-chip-pad:    8px 10px;
+
+  --cs-sidebar-w: 236px;
+  --cs-drawer-w:  440px;
+
+  --cs-font: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --cs-serif: 'Instrument Serif', Georgia, serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ------------------------------------------------------------- app shell - */
+.cs-desk {
+  background: var(--cs-ground);
+  padding: 18px;
+  min-height: 100vh;
+  overflow-x: hidden;
+  font-family: var(--cs-font);
+  color: var(--cs-ink);
+}
+.cs-shell {
+  display: grid;
+  grid-template-columns: var(--cs-sidebar-w) minmax(0, 1fr);
+  background: var(--cs-surface);
+  border-radius: var(--cs-r-panel);
+  overflow: hidden;
+  min-height: calc(100vh - 36px);
+}
+.cs-shell > * { min-width: 0; }   /* load-bearing: without it the board widens the page */
+
+/* ---------------------------------------------------------------- sidebar - */
+.cs-sidebar {
+  padding: 26px 18px;
+  display: flex; flex-direction: column;
+  border-right: 1px solid rgba(20, 17, 15, .06);
+  min-width: 0;
+}
+.cs-brand { padding: 0 10px 24px; }
+.cs-brand__name { font: 800 19px var(--cs-font); letter-spacing: -.03em; color: var(--cs-ink); }
+.cs-brand__name em { font: 400 23px var(--cs-serif); font-style: italic; }
+.cs-brand__site {
+  font: 700 10px var(--cs-font); letter-spacing: .16em; text-transform: uppercase;
+  color: var(--cs-label); margin-top: 3px;
+}
+
+.cs-nav { display: flex; flex-direction: column; gap: 4px; }
+.cs-nav__item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: var(--cs-r-14);
+  font: 500 13px var(--cs-font); color: rgba(20, 17, 15, .6);
+  text-decoration: none; cursor: pointer; border: 0; background: none; text-align: left;
+}
+.cs-nav__item:hover { background: var(--cs-hover); color: var(--cs-ink); }
+.cs-nav__item--active { background: var(--cs-peach); color: var(--cs-ink); font-weight: 600; }
+.cs-nav__item svg { width: 18px; height: 18px; flex: none; }
+.cs-nav__label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-nav__count {
+  margin-left: auto; font: 700 10px var(--cs-font);
+  background: var(--cs-pink); color: var(--cs-ink);
+  padding: 3px 8px; border-radius: var(--cs-r-pill);
+}
+
+.cs-minical { background: var(--cs-canvas); border-radius: var(--cs-r-inner); padding: 16px 14px; margin-top: 22px; }
+.cs-minical__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.cs-minical__month { font: 700 13px var(--cs-font); letter-spacing: -.01em; }
+.cs-minical__nav { display: flex; gap: 4px; }
+.cs-minical__nav button {
+  width: 22px; height: 22px; border: 0; cursor: pointer; border-radius: var(--cs-r-pill);
+  background: var(--cs-surface); font: 500 11px var(--cs-font); color: var(--cs-label);
+  display: flex; align-items: center; justify-content: center;
+}
+.cs-minical__nav button:hover { background: var(--cs-grey); color: var(--cs-ink); }
+.cs-minical__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
+.cs-minical__dow { font: 600 10px var(--cs-font); color: var(--cs-label); padding: 4px 0; }
+.cs-minical__day { font: 500 11px var(--cs-font); color: var(--cs-ink); padding: 6px 0; border: 0; background: none; cursor: pointer; }
+.cs-minical__day--out { color: rgba(20, 17, 15, .38); }
+.cs-minical__day--inweek { background: var(--cs-peach); font-weight: 600; }
+.cs-minical__day--today { background: var(--cs-ink); color: #fff; font-weight: 700; border-radius: 8px; }
+
+.cs-legend { margin-top: auto; padding-top: 22px; }
+.cs-legend__title {
+  font: 700 10px var(--cs-font); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--cs-label); padding: 0 12px 10px;
+}
+.cs-legend__row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 12px; border-radius: 10px;
+  font: 500 11px var(--cs-font); color: var(--cs-secondary);
+}
+.cs-legend__swatch { width: 10px; height: 10px; border-radius: 4px; flex: none; }
+
+/* ------------------------------------------------------------------ main - */
+.cs-main {
+  padding: 18px;
+  background: var(--cs-canvas);
+  display: flex; flex-direction: column; gap: 14px;
+  min-width: 0;
+}
+.cs-main > * { min-width: 0; }
+
+/* ---------------------------------------------------------------- topbar - */
+.cs-topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; row-gap: 10px; }
+.cs-search {
+  display: flex; align-items: center; gap: 9px;
+  background: var(--cs-surface); border-radius: var(--cs-r-pill);
+  padding: 9px 18px; width: 300px; max-width: 100%; border: 0;
+  font: 500 12px var(--cs-font); color: var(--cs-label);
+}
+.cs-search input {
+  border: 0; background: none; outline: none; min-width: 0; flex: 1;
+  font: 500 12px var(--cs-font); color: var(--cs-ink);
+}
+.cs-search input::placeholder { color: var(--cs-label); }
+.cs-topbar__right { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.cs-topbar__link {
+  display: flex; align-items: center; gap: 6px;
+  font: 600 12px var(--cs-font); color: var(--cs-ink); text-decoration: none; cursor: pointer;
+}
+.cs-topbar__link:hover { color: var(--cs-label); }
+.cs-avatar {
+  width: 28px; height: 28px; border-radius: var(--cs-r-pill);
+  background: var(--cs-peach); color: var(--cs-ink);
+  display: flex; align-items: center; justify-content: center; font: 700 10px var(--cs-font);
+}
+
+/* --------------------------------------------------------------- toolbar - */
+.cs-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 14px; flex-wrap: wrap; row-gap: 10px; margin-bottom: 14px;
+}
+.cs-toolbar__title-group { display: flex; align-items: center; gap: 10px; }
+.cs-range { font: 800 20px var(--cs-font); letter-spacing: -.035em; color: var(--cs-ink); white-space: nowrap; }
+.cs-todaytag {
+  background: var(--cs-peach); border-radius: var(--cs-r-pill);
+  padding: 5px 12px; font: 600 11px var(--cs-font); color: var(--cs-ink);
+}
+.cs-stepper { display: flex; align-items: center; gap: 6px; }
+.cs-stepper button {
+  width: 32px; height: 32px; border: 0; cursor: pointer; border-radius: var(--cs-r-pill);
+  background: var(--cs-surface); color: var(--cs-label); font: 500 13px var(--cs-font);
+  display: flex; align-items: center; justify-content: center;
+}
+.cs-stepper button:hover { background: var(--cs-grey); color: var(--cs-ink); }
+.cs-stepper .cs-today { width: auto; padding: 8px 16px; font: 600 12px var(--cs-font); color: var(--cs-ink); }
+.cs-toolbar__controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.cs-select {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--cs-surface); border: 0; border-radius: var(--cs-r-pill);
+  padding: 11px 16px 11px 20px; cursor: pointer; white-space: nowrap;
+}
+.cs-select:hover { background: var(--cs-hover); }
+.cs-select--ink { background: var(--cs-ink); }
+.cs-select--ink .cs-select__value { color: #fff; }
+.cs-select--ink .cs-select__meta,
+.cs-select--ink .cs-select__caret { color: rgba(255, 255, 255, .6); }
+.cs-select__label { font: 700 10px var(--cs-font); letter-spacing: .1em; text-transform: uppercase; color: var(--cs-label); }
+.cs-select__value { font: 600 12px var(--cs-font); color: var(--cs-ink); }
+.cs-select__meta  { font: 500 11px var(--cs-font); color: var(--cs-label); }
+.cs-select__caret { font-size: 10px; color: var(--cs-label); margin-left: auto; }
+
+.cs-viewswitch { display: flex; background: var(--cs-surface); border-radius: var(--cs-r-pill); padding: 5px; }
+.cs-viewswitch button {
+  border: 0; cursor: pointer; background: none;
+  padding: 7px 16px; border-radius: var(--cs-r-pill);
+  font: 600 11px var(--cs-font); color: rgba(20, 17, 15, .55);
+}
+.cs-viewswitch button:hover { background: var(--cs-hover); color: var(--cs-ink); }
+.cs-viewswitch button[aria-pressed="true"] { background: var(--cs-ink); color: #fff; }
+
+/* one black CTA per screen */
+.cs-cta {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--cs-ink); color: #fff; border: 0; cursor: pointer;
+  border-radius: var(--cs-r-pill); padding: 10px 10px 10px 20px;
+  font: 600 12px var(--cs-font); white-space: nowrap;
+}
+.cs-cta:hover { background: var(--cs-ink-hover); }
+.cs-cta__plus {
+  width: 24px; height: 24px; border-radius: var(--cs-r-pill);
+  background: rgba(255, 255, 255, .16);
+  display: flex; align-items: center; justify-content: center; font-size: 12px;
+}
+
+/* ============================================================ THE BOARD ===
+   One hour = var(--cs-row-h). Week 64px, day 72px.
+   A day column is position:relative and is the ONLY positioning context for
+   its chips. Chips are absolute, driven by --top / --h. A chip with no --top
+   collapses to top:0 — that is the overlap bug.
+   Hour lines come from the repeating gradient; never add row divs.
+   ========================================================================= */
+
+.cs-boardcard {
+  background: var(--cs-surface); border-radius: var(--cs-r-card);
+  padding: 6px 14px 14px; width: 100%; min-width: 0; overflow: hidden;
+}
+.cs-board { --cs-cols: var(--cs-gutter) repeat(7, minmax(0, 1fr)); }
+.cs-board__head,
+.cs-board__body { display: grid; grid-template-columns: var(--cs-cols); }
+.cs-board__head { align-items: center; }
+.cs-board__body { border-top: 1px solid var(--cs-hairline); padding-top: 6px; }
+
+/* week day headers */
+.cs-daylabel { padding: 16px 6px 12px; text-align: center; min-width: 0; }
+.cs-daylabel__dow {
+  font: 600 10px var(--cs-font); letter-spacing: .1em;
+  text-transform: uppercase; color: var(--cs-label);
+}
+.cs-daylabel__date { font: 700 19px var(--cs-font); letter-spacing: -.03em; color: var(--cs-ink); margin-top: 4px; }
+.cs-daylabel--today .cs-daylabel__dow { color: var(--cs-secondary); }
+.cs-daylabel--today .cs-daylabel__date {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: var(--cs-r-pill);
+  background: var(--cs-ink); color: #fff; font-size: 17px; margin-top: 2px;
+}
+
+/* time gutter */
+.cs-gutter { min-width: 0; }
+.cs-gutter__hour {
+  height: var(--cs-row-h); padding-right: 14px; text-align: right;
+  font: 600 11px var(--cs-font); color: var(--cs-label);
+}
+
+/* --- day column: the positioning context --------------------------------- */
+.cs-col {
+  position: relative;
+  height: calc(var(--cs-hours) * var(--cs-row-h));
+  padding: 0 var(--cs-chip-inset);
+  min-width: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0 calc(var(--cs-row-h) - 1px),
+    var(--cs-gridline) calc(var(--cs-row-h) - 1px) var(--cs-row-h));
+}
+.cs-col + .cs-col { border-left: 1px solid var(--cs-hairline-2); }
+.cs-col--today {
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 calc(var(--cs-row-h) - 1px),
+      var(--cs-gridline) calc(var(--cs-row-h) - 1px) var(--cs-row-h)),
+    var(--cs-today-tint);
+}
+.cs-col--closed {
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 calc(var(--cs-row-h) - 1px),
+      var(--cs-hairline-2) calc(var(--cs-row-h) - 1px) var(--cs-row-h)),
+    var(--cs-closed);
+}
+/* De-emphasis is a ground + a written label, never opacity. */
+.cs-col__notice {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font: 600 11px var(--cs-font); color: var(--cs-secondary);
+  white-space: nowrap;
+}
+.cs-col__notice--vertical { transform: rotate(-90deg); }
+
+/* --- chip ------------------------------------------------------------------
+   Component supplies --top / --h (unitless numbers) and, for overlaps,
+   --lane / --lanes.
+   -------------------------------------------------------------------------- */
+.cs-chip {
+  --lane: 0; --lanes: 1;
+  position: absolute;
+  top: calc(var(--top) * 1px);
+  height: calc(var(--h) * 1px);
+  left: calc(var(--cs-chip-inset) + (var(--lane) * (100% - var(--cs-chip-inset) * 2) / var(--lanes)));
+  width: calc((100% - var(--cs-chip-inset) * 2) / var(--lanes) - 2px);
+  border: 0; text-align: left; overflow: hidden; cursor: pointer;
+  border-radius: var(--cs-chip-r);
+  padding: var(--cs-chip-pad);
+  background: var(--cs-mint);
+  color: var(--cs-ink);
+  display: block;
+}
+.cs-chip:hover { filter: brightness(.97); }
+.cs-chip:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--cs-ink); }
+
+.cs-chip__time { font: 700 10px var(--cs-font); color: var(--cs-secondary); display: block; }
+.cs-chip__client {
+  font: 600 12px var(--cs-font); color: var(--cs-ink); margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cs-chip__treatment {
+  font: 500 10px var(--cs-font); color: var(--cs-secondary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cs-chip__badge {
+  margin-top: 6px; display: inline-block;
+  font: 700 9px var(--cs-font);
+  background: rgba(255, 255, 255, .7); color: var(--cs-ink);
+  padding: 3px 7px; border-radius: var(--cs-r-pill);
+}
+.cs-chip__flag {
+  position: absolute; right: 8px; top: 8px;
+  width: 16px; height: 16px; border-radius: var(--cs-r-pill);
+  background: var(--cs-ink); color: #fff; font: 700 10px var(--cs-font);
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* treatment families */
+.cs-chip--facial   { background: var(--cs-mint); }
+.cs-chip--advanced { background: var(--cs-lilac); }
+.cs-chip--laser    { background: var(--cs-pink); }
+.cs-chip--consult  { background: var(--cs-blue); }
+.cs-chip--studio   { background: var(--cs-peach); }
+
+/* in progress — ink fill, peach label */
+.cs-chip--inprogress { background: var(--cs-ink); }
+.cs-chip--inprogress .cs-chip__client { color: #fff; }
+.cs-chip--inprogress .cs-chip__treatment { color: rgba(255, 255, 255, .6); }
+.cs-chip__live { display: flex; align-items: center; gap: 5px; }
+.cs-chip__live span:first-child {
+  width: 5px; height: 5px; border-radius: var(--cs-r-pill); background: var(--cs-peach); flex: none;
+}
+.cs-chip__live span:last-child {
+  font: 700 10px var(--cs-font); letter-spacing: .06em; color: var(--cs-peach);
+}
+.cs-chip__bar { height: 5px; border-radius: var(--cs-r-pill); background: rgba(255, 255, 255, .16); margin-top: 12px; }
+.cs-chip__bar > i { display: block; height: 5px; border-radius: var(--cs-r-pill); background: var(--cs-peach); }
+
+/* non-appointment blocks */
+.cs-chip--block { background: var(--cs-block); cursor: default; }
+.cs-chip--block .cs-chip__client { color: var(--cs-muted); }
+.cs-chip--completed { background: var(--cs-block); }
+
+.cs-chip--selected { box-shadow: 0 0 0 2px var(--cs-ink); }
+.cs-chip--selected:hover { filter: brightness(.98); }
+
+/* hatched turnover / lunch */
+.cs-hatch {
+  position: absolute;
+  left: var(--cs-chip-inset); right: var(--cs-chip-inset);
+  top: calc(var(--top) * 1px); height: calc(var(--h) * 1px);
+  border-radius: var(--cs-r-12);
+  padding: 7px 12px;
+  background: repeating-linear-gradient(135deg,
+    rgba(20, 17, 15, .04) 0 6px, rgba(20, 17, 15, .08) 6px 12px);
+  font: 600 10px var(--cs-font); color: var(--cs-secondary);
+}
+
+/* open slot — dashed, click to book */
+.cs-slot {
+  position: absolute;
+  left: var(--cs-chip-inset); right: var(--cs-chip-inset);
+  top: calc(var(--top) * 1px); height: calc(var(--h) * 1px);
+  border: 1.5px dashed rgba(20, 17, 15, .2); border-radius: var(--cs-r-16);
+  background: none; cursor: pointer; text-align: left;
+  padding: 9px 12px;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.cs-slot:hover { border-color: var(--cs-ink); background: var(--cs-today-tint); }
+.cs-slot__when { font: 600 12px var(--cs-font); color: var(--cs-secondary); }
+.cs-slot__cue  { font: 600 11px var(--cs-font); color: var(--cs-ink); margin-top: 2px; }
+
+/* current-time indicator — today's column only, one per board */
+.cs-now {
+  position: absolute;
+  left: var(--cs-chip-inset); right: var(--cs-chip-inset);
+  top: calc(var(--top) * 1px); height: 2px;
+  background: var(--cs-now); pointer-events: none; z-index: 3;
+}
+.cs-now::before {
+  content: ""; position: absolute; left: -3px; top: -3px;
+  width: 8px; height: 8px; border-radius: var(--cs-r-pill); background: var(--cs-now);
+}
+
+/* --- day view -------------------------------------------------------------
+   Taller rows, roomier chips, provider columns. --provider-count from the
+   component; above 6 providers add .cs-board--scroll so this ONE grid scrolls. */
+.cs-board--day {
+  --provider-count: 3;
+  --cs-row-h: 72px;
+  --cs-hours: 7;
+  --cs-gutter: 76px;
+  --cs-chip-inset: 4px;
+  --cs-chip-r: var(--cs-r-16);
+  --cs-chip-pad: 9px 12px;
+  --cs-cols: var(--cs-gutter) repeat(var(--provider-count), minmax(0, 1fr));
+}
+.cs-board--day .cs-gutter__hour { padding-right: 12px; }
+.cs-board--day .cs-chip__client {
+  font: 700 14px var(--cs-font); letter-spacing: -.02em; margin-top: 3px;
+}
+.cs-board--day .cs-chip__treatment { font: 500 11px var(--cs-font); color: var(--cs-muted); }
+.cs-board--day .cs-chip__badge { margin-top: 8px; font-size: 9px; padding: 4px 9px; background: rgba(255, 255, 255, .75); }
+.cs-board--day .cs-chip__flag { position: static; width: 18px; height: 18px; font-size: 11px; }
+.cs-board--day .cs-chip__row { display: flex; justify-content: space-between; align-items: flex-start; }
+.cs-board--day .cs-hatch { border-radius: var(--cs-r-16); font-size: 11px; }
+
+.cs-board--day.cs-board--scroll { --cs-cols: var(--cs-gutter) repeat(var(--provider-count), minmax(180px, 1fr)); }
+.cs-board--day.cs-board--scroll .cs-board__head,
+.cs-board--day.cs-board--scroll .cs-board__body { overflow-x: auto; overscroll-behavior-x: contain; }
+.cs-board--day.cs-board--scroll .cs-gutter,
+.cs-board--day.cs-board--scroll .cs-board__head > :first-child {
+  position: sticky; left: 0; z-index: 2; background: var(--cs-surface);
+}
+
+.cs-provider { padding: 14px 8px 12px; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.cs-provider__avatar { width: 32px; height: 32px; border-radius: var(--cs-r-pill); flex: none; background: var(--cs-block); }
+.cs-provider__name { font: 700 13px var(--cs-font); color: var(--cs-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-provider__role { font: 500 10px var(--cs-font); color: var(--cs-label); }
+
+/* ------------------------------------------------------------ board foot - */
+.cs-boardfoot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 0 4px; flex-wrap: wrap; row-gap: 8px;
+}
+.cs-boardfoot__stats { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.cs-boardfoot__now { display: flex; align-items: center; gap: 8px; font: 500 11px var(--cs-font); color: var(--cs-label); }
+.cs-boardfoot__now::before {
+  content: ""; width: 10px; height: 10px; border-radius: var(--cs-r-pill); background: var(--cs-now);
+}
+.cs-boardfoot__meta { font: 500 11px var(--cs-font); color: var(--cs-label); }
+.cs-boardfoot__cue { font: 600 12px var(--cs-font); color: var(--cs-ink); cursor: pointer; }
+.cs-boardfoot__cue:hover { color: var(--cs-label); }
+
+/* ---------------------------------------------------------------- drawer -
+   Fixed overlay. Never a third grid column — must not add page width. */
+.cs-scrim { position: fixed; inset: 0; background: var(--cs-scrim); z-index: 40; }
+.cs-drawer {
+  position: fixed; top: 16px; right: 16px; bottom: 16px;
+  width: var(--cs-drawer-w); max-width: calc(100vw - 32px);
+  background: var(--cs-surface); border-radius: var(--cs-r-panel);
+  z-index: 41; display: flex; flex-direction: column; overflow: hidden;
+}
+.cs-drawer__inner { padding: 24px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; }
+.cs-drawer__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.cs-drawer__kicker {
+  font: 700 11px var(--cs-font); letter-spacing: .12em;
+  text-transform: uppercase; color: var(--cs-label);
+}
+.cs-drawer__title { font: 800 22px var(--cs-font); letter-spacing: -.035em; color: var(--cs-ink); margin-top: 6px; }
+.cs-drawer__meta { font: 500 12px var(--cs-font); color: var(--cs-label); margin-top: 3px; }
+.cs-drawer__close {
+  width: 32px; height: 32px; border: 0; cursor: pointer; flex: none;
+  border-radius: var(--cs-r-pill); background: var(--cs-hover); color: var(--cs-label);
+  display: flex; align-items: center; justify-content: center; font: 400 13px var(--cs-font);
+}
+.cs-drawer__close:hover { background: var(--cs-hover-2); color: var(--cs-ink); }
+
+.cs-section__label {
+  font: 700 11px var(--cs-font); letter-spacing: .1em;
+  text-transform: uppercase; color: var(--cs-label); margin-bottom: 10px;
+}
+.cs-panel { background: var(--cs-canvas); border-radius: var(--cs-r-inner); padding: 16px 18px; }
+.cs-panel--tint { background: var(--cs-pink); }
+.cs-panel--credit { background: var(--cs-mint); }
+.cs-note {
+  background: var(--cs-canvas); border-radius: 18px; padding: 14px 16px;
+  font: 500 12px/1.7 var(--cs-font); color: rgba(20, 17, 15, .7); font-style: italic;
+}
+
+/* segmented control */
+.cs-seg { display: flex; background: var(--cs-hover); border-radius: var(--cs-r-pill); padding: 4px; }
+.cs-seg > button {
+  flex: 1; border: 0; cursor: pointer; background: none;
+  padding: 9px; border-radius: var(--cs-r-pill);
+  font: 600 12px var(--cs-font); color: rgba(20, 17, 15, .55);
+}
+.cs-seg > button[aria-pressed="true"] { background: var(--cs-ink); color: #fff; }
+.cs-seg > button:hover:not([aria-pressed="true"]) { color: var(--cs-ink); }
+
+/* inputs, chips, toggle */
+.cs-input {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--cs-canvas); border: 0; border-radius: var(--cs-r-pill);
+  padding: 12px 18px; font: 500 13px var(--cs-font); color: var(--cs-ink);
+  outline: none; width: 100%;
+}
+.cs-input::placeholder { color: var(--cs-label); }
+.cs-input:focus { background: var(--cs-surface); box-shadow: inset 0 0 0 1px rgba(20, 17, 15, .12); }
+
+.cs-choice {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: var(--cs-r-16);
+  cursor: pointer; border: 0; background: none; width: 100%; text-align: left;
+}
+.cs-choice:hover { background: var(--cs-hover); }
+.cs-choice--selected { background: var(--cs-peach); }
+.cs-choice__name { font: 600 13px var(--cs-font); color: var(--cs-ink); }
+.cs-choice__meta { font: 500 11px var(--cs-font); color: var(--cs-secondary); }
+
+.cs-tag {
+  background: var(--cs-hover); border-radius: var(--cs-r-pill);
+  padding: 10px 16px; font: 600 12px var(--cs-font); color: rgba(20, 17, 15, .6);
+  cursor: pointer; border: 0;
+}
+.cs-tag:hover { background: var(--cs-hover-2); color: var(--cs-ink); }
+.cs-tag--selected { background: var(--cs-mint); color: var(--cs-ink); }
+
+.cs-stat { background: var(--cs-canvas); border-radius: var(--cs-r-16); padding: 12px 14px; }
+.cs-stat__label { font: 600 10px var(--cs-font); letter-spacing: .08em; text-transform: uppercase; color: var(--cs-label); }
+.cs-stat__value { font: 700 14px var(--cs-font); color: var(--cs-ink); margin-top: 4px; }
+
+.cs-toggle {
+  width: 44px; height: 26px; border-radius: var(--cs-r-pill);
+  background: var(--cs-block); padding: 3px; display: flex; flex: none;
+  border: 0; cursor: pointer; justify-content: flex-start;
+}
+.cs-toggle > span { width: 20px; height: 20px; border-radius: var(--cs-r-pill); background: #fff; }
+.cs-toggle[aria-checked="true"] { background: var(--cs-ink); justify-content: flex-end; }
+
+/* money rows */
+.cs-money { display: flex; justify-content: space-between; padding: 6px 0; font: 500 13px var(--cs-font); color: rgba(20, 17, 15, .65); }
+.cs-money > span:last-child { color: var(--cs-ink); font-weight: 600; }
+.cs-money--credit > span:last-child { color: var(--cs-credit); }
+.cs-money--total {
+  align-items: center; margin-top: 10px; padding-top: 12px;
+  border-top: 1px solid rgba(20, 17, 15, .08);
+}
+.cs-money--total > span:first-child { font: 600 13px var(--cs-font); color: var(--cs-ink); }
+.cs-money--total > span:last-child { font: 800 22px var(--cs-font); letter-spacing: -.035em; }
+
+/* ------------------------------------------------------------ status pills */
+.cs-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: var(--cs-r-pill);
+  font: 700 10px var(--cs-font); letter-spacing: .06em; text-transform: uppercase;
+  background: var(--cs-quiet-fill); color: var(--cs-quiet-text);
+}
+.cs-pill--ok   { background: var(--cs-ok-fill);   color: var(--cs-ok-text); }
+.cs-pill--warn { background: var(--cs-warn-fill); color: var(--cs-warn-text); }
+.cs-pill--risk { background: var(--cs-risk-fill); color: var(--cs-risk-text); }
+.cs-pill--info { background: var(--cs-info-fill); color: var(--cs-info-text); }
+.cs-pill--note { background: var(--cs-note-fill); color: var(--cs-note-text); }
+
+/* ---------------------------------------------------------------- buttons - */
+.cs-btn {
+  border: 0; cursor: pointer; border-radius: var(--cs-r-pill);
+  padding: 14px 20px; font: 600 12px var(--cs-font);
+  background: var(--cs-hover); color: var(--cs-ink);
+}
+.cs-btn:hover { background: var(--cs-hover-2); }
+.cs-btn--primary { background: var(--cs-ink); color: #fff; flex: 1; text-align: center; }
+.cs-btn--primary:hover { background: var(--cs-ink-hover); }
+.cs-btn--sm { padding: 9px 15px; font-size: 11px; background: var(--cs-surface); }
+.cs-btn--sm:hover { background: var(--cs-grey); }
+.cs-btn--onTint { background: rgba(255, 255, 255, .7); }
+.cs-btn--onTint:hover { background: #fff; }
+.cs-btn--ghost { background: none; color: var(--cs-secondary); }
+.cs-btn--ghost:hover { background: var(--cs-hover); color: var(--cs-ink); }
+/* destructive is never a solid red button */
+.cs-btn--danger { background: none; color: var(--cs-risk-text); }
+.cs-btn--danger:hover { background: var(--cs-risk-fill); }
+.cs-btn:focus-visible { outline: 2px solid var(--cs-ink); outline-offset: 2px; }
+.cs-actions { display: flex; align-items: center; gap: 10px; }
+
+/* ------------------------------------------------------------------ menus -
+   The only element allowed a shadow. */
+.cs-menu {
+  background: var(--cs-surface); border-radius: var(--cs-r-inner);
+  padding: 8px; box-shadow: var(--cs-menu-shadow); min-width: 200px;
+}
+.cs-menu__label {
+  font: 700 10px var(--cs-font); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--cs-label); padding: 8px 12px 4px;
+}
+.cs-menu__item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 12px; border-radius: var(--cs-r-14);
+  font: 500 12px var(--cs-font); color: var(--cs-ink);
+  cursor: pointer; border: 0; background: none; width: 100%; text-align: left;
+}
+.cs-menu__item:hover { background: var(--cs-hover); }
+.cs-menu__item--selected { background: var(--cs-hover); font-weight: 600; }
+.cs-menu__item--danger { color: var(--cs-risk-text); }
+.cs-menu__item--danger:hover { background: var(--cs-risk-fill); }
+.cs-menu__count { margin-left: auto; font: 500 11px var(--cs-font); color: var(--cs-label); }
+.cs-menu__check {
+  width: 18px; height: 18px; border-radius: 6px; flex: none;
+  border: 1.5px solid rgba(20, 17, 15, .2);
+  display: flex; align-items: center; justify-content: center;
+}
+.cs-menu__check[aria-checked="true"] { background: var(--cs-ink); border-color: var(--cs-ink); color: #fff; font-size: 10px; }
+.cs-menu__dot { width: 24px; height: 24px; border-radius: var(--cs-r-pill); flex: none; }
+.cs-menu__swatch { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.cs-menu__rule { height: 1px; background: var(--cs-hairline); margin: 6px 12px; }
+
+/* ------------------------------------------------------------------ links - */
+.cs-desk a { color: var(--cs-ink); text-decoration-color: rgba(20, 17, 15, .28); }
+.cs-desk a:hover { color: var(--cs-label); }
+
+/* ------------------------------------------------------------ narrow fits - */
+@media (max-width: 1180px) {
+  .cs-select__label { display: none; }
+  .cs-select { padding: 11px 16px; }
+  :root { --cs-gutter: 68px; }
+}
+@media (max-width: 1024px) {
+  :root { --cs-sidebar-w: 76px; }
+  .cs-sidebar { padding: 20px 12px; }
+  .cs-brand__site, .cs-minical, .cs-legend, .cs-nav__label { display: none; }
+  .cs-nav__item { justify-content: center; padding: 12px 0; gap: 0; }
+  .cs-nav__count { position: absolute; top: 4px; right: 8px; margin: 0; }
+  .cs-nav__item { position: relative; }
+  .cs-brand__name { font-size: 15px; text-align: center; }
+  .cs-brand { padding: 0 0 20px; }
+  .cs-range { font-size: 18px; }
+  .cs-chip__treatment { display: none; }
+}
+
+@media print {
+  .cs-desk { background: #fff; padding: 0; }
+  .cs-shell { border-radius: 0; min-height: 0; }
+  .cs-scrim, .cs-drawer, .cs-cta { display: none; }
+}
+
+/* ============================================================================
+   BANNED — do not reintroduce
+   ----------------------------------------------------------------------------
+   opacity on anything containing text   -> use #EDEAE6 ground + full-strength
+                                            text + a written label
+   rgba(20,17,15,.5) / #8A8580 as text   -> fail AA at 10-13px
+   #E8896F anywhere but .cs-now / .cs-boardfoot__now
+   box-shadow outside .cs-menu (and the 2px .cs-chip--selected ring)
+   saturated status colours (#16a34a #b45309 #8a1a14 #4dd4ac #4f46e5 …)
+   fixed px widths on day columns        -> minmax(0, 1fr) only
+   margin/flow positioning of .cs-chip   -> --top / --h only
+   ========================================================================= */

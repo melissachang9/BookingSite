@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:#E9E6E3;font-family:'Plus Jakarta Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#14110F}a:hover{color:#6E6862}
+.dv-turn{padding:44px 48px 36px;border-bottom:1px solid rgba(20,17,15,.08);scroll-margin-top:16px;min-width:max-content}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 22px}
+.dv-tid{font:700 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.04em;padding:5px 10px;background:#14110F;color:#fff;border-radius:999px;text-decoration:none}
+.dv-tname{font:600 13px/1.2 'Plus Jakarta Sans',sans-serif;color:#14110F}
+.dv-opts{display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:11px;scroll-margin-top:16px}
+.dv-oid{font:700 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.04em;padding:5px 10px;background:rgba(20,17,15,.07);color:#14110F;border-radius:999px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:9px;font:500 12px/1.3 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)}
+.dv-card{max-width:100%;background:transparent}
+.dv-opt:target .dv-oid{background:#F6DFCE}
+.dv-next{margin:26px 0 0;font:500 12px/1.7 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.45)}
+</style></helmet>
+
+<section class="dv-turn" id="t2">
+<div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">Calendar v4 — AA contrast pass on chips, time axis and controls</span></div>
+
+<div class="dv-opts">
+
+<div class="dv-opt" id="2a"><div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>Week view — the default landing screen</div>
+<div class="dv-card" style="width:1420px">
+<div style="background:#E9E6E3;padding:18px;border-radius:36px">
+<div style="display:grid;grid-template-columns:244px 1fr;background:#fff;border-radius:28px;overflow:hidden;min-height:860px">
+
+<aside style="padding:26px 18px;display:flex;flex-direction:column;gap:22px;border-right:1px solid rgba(20,17,15,.06)">
+<div style="padding:0 10px">
+<div style="font:800 19px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.03em;color:#14110F">Club <span style="font-family:'Instrument Serif',Georgia,serif;font-style:italic;font-weight:400;font-size:23px">Sunday</span></div>
+<div style="font:700 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#6E6862;margin-top:3px">Studio One</div>
+</div>
+
+<div style="background:#FBFAF9;border-radius:20px;padding:16px 14px">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+<div style="font:700 13px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.01em;color:#14110F">August 2026</div>
+<div style="display:flex;gap:4px"><span style="width:22px;height:22px;border-radius:999px;background:#fff;display:flex;align-items:center;justify-content:center;font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862;cursor:pointer">&#8249;</span><span style="width:22px;height:22px;border-radius:999px;background:#fff;display:flex;align-items:center;justify-content:center;font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862;cursor:pointer">&#8250;</span></div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center">
+<span style="font:600 10px 'Plus Jakarta Sans',sans-serif;color:#6E6862;padding:4px 0">M</span><span style="font:600 10px 'Plus Jakarta Sans',sans-serif;color:#6E6862;padding:4px 0">T</span><span style="font:600 10px 'Plus Jakarta Sans',sans-serif;color:#6E6862;padding:4px 0">W</span><span style="font:600 10px 'Plus Jakarta Sans',sans-serif;color:#6E6862;padding:4px 0">T</span><span style="font:600 10px 'Plus Jakarta Sans',sans-serif;color:#6E6862;padding:4px 0">F</span><span style="font:600 10px 'Plus Jakarta Sans',sans-serif;color:#6E6862;padding:4px 0">S</span><span style="font:600 10px 'Plus Jakarta Sans',sans-serif;color:#6E6862;padding:4px 0">S</span>
+<span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.22);padding:6px 0">27</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.22);padding:6px 0">28</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.22);padding:6px 0">29</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.22);padding:6px 0">30</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.22);padding:6px 0">31</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">1</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">2</span>
+<span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">3</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">4</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">5</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">6</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">7</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">8</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">9</span>
+<span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">10</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">11</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">12</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">13</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">14</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">15</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">16</span>
+<span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">17</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">18</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">19</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">20</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">21</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">22</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0">23</span>
+<span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0;background:#F6DFCE;border-radius:8px 0 0 8px">24</span><span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0;background:#F6DFCE">25</span><span style="font:700 11px 'Plus Jakarta Sans',sans-serif;color:#fff;padding:6px 0;background:#14110F;border-radius:8px">26</span><span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0;background:#F6DFCE">27</span><span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0;background:#F6DFCE">28</span><span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0;background:#F6DFCE">29</span><span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;padding:6px 0;background:#F6DFCE;border-radius:0 8px 8px 0">30</span>
+</div>
+</div>
+
+<nav style="display:flex;flex-direction:column;gap:4px">
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#F6DFCE;font:600 13px 'Plus Jakarta Sans',sans-serif;color:#14110F"><span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 18 18" width="18" height="18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><g stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><rect x="2.5" y="3.75" width="13" height="11.5" rx="2.5"/><line x1="2.5" y1="7.25" x2="15.5" y2="7.25"/><line x1="6" y1="2" x2="6" y2="5"/><line x1="12" y1="2" x2="12" y2="5"/></g></svg></span>Calendar</div>
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;font:500 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.6)" style-hover="background:#F5F3F1;color:#14110F"><span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 18 18" width="18" height="18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><g stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><circle cx="9" cy="6.5" r="2.75"/><path d="M3.75 15.25c0-2.9 2.35-4.75 5.25-4.75s5.25 1.85 5.25 4.75"/></g></svg></span>Clients</div>
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;font:500 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.6)" style-hover="background:#F5F3F1;color:#14110F"><span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 18 18" width="18" height="18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><g stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><rect x="4.75" y="6.5" width="8.5" height="9" rx="3"/><line x1="9" y1="6.5" x2="9" y2="3"/><circle cx="9" cy="11" r="1.75"/></g></svg></span>Treatments</div>
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;font:500 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.6)" style-hover="background:#F5F3F1;color:#14110F"><span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 18 18" width="18" height="18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><g stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><circle cx="7" cy="6.25" r="2.5"/><path d="M2.5 15c0-2.6 2-4.25 4.5-4.25s4.5 1.65 4.5 4.25"/><path d="M12 4.25a2.5 2.5 0 0 1 0 4.75"/><path d="M13 10.9c1.6.5 2.5 1.9 2.5 4.1"/></g></svg></span>Team</div>
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;font:500 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.6)" style-hover="background:#F5F3F1;color:#14110F"><span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 18 18" width="18" height="18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><g stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><rect x="3.5" y="2.5" width="11" height="13" rx="2.5"/><line x1="6.25" y1="6.5" x2="11.75" y2="6.5"/><line x1="6.25" y1="9" x2="11.75" y2="9"/><line x1="6.25" y1="11.5" x2="9.5" y2="11.5"/></g></svg></span>Forms<span style="margin-left:auto;font:700 10px 'Plus Jakarta Sans',sans-serif;background:#F7E0E4;color:#14110F;padding:3px 8px;border-radius:999px">4</span></div>
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;font:500 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.6)" style-hover="background:#F5F3F1;color:#14110F"><span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 18 18" width="18" height="18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><g stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><rect x="2" y="4.25" width="14" height="9.5" rx="2.5"/><line x1="2" y1="7.75" x2="16" y2="7.75"/><line x1="5" y1="11" x2="8" y2="11"/></g></svg></span>Payments<span style="margin-left:auto;font:700 10px 'Plus Jakarta Sans',sans-serif;background:#F7E0E4;color:#14110F;padding:3px 8px;border-radius:999px">2</span></div>
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;font:500 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.6)" style-hover="background:#F5F3F1;color:#14110F"><span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 18 18" width="18" height="18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><g stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><circle cx="9" cy="9" r="2.6"/><circle cx="9" cy="9" r="6.1"/><line x1="9" y1="2.9" x2="9" y2="6.4"/><line x1="9" y1="11.6" x2="9" y2="15.1"/><line x1="2.9" y1="9" x2="6.4" y2="9"/><line x1="11.6" y1="9" x2="15.1" y2="9"/></g></svg></span>Settings</div>
+</nav>
+
+<div style="margin-top:auto">
+<div style="font:700 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E6862;padding:0 12px 10px">Treatment families</div>
+<div style="display:flex;flex-direction:column;gap:2px">
+<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;border-radius:10px;font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.65)"><span style="width:10px;height:10px;border-radius:4px;background:#DFEBE1"></span>Facials</div>
+<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;border-radius:10px;font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.65)"><span style="width:10px;height:10px;border-radius:4px;background:#E8E3F5"></span>Advanced / needling</div>
+<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;border-radius:10px;font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.65)"><span style="width:10px;height:10px;border-radius:4px;background:#F7E0E4"></span>Laser &amp; peels</div>
+<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;border-radius:10px;font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.65)"><span style="width:10px;height:10px;border-radius:4px;background:#DEE7F3"></span>Consults</div>
+<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;border-radius:10px;font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.65)"><span style="width:10px;height:10px;border-radius:4px;background:#EDEAE6"></span>Blocks &amp; time off</div>
+</div>
+</div>
+</aside>
+
+<main style="padding:22px 24px 24px;background:#FBFAF9;display:flex;flex-direction:column;gap:16px;min-width:0">
+
+<div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+<div style="display:flex;align-items:center;gap:9px;background:#fff;border-radius:999px;padding:9px 18px;width:300px">
+<span style="width:13px;height:13px;border-radius:999px;border:1.5px solid rgba(20,17,15,.28);flex:none"></span>
+<span style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:#6E6862">Search customers &amp; appointments…</span>
+</div>
+<div style="display:flex;align-items:center;gap:18px">
+<span style="display:flex;align-items:center;gap:6px;font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;cursor:pointer" style-hover="color:#6E6862">Open storefront<span style="font-size:11px;color:#6E6862">&#8599;</span></span>
+<span style="width:1px;height:18px;background:rgba(20,17,15,.12)"></span>
+<span style="display:flex;align-items:center;gap:9px;cursor:pointer"><span style="width:28px;height:28px;border-radius:999px;background:#F6DFCE;display:flex;align-items:center;justify-content:center;font:700 10px 'Plus Jakarta Sans',sans-serif;color:#14110F">MC</span><span style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">Melissa Chang</span></span>
+<span style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:#6E6862;cursor:pointer" style-hover="color:#14110F">Sign out</span>
+</div>
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+<div style="display:flex;align-items:center;gap:12px">
+<div style="font:800 24px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.035em;color:#14110F">24 – 30 August</div>
+<div style="display:flex;align-items:center;gap:6px">
+<span style="width:32px;height:32px;border-radius:999px;background:#fff;display:flex;align-items:center;justify-content:center;font:500 13px 'Plus Jakarta Sans',sans-serif;color:#6E6862;cursor:pointer" style-hover="background:#F0EDEA;color:#14110F">&#8249;</span>
+<span style="background:#fff;border-radius:999px;padding:8px 16px;font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;cursor:pointer" style-hover="background:#F0EDEA">Today</span>
+<span style="width:32px;height:32px;border-radius:999px;background:#fff;display:flex;align-items:center;justify-content:center;font:500 13px 'Plus Jakarta Sans',sans-serif;color:#6E6862;cursor:pointer" style-hover="background:#F0EDEA;color:#14110F">&#8250;</span>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:10px">
+<div style="display:flex;align-items:center;gap:8px;background:#fff;border-radius:999px;padding:11px 16px 11px 20px;cursor:pointer" style-hover="background:#F5F3F1"><span style="font:700 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E6862">Availability for</span><span style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">Any service</span><span style="font-size:10px;color:#6E6862">&#9662;</span></div>
+<div style="display:flex;align-items:center;gap:10px;background:#fff;border-radius:999px;padding:11px 16px 11px 20px;cursor:pointer" style-hover="background:#F5F3F1"><span style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">All staff</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">13</span><span style="font-size:10px;color:#6E6862">&#9662;</span></div>
+<div style="display:flex;background:#fff;border-radius:999px;padding:5px">
+<span style="padding:8px 18px;border-radius:999px;font:600 12px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.55);cursor:pointer" style-hover="background:#F5F3F1;color:#14110F">Day</span>
+<span style="padding:8px 18px;border-radius:999px;background:#14110F;color:#fff;font:600 12px 'Plus Jakarta Sans',sans-serif">Week</span>
+</div>
+<div style="display:flex;align-items:center;gap:10px;background:#14110F;color:#fff;border-radius:999px;padding:10px 10px 10px 20px;font:600 12px 'Plus Jakarta Sans',sans-serif;cursor:pointer" style-hover="background:#2E2825">New booking<span style="width:24px;height:24px;border-radius:999px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-size:12px">+</span></div>
+</div>
+</div>
+
+<div style="background:#fff;border-radius:24px;padding:6px 14px 14px;min-width:0">
+<div style="display:grid;grid-template-columns:88px repeat(7,minmax(0,1fr));align-items:end">
+<div></div>
+<div style="padding:16px 6px 12px;text-align:center"><div style="font:600 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E6862">Mon</div><div style="font:700 19px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.03em;color:#14110F;margin-top:4px">24</div></div>
+<div style="padding:16px 6px 12px;text-align:center"><div style="font:600 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E6862">Tue</div><div style="font:700 19px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.03em;color:#14110F;margin-top:4px">25</div></div>
+<div style="padding:16px 6px 12px;text-align:center"><div style="font:600 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:rgba(20,17,15,.62)">Wed</div><div style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:999px;background:#14110F;color:#fff;font:700 17px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.03em;margin-top:2px">26</div></div>
+<div style="padding:16px 6px 12px;text-align:center"><div style="font:600 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E6862">Thu</div><div style="font:700 19px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.03em;color:#14110F;margin-top:4px">27</div></div>
+<div style="padding:16px 6px 12px;text-align:center"><div style="font:600 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E6862">Fri</div><div style="font:700 19px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.03em;color:#14110F;margin-top:4px">28</div></div>
+<div style="padding:16px 6px 12px;text-align:center"><div style="font:600 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E6862">Sat</div><div style="font:700 19px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.03em;color:#14110F;margin-top:4px">29</div></div>
+<div style="padding:16px 6px 12px;text-align:center;opacity:.4"><div style="font:600 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E6862">Sun</div><div style="font:700 19px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.03em;color:#14110F;margin-top:4px">30</div></div>
+</div>
+
+<div style="display:grid;grid-template-columns:88px repeat(7,minmax(0,1fr));border-top:1px solid rgba(20,17,15,.07);padding-top:6px">
+<div>
+<div style="height:64px;padding-right:14px;text-align:right;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">09:00</div>
+<div style="height:64px;padding-right:14px;text-align:right;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">10:00</div>
+<div style="height:64px;padding-right:14px;text-align:right;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">11:00</div>
+<div style="height:64px;padding-right:14px;text-align:right;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">12:00</div>
+<div style="height:64px;padding-right:14px;text-align:right;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">13:00</div>
+<div style="height:64px;padding-right:14px;text-align:right;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">14:00</div>
+<div style="height:64px;padding-right:14px;text-align:right;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">15:00</div>
+<div style="height:64px;padding-right:14px;text-align:right;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">16:00</div>
+<div style="height:64px;padding-right:14px;text-align:right;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">17:00</div>
+</div>
+
+<div style="position:relative;height:576px;background:repeating-linear-gradient(to bottom,transparent 0 63px,rgba(20,17,15,.06) 63px 64px);padding:0 3px">
+<div style="position:absolute;left:3px;right:3px;top:64px;height:60px;background:#DFEBE1;border-radius:14px;padding:8px 10px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">10:00</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Ivy Chen</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Sunday Glow</div></div>
+<div style="position:absolute;left:3px;right:3px;top:192px;height:92px;background:#E8E3F5;border-radius:14px;padding:8px 10px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">12:00</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Maya Sharif</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Microneedling</div></div>
+<div style="position:absolute;left:3px;right:3px;top:320px;height:60px;background:#DEE7F3;border-radius:14px;padding:8px 10px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">14:00</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Tom Reyes</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Consult</div></div>
+</div>
+
+<div style="position:relative;height:576px;background:repeating-linear-gradient(to bottom,transparent 0 63px,rgba(20,17,15,.06) 63px 64px);padding:0 3px;border-left:1px solid rgba(20,17,15,.05)">
+<div style="position:absolute;left:3px;right:3px;top:0;height:92px;background:#F7E0E4;border-radius:14px;padding:8px 10px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">09:00</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Leah Barnes</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Brightening Peel</div></div>
+<div style="position:absolute;left:3px;right:3px;top:128px;height:60px;background:#DFEBE1;border-radius:14px;padding:8px 10px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">11:00</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Anouk V.</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Hydration</div></div>
+<div style="position:absolute;left:3px;right:3px;top:256px;height:60px;background:#EDEAE6;border-radius:14px;padding:8px 10px"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">13:00</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.55);margin-top:2px">Team training</div></div>
+<div style="position:absolute;left:3px;right:3px;top:384px;height:92px;background:#E8E3F5;border-radius:14px;padding:8px 10px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">15:00</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Joy Adebayo</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">RF Tightening</div></div>
+</div>
+
+<div style="position:relative;height:576px;background:repeating-linear-gradient(to bottom,transparent 0 63px,rgba(20,17,15,.06) 63px 64px),#FDFBF8;padding:0 3px;border-left:1px solid rgba(20,17,15,.05)">
+<div style="position:absolute;left:3px;right:3px;top:0;height:60px;background:#DFEBE1;border-radius:14px;padding:8px 10px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">09:00</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Zoe Adeyemi</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Sunday Glow</div></div>
+<div style="position:absolute;left:3px;right:3px;top:64px;height:92px;background:#14110F;border-radius:14px;padding:8px 10px;cursor:pointer"><div style="display:flex;align-items:center;gap:5px"><span style="width:5px;height:5px;border-radius:999px;background:#F6DFCE"></span><span style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:#F6DFCE">IN ROOM</span></div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#fff;margin-top:3px">Hana Ito</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(255,255,255,.6)">Microneedling</div></div>
+<div style="position:absolute;left:3px;right:3px;top:256px;height:92px;background:#F7E0E4;border-radius:14px;padding:8px 10px;cursor:pointer;box-shadow:0 0 0 2px #14110F" style-hover="filter:brightness(.98)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">13:00</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Rina Patel</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Collagen Laser</div><div style="position:absolute;right:8px;top:8px;width:16px;height:16px;border-radius:999px;background:#14110F;color:#fff;font:700 10px 'Plus Jakarta Sans',sans-serif;display:flex;align-items:center;justify-content:center">!</div></div>
+<div style="position:absolute;left:3px;right:3px;top:384px;height:60px;background:#DFEBE1;border-radius:14px;padding:8px 10px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">15:00</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Amelia Fox</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Hydration</div></div>
+<div style="position:absolute;left:3px;right:3px;top:141px;height:2px;background:#E8896F"><span style="position:absolute;left:-3px;top:-3px;width:8px;height:8px;border-radius:999px;background:#E8896F"></span></div>
+</div>
+
+<div style="position:relative;height:576px;background:repeating-linear-gradient(to bottom,transparent 0 63px,rgba(20,17,15,.06) 63px 64px);padding:0 3px;border-left:1px solid rgba(20,17,15,.05)">
+<div style="position:absolute;left:3px;right:3px;top:32px;height:92px;background:#E8E3F5;border-radius:14px;padding:8px 10px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">09:30</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Grace Lin</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">RF · 4 of 6</div></div>
+<div style="position:absolute;left:3px;right:3px;top:192px;height:60px;background:#DEE7F3;border-radius:14px;padding:8px 10px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">12:00</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Noor Ahmed</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Consult</div></div>
+<div style="position:absolute;left:3px;right:3px;top:288px;height:60px;background:#DFEBE1;border-radius:14px;padding:8px 10px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">13:30</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Bea Nkemi</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Sunday Glow</div></div>
+<div style="position:absolute;left:3px;right:3px;top:416px;height:92px;background:#F7E0E4;border-radius:14px;padding:8px 10px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">15:30</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Kit Alvarez</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Peel + LED</div></div>
+</div>
+
+<div style="position:relative;height:576px;background:repeating-linear-gradient(to bottom,transparent 0 63px,rgba(20,17,15,.06) 63px 64px);padding:0 3px;border-left:1px solid rgba(20,17,15,.05)">
+<div style="position:absolute;left:3px;right:3px;top:0;height:60px;background:#DFEBE1;border-radius:14px;padding:8px 10px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">09:00</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Priya M.</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Sunday Glow</div></div>
+<div style="position:absolute;left:3px;right:3px;top:96px;height:124px;background:#F7E0E4;border-radius:14px;padding:8px 10px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">10:30</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Sarah Mensah</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Peel + LED</div><div style="margin-top:6px;display:inline-block;font:700 9px 'Plus Jakarta Sans',sans-serif;background:rgba(255,255,255,.7);color:#14110F;padding:3px 7px;border-radius:999px">$95 due</div></div>
+<div style="position:absolute;left:3px;right:3px;top:256px;height:60px;background:#EDEAE6;border-radius:14px;padding:8px 10px"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">13:00</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.55);margin-top:2px">Lunch</div></div>
+<div style="position:absolute;left:3px;right:3px;top:352px;height:92px;background:#E8E3F5;border-radius:14px;padding:8px 10px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">14:30</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Lena Roth</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Microneedling</div></div>
+</div>
+
+<div style="position:relative;height:576px;background:repeating-linear-gradient(to bottom,transparent 0 63px,rgba(20,17,15,.06) 63px 64px);padding:0 3px;border-left:1px solid rgba(20,17,15,.05)">
+<div style="position:absolute;left:3px;right:3px;top:64px;height:60px;background:#DFEBE1;border-radius:14px;padding:8px 10px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">10:00</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Club onboarding</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">3 new members</div></div>
+<div style="position:absolute;left:3px;right:3px;top:160px;height:92px;background:#F7E0E4;border-radius:14px;padding:8px 10px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">11:30</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Dani Cole</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Collagen Laser</div></div>
+<div style="position:absolute;left:3px;right:3px;top:288px;height:60px;background:#DEE7F3;border-radius:14px;padding:8px 10px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">13:30</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Ade Bakare</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Consult</div></div>
+</div>
+
+<div style="position:relative;height:576px;background:repeating-linear-gradient(to bottom,transparent 0 63px,rgba(20,17,15,.05) 63px 64px),#F7F5F3;padding:0 3px;border-left:1px solid rgba(20,17,15,.05)">
+<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62);transform:rotate(-90deg);white-space:nowrap">Studio closed</span></div>
+</div>
+
+</div>
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 4px">
+<div style="display:flex;align-items:center;gap:18px">
+<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:999px;background:#E8896F"></span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">Now, 11:12</span></div>
+<div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">31 appointments this week · 4 open slots · 86% utilisation</div>
+</div>
+<div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;cursor:pointer" style-hover="color:#6E6862">Click any empty slot to book &#8594;</div>
+</div>
+
+</main>
+</div>
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="2e"><div class="dv-olabel"><a class="dv-oid" href="#2e">2e</a>Staff filter, open — multi-select with today's counts</div>
+<div class="dv-card" style="width:300px">
+<div style="background:#E9E6E3;padding:16px;border-radius:30px">
+<div style="display:flex;align-items:center;gap:10px;background:#14110F;border-radius:999px;padding:11px 16px 11px 20px;cursor:pointer"><span style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#fff">All staff</span><span style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(255,255,255,.6)">13</span><span style="margin-left:auto;font-size:10px;color:rgba(255,255,255,.6)">&#9652;</span></div>
+<div style="background:#fff;border-radius:20px;padding:8px;box-shadow:0 12px 40px rgba(20,17,15,.14);margin-top:6px">
+<div style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:14px;background:#F5F3F1;cursor:pointer"><span style="width:18px;height:18px;border-radius:6px;background:#14110F;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;flex:none">&#10003;</span><span style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">All staff</span><span style="margin-left:auto;font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">13</span></div>
+<div style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:14px;cursor:pointer" style-hover="background:#F5F3F1"><span style="width:18px;height:18px;border-radius:6px;border:1.5px solid rgba(20,17,15,.2);flex:none"></span><span style="width:24px;height:24px;border-radius:999px;background:#DFEBE1;flex:none"></span><span style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">Amara O.</span><span style="margin-left:auto;font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">6</span></div>
+<div style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:14px;cursor:pointer" style-hover="background:#F5F3F1"><span style="width:18px;height:18px;border-radius:6px;border:1.5px solid rgba(20,17,15,.2);flex:none"></span><span style="width:24px;height:24px;border-radius:999px;background:#F7E0E4;flex:none"></span><span style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">Nia B.</span><span style="margin-left:auto;font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">4</span></div>
+<div style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:14px;cursor:pointer" style-hover="background:#F5F3F1"><span style="width:18px;height:18px;border-radius:6px;border:1.5px solid rgba(20,17,15,.2);flex:none"></span><span style="width:24px;height:24px;border-radius:999px;background:#DEE7F3;flex:none"></span><span style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">Priya R.</span><span style="margin-left:auto;font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">3</span></div>
+<div style="height:1px;background:rgba(20,17,15,.07);margin:6px 12px"></div>
+<div style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:14px;cursor:pointer" style-hover="background:#F5F3F1"><span style="width:18px;height:18px;border-radius:6px;border:1.5px solid rgba(20,17,15,.2);flex:none"></span><span style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.6)">Unassigned &amp; blocks</span></div>
+</div>
+<div style="background:#fff;border-radius:20px;padding:8px;box-shadow:0 12px 40px rgba(20,17,15,.14);margin-top:14px">
+<div style="font:700 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E6862;padding:8px 12px 4px">Availability for</div>
+<div style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:14px;background:#F5F3F1;cursor:pointer"><span style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">Any service</span></div>
+<div style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:14px;cursor:pointer" style-hover="background:#F5F3F1"><span style="width:9px;height:9px;border-radius:3px;background:#DFEBE1;flex:none"></span><span style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">The Sunday Glow</span><span style="margin-left:auto;font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">60m</span></div>
+<div style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:14px;cursor:pointer" style-hover="background:#F5F3F1"><span style="width:9px;height:9px;border-radius:3px;background:#E8E3F5;flex:none"></span><span style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">Microneedling + LED</span><span style="margin-left:auto;font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">90m</span></div>
+<div style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:14px;cursor:pointer" style-hover="background:#F5F3F1"><span style="width:9px;height:9px;border-radius:3px;background:#F7E0E4;flex:none"></span><span style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">Collagen Laser</span><span style="margin-left:auto;font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">90m</span></div>
+<div style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:14px;cursor:pointer" style-hover="background:#F5F3F1"><span style="width:9px;height:9px;border-radius:3px;background:#DEE7F3;flex:none"></span><span style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">Consultation</span><span style="margin-left:auto;font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">40m</span></div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="2b"><div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>Day view — one column per provider, board only</div>
+<div class="dv-card" style="width:820px">
+<div style="background:#E9E6E3;padding:18px;border-radius:36px">
+<div style="background:#FBFAF9;border-radius:28px;padding:18px">
+
+<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px">
+<div style="display:flex;align-items:center;gap:10px">
+<div style="font:800 20px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.035em;color:#14110F">Wednesday 26</div>
+<span style="background:#F6DFCE;border-radius:999px;padding:5px 12px;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F">Today</span>
+</div>
+<div style="display:flex;background:#fff;border-radius:999px;padding:5px">
+<span style="padding:7px 16px;border-radius:999px;background:#14110F;color:#fff;font:600 11px 'Plus Jakarta Sans',sans-serif">Day</span>
+<span style="padding:7px 16px;border-radius:999px;font:600 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.55);cursor:pointer" style-hover="background:#F5F3F1;color:#14110F">Week</span>
+</div>
+</div>
+
+<div style="background:#fff;border-radius:24px;padding:6px 14px 14px">
+<div style="display:grid;grid-template-columns:76px repeat(3,minmax(0,1fr));align-items:center">
+<div></div>
+<div style="padding:14px 8px 12px;display:flex;align-items:center;gap:10px"><span style="width:32px;height:32px;border-radius:999px;background:#DFEBE1"></span><div><div style="font:700 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">Amara O.</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:#6E6862">Lead therapist</div></div></div>
+<div style="padding:14px 8px 12px;display:flex;align-items:center;gap:10px"><span style="width:32px;height:32px;border-radius:999px;background:#F7E0E4"></span><div><div style="font:700 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">Nia B.</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:#6E6862">Laser</div></div></div>
+<div style="padding:14px 8px 12px;display:flex;align-items:center;gap:10px"><span style="width:32px;height:32px;border-radius:999px;background:#DEE7F3"></span><div><div style="font:700 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">Priya R.</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:#6E6862">Skin coach</div></div></div>
+</div>
+
+<div style="display:grid;grid-template-columns:76px repeat(3,minmax(0,1fr));border-top:1px solid rgba(20,17,15,.07);padding-top:6px">
+<div>
+<div style="height:72px;padding-right:12px;text-align:right;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">09:00</div>
+<div style="height:72px;padding-right:12px;text-align:right;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">10:00</div>
+<div style="height:72px;padding-right:12px;text-align:right;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">11:00</div>
+<div style="height:72px;padding-right:12px;text-align:right;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">12:00</div>
+<div style="height:72px;padding-right:12px;text-align:right;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">13:00</div>
+<div style="height:72px;padding-right:12px;text-align:right;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">14:00</div>
+<div style="height:72px;padding-right:12px;text-align:right;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">15:00</div>
+</div>
+
+<div style="position:relative;height:504px;background:repeating-linear-gradient(to bottom,transparent 0 71px,rgba(20,17,15,.06) 71px 72px);padding:0 4px">
+<div style="position:absolute;left:4px;right:4px;top:0;height:68px;background:#DFEBE1;border-radius:16px;padding:9px 12px;cursor:pointer" style-hover="filter:brightness(.97)"><div style="display:flex;justify-content:space-between"><span style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">09:00 – 10:00</span><span style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Paid</span></div><div style="font:700 14px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F;margin-top:3px">Zoe Adeyemi</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.55)">The Sunday Glow</div></div>
+<div style="position:absolute;left:4px;right:4px;top:72px;height:104px;background:#14110F;border-radius:16px;padding:10px 12px;cursor:pointer"><div style="display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:999px;background:#F6DFCE"></span><span style="font:700 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.06em;color:#F6DFCE">IN ROOM · 18 MIN LEFT</span></div><div style="font:700 14px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#fff;margin-top:4px">Hana Ito</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(255,255,255,.6)">Microneedling + LED</div><div style="height:5px;border-radius:999px;background:rgba(255,255,255,.16);margin-top:12px"><div style="width:72%;height:5px;border-radius:999px;background:#F6DFCE"></div></div></div>
+<div style="position:absolute;left:4px;right:4px;top:184px;height:32px;background:repeating-linear-gradient(135deg,rgba(20,17,15,.04) 0 6px,rgba(20,17,15,.08) 6px 12px);border-radius:12px;padding:7px 12px"><span style="font:600 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.45)">Turnover 15 min</span></div>
+<div style="position:absolute;left:4px;right:4px;top:288px;height:104px;background:#F7E0E4;border-radius:16px;padding:9px 12px;cursor:pointer;box-shadow:0 0 0 2px #14110F"><div style="display:flex;justify-content:space-between;align-items:flex-start"><span style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">13:00 – 14:30</span><span style="width:18px;height:18px;border-radius:999px;background:#14110F;color:#fff;font:700 11px 'Plus Jakarta Sans',sans-serif;display:flex;align-items:center;justify-content:center">!</span></div><div style="font:700 14px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F;margin-top:3px">Rina Patel</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.55)">Collagen Laser · first visit</div><div style="margin-top:8px;display:inline-block;font:700 9px 'Plus Jakarta Sans',sans-serif;background:rgba(255,255,255,.75);color:#14110F;padding:4px 9px;border-radius:999px">Intake unsigned</div></div>
+<div style="position:absolute;left:4px;right:4px;top:432px;height:68px;background:#DFEBE1;border-radius:16px;padding:9px 12px;cursor:pointer" style-hover="filter:brightness(.97)"><span style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">15:00 – 16:00</span><div style="font:700 14px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F;margin-top:3px">Amelia Fox</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.55)">Hydration Rescue</div></div>
+<div style="position:absolute;left:4px;right:4px;top:158px;height:2px;background:#E8896F"><span style="position:absolute;left:-3px;top:-3px;width:8px;height:8px;border-radius:999px;background:#E8896F"></span></div>
+</div>
+
+<div style="position:relative;height:504px;background:repeating-linear-gradient(to bottom,transparent 0 71px,rgba(20,17,15,.06) 71px 72px);padding:0 4px;border-left:1px solid rgba(20,17,15,.05)">
+<div style="position:absolute;left:4px;right:4px;top:36px;height:86px;background:#E8E3F5;border-radius:16px;padding:9px 12px;cursor:pointer" style-hover="filter:brightness(.97)"><span style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">09:30 – 10:45</span><div style="font:700 14px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F;margin-top:3px">Grace Lin</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.55)">RF Tightening · 3 of 6</div></div>
+<div style="position:absolute;left:4px;right:4px;top:144px;height:50px;background:#DEE7F3;border-radius:16px;padding:9px 12px;cursor:pointer" style-hover="filter:brightness(.97)"><span style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">11:00 – 11:40</span><div style="font:700 13px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F;margin-top:2px">Dara Mbeki · consult</div></div>
+<div style="position:absolute;left:4px;right:4px;top:216px;height:68px;background:repeating-linear-gradient(135deg,rgba(20,17,15,.04) 0 6px,rgba(20,17,15,.08) 6px 12px);border-radius:16px;padding:9px 12px"><span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.45)">Lunch</span></div>
+<div style="position:absolute;left:4px;right:4px;top:324px;height:122px;background:#F7E0E4;border-radius:16px;padding:9px 12px;cursor:pointer" style-hover="filter:brightness(.97)"><span style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">13:30 – 15:15</span><div style="font:700 14px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F;margin-top:3px">Sarah Mensah</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.55)">Brightening Peel + LED</div><div style="margin-top:8px;display:inline-block;font:700 9px 'Plus Jakarta Sans',sans-serif;background:rgba(255,255,255,.75);color:#14110F;padding:4px 9px;border-radius:999px">$95 balance</div></div>
+</div>
+
+<div style="position:relative;height:504px;background:repeating-linear-gradient(to bottom,transparent 0 71px,rgba(20,17,15,.06) 71px 72px);padding:0 4px;border-left:1px solid rgba(20,17,15,.05)">
+<div style="position:absolute;left:4px;right:4px;top:72px;height:50px;background:#DEE7F3;border-radius:16px;padding:9px 12px;cursor:pointer" style-hover="filter:brightness(.97)"><span style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">10:00 – 10:40</span><div style="font:700 13px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F;margin-top:2px">Noor A. · consult</div></div>
+<div style="position:absolute;left:4px;right:4px;top:180px;height:68px;background:#F6DFCE;border-radius:16px;padding:9px 12px;cursor:pointer" style-hover="filter:brightness(.97)"><span style="font:700 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">11:30 – 12:30</span><div style="font:700 14px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F;margin-top:3px">Club onboarding</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.55)">3 new members</div></div>
+<div style="position:absolute;left:4px;right:4px;top:360px;height:68px;border:1.5px dashed rgba(20,17,15,.2);border-radius:16px;padding:9px 12px;display:flex;flex-direction:column;justify-content:center;cursor:pointer" style-hover="border-color:#14110F;background:#FDFBF8"><span style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Open 14:00 – 15:00</span><span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:2px">Click to book &#8594;</span></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="2c"><div class="dv-olabel"><a class="dv-oid" href="#2c">2c</a>Empty slot → book from calendar context</div>
+<div class="dv-card" style="width:440px">
+<div style="background:#E9E6E3;padding:16px;border-radius:34px">
+<div style="background:#fff;border-radius:28px;padding:24px 24px 22px;display:flex;flex-direction:column;gap:18px">
+
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+<div>
+<div style="font:700 11px 'Plus Jakarta Sans',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#6E6862">New booking</div>
+<div style="font:800 21px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.035em;color:#14110F;margin-top:6px">Wed 26 Aug · 14:00</div>
+<div style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:#6E6862;margin-top:2px">Priya R. · Room 3 · slot held 9:52</div>
+</div>
+<div style="width:32px;height:32px;border-radius:999px;background:#F5F3F1;display:flex;align-items:center;justify-content:center;font:400 13px 'Plus Jakarta Sans',sans-serif;color:#6E6862;cursor:pointer" style-hover="background:#EDE9E6;color:#14110F">&#10005;</div>
+</div>
+
+<div style="display:flex;background:#F5F3F1;border-radius:999px;padding:4px">
+<span style="flex:1;text-align:center;padding:9px;border-radius:999px;background:#14110F;color:#fff;font:600 12px 'Plus Jakarta Sans',sans-serif">Appointment</span>
+<span style="flex:1;text-align:center;padding:9px;border-radius:999px;font:600 12px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.55);cursor:pointer" style-hover="color:#14110F">Time block</span>
+</div>
+
+<div>
+<div style="font:700 11px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E6862;margin-bottom:10px">Client</div>
+<div style="display:flex;align-items:center;gap:10px;background:#FBFAF9;border-radius:999px;padding:12px 18px"><span style="width:14px;height:14px;border-radius:999px;border:1.5px solid rgba(20,17,15,.28)"></span><span style="font:500 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">gra</span><span style="width:1px;height:14px;background:#14110F"></span></div>
+<div style="margin-top:8px;background:#FBFAF9;border-radius:20px;padding:6px">
+<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:16px;background:#F6DFCE;cursor:pointer">
+<span style="width:34px;height:34px;border-radius:999px;background:rgba(255,255,255,.7);flex:none"></span>
+<div style="flex:1"><div style="font:600 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">Grace Lin</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Member · 12 visits · grace.lin@email.com</div></div>
+</div>
+<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:16px;cursor:pointer" style-hover="background:#F5F3F1">
+<span style="width:34px;height:34px;border-radius:999px;background:#EDEAE6;flex:none"></span>
+<div style="flex:1"><div style="font:600 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">Grace Okonkwo</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">2 visits · +61 400 118 220</div></div>
+</div>
+<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:16px;cursor:pointer" style-hover="background:#F5F3F1">
+<span style="width:34px;height:34px;border-radius:999px;background:#FBFAF9;border:1.5px dashed rgba(20,17,15,.2);flex:none;display:flex;align-items:center;justify-content:center;font:400 15px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">+</span>
+<div style="flex:1"><div style="font:600 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">New client</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62)">Name, phone, email</div></div>
+</div>
+</div>
+</div>
+
+<div>
+<div style="font:700 11px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E6862;margin-bottom:10px">Treatment</div>
+<div style="display:flex;flex-wrap:wrap;gap:8px">
+<span style="background:#DFEBE1;border-radius:999px;padding:10px 16px;font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;cursor:pointer">The Sunday Glow</span>
+<span style="background:#F5F3F1;border-radius:999px;padding:10px 16px;font:600 12px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.6);cursor:pointer" style-hover="background:#EDE9E6;color:#14110F">Hydration Rescue</span>
+<span style="background:#F5F3F1;border-radius:999px;padding:10px 16px;font:600 12px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.6);cursor:pointer" style-hover="background:#EDE9E6;color:#14110F">Microneedling</span>
+<span style="background:#F5F3F1;border-radius:999px;padding:10px 16px;font:600 12px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.6);cursor:pointer" style-hover="background:#EDE9E6;color:#14110F">Browse all &#8250;</span>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px">
+<div style="background:#FBFAF9;border-radius:16px;padding:12px 14px"><div style="font:600 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6E6862">Duration</div><div style="font:700 14px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:4px">60 min</div></div>
+<div style="background:#FBFAF9;border-radius:16px;padding:12px 14px"><div style="font:600 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6E6862">Ends</div><div style="font:700 14px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:4px">15:00</div></div>
+<div style="background:#FBFAF9;border-radius:16px;padding:12px 14px"><div style="font:600 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6E6862">Price</div><div style="font:700 14px 'Plus Jakarta Sans',sans-serif;color:#14110F;margin-top:4px">$180</div></div>
+</div>
+</div>
+
+<div style="background:#DFEBE1;border-radius:20px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+<div><div style="font:600 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">Grace has 1 facial credit</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.55);margin-top:2px">Apply it and nothing is owed today</div></div>
+<span style="width:44px;height:26px;border-radius:999px;background:#14110F;padding:3px;display:flex;justify-content:flex-end;flex:none"><span style="width:20px;height:20px;border-radius:999px;background:#fff"></span></span>
+</div>
+
+<div>
+<div style="font:700 11px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E6862;margin-bottom:10px">Notes for the team</div>
+<div style="background:#FBFAF9;border-radius:18px;padding:14px 16px;font:500 12px/1.6 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62);min-height:64px">Add context for this client or appointment.</div>
+</div>
+
+<div style="display:flex;align-items:center;gap:10px">
+<div style="flex:none;background:#F5F3F1;border-radius:999px;padding:14px 20px;font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;cursor:pointer" style-hover="background:#EDE9E6">Cancel</div>
+<div style="flex:1;text-align:center;background:#14110F;border-radius:999px;padding:14px 20px;font:600 12px 'Plus Jakarta Sans',sans-serif;color:#fff;cursor:pointer" style-hover="background:#2E2825">Book &amp; send confirmation</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="2d"><div class="dv-olabel"><a class="dv-oid" href="#2d">2d</a>Appointment → details drawer</div>
+<div class="dv-card" style="width:440px">
+<div style="background:#E9E6E3;padding:16px;border-radius:34px">
+<div style="background:#fff;border-radius:28px;padding:24px;display:flex;flex-direction:column;gap:18px">
+
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+<div>
+<div style="display:inline-block;background:#F7E0E4;border-radius:999px;padding:5px 12px;font:700 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#14110F">Laser &amp; peels</div>
+<div style="font:800 22px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.035em;color:#14110F;margin-top:10px">Rina Patel</div>
+<div style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:#6E6862;margin-top:3px">Collagen Laser · Amara O. · Room 1</div>
+</div>
+<div style="width:32px;height:32px;border-radius:999px;background:#F5F3F1;display:flex;align-items:center;justify-content:center;font:400 13px 'Plus Jakarta Sans',sans-serif;color:#6E6862;cursor:pointer" style-hover="background:#EDE9E6;color:#14110F">&#10005;</div>
+</div>
+
+<div style="background:#FBFAF9;border-radius:20px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between">
+<div><div style="font:600 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E6862">Today</div><div style="font:700 18px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.03em;color:#14110F;margin-top:3px">13:00 – 14:30</div></div>
+<div style="display:flex;gap:8px">
+<span style="background:#fff;border-radius:999px;padding:9px 15px;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;cursor:pointer" style-hover="background:#F0EDEA">Reschedule</span>
+<span style="background:#fff;border-radius:999px;padding:9px 15px;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;cursor:pointer" style-hover="background:#F0EDEA">Check in</span>
+</div>
+</div>
+
+<div style="background:#F7E0E4;border-radius:20px;padding:16px 18px">
+<div style="display:flex;align-items:center;gap:9px"><span style="width:18px;height:18px;border-radius:999px;background:#14110F;color:#fff;font:700 11px 'Plus Jakarta Sans',sans-serif;display:flex;align-items:center;justify-content:center">!</span><span style="font:700 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">Laser consent unsigned</span></div>
+<div style="font:500 12px/1.6 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.6);margin-top:8px">Two answers need a therapist sign-off — recent retinoid use and sun exposure in the last 14 days.</div>
+<div style="display:flex;gap:8px;margin-top:14px">
+<span style="background:#14110F;color:#fff;border-radius:999px;padding:10px 16px;font:600 11px 'Plus Jakarta Sans',sans-serif;cursor:pointer" style-hover="background:#2E2825">Review form</span>
+<span style="background:rgba(255,255,255,.7);border-radius:999px;padding:10px 16px;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;cursor:pointer" style-hover="background:#fff">Resend link</span>
+</div>
+</div>
+
+<div>
+<div style="font:700 11px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E6862;margin-bottom:10px">Client</div>
+<div style="display:flex;align-items:center;gap:12px">
+<span style="width:44px;height:44px;border-radius:16px;background:#EDEAE6;flex:none"></span>
+<div style="flex:1"><div style="font:600 14px 'Plus Jakarta Sans',sans-serif;color:#14110F">Rina Patel</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">First visit · Fitzpatrick V · +61 421 771 004</div></div>
+<span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;background:#F5F3F1;border-radius:999px;padding:8px 14px;cursor:pointer" style-hover="background:#EDE9E6">Profile</span>
+</div>
+<div style="background:#FBFAF9;border-radius:18px;padding:14px 16px;margin-top:12px;font:500 12px/1.7 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.7);font-style:italic">"Reacted to a peel two years ago — went dark for a few weeks. Nervous about that happening again."</div>
+</div>
+
+<div>
+<div style="font:700 11px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E6862;margin-bottom:10px">Payment</div>
+<div style="display:flex;justify-content:space-between;padding:6px 0;font:500 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.65)"><span>Collagen Laser</span><span style="color:#14110F;font-weight:600">$320.00</span></div>
+<div style="display:flex;justify-content:space-between;padding:6px 0;font:500 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.65)"><span>Deposit paid 19 Aug</span><span style="color:#5E8F6E;font-weight:600">–$50.00</span></div>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:12px;border-top:1px solid rgba(20,17,15,.08)"><span style="font:600 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">Due at checkout</span><span style="font:800 22px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.035em;color:#14110F">$270.00</span></div>
+</div>
+
+<div style="display:flex;align-items:center;gap:10px">
+<div style="flex:none;background:#F5F3F1;border-radius:999px;padding:14px 18px;font:600 12px 'Plus Jakarta Sans',sans-serif;color:#6E6862;cursor:pointer" style-hover="background:#EDE9E6;color:#14110F">Cancel</div>
+<div style="flex:1;text-align:center;background:#14110F;border-radius:999px;padding:14px 20px;font:600 12px 'Plus Jakarta Sans',sans-serif;color:#fff;cursor:pointer" style-hover="background:#2E2825">Complete &amp; check out</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+</div>
+
+<p class="dv-next">Try next: "drag-to-create on the week grid" · "show <a class="dv-oid" href="#2a">2a</a> at laptop width" · "the time-block and time-off drawers" · "clients page next"</p>
+</section>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Soft direction — rounded, roomy, warm neutrals</span></div>
+
+<div style="max-width:820px;background:#fff;border-radius:24px;padding:26px 30px;margin:0 0 34px">
+<div style="font:700 11px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E6862;margin-bottom:14px">The system</div>
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px">
+<div style="display:flex;align-items:center;gap:9px;padding:8px 14px 8px 8px;background:#F5F3F1;border-radius:999px"><span style="width:22px;height:22px;border-radius:999px;background:#FFFFFF;border:1px solid rgba(20,17,15,.08)"></span><span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F">Card #FFF</span></div>
+<div style="display:flex;align-items:center;gap:9px;padding:8px 14px 8px 8px;background:#F5F3F1;border-radius:999px"><span style="width:22px;height:22px;border-radius:999px;background:#E9E6E3"></span><span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F">Ground</span></div>
+<div style="display:flex;align-items:center;gap:9px;padding:8px 14px 8px 8px;background:#F5F3F1;border-radius:999px"><span style="width:22px;height:22px;border-radius:999px;background:#F6DFCE"></span><span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F">Peach</span></div>
+<div style="display:flex;align-items:center;gap:9px;padding:8px 14px 8px 8px;background:#F5F3F1;border-radius:999px"><span style="width:22px;height:22px;border-radius:999px;background:#E8E3F5"></span><span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F">Lilac</span></div>
+<div style="display:flex;align-items:center;gap:9px;padding:8px 14px 8px 8px;background:#F5F3F1;border-radius:999px"><span style="width:22px;height:22px;border-radius:999px;background:#DEE7F3"></span><span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F">Blue</span></div>
+<div style="display:flex;align-items:center;gap:9px;padding:8px 14px 8px 8px;background:#F5F3F1;border-radius:999px"><span style="width:22px;height:22px;border-radius:999px;background:#DFEBE1"></span><span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F">Mint</span></div>
+<div style="display:flex;align-items:center;gap:9px;padding:8px 14px 8px 8px;background:#F5F3F1;border-radius:999px"><span style="width:22px;height:22px;border-radius:999px;background:#14110F"></span><span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F">Ink / CTA</span></div>
+</div>
+<div style="font:400 13px/1.8 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62);max-width:64ch">Plus Jakarta Sans throughout with an <span style="font-family:'Instrument Serif',Georgia,serif;font-style:italic;font-size:16px">italic serif</span> for warmth. 28px outer radius, 20px inner, pill buttons. Pastels carry meaning — a treatment family per tint — never decoration. One black CTA per screen.</div>
+</div>
+
+<div class="dv-opts">
+
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Studio dashboard — the screen the front desk leaves open all day</div>
+<div class="dv-card" style="width:1360px">
+<div style="background:#E9E6E3;padding:18px;border-radius:36px">
+<div style="display:grid;grid-template-columns:236px 1fr;background:#fff;border-radius:28px;overflow:hidden;min-height:880px">
+
+<aside style="padding:26px 18px;display:flex;flex-direction:column;border-right:1px solid rgba(20,17,15,.06)">
+<div style="padding:0 10px 24px">
+<div style="font:800 19px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.03em;color:#14110F">Club <span style="font-family:'Instrument Serif',Georgia,serif;font-style:italic;font-weight:400;font-size:23px">Sunday</span></div>
+<div style="font:700 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#6E6862;margin-top:3px">Studio One</div>
+</div>
+<nav style="display:flex;flex-direction:column;gap:4px">
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#F6DFCE;font:600 13px 'Plus Jakarta Sans',sans-serif;color:#14110F"><span style="width:16px;height:16px;border-radius:5px;background:#14110F;display:inline-block"></span>Today</div>
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;font:500 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.6)" style-hover="background:#F5F3F1;color:#14110F"><span style="width:16px;height:16px;border-radius:5px;background:rgba(20,17,15,.14);display:inline-block"></span>Calendar</div>
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;font:500 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.6)" style-hover="background:#F5F3F1;color:#14110F"><span style="width:16px;height:16px;border-radius:5px;background:rgba(20,17,15,.14);display:inline-block"></span>Clients</div>
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;font:500 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.6)" style-hover="background:#F5F3F1;color:#14110F"><span style="width:16px;height:16px;border-radius:5px;background:rgba(20,17,15,.14);display:inline-block"></span>Treatments</div>
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;font:500 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.6)" style-hover="background:#F5F3F1;color:#14110F"><span style="width:16px;height:16px;border-radius:5px;background:rgba(20,17,15,.14);display:inline-block"></span>Team</div>
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;font:500 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.6)" style-hover="background:#F5F3F1;color:#14110F"><span style="width:16px;height:16px;border-radius:5px;background:rgba(20,17,15,.14);display:inline-block"></span>Forms<span style="margin-left:auto;font:700 10px 'Plus Jakarta Sans',sans-serif;background:#F7E0E4;color:#14110F;padding:3px 8px;border-radius:999px">4</span></div>
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;font:500 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.6)" style-hover="background:#F5F3F1;color:#14110F"><span style="width:16px;height:16px;border-radius:5px;background:rgba(20,17,15,.14);display:inline-block"></span>Payments<span style="margin-left:auto;font:700 10px 'Plus Jakarta Sans',sans-serif;background:#F7E0E4;color:#14110F;padding:3px 8px;border-radius:999px">2</span></div>
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;font:500 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.6)" style-hover="background:#F5F3F1;color:#14110F"><span style="width:16px;height:16px;border-radius:5px;background:rgba(20,17,15,.14);display:inline-block"></span>Membership</div>
+</nav>
+<div style="margin-top:auto;background:#F5F3F1;border-radius:20px;padding:16px">
+<div style="font:700 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E6862">Rooms free now</div>
+<div style="font:800 26px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.03em;color:#14110F;margin-top:6px">2 of 4</div>
+<div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.45);margin-top:2px">Laser suite free until 13:00</div>
+</div>
+</aside>
+
+<main style="padding:24px 26px 28px;background:#FBFAF9;display:flex;flex-direction:column;gap:16px">
+
+<div style="display:flex;align-items:center;justify-content:space-between;gap:20px">
+<div style="font:700 22px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.03em;color:#14110F">Good morning, Melissa</div>
+<div style="display:flex;align-items:center;gap:12px">
+<div style="display:flex;align-items:center;gap:9px;background:#fff;border-radius:999px;padding:10px 18px;min-width:230px"><span style="width:14px;height:14px;border-radius:999px;border:1.5px solid rgba(20,17,15,.3);display:inline-block"></span><span style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.38)">Search clients, bookings…</span></div>
+<div style="width:40px;height:40px;border-radius:999px;background:#fff;display:flex;align-items:center;justify-content:center;position:relative"><span style="width:15px;height:15px;border-radius:4px 4px 8px 8px;background:rgba(20,17,15,.28)"></span><span style="position:absolute;top:9px;right:10px;width:7px;height:7px;border-radius:999px;background:#E8896F"></span></div>
+<div style="display:flex;align-items:center;gap:10px;background:#fff;border-radius:999px;padding:5px 16px 5px 5px"><span style="width:30px;height:30px;border-radius:999px;background:#F6DFCE;display:flex;align-items:center;justify-content:center;font:700 11px 'Plus Jakarta Sans',sans-serif;color:#14110F">MC</span><span style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">Melissa C.</span></div>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:1.35fr 1fr;gap:16px">
+<div style="background:#F6DFCE;border-radius:24px;padding:30px 32px;display:flex;align-items:center;gap:24px;min-height:196px">
+<div style="flex:1">
+<div style="font:700 11px 'Plus Jakarta Sans',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:rgba(20,17,15,.45)">Wednesday 26 August</div>
+<div style="font:800 40px/1.05 'Plus Jakarta Sans',sans-serif;letter-spacing:-.045em;color:#14110F;margin-top:10px">13 in the book,<br><span style="font-family:'Instrument Serif',Georgia,serif;font-style:italic;font-weight:400;font-size:46px">two</span> rooms open</div>
+<div style="display:flex;align-items:center;gap:10px;margin-top:18px">
+<div style="display:flex;align-items:center;gap:10px;background:#14110F;color:#fff;border-radius:999px;padding:12px 10px 12px 20px;font:600 12px 'Plus Jakarta Sans',sans-serif;cursor:pointer" style-hover="background:#2E2825">New booking<span style="width:26px;height:26px;border-radius:999px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-size:12px">&#8594;</span></div>
+<div style="background:rgba(255,255,255,.65);border-radius:999px;padding:12px 20px;font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;cursor:pointer" style-hover="background:#fff">Fill from waitlist</div>
+</div>
+</div>
+<div style="width:150px;height:150px;border-radius:20px;background:rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center;text-align:center;flex:none"><span style="font:600 10px/1.5 'Plus Jakarta Sans',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:rgba(20,17,15,.62)">Studio<br>photo</span></div>
+</div>
+
+<div style="background:#fff;border-radius:24px;padding:24px 26px;display:flex;flex-direction:column">
+<div style="display:flex;align-items:center;justify-content:space-between">
+<div style="font:700 15px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F">In room now</div>
+<div style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">Room 1</div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;margin-top:18px">
+<div style="width:52px;height:52px;border-radius:16px;background:#E8E3F5;flex:none"></div>
+<div style="flex:1"><div style="font:700 17px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F">Hana Ito</div><div style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:#6E6862;margin-top:2px">Microneedling + LED · Amara O.</div></div>
+</div>
+<div style="margin-top:18px;display:flex;align-items:center;gap:12px">
+<div style="flex:1;height:8px;border-radius:999px;background:#F0EDEA"><div style="width:72%;height:8px;border-radius:999px;background:#14110F"></div></div>
+<div style="font:700 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">18 min</div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:auto;padding-top:20px">
+<div style="padding:13px;text-align:center;background:#14110F;color:#fff;border-radius:999px;font:600 12px 'Plus Jakarta Sans',sans-serif;cursor:pointer" style-hover="background:#2E2825">Check out</div>
+<div style="padding:13px;text-align:center;background:#F5F3F1;color:#14110F;border-radius:999px;font:600 12px 'Plus Jakarta Sans',sans-serif;cursor:pointer" style-hover="background:#EDE9E6">Open chart</div>
+</div>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+<div style="background:#DEE7F3;border-radius:22px;padding:20px 22px"><div style="width:30px;height:30px;border-radius:10px;background:rgba(255,255,255,.6);margin-bottom:14px"></div><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:rgba(20,17,15,.45)">Booked value</div><div style="font:800 24px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.03em;color:#14110F;margin-top:5px">$3,240</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.45);margin-top:3px">+12% on last Wed</div></div>
+<div style="background:#DFEBE1;border-radius:22px;padding:20px 22px"><div style="width:30px;height:30px;border-radius:10px;background:rgba(255,255,255,.6);margin-bottom:14px"></div><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:rgba(20,17,15,.45)">Utilisation</div><div style="font:800 24px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.03em;color:#14110F;margin-top:5px">86%</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.45);margin-top:3px">2 slots to fill</div></div>
+<div style="background:#F7E0E4;border-radius:22px;padding:20px 22px"><div style="width:30px;height:30px;border-radius:10px;background:rgba(255,255,255,.6);margin-bottom:14px"></div><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:rgba(20,17,15,.45)">Outstanding</div><div style="font:800 24px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.03em;color:#14110F;margin-top:5px">$95</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.45);margin-top:3px">1 balance to collect</div></div>
+<div style="background:#E8E3F5;border-radius:22px;padding:20px 22px"><div style="width:30px;height:30px;border-radius:10px;background:rgba(255,255,255,.6);margin-bottom:14px"></div><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:rgba(20,17,15,.45)">Members</div><div style="font:800 24px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.03em;color:#14110F;margin-top:5px">248</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.45);margin-top:3px">3 join today</div></div>
+</div>
+
+<div style="display:grid;grid-template-columns:1.35fr 1fr;gap:16px">
+<div style="background:#fff;border-radius:24px;padding:24px 26px">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+<div style="font:700 15px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F">Today's schedule</div>
+<div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#6E6862;cursor:pointer" style-hover="color:#14110F">View calendar &#8250;</div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid rgba(20,17,15,.06)">
+<div style="width:56px;font:700 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">09:00</div>
+<div style="width:42px;height:42px;border-radius:14px;background:#DFEBE1;flex:none"></div>
+<div style="flex:1"><div style="font:600 14px 'Plus Jakarta Sans',sans-serif;color:#14110F">Zoe Adeyemi</div><div style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:#6E6862">The Sunday Glow · Amara O.</div></div>
+<div style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;background:#F5F3F1;padding:7px 13px;border-radius:999px">Paid</div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid rgba(20,17,15,.06)">
+<div style="width:56px;font:700 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">10:00</div>
+<div style="width:42px;height:42px;border-radius:14px;background:#E8E3F5;flex:none"></div>
+<div style="flex:1"><div style="font:600 14px 'Plus Jakarta Sans',sans-serif;color:#14110F">Hana Ito</div><div style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:#6E6862">Microneedling + LED · Amara O.</div></div>
+<div style="display:flex;align-items:center;gap:7px;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;background:#F6DFCE;padding:7px 13px;border-radius:999px"><span style="width:6px;height:6px;border-radius:999px;background:#14110F"></span>In room</div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid rgba(20,17,15,.06)">
+<div style="width:56px;font:700 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">11:00</div>
+<div style="width:42px;height:42px;border-radius:14px;background:#DEE7F3;flex:none"></div>
+<div style="flex:1"><div style="font:600 14px 'Plus Jakarta Sans',sans-serif;color:#14110F">Dara Mbeki</div><div style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:#6E6862">Free consultation · Nia B.</div></div>
+<div style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862;background:#F5F3F1;padding:7px 13px;border-radius:999px">40 min</div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid rgba(20,17,15,.06)">
+<div style="width:56px;font:700 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">13:00</div>
+<div style="width:42px;height:42px;border-radius:14px;background:#F7E0E4;flex:none"></div>
+<div style="flex:1"><div style="font:600 14px 'Plus Jakarta Sans',sans-serif;color:#14110F">Rina Patel</div><div style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:#6E6862">Collagen Laser · first visit</div></div>
+<div style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;background:#F7E0E4;padding:7px 13px;border-radius:999px">Intake due</div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:16px 0 4px">
+<div style="width:56px;font:700 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.3)">14:00</div>
+<div style="flex:1;border:1.5px dashed rgba(20,17,15,.16);border-radius:16px;padding:13px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer" style-hover="border-color:#14110F;background:#FBFAF9">
+<span style="font:600 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.45)">One hour open with Amara</span>
+<span style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">Book &#8594;</span>
+</div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:16px">
+<div style="background:#fff;border-radius:24px;padding:24px 26px">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+<div style="font:700 15px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F">Needs a hand</div>
+<div style="font:700 10px 'Plus Jakarta Sans',sans-serif;background:#F7E0E4;color:#14110F;padding:4px 10px;border-radius:999px">3</div>
+</div>
+<div style="display:flex;align-items:center;gap:12px;padding:11px 0">
+<div style="width:36px;height:36px;border-radius:12px;background:#F7E0E4;flex:none"></div>
+<div style="flex:1"><div style="font:600 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">Rina Patel</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">Laser intake unsigned</div></div>
+<div style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;background:#F5F3F1;padding:7px 13px;border-radius:999px;cursor:pointer" style-hover="background:#14110F;color:#fff">Send</div>
+</div>
+<div style="display:flex;align-items:center;gap:12px;padding:11px 0">
+<div style="width:36px;height:36px;border-radius:12px;background:#DEE7F3;flex:none"></div>
+<div style="flex:1"><div style="font:600 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">Sarah Mensah</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">$95 balance after peel</div></div>
+<div style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;background:#F5F3F1;padding:7px 13px;border-radius:999px;cursor:pointer" style-hover="background:#14110F;color:#fff">Collect</div>
+</div>
+<div style="display:flex;align-items:center;gap:12px;padding:11px 0">
+<div style="width:36px;height:36px;border-radius:12px;background:#E8E3F5;flex:none"></div>
+<div style="flex:1"><div style="font:600 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">Grace Lin</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">Card expires Friday</div></div>
+<div style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;background:#F5F3F1;padding:7px 13px;border-radius:999px;cursor:pointer" style-hover="background:#14110F;color:#fff">Notify</div>
+</div>
+</div>
+<div style="background:#fff;border-radius:24px;padding:24px 26px">
+<div style="font:700 15px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F;margin-bottom:16px">On the floor</div>
+<div style="display:flex;gap:14px">
+<div style="flex:1;text-align:center"><div style="width:100%;aspect-ratio:1;border-radius:18px;background:#F0EDEA;margin-bottom:9px"></div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">Amara</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:#6E6862">6 booked</div></div>
+<div style="flex:1;text-align:center"><div style="width:100%;aspect-ratio:1;border-radius:18px;background:#F0EDEA;margin-bottom:9px"></div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">Nia</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:#6E6862">4 booked</div></div>
+<div style="flex:1;text-align:center"><div style="width:100%;aspect-ratio:1;border-radius:18px;background:#F0EDEA;margin-bottom:9px"></div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">Priya</div><div style="font:500 10px 'Plus Jakarta Sans',sans-serif;color:#6E6862">3 booked</div></div>
+<div style="flex:1;text-align:center"><div style="width:100%;aspect-ratio:1;border-radius:18px;background:#FBFAF9;border:1.5px dashed rgba(20,17,15,.16);margin-bottom:9px;display:flex;align-items:center;justify-content:center;font:400 18px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.3)">+</div><div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.45)">Cover</div></div>
+</div>
+</div>
+</div>
+</div>
+
+</main>
+</div>
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Check out — one sheet, one black button</div>
+<div class="dv-card" style="width:600px">
+<div style="background:#E9E6E3;padding:18px;border-radius:36px">
+<div style="background:#fff;border-radius:28px;padding:30px 32px">
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+<div>
+<div style="font:700 11px 'Plus Jakarta Sans',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#6E6862">Complete appointment</div>
+<div style="font:800 26px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.035em;color:#14110F;margin-top:8px">Sarah Mensah</div>
+<div style="font:500 13px 'Plus Jakarta Sans',sans-serif;color:#6E6862;margin-top:3px">Brightening Peel + LED · Nia B. · 13:30</div>
+</div>
+<div style="width:34px;height:34px;border-radius:999px;background:#F5F3F1;display:flex;align-items:center;justify-content:center;font:400 14px 'Plus Jakarta Sans',sans-serif;color:#6E6862;cursor:pointer" style-hover="background:#EDE9E6;color:#14110F">&#10005;</div>
+</div>
+
+<div style="background:#FBFAF9;border-radius:20px;padding:20px 22px;margin-top:22px">
+<div style="display:flex;justify-content:space-between;padding:6px 0;font:500 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.65)"><span>Brightening Peel + LED</span><span style="color:#14110F;font-weight:600">$210.00</span></div>
+<div style="display:flex;justify-content:space-between;padding:6px 0;font:500 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.65)"><span>Add-on · Hydrating mask</span><span style="color:#14110F;font-weight:600">$35.00</span></div>
+<div style="display:flex;justify-content:space-between;padding:6px 0;font:500 13px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.65)"><span>Deposit paid 12 Aug</span><span style="color:#5E8F6E;font-weight:600">–$150.00</span></div>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:16px;border-top:1px solid rgba(20,17,15,.08)"><span style="font:600 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">Balance due</span><span style="font:800 30px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.04em;color:#14110F">$95.00</span></div>
+</div>
+
+<div style="margin-top:24px">
+<div style="font:700 11px 'Plus Jakarta Sans',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#6E6862;margin-bottom:12px">How was it settled?</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+<div style="border-radius:18px;padding:16px 18px;background:#F6DFCE;cursor:pointer"><div style="font:700 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">External POS</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62);margin-top:3px">Enter exact amount</div></div>
+<div style="border-radius:18px;padding:16px 18px;background:#F5F3F1;cursor:pointer" style-hover="background:#EDE9E6"><div style="font:700 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">Cash</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62);margin-top:3px">Drawer count</div></div>
+<div style="border-radius:18px;padding:16px 18px;background:#F5F3F1;cursor:pointer" style-hover="background:#EDE9E6"><div style="font:700 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">Member credit</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62);margin-top:3px">1 available</div></div>
+<div style="border-radius:18px;padding:16px 18px;background:#F5F3F1;cursor:pointer" style-hover="background:#EDE9E6"><div style="font:700 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">Collect later</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.62);margin-top:3px">Adds to follow-up</div></div>
+</div>
+<div style="display:flex;align-items:center;gap:12px;margin-top:14px">
+<div style="flex:1;background:#fff;border:1.5px solid #14110F;border-radius:999px;padding:14px 20px;font:700 16px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F">$95.00</div>
+<div style="font:500 11px/1.5 'Plus Jakarta Sans',sans-serif;color:#6E6862;max-width:160px">Underpayment is blocked on POS</div>
+</div>
+</div>
+
+<div style="margin-top:22px;background:#DFEBE1;border-radius:20px;padding:18px 20px;display:flex;align-items:center;justify-content:space-between;gap:14px">
+<div><div style="font:700 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">Rebook before she leaves</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.55);margin-top:3px">Peel #2 due in 4 weeks · Nia free Tue 23 Sep, 13:30</div></div>
+<div style="background:rgba(255,255,255,.7);border-radius:999px;padding:11px 18px;font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;white-space:nowrap;cursor:pointer" style-hover="background:#fff">Hold slot</div>
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:24px">
+<div style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#6E6862;cursor:pointer" style-hover="color:#14110F">Cancel · no-show · refund</div>
+<div style="display:flex;gap:10px">
+<div style="background:#F5F3F1;border-radius:999px;padding:14px 22px;font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F;cursor:pointer" style-hover="background:#EDE9E6">Save draft</div>
+<div style="background:#14110F;border-radius:999px;padding:14px 26px;font:600 12px 'Plus Jakarta Sans',sans-serif;color:#fff;cursor:pointer" style-hover="background:#2E2825">Complete &amp; collect</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Client record — history reads like a timeline, not a table</div>
+<div class="dv-card" style="width:720px">
+<div style="background:#E9E6E3;padding:18px;border-radius:36px;display:flex;flex-direction:column;gap:14px">
+
+<div style="background:#fff;border-radius:28px;padding:26px 28px;display:flex;align-items:center;gap:20px">
+<div style="width:76px;height:76px;border-radius:24px;background:#E8E3F5;flex:none"></div>
+<div style="flex:1">
+<div style="font:800 26px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.035em;color:#14110F">Grace Lin</div>
+<div style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:#6E6862;margin-top:3px">grace.lin@email.com · Fitzpatrick IV · member 14 months</div>
+<div style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap">
+<span style="font:600 11px 'Plus Jakarta Sans',sans-serif;background:#F6DFCE;color:#14110F;padding:6px 12px;border-radius:999px">The Ritual · $189/mo</span>
+<span style="font:600 11px 'Plus Jakarta Sans',sans-serif;background:#F5F3F1;color:#14110F;padding:6px 12px;border-radius:999px">Retinoid user</span>
+<span style="font:600 11px 'Plus Jakarta Sans',sans-serif;background:#F7E0E4;color:#14110F;padding:6px 12px;border-radius:999px">Card expires Fri</span>
+</div>
+</div>
+<div style="background:#14110F;border-radius:999px;padding:14px 22px;font:600 12px 'Plus Jakarta Sans',sans-serif;color:#fff;white-space:nowrap;cursor:pointer" style-hover="background:#2E2825">Book from calendar</div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+<div style="background:#DFEBE1;border-radius:22px;padding:18px 20px"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:rgba(20,17,15,.45)">Facial credits</div><div style="font:800 26px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.035em;color:#14110F;margin-top:5px">1</div></div>
+<div style="background:#DEE7F3;border-radius:22px;padding:18px 20px"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:rgba(20,17,15,.45)">Wallet</div><div style="font:800 26px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.035em;color:#14110F;margin-top:5px">$40</div></div>
+<div style="background:#E8E3F5;border-radius:22px;padding:18px 20px"><div style="font:700 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:rgba(20,17,15,.45)">Lifetime</div><div style="font:800 26px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.035em;color:#14110F;margin-top:5px">$4,120</div></div>
+</div>
+
+<div style="background:#fff;border-radius:28px;padding:24px 28px">
+<div style="display:flex;gap:8px;margin-bottom:8px">
+<div style="padding:9px 16px;border-radius:999px;background:#14110F;color:#fff;font:600 12px 'Plus Jakarta Sans',sans-serif">History</div>
+<div style="padding:9px 16px;border-radius:999px;background:#F5F3F1;color:rgba(20,17,15,.6);font:600 12px 'Plus Jakarta Sans',sans-serif;cursor:pointer" style-hover="background:#EDE9E6;color:#14110F">Forms</div>
+<div style="padding:9px 16px;border-radius:999px;background:#F5F3F1;color:rgba(20,17,15,.6);font:600 12px 'Plus Jakarta Sans',sans-serif;cursor:pointer" style-hover="background:#EDE9E6;color:#14110F">Photos</div>
+<div style="padding:9px 16px;border-radius:999px;background:#F5F3F1;color:rgba(20,17,15,.6);font:600 12px 'Plus Jakarta Sans',sans-serif;cursor:pointer" style-hover="background:#EDE9E6;color:#14110F">Notes</div>
+</div>
+<div style="display:flex;gap:16px;padding:18px 0;border-bottom:1px solid rgba(20,17,15,.06)">
+<div style="width:52px;flex:none;text-align:center"><div style="font:700 15px 'Plus Jakarta Sans',sans-serif;color:#14110F">26</div><div style="font:600 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6E6862">Aug</div></div>
+<div style="flex:1"><div style="font:700 15px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F">RF Tightening · session 3 of 6</div><div style="font:500 12px/1.7 'Plus Jakarta Sans',sans-serif;color:#6E6862;margin-top:3px">Nia B. · settings 3.2, four passes. Mild erythema, resolved at 20 min.</div></div>
+<div style="text-align:right;flex:none"><div style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;background:#DFEBE1;padding:6px 12px;border-radius:999px">3 left</div></div>
+</div>
+<div style="display:flex;gap:16px;padding:18px 0;border-bottom:1px solid rgba(20,17,15,.06)">
+<div style="width:52px;flex:none;text-align:center"><div style="font:700 15px 'Plus Jakarta Sans',sans-serif;color:#14110F">29</div><div style="font:600 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6E6862">Jul</div></div>
+<div style="flex:1"><div style="font:700 15px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F">The Sunday Glow</div><div style="font:500 12px/1.7 'Plus Jakarta Sans',sans-serif;color:#6E6862;margin-top:3px">Amara O. · member credit used · asked for less fragrance</div></div>
+<div style="text-align:right;flex:none"><div style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;background:#F5F3F1;padding:6px 12px;border-radius:999px">Credit</div></div>
+</div>
+<div style="display:flex;gap:16px;padding:18px 0;border-bottom:1px solid rgba(20,17,15,.06)">
+<div style="width:52px;flex:none;text-align:center"><div style="font:700 15px 'Plus Jakarta Sans',sans-serif;color:#14110F">02</div><div style="font:600 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6E6862">Jul</div></div>
+<div style="flex:1"><div style="font:700 15px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F">Microneedling + LED</div><div style="font:500 12px/1.7 'Plus Jakarta Sans',sans-serif;color:#6E6862;margin-top:3px">Amara O. · before/after captured</div></div>
+<div style="text-align:right;flex:none"><div style="font:700 15px 'Plus Jakarta Sans',sans-serif;color:#14110F">$280</div></div>
+</div>
+<div style="display:flex;gap:16px;padding:18px 0 4px;opacity:.6">
+<div style="width:52px;flex:none;text-align:center"><div style="font:700 15px 'Plus Jakarta Sans',sans-serif;color:#14110F">18</div><div style="font:600 10px 'Plus Jakarta Sans',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6E6862">Jun</div></div>
+<div style="flex:1"><div style="font:700 15px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F;text-decoration:line-through">Hydration Rescue</div><div style="font:500 12px/1.7 'Plus Jakarta Sans',sans-serif;color:#6E6862;margin-top:3px">Cancelled 3 h before · deposit retained</div></div>
+<div style="text-align:right;flex:none"><div style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F;background:#F7E0E4;padding:6px 12px;border-radius:999px">$50 kept</div></div>
+</div>
+</div>
+
+<div style="background:#fff;border-radius:28px;padding:24px 28px">
+<div style="font:700 15px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F;margin-bottom:14px">Progress · texture &amp; firmness</div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+<div style="aspect-ratio:3/4;border-radius:18px;background:#F0EDEA;display:flex;align-items:flex-end;padding:10px"><span style="font:600 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.4)">Baseline</span></div>
+<div style="aspect-ratio:3/4;border-radius:18px;background:#F0EDEA;display:flex;align-items:flex-end;padding:10px"><span style="font:600 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.4)">Session 1</span></div>
+<div style="aspect-ratio:3/4;border-radius:18px;background:#F0EDEA;display:flex;align-items:flex-end;padding:10px"><span style="font:600 10px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.4)">Session 2</span></div>
+<div style="aspect-ratio:3/4;border-radius:18px;border:1.5px dashed rgba(20,17,15,.16);display:flex;align-items:center;justify-content:center;cursor:pointer" style-hover="border-color:#14110F"><span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.4)">+ Capture</span></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Phone — what a therapist checks between rooms</div>
+<div class="dv-card" style="width:400px">
+<div style="background:#E9E6E3;padding:16px;border-radius:44px">
+<div style="background:#FBFAF9;border-radius:34px;padding:20px 18px 16px;min-height:740px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:0 4px">
+<div><div style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">Wednesday 26 August</div><div style="font:800 24px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.035em;color:#14110F;margin-top:2px">Hi, <span style="font-family:'Instrument Serif',Georgia,serif;font-style:italic;font-weight:400;font-size:27px">Amara</span></div></div>
+<div style="width:40px;height:40px;border-radius:999px;background:#F6DFCE"></div>
+</div>
+
+<div style="background:#14110F;border-radius:26px;padding:22px">
+<div style="display:flex;align-items:center;gap:8px"><span style="width:7px;height:7px;border-radius:999px;background:#F6DFCE"></span><span style="font:600 11px 'Plus Jakarta Sans',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#F6DFCE">In room · 18 min left</span></div>
+<div style="font:800 24px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.035em;color:#fff;margin-top:10px">Hana Ito</div>
+<div style="font:500 12px 'Plus Jakarta Sans',sans-serif;color:rgba(255,255,255,.55);margin-top:2px">Microneedling + LED · 10:00</div>
+<div style="height:7px;border-radius:999px;background:rgba(255,255,255,.16);margin-top:18px"><div style="width:72%;height:7px;border-radius:999px;background:#F6DFCE"></div></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px">
+<div style="padding:13px;text-align:center;border-radius:999px;background:#F6DFCE;color:#14110F;font:600 12px 'Plus Jakarta Sans',sans-serif">Check out</div>
+<div style="padding:13px;text-align:center;border-radius:999px;background:rgba(255,255,255,.12);color:#fff;font:600 12px 'Plus Jakarta Sans',sans-serif">Open chart</div>
+</div>
+</div>
+
+<div style="background:#fff;border-radius:26px;padding:20px">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="font:700 14px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;color:#14110F">Up next</div><div style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">3 more</div></div>
+<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid rgba(20,17,15,.06)">
+<div style="width:44px;font:700 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">13:00</div>
+<div style="width:38px;height:38px;border-radius:13px;background:#F7E0E4;flex:none"></div>
+<div style="flex:1"><div style="font:600 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">Rina Patel</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">Collagen Laser · first visit</div></div>
+</div>
+<div style="margin:10px 0 4px;background:#F7E0E4;border-radius:16px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
+<span style="font:600 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">Intake unsigned · 2 flags</span>
+<span style="font:600 11px 'Plus Jakarta Sans',sans-serif;color:#14110F">Review &#8594;</span>
+</div>
+<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid rgba(20,17,15,.06)">
+<div style="width:44px;font:700 12px 'Plus Jakarta Sans',sans-serif;color:#14110F">15:00</div>
+<div style="width:38px;height:38px;border-radius:13px;background:#DFEBE1;flex:none"></div>
+<div style="flex:1"><div style="font:600 13px 'Plus Jakarta Sans',sans-serif;color:#14110F">Amelia Fox</div><div style="font:500 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">Hydration Rescue · member</div></div>
+</div>
+<div style="display:flex;align-items:center;gap:12px;padding:14px 0 2px">
+<div style="width:44px;font:700 12px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.3)">16:15</div>
+<div style="flex:1;border:1.5px dashed rgba(20,17,15,.16);border-radius:14px;padding:11px 14px;font:600 12px 'Plus Jakarta Sans',sans-serif;color:rgba(20,17,15,.45)">Open — offer to waitlist</div>
+</div>
+</div>
+
+<div style="margin-top:auto;background:#fff;border-radius:999px;padding:9px;display:flex;align-items:center;justify-content:space-between">
+<div style="flex:1;text-align:center;padding:11px 0;border-radius:999px;background:#14110F;color:#fff;font:600 11px 'Plus Jakarta Sans',sans-serif">Day</div>
+<div style="flex:1;text-align:center;padding:11px 0;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">Clients</div>
+<div style="flex:1;text-align:center;padding:11px 0;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">Forms</div>
+<div style="flex:1;text-align:center;padding:11px 0;font:600 11px 'Plus Jakarta Sans',sans-serif;color:#6E6862">More</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+</div>
+
+<p class="dv-next">Try next: "carry this style through the treatment editor and team pages" · "swap the peach hero for lilac" · "show <a class="dv-oid" href="#1a">1a</a> with real photography in the tiles" · "a week calendar in this style"</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

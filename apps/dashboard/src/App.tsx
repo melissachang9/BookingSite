@@ -33,6 +33,7 @@ import { LocationsPage } from "./locations-page";
 import { FormsPage } from "./forms-page";
 import { ResourcesPage } from "./resources-page";
 import "./styles.css";
+import "./club-sunday.css";
 
 type RouteGroupKey = "settings-management";
 
@@ -331,17 +332,6 @@ function AuthenticatedLayout({
     }
     return initial;
   });
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem("booking.dashboard.sidebar-collapsed") === "true";
-  });
-  const toggleSidebar = () => {
-    setSidebarCollapsed((prev) => {
-      const next = !prev;
-      window.localStorage.setItem("booking.dashboard.sidebar-collapsed", String(next));
-      return next;
-    });
-  };
   useEffect(() => {
     setExpandedGroups((current) => {
       let next = current;
@@ -366,148 +356,201 @@ function AuthenticatedLayout({
     (definition) => definition.path !== "/onboarding" && !definition.group,
   );
 
+  const getInitials = (name: string): string => {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 0) return "";
+    if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+    return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
+  };
+
+  const NAV_ICONS: Record<string, JSX.Element> = {
+    "/calendar": (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="5" width="18" height="16" rx="2" />
+        <path d="M3 10h18M8 3v4M16 3v4" />
+      </svg>
+    ),
+    "/customers": (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" />
+      </svg>
+    ),
+    "/locations": (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 21s7-6.5 7-12a7 7 0 10-14 0c0 5.5 7 12 7 12z" />
+        <circle cx="12" cy="9" r="2.5" />
+      </svg>
+    ),
+    "/forms": (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 3h10l4 4v14H5z" />
+        <path d="M9 12h6M9 16h6M9 8h3" />
+      </svg>
+    ),
+    "/settings": (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19 12a7 7 0 00-.1-1.2l2-1.5-2-3.4-2.4.7a7 7 0 00-2-1.2L14 3h-4l-.5 2.4a7 7 0 00-2 1.2l-2.4-.7-2 3.4 2 1.5a7 7 0 000 2.4l-2 1.5 2 3.4 2.4-.7a7 7 0 002 1.2L10 21h4l.5-2.4a7 7 0 002-1.2l2.4.7 2-3.4-2-1.5a7 7 0 00.1-1.2z" />
+      </svg>
+    ),
+    "/services": (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 7h16v13H4z" />
+        <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" />
+      </svg>
+    ),
+    "/staff": (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="9" cy="9" r="3.5" />
+        <circle cx="17" cy="10" r="2.5" />
+        <path d="M2 20c1-3.5 4-5 7-5s6 1.5 7 5M15 20c.5-2 2-3.5 4-3.5s3.5 1.5 4 3.5" />
+      </svg>
+    ),
+    "/resources": (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="8" rx="1.5" />
+        <rect x="3" y="14" width="18" height="6" rx="1.5" />
+      </svg>
+    ),
+    "/onboarding": (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 12l4 4L19 6" />
+      </svg>
+    ),
+  };
+  const navIcon = (path: string): JSX.Element =>
+    NAV_ICONS[path] ?? (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="4" />
+      </svg>
+    );
+
+  const initials = getInitials(session.user.name || session.user.email || "");
+  const pageTitle = currentDefinition.title;
+
   return (
-    <div className={`ops-shell${isCalendarRoute ? " ops-shell--calendar" : ""}${sidebarCollapsed ? " ops-shell--sidebar-collapsed" : ""}`}>
-      <aside className={`ops-sidebar${isCalendarRoute ? " ops-sidebar--calendar" : ""}`}>
-        <div className="ops-sidebar-brand" aria-label="Dashboard workspace">
-          <span className="ops-sidebar-brand__mark" aria-hidden="true" />
-          <div>
-            <strong>Brow Beauty Lab</strong>
-            <span>Operator desk</span>
+    <div className="cs-desk">
+      <div className="cs-shell">
+        <aside className="cs-sidebar">
+          <div className="cs-brand">
+            <div className="cs-brand__name">
+              Brow Beauty <em>Lab</em>
+            </div>
+            <div className="cs-brand__site">Operator desk</div>
           </div>
-          <button
-            type="button"
-            className="ops-sidebar-collapse"
-            onClick={toggleSidebar}
-            aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
-            title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
-          >
-            {sidebarCollapsed ? "»" : "«"}
-          </button>
-        </div>
 
-        {isCalendarRoute ? <div id="dashboard-calendar-sidebar-rail" className="ops-sidebar-calendar-slot" aria-label="Sidebar month calendar" /> : null}
+          {isCalendarRoute ? (
+            <div id="dashboard-calendar-sidebar-rail" aria-label="Sidebar month calendar" />
+          ) : null}
 
-        <nav className="ops-nav" aria-label="Dashboard sections">
-          {topLevelDefinitions.map((definition) => (
-            <NavLink
-              key={definition.path}
-              to={definition.path}
-              end={definition.path === "/calendar"}
-              className={({ isActive }) => `ops-nav-link${isActive ? " ops-nav-link--active" : ""}`}
-            >
-              <span>{definition.title}</span>
-              <small>{definition.metric}</small>
-            </NavLink>
-          ))}
-
-          {routeGroupDefinitions.map((group) => {
-            const children = groupedPathsByGroup.get(group.key) ?? [];
-            if (children.length === 0) return null;
-            const isExpanded = expandedGroups[group.key];
-            const groupActive = groupContainsActive(group.key);
-            return (
-              <div
-                key={group.key}
-                className={`ops-nav-group${isExpanded ? " ops-nav-group--expanded" : ""}${groupActive ? " ops-nav-group--active" : ""}`}
+          <nav className="cs-nav" aria-label="Dashboard sections">
+            {topLevelDefinitions.map((definition) => (
+              <NavLink
+                key={definition.path}
+                to={definition.path}
+                end={definition.path === "/calendar"}
+                className={({ isActive }) => `cs-nav__item${isActive ? " cs-nav__item--active" : ""}`}
               >
-                <button
-                  type="button"
-                  className="ops-nav-group__header"
-                  aria-expanded={isExpanded}
-                  aria-controls={`ops-nav-group-${group.key}`}
-                  onClick={() => toggleGroup(group.key)}
-                >
-                  <span className="ops-nav-group__title">{group.title}</span>
-                  <span className="ops-nav-group__chevron" aria-hidden="true">
-                    {isExpanded ? "▾" : "▸"}
-                  </span>
-                </button>
-                {isExpanded ? (
-                  <div className="ops-nav-group__children" id={`ops-nav-group-${group.key}`}>
-                    {children.map((definition) => (
-                      <NavLink
-                        key={definition.path}
-                        to={definition.path}
-                        className={({ isActive }) =>
-                          `ops-nav-link ops-nav-link--child${isActive ? " ops-nav-link--active" : ""}`
-                        }
-                      >
-                        <span>{definition.title}</span>
-                        <small>{definition.metric}</small>
-                      </NavLink>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </nav>
+                {navIcon(definition.path)}
+                <span className="cs-nav__label">{definition.title}</span>
+              </NavLink>
+            ))}
 
-        {isCalendarRoute ? (
-          <div className="sidebar-filters">
-            <div className="sidebar-filters__head">
-              <span>Status</span>
+            {routeGroupDefinitions.map((group) => {
+              const children = groupedPathsByGroup.get(group.key) ?? [];
+              if (children.length === 0) return null;
+              const isExpanded = expandedGroups[group.key];
+              const groupActive = groupContainsActive(group.key);
+              return (
+                <div key={group.key} className={`cs-nav__group${groupActive ? " cs-nav__group--active" : ""}`}>
+                  <button
+                    type="button"
+                    className="cs-nav__item cs-nav__group-header"
+                    aria-expanded={isExpanded}
+                    aria-controls={`cs-nav-group-${group.key}`}
+                    onClick={() => toggleGroup(group.key)}
+                  >
+                    {navIcon("/settings")}
+                    <span className="cs-nav__label">{group.title}</span>
+                    <span className="cs-nav__chevron" aria-hidden="true">
+                      {isExpanded ? "▾" : "▸"}
+                    </span>
+                  </button>
+                  {isExpanded ? (
+                    <div className="cs-nav__children" id={`cs-nav-group-${group.key}`}>
+                      {children.map((definition) => (
+                        <NavLink
+                          key={definition.path}
+                          to={definition.path}
+                          className={({ isActive }) =>
+                            `cs-nav__item cs-nav__item--child${isActive ? " cs-nav__item--active" : ""}`
+                          }
+                        >
+                          {navIcon(definition.path)}
+                          <span className="cs-nav__label">{definition.title}</span>
+                        </NavLink>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </nav>
+
+          {isCalendarRoute ? (
+            <div className="cs-legend">
+              <div className="cs-legend__title">Treatment families</div>
+              <div className="cs-legend__row">
+                <span className="cs-legend__swatch" style={{ background: "var(--cs-mint)" }} />
+                Facials
+              </div>
+              <div className="cs-legend__row">
+                <span className="cs-legend__swatch" style={{ background: "var(--cs-lilac)" }} />
+                Advanced
+              </div>
+              <div className="cs-legend__row">
+                <span className="cs-legend__swatch" style={{ background: "var(--cs-pink)" }} />
+                Laser &amp; peels
+              </div>
+              <div className="cs-legend__row">
+                <span className="cs-legend__swatch" style={{ background: "var(--cs-blue)" }} />
+                Consults
+              </div>
             </div>
-            <div className="sidebar-legend">
-              <div className="sidebar-legend__row">
-                <span className="sidebar-legend__swatch sidebar-legend__swatch--service" />
-                Booked · service color
-              </div>
-              <div className="sidebar-legend__row">
-                <span className="sidebar-legend__swatch sidebar-legend__swatch--active" />
-                In progress · checked in
-              </div>
-              <div className="sidebar-legend__row">
-                <span className="sidebar-legend__swatch sidebar-legend__swatch--done" />
-                Checked out · completed
-              </div>
-              <div className="sidebar-legend__row">
-                <span className="sidebar-legend__swatch sidebar-legend__swatch--canceled" />
-                Canceled · no-show
-              </div>
-            </div>
-          </div>
-        ) : null}
+          ) : null}
+        </aside>
 
-      </aside>
-
-      <div className="ops-main">
-        <button
-          type="button"
-          className="ops-sidebar-reopen"
-          onClick={toggleSidebar}
-          aria-label="Show sidebar"
-        >
-          » Menu
-        </button>
-        <header className="ops-topbar">
-          <div>
+        <main className="cs-main">
+          <header className="cs-topbar">
             {isCalendarRoute ? (
               <CalendarSearchBar tenantSlug={session.user.tenantSlug} />
             ) : (
-              <>
-                {currentDefinition.eyebrow ? <p className="eyebrow">{currentDefinition.eyebrow}</p> : null}
-                <h2>{currentDefinition.title}</h2>
-              </>
+              <div className="cs-page-title">
+                {currentDefinition.eyebrow ? <p className="cs-page-title__eyebrow">{currentDefinition.eyebrow}</p> : null}
+                <h2>{pageTitle}</h2>
+              </div>
             )}
-          </div>
-
-          <div className="ops-topbar-actions">
-            <div className="user-pill">
-              <span>{session.user.role}</span>
-              <strong>{session.user.name}</strong>
+            <div className="cs-topbar__right">
+              <a
+                href={`${storefrontBaseUrl}/${session.user.tenantSlug}`}
+                target="_blank"
+                rel="noreferrer"
+                className="cs-topbar__link"
+              >
+                Open storefront
+              </a>
+              <button type="button" className="cs-topbar__link" onClick={onSignOut}>
+                Sign out
+              </button>
+              <div className="cs-avatar" aria-label={session.user.name}>
+                {initials}
+              </div>
             </div>
-            <a href={`${storefrontBaseUrl}/${session.user.tenantSlug}`} target="_blank" rel="noreferrer" className="ghost-action">
-              Open storefront
-            </a>
-            <button type="button" className="ghost-action" onClick={onSignOut}>
-              Sign out
-            </button>
-          </div>
-        </header>
+          </header>
 
-        <Outlet />
+          <Outlet />
+        </main>
       </div>
     </div>
   );

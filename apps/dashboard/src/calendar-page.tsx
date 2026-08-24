@@ -23,6 +23,7 @@ import type {
   ProviderTimeOffEntry,
   RecordManualPaymentRequest,
   SendFormReminderResponse,
+  ServiceCategoryListResponse,
   ServiceListResponse,
   ServiceSummary,
   SlotAvailability,
@@ -35,7 +36,7 @@ import { platformApi } from "./platform-api";
 
 type CalendarDataState =
   | { kind: "loading" }
-  | { kind: "ready"; days: CalendarDay[]; services: ServiceSummary[]; providers: CalendarProviderOption[] }
+  | { kind: "ready"; days: CalendarDay[]; services: ServiceSummary[]; providers: CalendarProviderOption[]; categoryNameById: Record<string, string> }
   | { kind: "empty"; message: string }
   | { kind: "error"; message: string };
 
@@ -199,6 +200,7 @@ export type CalendarPageApi = {
   listBookings: (tenantSlug: string, query?: BookingListQuery) => Promise<BookingListResponse>;
   listServices: (tenantSlug: string) => Promise<ServiceListResponse>;
   listServiceProviders: (tenantSlug: string, serviceId: string) => Promise<ProviderListResponse>;
+  listServiceCategories: (tenantSlug: string) => Promise<ServiceCategoryListResponse>;
   lookupCustomers: (query: CustomerLookupQuery) => Promise<CustomerLookupResponse>;
   getAvailability: (request: AvailabilityRequest) => Promise<AvailabilityResponse>;
   createBookingDraft: (body: CreateBookingDraftRequest) => Promise<BookingDraftSummary>;
@@ -268,8 +270,26 @@ const tenantTimePartsFormatter = new Intl.DateTimeFormat("en-US", {
   hour12: false,
 });
 
+const rangeDayFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Los_Angeles",
+  day: "numeric",
+});
+
+const rangeMonthFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Los_Angeles",
+  month: "long",
+});
+
+const nowTimeFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Los_Angeles",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
 const SCHEDULE_MIN_VISIBLE_HOURS = 8;
-const SCHEDULE_HOUR_HEIGHT_PX = 66;
+const SCHEDULE_HOUR_HEIGHT_PX = 64;         // week view; must match --cs-row-h default
+const SCHEDULE_DAY_HOUR_HEIGHT_PX = 72;     // day view; must match .cs-board--day --cs-row-h
+const SCHEDULE_CHIP_GAP_PX = 4;             // STRUCTURE.md §1: 4px breath between stacked chips
 const SCHEDULE_QUARTER_HEIGHT_PX = SCHEDULE_HOUR_HEIGHT_PX / 4;
 const SCHEDULE_MIN_EVENT_HEIGHT_PX = 26;
 
@@ -285,8 +305,8 @@ const monthWeekdayFormatter = new Intl.DateTimeFormat("en-US", {
 });
 
 const monthDayLabel = Array.from({ length: 7 }, (_, index) => {
-  const reference = new Date(Date.UTC(2026, 4, 3 + index));
-  return monthWeekdayFormatter.format(reference).slice(0, 2).toUpperCase();
+  const reference = new Date(Date.UTC(2026, 4, 5 + index));
+  return monthWeekdayFormatter.format(reference).slice(0, 1).toUpperCase();
 });
 
 const CALENDAR_SIDEBAR_RAIL_ID = "dashboard-calendar-sidebar-rail";
@@ -298,6 +318,19 @@ function getUpcomingDate(offsetDays: number): string {
 
 function getDateLabel(date: string): string {
   return dayLabelFormatter.format(new Date(`${date}T12:00:00Z`));
+}
+
+function formatDateRangeLabel(startDate: string, endDate: string): string {
+  const start = parseIsoDate(startDate);
+  const end = parseIsoDate(endDate);
+  const startDay = rangeDayFormatter.format(start);
+  const endDay = rangeDayFormatter.format(end);
+  const startMonth = rangeMonthFormatter.format(start);
+  const endMonth = rangeMonthFormatter.format(end);
+  if (startMonth === endMonth) {
+    return `${startDay} – ${endDay} ${endMonth}`;
+  }
+  return `${startDay} ${startMonth} – ${endDay} ${endMonth}`;
 }
 
 function getTenantDate(value: string): string {
@@ -364,6 +397,65 @@ function formatPriceCents(cents: number): string {
 
 function timeRangesOverlap(leftStartAt: string, leftEndAt: string, rightStartAt: string, rightEndAt: string): boolean {
   return new Date(leftStartAt).getTime() < new Date(rightEndAt).getTime() && new Date(rightStartAt).getTime() < new Date(leftEndAt).getTime();
+}
+
+// STRUCTURE.md §1: concurrent bookings in a column are laid out side-by-side
+// via --lane / --lanes. Group appointments into overlap clusters (connected
+// components of the overlap graph), then greedily assign each a lane within
+// its cluster. Returns a map of appointment id -> { lane, lanes }.
+function computeAppointmentLanes(
+  appointments: { id: string; startAt: string; endAt: string }[],
+): Map<string, { lane: number; lanes: number }> {
+  const result = new Map<string, { lane: number; lanes: number }>();
+  if (appointments.length === 0) {
+    return result;
+  }
+
+  const sorted = [...appointments].sort(
+    (left, right) => left.startAt.localeCompare(right.startAt) || left.endAt.localeCompare(right.endAt),
+  );
+
+  // Build overlap clusters (connected components).
+  const clusters: { id: string; startAt: string; endAt: string }[][] = [];
+  for (const appointment of sorted) {
+    const overlappingClusters = clusters.filter((cluster) =>
+      cluster.some((member) => timeRangesOverlap(member.startAt, member.endAt, appointment.startAt, appointment.endAt)),
+    );
+    if (overlappingClusters.length === 0) {
+      clusters.push([appointment]);
+    } else {
+      const merged = overlappingClusters.flat();
+      merged.push(appointment);
+      for (const cluster of overlappingClusters) {
+        const index = clusters.indexOf(cluster);
+        if (index !== -1) {
+          clusters.splice(index, 1);
+        }
+      }
+      clusters.push(merged);
+    }
+  }
+
+  for (const cluster of clusters) {
+    const lanes = cluster.length;
+    // Greedy lane assignment: each appointment takes the lowest lane whose
+    // last occupant has already ended.
+    const laneEndTimes: number[] = [];
+    for (const appointment of cluster) {
+      const startMs = new Date(appointment.startAt).getTime();
+      const endMs = new Date(appointment.endAt).getTime();
+      let lane = laneEndTimes.findIndex((end) => end <= startMs);
+      if (lane === -1) {
+        lane = laneEndTimes.length;
+        laneEndTimes.push(endMs);
+      } else {
+        laneEndTimes[lane] = endMs;
+      }
+      result.set(appointment.id, { lane, lanes });
+    }
+  }
+
+  return result;
 }
 
 function getInitials(value: string): string {
@@ -679,7 +771,7 @@ function monthAnchor(value: string): string {
 function buildMonthGrid(value: string): string[] {
   const anchor = parseIsoDate(monthAnchor(value));
   const start = new Date(anchor);
-  start.setUTCDate(1 - start.getUTCDay());
+  start.setUTCDate(1 - ((start.getUTCDay() + 6) % 7));
 
   return Array.from({ length: 42 }, (_, index) => {
     const day = new Date(start);
@@ -863,7 +955,7 @@ export function CalendarPage({
           requestedDates.push(addDays(today, i));
         }
 
-        const [bookingsResult, servicesResult] = await Promise.allSettled([
+        const [bookingsResult, servicesResult, categoriesResult] = await Promise.allSettled([
           api.listBookings(tenantSlug, {
             status: ["confirmed", "completed", "canceled", "no_show"],
             startsAtGte: `${addDays(requestedDates[0], -1)}T00:00:00.000Z`,
@@ -871,6 +963,7 @@ export function CalendarPage({
             limit: 200,
           }),
           api.listServices(tenantSlug),
+          api.listServiceCategories(tenantSlug),
         ]);
 
         if (bookingsResult.status === "rejected") {
@@ -885,6 +978,10 @@ export function CalendarPage({
           servicesResult.status === "fulfilled"
             ? servicesResult.value.services.filter((candidate) => candidate.isActive)
             : [];
+        const categoryNameById: Record<string, string> =
+          categoriesResult.status === "fulfilled"
+            ? Object.fromEntries(categoriesResult.value.categories.map((category) => [category.id, category.name]))
+            : {};
         const providerResults = services.length > 0
           ? await Promise.allSettled(services.map((service) => api.listServiceProviders(tenantSlug, service.id)))
           : [];
@@ -931,7 +1028,7 @@ export function CalendarPage({
         }));
 
         startTransition(() => {
-          setCalendarState({ kind: "ready", days, services, providers });
+          setCalendarState({ kind: "ready", days, services, providers, categoryNameById });
           if (days.length > 0 && isInitialLoad.current) {
             isInitialLoad.current = false;
             const todayDate = toIsoDate(new Date());
@@ -989,6 +1086,7 @@ export function CalendarPage({
           kind: "ready",
           services: current.services,
           providers: current.providers,
+          categoryNameById: current.categoryNameById,
           days: current.days.map((day) => ({
             ...day,
             openings: [],
@@ -1048,6 +1146,7 @@ export function CalendarPage({
               kind: "ready",
               services: current.services,
               providers: current.providers,
+              categoryNameById: current.categoryNameById,
               days: current.days.map((day) => ({
                 ...day,
                 openings: openingsByDate.get(day.date) ?? [],
@@ -1070,6 +1169,7 @@ export function CalendarPage({
               kind: "ready",
               services: current.services,
               providers: current.providers,
+              categoryNameById: current.categoryNameById,
               days: current.days.map((day) => ({
                 ...day,
                 openings: [],
@@ -1154,8 +1254,17 @@ export function CalendarPage({
       return getDateLabel(viewDays[0].date);
     }
 
-    return `${getDateLabel(viewDays[0].date)} - ${getDateLabel(viewDays[viewDays.length - 1].date)}`;
+    return formatDateRangeLabel(viewDays[0].date, viewDays[viewDays.length - 1].date);
   }, [viewDays]);
+
+  const boardFootStats = useMemo(() => {
+    if (calendarState.kind !== "ready") {
+      return { appointmentCount: 0, openSlotCount: 0 };
+    }
+    const appointmentCount = viewDays.reduce((sum, day) => sum + day.appointments.length, 0);
+    const openSlotCount = viewDays.reduce((sum, day) => sum + day.openings.length, 0);
+    return { appointmentCount, openSlotCount };
+  }, [calendarState, viewDays]);
 
   const weekProviderOptions = useMemo(
     () => (viewMode === "week" && calendarState.kind === "ready" ? mergeProviderOptions(calendarState.providers, getProviderOptions(viewDays)) : []),
@@ -1362,6 +1471,25 @@ export function CalendarPage({
     setSelectedSlotBlockDurationMinutes(getDurationMinutes(slot.startAt, slot.endAt));
     setCustomerLookupState({ kind: "idle" });
     setDraftCreationState({ kind: "idle" });
+  };
+
+  const handleNewBooking = () => {
+    if (calendarState.kind !== "ready") {
+      return;
+    }
+    const provider = allKnownProviderOptions[0] ?? null;
+    const startMinute = (displayStartHour ?? 9) * 60;
+    const startAt = toTenantDateTimeIso(focusedDate, startMinute);
+    const endAt = toTenantDateTimeIso(focusedDate, startMinute + 60);
+    handleRequestCalendarSlot({
+      date: focusedDate,
+      providerId: provider?.id ?? null,
+      providerName: provider?.name ?? null,
+      startAt,
+      endAt,
+      openings: [],
+      providerOptions: allKnownProviderOptions,
+    });
   };
 
   const handleSelectSlotService = (serviceId: string) => {
@@ -1821,12 +1949,13 @@ export function CalendarPage({
       {sidebarRailHost ? createPortal(monthRail, sidebarRailHost) : null}
 
       <section className="calendar-workspace">
-        <article className="ops-panel calendar-panel">
-          <div className="calendar-topbar">
-            <div className="calendar-topbar__nav">
+        <div className="cs-toolbar" role="toolbar" aria-label="Calendar controls">
+          <div className="cs-toolbar__title-group">
+            <div className="cs-range">{visibleDateRangeLabel || "Calendar"}</div>
+            <div className="cs-stepper">
               <button
                 type="button"
-                className="calendar-topbar__today"
+                className="cs-today"
                 onClick={() => {
                   setFocusedDate(toIsoDate(new Date()));
                   setViewMode("day");
@@ -1837,7 +1966,6 @@ export function CalendarPage({
               </button>
               <button
                 type="button"
-                className="calendar-topbar__arrow"
                 onClick={() => moveFocus(viewMode === "day" ? -1 : -7)}
                 disabled={calendarState.kind !== "ready"}
                 aria-label="Previous"
@@ -1846,211 +1974,244 @@ export function CalendarPage({
               </button>
               <button
                 type="button"
-                className="calendar-topbar__arrow"
                 onClick={() => moveFocus(viewMode === "day" ? 1 : 7)}
                 disabled={calendarState.kind !== "ready"}
                 aria-label="Next"
               >
                 ›
               </button>
-              <h4 className="calendar-topbar__date">{visibleDateRangeLabel || "Weekly calendar"}</h4>
-            </div>
-
-            <div className="calendar-topbar__actions">
-              {calendarState.kind === "ready" && calendarState.services.length > 0 ? (
-                <label className="calendar-service-filter">
-                  <span>Availability for</span>
-                  <select value={selectedServiceId ?? ""} onChange={(event) => setSelectedServiceId(event.target.value || null)}>
-                    <option value="">Any service</option>
-                    {calendarState.services.map((service) => (
-                      <option key={service.id} value={service.id}>
-                        {service.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-
-              {viewMode === "week" && weekProviderOptions.length > 0 ? (
-                <div className="context" style={{ position: "relative" }}>
-                  <button
-                    type="button"
-                    className="calendar-context-chip"
-                    onClick={() => setContextMenuOpen((prev) => !prev)}
-                    aria-expanded={contextMenuOpen}
-                  >
-                    {selectedWeekProviderId
-                      ? (() => {
-                          const p = weekProviderOptions.find((x) => x.id === selectedWeekProviderId);
-                          return p ? (
-                            <span className="context-opt__id">
-                              {p.imageUrl ? <img className="pfp pfp--sm" src={p.imageUrl} alt="" /> : null}
-                              {p.name}
-                            </span>
-                          ) : "All providers";
-                        })()
-                      : "All providers"} ▾
-                  </button>
-                  {contextMenuOpen ? (
-                    <div className="context-menu" role="menu">
-                      <button
-                        type="button"
-                        className={`context-opt${!selectedWeekProviderId ? " context-opt--selected" : ""}`}
-                        role="menuitemradio"
-                        aria-checked={!selectedWeekProviderId}
-                        onClick={() => { handleSelectWeekProvider(null); setContextMenuOpen(false); }}
-                      >
-                        All providers
-                      </button>
-                      {weekProviderOptions.map((provider) => (
-                        <button
-                          key={provider.id}
-                          type="button"
-                          className={`context-opt${selectedWeekProviderId === provider.id ? " context-opt--selected" : ""}`}
-                          role="menuitemradio"
-                          aria-checked={selectedWeekProviderId === provider.id}
-                          onClick={() => { handleSelectWeekProvider(provider.id); setContextMenuOpen(false); }}
-                        >
-                          <span className="context-opt__id">
-                            {provider.imageUrl ? <img className="pfp pfp--sm" src={provider.imageUrl} alt="" /> : null}
-                            {provider.name}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              <div className="view-mode-toggle" role="group" aria-label="Calendar view mode">
-                <button
-                  type="button"
-                  className={`view-mode-toggle__button${viewMode === "day" ? " view-mode-toggle__button--active" : ""}`}
-                  onClick={() => setViewMode("day")}
-                  aria-pressed={viewMode === "day"}
-                >
-                  Day
-                </button>
-                <button
-                  type="button"
-                  className={`view-mode-toggle__button${viewMode === "week" ? " view-mode-toggle__button--active" : ""}`}
-                  onClick={() => setViewMode("week")}
-                  aria-pressed={viewMode === "week"}
-                >
-                  Week
-                </button>
-              </div>
             </div>
           </div>
-          <CalendarBoard
-            state={calendarState}
-            days={viewDays}
-            viewMode={viewMode}
-            selectedAppointmentId={selectedAppointmentId}
-            intakeStatusByBookingId={intakeStatusByBookingId}
-            selectedWeekProviderId={selectedWeekProviderId}
-            selectedWeekProviderName={selectedWeekProvider?.name ?? null}
-            fallbackProviderOptions={allKnownProviderOptions}
-            timeBlockDurationMinutes={selectedService?.durationMinutes ?? 60}
-            onSelectAppointment={handleSelectAppointment}
-            timeBlocks={timeBlocks}
-            selectedTimeBlockId={selectedTimeBlockId}
-            onSelectTimeBlock={handleSelectTimeBlock}
-            onRequestCalendarSlot={handleRequestCalendarSlot}
-            providerTimeOffs={providerTimeOffs}
-            selectedTimeOffId={selectedTimeOffId}
-            onSelectTimeOff={setSelectedTimeOffId}
-            displayStartHour={displayStartHour}
-            displayEndHour={displayEndHour}
-          />
-        </article>
+
+          <div className="cs-toolbar__controls">
+            {calendarState.kind === "ready" && calendarState.services.length > 0 ? (
+              <label className="cs-select">
+                <span className="cs-select__label">Availability for</span>
+                <span className="cs-select__value">
+                  {selectedServiceId
+                    ? calendarState.services.find((s) => s.id === selectedServiceId)?.name ?? "Any service"
+                    : "Any service"}
+                </span>
+                <span className="cs-select__caret" aria-hidden="true">▾</span>
+                <select
+                  value={selectedServiceId ?? ""}
+                  onChange={(event) => setSelectedServiceId(event.target.value || null)}
+                  aria-label="Availability for"
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    opacity: 0,
+                    cursor: "pointer",
+                  }}
+                >
+                  <option value="">Any service</option>
+                  {calendarState.services.map((service) => (
+                    <option key={service.id} value={service.id}>
+                      {service.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
+            {viewMode === "week" && weekProviderOptions.length > 0 ? (
+              <div style={{ position: "relative" }}>
+                <button
+                  type="button"
+                  className="cs-select"
+                  onClick={() => setContextMenuOpen((prev) => !prev)}
+                  aria-expanded={contextMenuOpen}
+                >
+                  <span className="cs-select__label">Provider</span>
+                  <span className="cs-select__value">
+                    {selectedWeekProviderId
+                      ? weekProviderOptions.find((x) => x.id === selectedWeekProviderId)?.name ?? "All providers"
+                      : "All providers"}
+                  </span>
+                  <span className="cs-select__caret" aria-hidden="true">▾</span>
+                </button>
+                {contextMenuOpen ? (
+                  <div className="cs-menu" role="menu">
+                    <button
+                      type="button"
+                      className={`cs-menu__item${!selectedWeekProviderId ? " cs-menu__item--selected" : ""}`}
+                      role="menuitemradio"
+                      aria-checked={!selectedWeekProviderId}
+                      onClick={() => { handleSelectWeekProvider(null); setContextMenuOpen(false); }}
+                    >
+                      All providers
+                    </button>
+                    {weekProviderOptions.map((provider) => (
+                      <button
+                        key={provider.id}
+                        type="button"
+                        className={`cs-menu__item${selectedWeekProviderId === provider.id ? " cs-menu__item--selected" : ""}`}
+                        role="menuitemradio"
+                        aria-checked={selectedWeekProviderId === provider.id}
+                        onClick={() => { handleSelectWeekProvider(provider.id); setContextMenuOpen(false); }}
+                      >
+                        {provider.name}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="cs-viewswitch" role="group" aria-label="Calendar view mode">
+              <button
+                type="button"
+                onClick={() => setViewMode("day")}
+                aria-pressed={viewMode === "day"}
+              >
+                Day
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("week")}
+                aria-pressed={viewMode === "week"}
+              >
+                Week
+              </button>
+            </div>
+            <button type="button" className="cs-cta" onClick={handleNewBooking}>
+              New booking
+              <span className="cs-cta__plus" aria-hidden="true">+</span>
+            </button>
+          </div>
+        </div>
+
+        <CalendarBoard
+          state={calendarState}
+          days={viewDays}
+          viewMode={viewMode}
+          selectedAppointmentId={selectedAppointmentId}
+          intakeStatusByBookingId={intakeStatusByBookingId}
+          selectedWeekProviderId={selectedWeekProviderId}
+          selectedWeekProviderName={selectedWeekProvider?.name ?? null}
+          fallbackProviderOptions={allKnownProviderOptions}
+          timeBlockDurationMinutes={selectedService?.durationMinutes ?? 60}
+          onSelectAppointment={handleSelectAppointment}
+          timeBlocks={timeBlocks}
+          selectedTimeBlockId={selectedTimeBlockId}
+          onSelectTimeBlock={handleSelectTimeBlock}
+          onRequestCalendarSlot={handleRequestCalendarSlot}
+          providerTimeOffs={providerTimeOffs}
+          selectedTimeOffId={selectedTimeOffId}
+          onSelectTimeOff={setSelectedTimeOffId}
+          displayStartHour={displayStartHour}
+          displayEndHour={displayEndHour}
+        />
+        {calendarState.kind === "ready" ? (
+          <div className="cs-boardfoot">
+            <div className="cs-boardfoot__stats">
+              <div className="cs-boardfoot__now">Now, {nowTimeFormatter.format(new Date())}</div>
+              <div className="cs-boardfoot__meta">
+                {boardFootStats.appointmentCount} appointments {viewMode === "day" ? "today" : "this week"} · {boardFootStats.openSlotCount} open slots
+              </div>
+            </div>
+            <div className="cs-boardfoot__cue">Click any empty slot to book →</div>
+          </div>
+        ) : null}
       </section>
       {sidebarRailHost ? null : <div className="calendar-fallback-month-rail">{monthRail}</div>}
-      <SlotActionDrawer
-        selectedSlot={selectedSlot}
-        serviceOptions={selectedSlotServiceOptions}
-        selectedServiceId={selectedSlotServiceId}
-        blockedServiceIds={selectedSlotBlockedServiceIds}
-        notes={selectedSlotNotes}
-        draftCreationState={draftCreationState}
-        draftHref={draftHref}
-        onClose={() => setSelectedSlot(null)}
-        onSelectProvider={handleSelectSlotProvider}
-        onSelectService={handleSelectSlotService}
-        onStartDateChange={handleUpdateSlotStartDate}
-        onStartTimeChange={handleUpdateSlotStartTime}
-        onBlockDurationChange={handleUpdateSlotBlockDuration}
-        onBlockEndChange={handleUpdateSlotBlockEnd}
-        onToggleBlockedService={handleToggleSlotBlockedService}
-        customer={selectedSlotCustomer}
-        customerLookupState={customerLookupState}
-        blockDurationMinutes={selectedSlotBlockDurationMinutes}
-        onCustomerFieldChange={handleUpdateSlotCustomerField}
-        onApplyCustomer={handleApplySlotCustomer}
-        onNotesChange={setSelectedSlotNotes}
-        onBookAppointment={() => void handleCreateDraftFromSlot()}
-        onAddTimeBlock={handleAddTimeBlockFromSlot}
-      />
-      <AppointmentDetailsDrawer
-        selectedAppointment={selectedAppointment}
-        formResponsesState={formResponsesState}
-        intakeStatus={selectedAppointment ? (intakeStatusByBookingId[selectedAppointment.id] ?? "unknown") : "unknown"}
-        formReminderState={formReminderState}
-        onSendFormReminder={handleSendFormReminder}
-        services={calendarState.kind === "ready" ? calendarState.services : []}
-        providers={calendarState.kind === "ready" ? calendarState.providers : []}
-        onClose={handleCloseAppointmentDrawer}
-        onComplete={handleCompleteAppointment}
-        onNoShow={handleNoShowAppointment}
-        onUpdate={handleUpdateAppointment}
-        onCancel={handleCancelAppointment}
-        onUpdateCustomerNotes={handleUpdateCustomerNotes}
-        onUpdateCustomerContact={handleUpdateCustomerContact}
-        completionState={completionState}
-        api={api}
-        tenantSlug={tenantSlug}
-        storefrontBaseUrl={storefrontBaseUrl}
-        customPaymentMethods={customPaymentMethods}
-        onPaymentRecorded={() => setReloadKey((k) => k + 1)}
-      />
-      <TimeBlockDetailsDrawer
-        selectedTimeBlock={selectedTimeBlock}
-        selectedService={selectedService}
-        serviceOptions={selectedTimeBlockServiceOptions}
-        blockedAppointments={selectedTimeBlockAppointments}
-        draftCreationState={draftCreationState}
-        draftHref={draftHref}
-        onClose={handleCloseTimeBlockDrawer}
-        onCreateDraft={() => void handleCreateDraftFromTimeBlock()}
-        onDelete={() => {
-          if (selectedTimeBlock) {
-            handleDiscardTimeBlock(selectedTimeBlock.id);
-          }
-        }}
-        onSave={(updates) => {
-          if (selectedTimeBlock) {
-            handleSaveTimeBlockEdits(selectedTimeBlock.id, updates);
-          }
-        }}
-      />
-      <TimeOffDetailsDrawer
-        timeOff={selectedTimeOffId ? providerTimeOffs.find((t) => t.id === selectedTimeOffId) ?? null : null}
-        onClose={() => setSelectedTimeOffId(null)}
-        onSave={async (id, updates) => {
-          const to = providerTimeOffs.find((t) => t.id === id);
-          if (!to) return;
-          await platformApi.updateProviderTimeOff(tenantSlug, to.providerId, id, updates);
-          setSelectedTimeOffId(null);
-          setReloadKey((k) => k + 1);
-        }}
-        onDelete={async (id) => {
-          const to = providerTimeOffs.find((t) => t.id === id);
-          if (!to) return;
-          await platformApi.deleteProviderTimeOff(tenantSlug, to.providerId, id);
-          setSelectedTimeOffId(null);
-          setReloadKey((k) => k + 1);
-        }}
-      />
+      {createPortal(
+        <SlotActionDrawer
+          selectedSlot={selectedSlot}
+          serviceOptions={selectedSlotServiceOptions}
+          selectedServiceId={selectedSlotServiceId}
+          blockedServiceIds={selectedSlotBlockedServiceIds}
+          notes={selectedSlotNotes}
+          draftCreationState={draftCreationState}
+          draftHref={draftHref}
+          onClose={() => setSelectedSlot(null)}
+          onSelectProvider={handleSelectSlotProvider}
+          onSelectService={handleSelectSlotService}
+          onStartDateChange={handleUpdateSlotStartDate}
+          onStartTimeChange={handleUpdateSlotStartTime}
+          onBlockDurationChange={handleUpdateSlotBlockDuration}
+          onBlockEndChange={handleUpdateSlotBlockEnd}
+          onToggleBlockedService={handleToggleSlotBlockedService}
+          customer={selectedSlotCustomer}
+          customerLookupState={customerLookupState}
+          blockDurationMinutes={selectedSlotBlockDurationMinutes}
+          onCustomerFieldChange={handleUpdateSlotCustomerField}
+          onApplyCustomer={handleApplySlotCustomer}
+          onNotesChange={setSelectedSlotNotes}
+          onBookAppointment={() => void handleCreateDraftFromSlot()}
+          onAddTimeBlock={handleAddTimeBlockFromSlot}
+        />,
+        document.body,
+      )}
+      {createPortal(
+        <AppointmentDetailsDrawer
+          selectedAppointment={selectedAppointment}
+          formResponsesState={formResponsesState}
+          intakeStatus={selectedAppointment ? (intakeStatusByBookingId[selectedAppointment.id] ?? "unknown") : "unknown"}
+          formReminderState={formReminderState}
+          onSendFormReminder={handleSendFormReminder}
+          services={calendarState.kind === "ready" ? calendarState.services : []}
+          providers={calendarState.kind === "ready" ? calendarState.providers : []}
+          onClose={handleCloseAppointmentDrawer}
+          onComplete={handleCompleteAppointment}
+          onNoShow={handleNoShowAppointment}
+          onUpdate={handleUpdateAppointment}
+          onCancel={handleCancelAppointment}
+          onUpdateCustomerNotes={handleUpdateCustomerNotes}
+          onUpdateCustomerContact={handleUpdateCustomerContact}
+          completionState={completionState}
+          api={api}
+          tenantSlug={tenantSlug}
+          storefrontBaseUrl={storefrontBaseUrl}
+          customPaymentMethods={customPaymentMethods}
+          onPaymentRecorded={() => setReloadKey((k) => k + 1)}
+        />,
+        document.body,
+      )}
+      {createPortal(
+        <TimeBlockDetailsDrawer
+          selectedTimeBlock={selectedTimeBlock}
+          selectedService={selectedService}
+          serviceOptions={selectedTimeBlockServiceOptions}
+          blockedAppointments={selectedTimeBlockAppointments}
+          draftCreationState={draftCreationState}
+          draftHref={draftHref}
+          onClose={handleCloseTimeBlockDrawer}
+          onCreateDraft={() => void handleCreateDraftFromTimeBlock()}
+          onDelete={() => {
+            if (selectedTimeBlock) {
+              handleDiscardTimeBlock(selectedTimeBlock.id);
+            }
+          }}
+          onSave={(updates) => {
+            if (selectedTimeBlock) {
+              handleSaveTimeBlockEdits(selectedTimeBlock.id, updates);
+            }
+          }}
+        />,
+        document.body,
+      )}
+      {createPortal(
+        <TimeOffDetailsDrawer
+          timeOff={selectedTimeOffId ? providerTimeOffs.find((t) => t.id === selectedTimeOffId) ?? null : null}
+          onClose={() => setSelectedTimeOffId(null)}
+          onSave={async (id, updates) => {
+            const to = providerTimeOffs.find((t) => t.id === id);
+            if (!to) return;
+            await platformApi.updateProviderTimeOff(tenantSlug, to.providerId, id, updates);
+            setSelectedTimeOffId(null);
+            setReloadKey((k) => k + 1);
+          }}
+          onDelete={async (id) => {
+            const to = providerTimeOffs.find((t) => t.id === id);
+            if (!to) return;
+            await platformApi.deleteProviderTimeOff(tenantSlug, to.providerId, id);
+            setSelectedTimeOffId(null);
+            setReloadKey((k) => k + 1);
+          }}
+        />,
+        document.body,
+      )}
     </main>
   );
 }
@@ -2246,53 +2407,61 @@ function MonthRail({
   onPreviousMonth: () => void;
   onNextMonth: () => void;
 }) {
+  // Determine the visible week around focusedDate (Sun-Sat) so we can mark
+  // `.cs-minical__day--inweek` per proof.html.
+  const focused = parseIsoDate(focusedDate);
+  const focusedDow = (focused.getUTCDay() + 6) % 7; // Monday = 0
+  const weekStart = new Date(focused);
+  weekStart.setUTCDate(focused.getUTCDate() - focusedDow);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
+  const inWeek = (iso: string): boolean => {
+    const d = parseIsoDate(iso);
+    return d >= weekStart && d <= weekEnd;
+  };
+  const todayIso = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
   return (
-    <section className="month-rail" aria-label="Month calendar">
-      <div className="month-rail__header">
-        <h5>{monthLabelFormatter.format(parseIsoDate(monthCursorDate))}</h5>
-        <div className="month-rail__controls">
-          <button type="button" className="filter-chip" onClick={onPreviousMonth}>
-            Prev
-          </button>
-          <button type="button" className="filter-chip" onClick={onNextMonth}>
-            Next
-          </button>
+    <div className="cs-minical" aria-label="Month calendar">
+      <div className="cs-minical__head">
+        <div className="cs-minical__month">{monthLabelFormatter.format(parseIsoDate(monthCursorDate))}</div>
+        <div className="cs-minical__nav">
+          <button type="button" onClick={onPreviousMonth} aria-label="Previous month">‹</button>
+          <button type="button" onClick={onNextMonth} aria-label="Next month">›</button>
         </div>
       </div>
-      <div className="month-grid-labels" role="presentation">
+      <div className="cs-minical__grid" role="grid">
         {monthDayLabel.map((label) => (
-          <span key={label}>{label}</span>
+          <div key={label} className="cs-minical__dow">{label}</div>
         ))}
-      </div>
-      <div className="month-grid" role="grid">
         {monthGrid.map((date) => {
           const dayData = monthDatesByDay.get(date);
           const isInCurrentMonth = date.slice(0, 7) === monthCursorDate.slice(0, 7);
           const isFocused = date === focusedDate;
-
+          const isToday = date === todayIso;
+          const isInVisibleWeek = inWeek(date);
+          const cls = [
+            "cs-minical__day",
+            !isInCurrentMonth ? "cs-minical__day--out" : "",
+            isToday ? "cs-minical__day--today" : "",
+            !isToday && isInVisibleWeek ? "cs-minical__day--inweek" : "",
+          ].filter(Boolean).join(" ");
           return (
             <button
               key={date}
               type="button"
               role="gridcell"
-              disabled={!isInCurrentMonth && !dayData && !dayData}
+              disabled={!isInCurrentMonth && !dayData}
               aria-pressed={isFocused}
               aria-label={getDateLabel(date)}
-              className={[
-                "month-day",
-                !isInCurrentMonth ? "month-day--outside" : "",
-                isFocused ? "month-day--focused" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
+              className={cls}
               onClick={() => onSelectDate(date)}
             >
-              <span>{parseIsoDate(date).getUTCDate()}</span>
+              {parseIsoDate(date).getUTCDate()}
             </button>
           );
         })}
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -2322,6 +2491,34 @@ function mergeMinuteSegments(
     }
   }
   return merged;
+}
+
+// Derive chip family (mint/lilac/pink/blue/peach) from the service. Highly
+// specific service-name keywords (microneedling, xerf, laser, peel, consult,
+// brow) win over category-name matches — in demo data a "Facials" category
+// contains microneedling/XERF, so the specific service signal must dominate.
+// Matches the design contract in club-sunday.css (`.cs-chip--{family}`).
+function getChipFamily(serviceName: string | null | undefined, categoryName: string | null | undefined): string {
+  const cat = (categoryName ?? "").toLowerCase();
+  const svc = (serviceName ?? "").toLowerCase();
+
+  // 1. Specific service-name keywords (most authoritative signal).
+  if (svc.includes("consult")) return "cs-chip--consult";
+  if (svc.includes("microneedl") || svc.includes("xerf") || svc.includes(" rf") || svc.startsWith("rf") || svc.includes("advanced")) return "cs-chip--advanced";
+  if (svc.includes("laser") || svc.includes("peel")) return "cs-chip--laser";
+  if (svc.includes("brow")) return "cs-chip--studio";
+
+  // 2. Category name (operator-curated grouping).
+  if (cat.includes("consult")) return "cs-chip--consult";
+  if (cat.includes("advanced") || cat.includes("needling") || cat.includes(" rf") || cat.startsWith("rf")) return "cs-chip--advanced";
+  if (cat.includes("laser") || cat.includes("peel")) return "cs-chip--laser";
+  if (cat.includes("brow") || cat.includes("studio")) return "cs-chip--studio";
+  if (cat.includes("facial")) return "cs-chip--facial";
+
+  // 3. Generic service-name keywords.
+  if (svc.includes("facial") || svc.includes("glow") || svc.includes("hydration")) return "cs-chip--facial";
+
+  return "cs-chip--facial";
 }
 
 function CalendarBoard({
@@ -2365,6 +2562,38 @@ function CalendarBoard({
   displayStartHour?: number;
   displayEndHour?: number;
 }) {
+  const boardBodyRef = useRef<HTMLDivElement | null>(null);
+
+  // §4: land the board on "now" on mount — scroll the board body so the
+  // current time sits one row below the top (clamped to 0).
+  useEffect(() => {
+    if (state.kind !== "ready") {
+      return;
+    }
+
+    const startHour = Math.min(24, Math.max(0, Math.round(displayStartHour ?? 9)));
+    let endHour = Math.min(24, Math.max(0, Math.round(displayEndHour ?? 19)));
+    if (endHour <= startHour) {
+      endHour = Math.min(24, startHour + SCHEDULE_MIN_VISIBLE_HOURS);
+    }
+
+    const parts = tenantTimePartsFormatter.formatToParts(new Date());
+    const hh = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+    const mm = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+    const nowMinutes = hh * 60 + mm;
+
+    if (nowMinutes < startHour * 60 || nowMinutes > endHour * 60) {
+      return; // "now" is outside the displayed range; nothing to scroll to
+    }
+
+    const rowHpx = viewMode === "day" ? SCHEDULE_DAY_HOUR_HEIGHT_PX : SCHEDULE_HOUR_HEIGHT_PX;
+    const nowTopPx = ((nowMinutes - startHour * 60) / 60) * rowHpx;
+    const el = boardBodyRef.current;
+    if (el) {
+      el.scrollTop = Math.max(0, nowTopPx - rowHpx);
+    }
+  }, [state.kind, viewMode, displayStartHour, displayEndHour]);
+
   if (state.kind === "loading") {
     return <div className="calendar-state">Loading booked appointments...</div>;
   }
@@ -2511,53 +2740,92 @@ function CalendarBoard({
         });
 
   const dayCount = Math.max(1, scheduleColumns.length);
+  const todayIsoTenant = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
+  const nowMinutesTenant = (() => {
+    const parts = tenantTimePartsFormatter.formatToParts(new Date());
+    const hh = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+    const mm = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+    return hh * 60 + mm;
+  })();
+  const scheduleStartMinuteGlobal = startHour * 60;
+  const scheduleEndMinuteGlobal = endHour * 60;
+  // STRUCTURE.md §1: week ROW_H=64, day ROW_H=72. --cs-row-h is set by CSS
+  // (default 64, .cs-board--day override 72); JS must use the same value so
+  // --top / --h stay pinned to the CSS grid.
+  const rowHpx = viewMode === "day" ? SCHEDULE_DAY_HOUR_HEIGHT_PX : SCHEDULE_HOUR_HEIGHT_PX;
+  // CSS defaults: week --cs-hours: 9, day --cs-hours: 7. Only override when the
+  // tenant range differs. Same for --provider-count on day view.
+  const boardStyle: CSSProperties = {} as CSSProperties;
+  const defaultCsHours = viewMode === "day" ? 7 : 9;
+  if (totalHours !== defaultCsHours) {
+    (boardStyle as Record<string, string | number>)["--cs-hours"] = totalHours;
+  }
+  if (viewMode === "day") {
+    (boardStyle as Record<string, string | number>)["--provider-count"] = dayCount;
+  }
+  const boardClass = [
+    "cs-board",
+    viewMode === "day" ? "cs-board--day" : "",
+    viewMode === "day" && dayCount > 6 ? "cs-board--scroll" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const padHour = (h: number) => `${String(h).padStart(2, "0")}:00`;
+  // Chip geometry per STRUCTURE.md §1.
+  //   top = ((startMin - DAY_START) / 60) * ROW_H
+  //   h   = (durationMin / 60) * ROW_H - GAP
+  const chipTop = (startMinutes: number): number =>
+    ((startMinutes - scheduleStartMinuteGlobal) / 60) * rowHpx;
+  const chipHeight = (durationMinutes: number): number =>
+    Math.max(SCHEDULE_MIN_EVENT_HEIGHT_PX, (durationMinutes / 60) * rowHpx - SCHEDULE_CHIP_GAP_PX);
 
   return (
-    <div
-      className={`schedule-board${viewMode === "day" ? " schedule-board--day" : ""}`}
-      aria-label="Scheduled appointments"
-      style={{
-        "--schedule-hour-height": `${SCHEDULE_HOUR_HEIGHT_PX}px`,
-        "--schedule-quarter-height": `${SCHEDULE_QUARTER_HEIGHT_PX}px`,
-      } as CSSProperties}
-    >
-      <div className="schedule-board__header" style={{ gridTemplateColumns: `88px repeat(${dayCount}, minmax(0, 1fr))` }}>
-        <div className="schedule-header-corner">Time</div>
-        {scheduleColumns.map((column) => (
-          <div
-            key={column.key}
-            className="schedule-day-heading"
-            aria-label={column.subheading ? `${column.heading} ${column.subheading} column` : `${column.heading} column`}
-          >
-            {column.providerId ? (
-              <div className="schedule-day-heading__avatar" aria-hidden="true">
-                {column.providerImageUrl ? (
-                  <img src={column.providerImageUrl} alt="" />
-                ) : (
-                  <span>{getInitials(column.providerName ?? column.heading)}</span>
-                )}
+    <div className="cs-boardcard" aria-label="Scheduled appointments">
+      <div className={boardClass} style={boardStyle}>
+        <div className="cs-board__head">
+          <div />
+          {scheduleColumns.map((column) => {
+            const isToday = column.date === todayIsoTenant;
+            if (viewMode === "day" && column.providerId) {
+              // Day view head cell = provider identity per STRUCTURE.md §4
+              return (
+                <div key={column.key} className="cs-provider">
+                  <span className="cs-provider__avatar" aria-hidden="true">
+                    {column.providerImageUrl ? <img src={column.providerImageUrl} alt="" /> : null}
+                  </span>
+                  <div>
+                    <div className="cs-provider__name">{column.providerName ?? column.heading}</div>
+                    <div className="cs-provider__role">{column.providerName ? "Provider" : column.heading}</div>
+                  </div>
+                </div>
+              );
+            }
+            // Week view head cell = day label
+            return (
+              <div
+                key={column.key}
+                className={`cs-daylabel${isToday ? " cs-daylabel--today" : ""}`}
+                aria-label={column.subheading ? `${column.heading} ${column.subheading} column` : `${column.heading} column`}
+              >
+                <div className="cs-daylabel__dow">{column.heading}</div>
+                {column.subheading ? <div className="cs-daylabel__date">{column.subheading}</div> : null}
               </div>
-            ) : null}
-            <strong>{column.heading}</strong>
-            {column.subheading ? <span>{column.subheading}</span> : null}
-          </div>
-        ))}
-      </div>
-
-      <div className="schedule-board__body">
-        <div className="schedule-time-axis" style={{ height: `${scheduleHeightPx}px` }}>
-          {halfHourLabels.map((label, i) => (
-            <div key={i} className="schedule-time-axis__cell" style={{ height: `${SCHEDULE_HOUR_HEIGHT_PX / 2}px` }}>
-              {label}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        <div className="schedule-day-tracks" style={{ gridTemplateColumns: `repeat(${dayCount}, minmax(0, 1fr))`, height: `${scheduleHeightPx}px` }}>
+        <div className="cs-board__body" ref={boardBodyRef}>
+          <div className="cs-gutter" aria-hidden="true">
+            {Array.from({ length: totalHours }, (_, i) => (
+              <div key={i} className="cs-gutter__hour">{padHour(startHour + i)}</div>
+            ))}
+          </div>
+
           {scheduleColumns.map((column) => {
             const scheduleStartMinute = startHour * 60;
             const scheduleEndMinute = endHour * 60;
-            const unavailableSegments: { topPx: number; heightPx: number }[] = [];
+            const isToday = column.date === todayIsoTenant;
+            const hatchSegments: { top: number; h: number }[] = [];
             const columnProviderOptions = getProviderOptionsFromSchedule(column.appointments, column.openings);
             const slotProviderOptions = columnProviderOptions.length > 0 ? columnProviderOptions : fallbackProviderOptions;
             const isInteractiveTrack = (column.providerId !== undefined && column.providerName !== undefined) || slotProviderOptions.length > 0;
@@ -2573,9 +2841,8 @@ function CalendarBoard({
               if (!isInteractiveTrack) {
                 return;
               }
-              // Don't open the slot panel if the click landed on a time-off block
               const target = event.target as HTMLElement;
-              if (target.closest(".schedule-time-block--timeoff")) {
+              if (target.closest(".cs-hatch") || target.closest(".cs-chip")) {
                 return;
               }
 
@@ -2605,59 +2872,70 @@ function CalendarBoard({
               });
             };
 
+            let fullyClosed = false;
             if (column.availableSegments.length > 0) {
-              let cursor = scheduleStartMinute;
-              for (const segment of column.availableSegments) {
-                const segmentStart = Math.max(scheduleStartMinute, segment.startMinute);
-                const segmentEnd = Math.min(scheduleEndMinute, segment.endMinute);
-                if (segmentStart > cursor) {
-                  unavailableSegments.push({
-                    topPx: ((cursor - scheduleStartMinute) / 60) * SCHEDULE_HOUR_HEIGHT_PX,
-                    heightPx: ((segmentStart - cursor) / 60) * SCHEDULE_HOUR_HEIGHT_PX,
+              // STRUCTURE.md §C: .cs-hatch is ONLY for turnover gaps and lunch
+              // INSIDE a working column. Pre-first-opening and post-last-opening
+              // regions are just empty grid, not hatched.
+              const segs = column.availableSegments;
+              for (let i = 0; i < segs.length - 1; i++) {
+                const gapStart = Math.max(scheduleStartMinute, segs[i]!.endMinute);
+                const gapEnd = Math.min(scheduleEndMinute, segs[i + 1]!.startMinute);
+                if (gapEnd > gapStart) {
+                  hatchSegments.push({
+                    top: ((gapStart - scheduleStartMinute) / 60) * rowHpx,
+                    h: ((gapEnd - gapStart) / 60) * rowHpx - SCHEDULE_CHIP_GAP_PX,
                   });
                 }
-                cursor = Math.max(cursor, segmentEnd);
               }
-              if (cursor < scheduleEndMinute) {
-                unavailableSegments.push({
-                  topPx: ((cursor - scheduleStartMinute) / 60) * SCHEDULE_HOUR_HEIGHT_PX,
-                  heightPx: ((scheduleEndMinute - cursor) / 60) * SCHEDULE_HOUR_HEIGHT_PX,
-                });
-              }
-            } else if (column.openings.length === 0) {
-              // Gray out the entire track when the provider has no working hours,
-              // unless there's a time-off block already covering the date (which shows its own visual).
+            } else if (column.openings.length === 0 && column.appointments.length === 0) {
               const hasTimeOffBlocks = column.providerId !== undefined && providerTimeOffs.some((to) => {
-                // Use UTC date to match how overrides were stored (T00:00:00Z boundaries)
                 const toDate = to.startsAt.split("T")[0];
                 const toEndDate = to.endsAt.split("T")[0];
                 return column.date >= toDate && column.date <= toEndDate;
               });
               if (!hasTimeOffBlocks) {
-                unavailableSegments.push({
-                  topPx: 0,
-                  heightPx: scheduleHeightPx,
-                });
+                fullyClosed = true;
               }
             }
 
+            const colClass = [
+              "cs-col",
+              isToday ? "cs-col--today" : "",
+              fullyClosed ? "cs-col--closed" : "",
+            ].filter(Boolean).join(" ");
+
+            // STRUCTURE.md §1: concurrent bookings share the column width via
+            // --lane / --lanes. Compute overlap clusters once per column.
+            const appointmentLanes = computeAppointmentLanes(column.appointments);
+
             return (
-              <section
+              <div
                 key={column.key}
-                className={`schedule-day-track${isInteractiveTrack ? " schedule-day-track--interactive" : ""}`}
+                className={colClass}
+                role={isInteractiveTrack && !fullyClosed ? "button" : undefined}
                 aria-label={trackLabel}
-                onClick={handleTrackClick}
+                onClick={fullyClosed ? undefined : handleTrackClick}
               >
-                {unavailableSegments.map((segment, index) => (
+                {fullyClosed ? (
+                  <div className="cs-col__notice cs-col__notice--vertical">
+                    {column.heading ? `${column.heading} closed` : "Closed"}
+                  </div>
+                ) : null}
+                {hatchSegments.map((segment, index) => (
                   <div
-                    key={`unavailable-${index}`}
-                    className="schedule-unavailable"
+                    key={`hatch-${index}`}
+                    className="cs-hatch"
                     aria-hidden="true"
-                    style={{ top: `${segment.topPx}px`, height: `${segment.heightPx}px` }}
+                    style={{ "--top": segment.top, "--h": Math.max(SCHEDULE_MIN_EVENT_HEIGHT_PX, segment.h) } as CSSProperties}
                   />
                 ))}
-                {column.appointments.length === 0 && column.emptyLabel ? (
-                  <span className="schedule-day-track__empty">{column.emptyLabel}</span>
+                {isToday && nowMinutesTenant >= scheduleStartMinuteGlobal && nowMinutesTenant <= scheduleEndMinuteGlobal ? (
+                  <div
+                    className="cs-now"
+                    aria-hidden="true"
+                    style={{ "--top": ((nowMinutesTenant - scheduleStartMinuteGlobal) / 60) * rowHpx } as CSSProperties}
+                  />
                 ) : null}
                 {(column.providerId !== undefined || viewMode === "week")
                   ? timeBlocks
@@ -2667,79 +2945,72 @@ function CalendarBoard({
                         const startMinutes = minutesInTenantDay(block.startAt);
                         const rawEndMinutes = minutesInTenantDay(block.endAt);
                         const endMinutes = rawEndMinutes > startMinutes ? rawEndMinutes : startMinutes + 15;
-                        const startOffsetMinutes = Math.max(0, startMinutes - startHour * 60);
                         const durationMinutes = Math.max(15, endMinutes - startMinutes);
-
-                        const rawTopPx = (startOffsetMinutes / 60) * SCHEDULE_HOUR_HEIGHT_PX;
-                        const maxTopPx = Math.max(0, scheduleHeightPx - SCHEDULE_MIN_EVENT_HEIGHT_PX);
-                        const topPx = Math.min(rawTopPx, maxTopPx);
-                        const rawHeightPx = Math.max(
-                          SCHEDULE_MIN_EVENT_HEIGHT_PX,
-                          (durationMinutes / 60) * SCHEDULE_HOUR_HEIGHT_PX,
-                        );
-                        const heightPx = Math.max(
-                          SCHEDULE_MIN_EVENT_HEIGHT_PX,
-                          Math.min(rawHeightPx, scheduleHeightPx - topPx),
-                        );
-
+                        const top = chipTop(startMinutes);
+                        const h = chipHeight(durationMinutes);
                         return (
                           <button
                             key={block.id}
                             type="button"
-                            className={`schedule-time-block${isSelected ? " schedule-time-block--selected" : ""}`}
+                            className={`cs-chip cs-chip--block${isSelected ? " cs-chip--selected" : ""}`}
                             aria-label={`Time block ${formatDateTime(block.startAt)} with ${block.providerName}`}
                             aria-pressed={isSelected}
                             onClick={(event) => {
                               event.stopPropagation();
                               onSelectTimeBlock(block.id);
                             }}
-                            style={{ top: `${topPx}px`, height: `${heightPx}px` }}
+                            style={{ "--top": top, "--h": h } as CSSProperties}
                           >
-                            <strong>{formatTimeRange(block.startAt, block.endAt)}</strong>
-                            <span>{`Time block · ${block.providerName}`}</span>
+                            <span className="cs-chip__time">{formatTimeRange(block.startAt, block.endAt)}</span>
+                            <span className="cs-chip__client">{`Time block · ${block.providerName}`}</span>
                           </button>
                         );
                       })
                   : null}
-                {/* Render only custom_hours overrides as visible blocks. Closed days are greyed out via unavailableSegments. */}
-                {column.providerId !== undefined
+                {/* Provider custom_hours overrides render as hatched turnover blocks. */}
+                {(column.providerId !== undefined || viewMode === "week")
                   ? providerTimeOffs
                       .filter((to) => {
                         if (to.overrideType !== "custom_hours") return false;
-                        // Use UTC date to match how overrides were stored (T00:00:00Z boundaries)
+                        if (column.providerId !== undefined && to.providerId !== column.providerId) return false;
                         const toDate = to.startsAt.split("T")[0];
                         const toEndDate = to.endsAt.split("T")[0];
                         return column.date >= toDate && column.date <= toEndDate;
                       })
                       .map((to) => {
                         const isAllDay = to.overrideType === "closed";
-                        const startMinutes = isAllDay ? 0 : minutesInTenantDay(`${column.date}T${to.startTime || "00:00"}:00.000Z`);
-                        const endMinutes = isAllDay ? 24 * 60 : minutesInTenantDay(`${column.date}T${to.endTime || "23:59"}:00.000Z`);
-                        const startOffsetMinutes = Math.max(0, startMinutes - startHour * 60);
+                        // startTime/endTime are wall-clock "HH:MM" strings in the
+                        // tenant timezone; parse them directly (not via a UTC
+                        // datetime) so the block lands on the correct hour.
+                        const startMinutes = isAllDay ? 0 : (getMinutesFromTimeInput(to.startTime ?? "") ?? 0);
+                        const endMinutes = isAllDay ? 24 * 60 : (getMinutesFromTimeInput(to.endTime ?? "") ?? 24 * 60);
                         const durationMinutes = Math.max(15, endMinutes - startMinutes);
-                        const rawTopPx = (startOffsetMinutes / 60) * SCHEDULE_HOUR_HEIGHT_PX;
-                        const maxTopPx = Math.max(0, scheduleHeightPx - SCHEDULE_MIN_EVENT_HEIGHT_PX);
-                        const topPx = Math.min(rawTopPx, maxTopPx);
-                        const rawHeightPx = Math.max(SCHEDULE_MIN_EVENT_HEIGHT_PX, (durationMinutes / 60) * SCHEDULE_HOUR_HEIGHT_PX);
-                        const heightPx = Math.max(SCHEDULE_MIN_EVENT_HEIGHT_PX, Math.min(rawHeightPx, scheduleHeightPx - topPx));
+                        const top = chipTop(startMinutes);
+                        const h = chipHeight(durationMinutes);
                         const label = to.reason || (to.overrideType === "custom_hours" ? "Override" : "Blocked");
                         const isSelected = to.id === selectedTimeOffId;
                         return (
-                          <button
+                          <div
                             key={`to-${to.id}`}
-                            type="button"
-                            className={`schedule-time-block schedule-time-block--timeoff${isSelected ? " schedule-time-block--selected" : ""}`}
+                            role="button"
+                            tabIndex={0}
+                            className={`cs-hatch${isSelected ? " cs-hatch--selected" : ""}`}
                             aria-label={`${label} ${isAllDay ? "all day" : `${to.startTime || ""} – ${to.endTime || ""}`}`}
-                            aria-pressed={isSelected}
                             onClick={(event) => {
                               event.stopPropagation();
                               onSelectTimeOff(isSelected ? null : to.id);
                             }}
-                            style={{ top: `${topPx}px`, height: `${heightPx}px` }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                onSelectTimeOff(isSelected ? null : to.id);
+                              }
+                            }}
+                            style={{ "--top": top, "--h": h } as CSSProperties}
                           >
-                            <strong>{isAllDay ? "Blocked" : `${to.startTime || ""} – ${to.endTime || ""}`}</strong>
-                            <span>{label}</span>
-                          </button>
+                            {label}
+                          </div>
                         );
                       })
                   : null}
@@ -2751,56 +3022,65 @@ function CalendarBoard({
                   const startMinutes = minutesInTenantDay(appointment.startAt);
                   const rawEndMinutes = minutesInTenantDay(appointment.endAt);
                   const endMinutes = rawEndMinutes > startMinutes ? rawEndMinutes : startMinutes + 15;
-                  const startOffsetMinutes = Math.max(0, startMinutes - startHour * 60);
                   const durationMinutes = Math.max(15, endMinutes - startMinutes);
+                  const top = chipTop(startMinutes);
+                  const h = chipHeight(durationMinutes);
 
-                  const rawTopPx = (startOffsetMinutes / 60) * SCHEDULE_HOUR_HEIGHT_PX;
-                  const maxTopPx = Math.max(0, scheduleHeightPx - SCHEDULE_MIN_EVENT_HEIGHT_PX);
-                  const topPx = Math.min(rawTopPx, maxTopPx);
-                  const rawHeightPx = Math.max(
-                    SCHEDULE_MIN_EVENT_HEIGHT_PX,
-                    (durationMinutes / 60) * SCHEDULE_HOUR_HEIGHT_PX,
-                  );
-                  const heightPx = Math.max(
-                    SCHEDULE_MIN_EVENT_HEIGHT_PX,
-                    Math.min(rawHeightPx, scheduleHeightPx - topPx),
-                  );
+                  const nowMs = Date.now();
+                  const isInProgress =
+                    appointment.status === "confirmed" &&
+                    new Date(appointment.startAt).getTime() <= nowMs &&
+                    nowMs < new Date(appointment.endAt).getTime();
 
-                  const statusClass =
-                    appointment.status === "completed" ? " schedule-event--done" :
-                    appointment.status === "canceled" || appointment.status === "no_show" ? " schedule-event--canceled" :
-                    "";
+                  // Derive chip family from the service's category (falls back
+                  // to service-name keywords when category is unset).
+                  const bookedService = state.services.find((candidate) => candidate.id === appointment.serviceId);
+                  const bookedCategoryName = bookedService?.categoryId
+                    ? state.categoryNameById[bookedService.categoryId] ?? null
+                    : null;
+                  const bookedFamily = getChipFamily(appointment.serviceName, bookedCategoryName);
+
+                  const familyClass =
+                    appointment.status === "completed" ? "cs-chip--completed" :
+                    appointment.status === "canceled" || appointment.status === "no_show" ? "cs-chip--block" :
+                    isInProgress ? "cs-chip--inprogress" :
+                    bookedFamily;
+
+                  const laneInfo = appointmentLanes.get(appointment.id);
 
                   return (
                     <button
                       key={appointment.id}
                       type="button"
-                      className={`schedule-event${isSelected ? " schedule-event--selected" : ""}${statusClass}`}
+                      className={`cs-chip ${familyClass}${isSelected ? " cs-chip--selected" : ""}`}
                       aria-label={`View ${appointment.customerName} booked ${formatDateTime(appointment.startAt)} with ${appointment.providerName}. ${intakeLabel}.`}
                       aria-pressed={isSelected}
                       onClick={(event) => {
                         event.stopPropagation();
                         onSelectAppointment(appointment.id);
                       }}
-                      style={{ top: `${topPx}px`, height: `${heightPx}px` }}
+                      style={{
+                        "--top": top,
+                        "--h": h,
+                        ...(laneInfo ? { "--lane": laneInfo.lane, "--lanes": laneInfo.lanes } : {}),
+                      } as CSSProperties}
                     >
-                      <strong>
-                        {viewMode === "day"
-                          ? formatTimeRange(appointment.startAt, appointment.endAt)
-                          : appointment.customerName}
-                      </strong>
-                      <span>
-                        {viewMode === "day"
-                          ? `${appointment.customerName} · ${appointment.serviceName}`
-                          : `${appointment.serviceName} · ${formatTimeRange(appointment.startAt, appointment.endAt)}`}
-                      </span>
-                      <span className={`schedule-event__intake schedule-event__intake--${intakeStatus}`}>
-                        {intakeLabel}
-                      </span>
+                      {isInProgress ? (
+                        <span className="cs-chip__live">
+                          <span />
+                          <span>IN ROOM</span>
+                        </span>
+                      ) : (
+                        <span className="cs-chip__time">
+                          {formatTimeRange(appointment.startAt, appointment.endAt)}
+                        </span>
+                      )}
+                      <span className="cs-chip__client">{appointment.customerName}</span>
+                      <span className="cs-chip__treatment">{appointment.serviceName}</span>
                     </button>
                   );
                 })}
-              </section>
+              </div>
             );
           })}
         </div>
@@ -2808,6 +3088,7 @@ function CalendarBoard({
     </div>
   );
 }
+
 
 type SlotActionDrawerProps = {
   selectedSlot: PendingCalendarSlot | null;

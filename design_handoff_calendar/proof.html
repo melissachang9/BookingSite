@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>club-sunday.css — proof</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@1&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="club-sunday.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="cs-desk">
+<div class="cs-shell">
+
+<aside class="cs-sidebar">
+  <div class="cs-brand">
+    <div class="cs-brand__name">Club <em>Sunday</em></div>
+    <div class="cs-brand__site">Studio One</div>
+  </div>
+  <nav class="cs-nav">
+    <a class="cs-nav__item cs-nav__item--active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></svg><span class="cs-nav__label">Today</span></a>
+    <a class="cs-nav__item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span class="cs-nav__label">Calendar</span></a>
+    <a class="cs-nav__item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.6 3.1-5.5 7-5.5s7 1.9 7 5.5"/></svg><span class="cs-nav__label">Clients</span></a>
+    <a class="cs-nav__item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="3"/></svg><span class="cs-nav__label">Forms</span><span class="cs-nav__count">4</span></a>
+  </nav>
+  <div class="cs-minical">
+    <div class="cs-minical__head">
+      <div class="cs-minical__month">August 2026</div>
+      <div class="cs-minical__nav"><button>‹</button><button>›</button></div>
+    </div>
+    <div class="cs-minical__grid">
+      <div class="cs-minical__dow">M</div><div class="cs-minical__dow">T</div><div class="cs-minical__dow">W</div><div class="cs-minical__dow">T</div><div class="cs-minical__dow">F</div><div class="cs-minical__dow">S</div><div class="cs-minical__dow">S</div>
+      <button class="cs-minical__day cs-minical__day--out">28</button><button class="cs-minical__day cs-minical__day--out">29</button><button class="cs-minical__day cs-minical__day--out">30</button><button class="cs-minical__day cs-minical__day--out">31</button><button class="cs-minical__day">1</button><button class="cs-minical__day">2</button><button class="cs-minical__day">3</button>
+      <button class="cs-minical__day">17</button><button class="cs-minical__day">18</button><button class="cs-minical__day">19</button><button class="cs-minical__day">20</button><button class="cs-minical__day">21</button><button class="cs-minical__day">22</button><button class="cs-minical__day">23</button>
+      <button class="cs-minical__day cs-minical__day--inweek">24</button><button class="cs-minical__day cs-minical__day--inweek">25</button><button class="cs-minical__day cs-minical__day--today">26</button><button class="cs-minical__day cs-minical__day--inweek">27</button><button class="cs-minical__day cs-minical__day--inweek">28</button><button class="cs-minical__day cs-minical__day--inweek">29</button><button class="cs-minical__day cs-minical__day--inweek">30</button>
+    </div>
+  </div>
+  <div class="cs-legend">
+    <div class="cs-legend__title">Treatment families</div>
+    <div class="cs-legend__row"><span class="cs-legend__swatch" style="background:#DFEBE1"></span>Facials</div>
+    <div class="cs-legend__row"><span class="cs-legend__swatch" style="background:#E8E3F5"></span>Advanced</div>
+    <div class="cs-legend__row"><span class="cs-legend__swatch" style="background:#F7E0E4"></span>Laser &amp; peels</div>
+    <div class="cs-legend__row"><span class="cs-legend__swatch" style="background:#DEE7F3"></span>Consults</div>
+  </div>
+</aside>
+
+<main class="cs-main">
+
+  <div class="cs-topbar">
+    <div class="cs-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg><input placeholder="Search clients, bookings"></div>
+    <div class="cs-topbar__right">
+      <a class="cs-topbar__link">Waitlist · 3</a>
+      <a class="cs-topbar__link">Forms · 4</a>
+      <span class="cs-avatar">MC</span>
+    </div>
+  </div>
+
+  <div class="cs-toolbar">
+    <div class="cs-toolbar__title-group">
+      <div class="cs-range">24 – 30 August</div>
+      <div class="cs-stepper"><button>‹</button><button class="cs-today">Today</button><button>›</button></div>
+    </div>
+    <div class="cs-toolbar__controls">
+      <button class="cs-select"><span class="cs-select__label">Availability for</span><span class="cs-select__value">Any service</span><span class="cs-select__caret">▾</span></button>
+      <button class="cs-select cs-select--ink"><span class="cs-select__value">All staff</span><span class="cs-select__meta">13</span><span class="cs-select__caret">▾</span></button>
+      <div class="cs-viewswitch"><button>Day</button><button aria-pressed="true">Week</button></div>
+      <button class="cs-cta">New booking<span class="cs-cta__plus">+</span></button>
+    </div>
+  </div>
+
+  <div class="cs-boardcard">
+    <div class="cs-board">
+      <div class="cs-board__head">
+        <div></div>
+        <div class="cs-daylabel"><div class="cs-daylabel__dow">Mon</div><div class="cs-daylabel__date">24</div></div>
+        <div class="cs-daylabel"><div class="cs-daylabel__dow">Tue</div><div class="cs-daylabel__date">25</div></div>
+        <div class="cs-daylabel cs-daylabel--today"><div class="cs-daylabel__dow">Wed</div><div class="cs-daylabel__date">26</div></div>
+        <div class="cs-daylabel"><div class="cs-daylabel__dow">Thu</div><div class="cs-daylabel__date">27</div></div>
+        <div class="cs-daylabel"><div class="cs-daylabel__dow">Fri</div><div class="cs-daylabel__date">28</div></div>
+        <div class="cs-daylabel"><div class="cs-daylabel__dow">Sat</div><div class="cs-daylabel__date">29</div></div>
+        <div class="cs-daylabel"><div class="cs-daylabel__dow">Sun</div><div class="cs-daylabel__date">30</div></div>
+      </div>
+      <div class="cs-board__body">
+        <div class="cs-gutter">
+          <div class="cs-gutter__hour">09:00</div><div class="cs-gutter__hour">10:00</div><div class="cs-gutter__hour">11:00</div><div class="cs-gutter__hour">12:00</div><div class="cs-gutter__hour">13:00</div><div class="cs-gutter__hour">14:00</div><div class="cs-gutter__hour">15:00</div><div class="cs-gutter__hour">16:00</div><div class="cs-gutter__hour">17:00</div>
+        </div>
+
+        <div class="cs-col">
+          <button class="cs-chip cs-chip--facial" style="--top:64;--h:60"><span class="cs-chip__time">10:00</span><span class="cs-chip__client">Ivy Chen</span><span class="cs-chip__treatment">Sunday Glow</span></button>
+          <button class="cs-chip cs-chip--advanced" style="--top:192;--h:92"><span class="cs-chip__time">12:00</span><span class="cs-chip__client">Maya Sharif</span><span class="cs-chip__treatment">Microneedling</span></button>
+          <button class="cs-chip cs-chip--consult" style="--top:320;--h:60"><span class="cs-chip__time">14:00</span><span class="cs-chip__client">Tom Reyes</span><span class="cs-chip__treatment">Consult</span></button>
+        </div>
+
+        <div class="cs-col">
+          <button class="cs-chip cs-chip--laser" style="--top:0;--h:92"><span class="cs-chip__time">09:00</span><span class="cs-chip__client">Leah Barnes</span><span class="cs-chip__treatment">Brightening Peel</span></button>
+          <button class="cs-chip cs-chip--facial" style="--top:128;--h:60"><span class="cs-chip__time">11:00</span><span class="cs-chip__client">Anouk V.</span><span class="cs-chip__treatment">Hydration</span></button>
+          <div class="cs-chip cs-chip--block" style="--top:256;--h:60"><span class="cs-chip__time">13:00</span><span class="cs-chip__client">Team training</span></div>
+          <button class="cs-chip cs-chip--advanced" style="--top:384;--h:92"><span class="cs-chip__time">15:00</span><span class="cs-chip__client">Joy Adebayo</span><span class="cs-chip__treatment">RF Tightening</span></button>
+        </div>
+
+        <div class="cs-col cs-col--today">
+          <button class="cs-chip cs-chip--facial" style="--top:0;--h:60"><span class="cs-chip__time">09:00</span><span class="cs-chip__client">Zoe Adeyemi</span><span class="cs-chip__treatment">Sunday Glow</span></button>
+          <button class="cs-chip cs-chip--inprogress" style="--top:64;--h:92"><span class="cs-chip__live"><span></span><span>IN ROOM</span></span><span class="cs-chip__client">Hana Ito</span><span class="cs-chip__treatment">Microneedling</span></button>
+          <button class="cs-chip cs-chip--laser cs-chip--selected" style="--top:256;--h:92"><span class="cs-chip__time">13:00</span><span class="cs-chip__client">Rina Patel</span><span class="cs-chip__treatment">Collagen Laser</span><span class="cs-chip__flag">!</span></button>
+          <button class="cs-chip cs-chip--facial" style="--top:384;--h:60"><span class="cs-chip__time">15:00</span><span class="cs-chip__client">Amelia Fox</span><span class="cs-chip__treatment">Hydration</span></button>
+          <div class="cs-now" style="--top:141"></div>
+        </div>
+
+        <div class="cs-col">
+          <button class="cs-chip cs-chip--advanced" style="--top:32;--h:92"><span class="cs-chip__time">09:30</span><span class="cs-chip__client">Grace Lin</span><span class="cs-chip__treatment">RF · 4 of 6</span></button>
+          <button class="cs-chip cs-chip--consult" style="--top:192;--h:60"><span class="cs-chip__time">12:00</span><span class="cs-chip__client">Noor Ahmed</span><span class="cs-chip__treatment">Consult</span></button>
+          <button class="cs-chip cs-chip--facial" style="--top:288;--h:60"><span class="cs-chip__time">13:30</span><span class="cs-chip__client">Bea Nkemi</span><span class="cs-chip__treatment">Sunday Glow</span></button>
+          <button class="cs-chip cs-chip--laser" style="--top:416;--h:92"><span class="cs-chip__time">15:30</span><span class="cs-chip__client">Kit Alvarez</span><span class="cs-chip__treatment">Peel + LED</span></button>
+        </div>
+
+        <div class="cs-col">
+          <button class="cs-chip cs-chip--facial" style="--top:0;--h:60"><span class="cs-chip__time">09:00</span><span class="cs-chip__client">Priya M.</span><span class="cs-chip__treatment">Sunday Glow</span></button>
+          <button class="cs-chip cs-chip--laser" style="--top:96;--h:124"><span class="cs-chip__time">10:30</span><span class="cs-chip__client">Sarah Mensah</span><span class="cs-chip__treatment">Peel + LED</span><span class="cs-chip__badge">$95 due</span></button>
+          <div class="cs-chip cs-chip--block" style="--top:256;--h:60"><span class="cs-chip__time">13:00</span><span class="cs-chip__client">Lunch</span></div>
+          <button class="cs-chip cs-chip--advanced" style="--top:352;--h:92"><span class="cs-chip__time">14:30</span><span class="cs-chip__client">Lena Roth</span><span class="cs-chip__treatment">Microneedling</span></button>
+        </div>
+
+        <div class="cs-col">
+          <button class="cs-chip cs-chip--facial" style="--top:64;--h:60"><span class="cs-chip__time">10:00</span><span class="cs-chip__client">Club onboarding</span><span class="cs-chip__treatment">3 new members</span></button>
+          <button class="cs-chip cs-chip--laser" style="--top:160;--h:92"><span class="cs-chip__time">11:30</span><span class="cs-chip__client">Dani Cole</span><span class="cs-chip__treatment">Collagen Laser</span></button>
+          <button class="cs-chip cs-chip--consult" style="--top:288;--h:60"><span class="cs-chip__time">13:30</span><span class="cs-chip__client">Ade Bakare</span><span class="cs-chip__treatment">Consult</span></button>
+        </div>
+
+        <div class="cs-col cs-col--closed">
+          <div class="cs-col__notice cs-col__notice--vertical">Studio closed</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cs-boardfoot">
+    <div class="cs-boardfoot__stats">
+      <div class="cs-boardfoot__now">Now, 11:12</div>
+      <div class="cs-boardfoot__meta">31 appointments this week · 4 open slots · 86% utilisation</div>
+    </div>
+    <div class="cs-boardfoot__cue">Click any empty slot to book →</div>
+  </div>
+
+  <div class="cs-toolbar" style="margin-top:24px">
+    <div class="cs-toolbar__title-group">
+      <div class="cs-range">Wednesday 26</div>
+      <span class="cs-todaytag">Today</span>
+    </div>
+    <div class="cs-viewswitch"><button aria-pressed="true">Day</button><button>Week</button></div>
+  </div>
+
+  <div class="cs-boardcard">
+    <div class="cs-board cs-board--day" style="--provider-count:3">
+      <div class="cs-board__head">
+        <div></div>
+        <div class="cs-provider"><span class="cs-provider__avatar" style="background:#DFEBE1"></span><div><div class="cs-provider__name">Amara O.</div><div class="cs-provider__role">Lead therapist</div></div></div>
+        <div class="cs-provider"><span class="cs-provider__avatar" style="background:#F7E0E4"></span><div><div class="cs-provider__name">Nia B.</div><div class="cs-provider__role">Laser</div></div></div>
+        <div class="cs-provider"><span class="cs-provider__avatar" style="background:#DEE7F3"></span><div><div class="cs-provider__name">Priya R.</div><div class="cs-provider__role">Skin coach</div></div></div>
+      </div>
+      <div class="cs-board__body">
+        <div class="cs-gutter">
+          <div class="cs-gutter__hour">09:00</div><div class="cs-gutter__hour">10:00</div><div class="cs-gutter__hour">11:00</div><div class="cs-gutter__hour">12:00</div><div class="cs-gutter__hour">13:00</div><div class="cs-gutter__hour">14:00</div><div class="cs-gutter__hour">15:00</div>
+        </div>
+
+        <div class="cs-col">
+          <button class="cs-chip cs-chip--facial" style="--top:0;--h:68"><span class="cs-chip__row"><span class="cs-chip__time">09:00 – 10:00</span><span class="cs-chip__time">Paid</span></span><span class="cs-chip__client">Zoe Adeyemi</span><span class="cs-chip__treatment">The Sunday Glow</span></button>
+          <button class="cs-chip cs-chip--inprogress" style="--top:72;--h:104"><span class="cs-chip__live"><span></span><span>IN ROOM · 18 MIN LEFT</span></span><span class="cs-chip__client">Hana Ito</span><span class="cs-chip__treatment">Microneedling + LED</span><span class="cs-chip__bar"><i style="width:72%"></i></span></button>
+          <div class="cs-hatch" style="--top:184;--h:32">Turnover 15 min</div>
+          <button class="cs-chip cs-chip--laser cs-chip--selected" style="--top:288;--h:104"><span class="cs-chip__row"><span class="cs-chip__time">13:00 – 14:30</span><span class="cs-chip__flag">!</span></span><span class="cs-chip__client">Rina Patel</span><span class="cs-chip__treatment">Collagen Laser · first visit</span><span class="cs-chip__badge">Intake unsigned</span></button>
+          <button class="cs-chip cs-chip--facial" style="--top:432;--h:68"><span class="cs-chip__time">15:00 – 16:00</span><span class="cs-chip__client">Amelia Fox</span><span class="cs-chip__treatment">Hydration Rescue</span></button>
+          <div class="cs-now" style="--top:158"></div>
+        </div>
+
+        <div class="cs-col">
+          <button class="cs-chip cs-chip--advanced" style="--top:36;--h:86"><span class="cs-chip__time">09:30 – 10:45</span><span class="cs-chip__client">Grace Lin</span><span class="cs-chip__treatment">RF Tightening · 3 of 6</span></button>
+          <button class="cs-chip cs-chip--consult" style="--top:144;--h:50"><span class="cs-chip__time">11:00 – 11:40</span><span class="cs-chip__client">Dara Mbeki · consult</span></button>
+          <div class="cs-hatch" style="--top:216;--h:68">Lunch</div>
+          <button class="cs-chip cs-chip--laser" style="--top:324;--h:122"><span class="cs-chip__time">13:30 – 15:15</span><span class="cs-chip__client">Sarah Mensah</span><span class="cs-chip__treatment">Brightening Peel + LED</span><span class="cs-chip__badge">$95 balance</span></button>
+        </div>
+
+        <div class="cs-col">
+          <button class="cs-chip cs-chip--consult" style="--top:72;--h:50"><span class="cs-chip__time">10:00 – 10:40</span><span class="cs-chip__client">Noor A. · consult</span></button>
+          <button class="cs-chip cs-chip--studio" style="--top:180;--h:68"><span class="cs-chip__time">11:30 – 12:30</span><span class="cs-chip__client">Club onboarding</span><span class="cs-chip__treatment">3 new members</span></button>
+          <button class="cs-slot" style="--top:360;--h:68"><span class="cs-slot__when">Open 14:00 – 15:00</span><span class="cs-slot__cue">Click to book →</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+</div>
+</div>
+</body>
+</html>
