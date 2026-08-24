@@ -76,7 +76,7 @@
 /* ------------------------------------------------------------- app shell - */
 .cs-desk {
   background: var(--cs-ground);
-  padding: 18px;
+  padding: 0;
   min-height: 100vh;
   overflow-x: hidden;
   font-family: var(--cs-font);
@@ -86,9 +86,9 @@
   display: grid;
   grid-template-columns: var(--cs-sidebar-w) minmax(0, 1fr);
   background: var(--cs-surface);
-  border-radius: var(--cs-r-panel);
+  border-radius: 0;
   overflow: hidden;
-  min-height: calc(100vh - 36px);
+  min-height: 100vh;
 }
 .cs-shell > * { min-width: 0; }   /* load-bearing: without it the board widens the page */
 
