@@ -2138,10 +2138,16 @@ export function CalendarPage({
                             {checked ? "✓" : null}
                           </span>
                           <span
-                            className="cs-menu__swatch"
+                            className="cs-menu__avatar"
                             style={{ background: swatchForProvider(provider.id) }}
                             aria-hidden="true"
-                          />
+                          >
+                            {provider.imageUrl ? (
+                              <img src={provider.imageUrl} alt="" />
+                            ) : (
+                              <span className="cs-menu__avatar-initial">{getInitials(provider.name)}</span>
+                            )}
+                          </span>
                           <span>{provider.name}</span>
                           <span className="cs-menu__count">{count}</span>
                         </button>

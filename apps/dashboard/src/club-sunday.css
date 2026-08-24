@@ -99,7 +99,7 @@
   border-right: 1px solid rgba(20, 17, 15, .06);
   min-width: 0;
 }
-.cs-brand { padding: 0 10px 24px; }
+.cs-brand { padding: 0 10px 10px; }
 .cs-brand__name { font: 800 19px var(--cs-font); letter-spacing: -.03em; color: var(--cs-ink); }
 .cs-brand__name em { font: 400 23px var(--cs-serif); font-style: italic; }
 .cs-brand__site {
@@ -124,7 +124,7 @@
   padding: 3px 8px; border-radius: var(--cs-r-pill);
 }
 
-.cs-minical { background: var(--cs-canvas); border-radius: var(--cs-r-inner); padding: 16px 14px; margin-top: 22px; }
+.cs-minical { background: var(--cs-canvas); border-radius: var(--cs-r-inner); padding: 16px 14px; margin-top: 10px; }
 .cs-minical__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .cs-minical__month { font: 700 14px var(--cs-font); letter-spacing: -.01em; }
 .cs-minical__nav { display: flex; gap: 4px; }
@@ -205,7 +205,8 @@
   display: flex; align-items: center; justify-content: center;
 }
 .cs-stepper button:hover { background: var(--cs-grey); color: var(--cs-ink); }
-.cs-stepper .cs-today { width: auto; padding: 9px 18px; font: 600 13px var(--cs-font); color: var(--cs-ink); }
+.cs-stepper .cs-today { width: auto; padding: 9px 18px; font: 600 13px var(--cs-font); color: var(--cs-ink); background: var(--cs-peach); }
+.cs-stepper .cs-today:hover { background: var(--cs-peach); filter: brightness(.96); color: var(--cs-ink); }
 .cs-toolbar__controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 .cs-select {
@@ -221,7 +222,10 @@
 .cs-select--ink .cs-select__meta,
 .cs-select--ink .cs-select__caret { color: rgba(255, 255, 255, .6); }
 .cs-select__label { font: 700 11px var(--cs-font); letter-spacing: .1em; text-transform: uppercase; color: var(--cs-label); }
-.cs-select__value { font: 600 13px var(--cs-font); color: var(--cs-ink); }
+.cs-select__value {
+  font: 600 13px var(--cs-font); color: var(--cs-ink);
+  max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .cs-select__meta  { font: 500 12px var(--cs-font); color: var(--cs-label); }
 .cs-select__caret { font-size: 11px; color: var(--cs-label); margin-left: auto; }
 /* Staff-count badge and "+" affordance on the ink pill trigger */
@@ -483,10 +487,18 @@
   position: sticky; left: 0; z-index: 2; background: var(--cs-surface);
 }
 
-.cs-provider { padding: 14px 8px 12px; display: flex; align-items: center; gap: 10px; min-width: 0; }
-.cs-provider__avatar { width: 32px; height: 32px; border-radius: var(--cs-r-pill); flex: none; background: var(--cs-block); }
-.cs-provider__name { font: 700 13px var(--cs-font); color: var(--cs-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cs-provider__role { font: 500 10px var(--cs-font); color: var(--cs-label); }
+.cs-provider { padding: 18px 10px 14px; display: flex; align-items: center; gap: 12px; min-width: 0; }
+.cs-provider__avatar {
+  width: 40px; height: 40px; border-radius: var(--cs-r-pill); flex: none;
+  background: var(--cs-block); overflow: hidden;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.cs-provider__avatar img,
+.cs-provider__avatar svg {
+  width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit;
+}
+.cs-provider__name { font: 700 15px var(--cs-font); letter-spacing: -.01em; color: var(--cs-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-provider__role { font: 500 11px var(--cs-font); color: var(--cs-label); margin-top: 1px; }
 
 /* ------------------------------------------------------------ board foot - */
 .cs-boardfoot {
@@ -637,32 +649,42 @@
    The only element allowed a shadow. */
 .cs-menu {
   background: var(--cs-surface); border-radius: var(--cs-r-inner);
-  padding: 8px; box-shadow: var(--cs-menu-shadow); min-width: 200px;
+  padding: 10px; box-shadow: var(--cs-menu-shadow); min-width: 240px;
 }
 .cs-menu__label {
-  font: 700 10px var(--cs-font); letter-spacing: .1em; text-transform: uppercase;
-  color: var(--cs-label); padding: 8px 12px 4px;
+  font: 700 11px var(--cs-font); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--cs-label); padding: 10px 14px 6px;
 }
 .cs-menu__item {
-  display: flex; align-items: center; gap: 11px;
-  padding: 10px 12px; border-radius: var(--cs-r-14);
-  font: 500 12px var(--cs-font); color: var(--cs-ink);
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: var(--cs-r-14);
+  font: 500 14px var(--cs-font); color: var(--cs-ink);
   cursor: pointer; border: 0; background: none; width: 100%; text-align: left;
 }
 .cs-menu__item:hover { background: var(--cs-hover); }
-.cs-menu__item--selected { background: var(--cs-hover); font-weight: 600; }
+.cs-menu__item--selected { background: var(--cs-hover); font-weight: 700; }
 .cs-menu__item--danger { color: var(--cs-risk-text); }
 .cs-menu__item--danger:hover { background: var(--cs-risk-fill); }
-.cs-menu__count { margin-left: auto; font: 500 11px var(--cs-font); color: var(--cs-label); }
+.cs-menu__count { margin-left: auto; font: 500 12px var(--cs-font); color: var(--cs-label); }
 .cs-menu__check {
-  width: 18px; height: 18px; border-radius: 6px; flex: none;
-  border: 1.5px solid rgba(20, 17, 15, .2);
+  width: 22px; height: 22px; border-radius: 7px; flex: none;
+  border: 1.5px solid rgba(20, 17, 15, .22);
   display: flex; align-items: center; justify-content: center;
+  font-size: 12px; color: transparent;
 }
-.cs-menu__check[aria-checked="true"] { background: var(--cs-ink); border-color: var(--cs-ink); color: #fff; font-size: 10px; }
+.cs-menu__check[aria-checked="true"] { background: var(--cs-ink); border-color: var(--cs-ink); color: #fff; }
 .cs-menu__dot { width: 24px; height: 24px; border-radius: var(--cs-r-pill); flex: none; }
-.cs-menu__swatch { width: 9px; height: 9px; border-radius: 3px; flex: none; }
-.cs-menu__rule { height: 1px; background: var(--cs-hairline); margin: 6px 12px; }
+.cs-menu__swatch { width: 14px; height: 14px; border-radius: var(--cs-r-pill); flex: none; }
+.cs-menu__avatar {
+  width: 26px; height: 26px; border-radius: var(--cs-r-pill); flex: none;
+  overflow: hidden; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--cs-block);
+}
+.cs-menu__avatar img {
+  width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit;
+}
+.cs-menu__avatar-initial { font: 700 10px var(--cs-font); color: var(--cs-ink); letter-spacing: .02em; }
+.cs-menu__rule { height: 1px; background: var(--cs-hairline); margin: 8px 12px; }
 
 /* ------------------------------------------------------------------ links - */
 .cs-desk a { color: var(--cs-ink); text-decoration-color: rgba(20, 17, 15, .28); }
