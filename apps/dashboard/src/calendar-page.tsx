@@ -3296,6 +3296,7 @@ function SlotActionDrawer({
   const [showDatePopover, setShowDatePopover] = useState(false);
   const [showTimeInput, setShowTimeInput] = useState(false);
   const [manualNewClient, setManualNewClient] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSummary | null>(null);
   const [showTreatmentMenu, setShowTreatmentMenu] = useState(false);
   const [pickerMonth, setPickerMonth] = useState<string>(monthAnchor(getUpcomingDate(1)));
   const pickerGrid = useMemo(() => buildMonthGrid(pickerMonth), [pickerMonth]);
@@ -3306,6 +3307,7 @@ function SlotActionDrawer({
     setShowDatePopover(false);
     setShowTimeInput(false);
     setManualNewClient(false);
+    setSelectedCustomer(null);
     setShowTreatmentMenu(false);
   }, [slotKey]);
   useEffect(() => {
@@ -3384,10 +3386,40 @@ function SlotActionDrawer({
                 const hasSearchQuery = trimmedSearch.length > 0;
                 const lookupReady = customerLookupState.kind === "ready";
                 const lookupItems = lookupReady ? customerLookupState.items : [];
-                const selectedCustomerName = combineCustomerName(customer.firstName, customer.lastName);
-                const hasSelectedExistingClient =
-                  lookupReady && lookupItems.some((item) => item.name === selectedCustomerName);
                 const showEmptyState = lookupReady && lookupItems.length === 0 && trimmedSearch.length >= 2;
+
+                // Locked-in client: show a clean profile card instead of the search field.
+                if (selectedCustomer !== null) {
+                  const contactLines = [selectedCustomer.email, selectedCustomer.phone].filter(Boolean).join(" · ");
+                  return (
+                    <div>
+                      <div className="cs-section__label">Client</div>
+                      <div className="cs-panel" style={{ padding: 14 }}>
+                        <div className="cs-clientrow">
+                          <span className="cs-clientrow__avatar" aria-hidden="true">{getInitials(selectedCustomer.name)}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div className="cs-clientrow__name">{selectedCustomer.name}</div>
+                            <div className="cs-clientrow__meta">{contactLines || "No contact info"}</div>
+                          </div>
+                          <button
+                            type="button"
+                            className="cs-btn cs-btn--sm cs-btn--ghost"
+                            onClick={() => {
+                              setSelectedCustomer(null);
+                              onCustomerFieldChange("firstName", "");
+                              onCustomerFieldChange("lastName", "");
+                              onCustomerFieldChange("email", "");
+                              onCustomerFieldChange("phone", "");
+                            }}
+                          >
+                            Change
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 if (manualNewClient) {
                   const canCreateClient =
                     customer.firstName.trim().length > 0 &&
@@ -3450,7 +3482,6 @@ function SlotActionDrawer({
                     {hasSearchQuery ? (
                       <div style={{ marginTop: 8, background: "var(--cs-canvas)", borderRadius: 20, padding: 6 }}>
                         {lookupItems.slice(0, 4).map((lookupCustomer) => {
-                          const isSelected = selectedCustomerName === lookupCustomer.name;
                           const contactLines = [
                             lookupCustomer.email,
                             lookupCustomer.phone,
@@ -3459,8 +3490,11 @@ function SlotActionDrawer({
                             <button
                               key={lookupCustomer.id}
                               type="button"
-                              className={`cs-choice${isSelected ? " cs-choice--selected" : ""}`}
-                              onClick={() => onApplyCustomer(lookupCustomer)}
+                              className="cs-choice"
+                              onClick={() => {
+                                setSelectedCustomer(lookupCustomer);
+                                onApplyCustomer(lookupCustomer);
+                              }}
                             >
                               <span className="cs-choice__avatar" aria-hidden="true">{getInitials(lookupCustomer.name)}</span>
                               <div style={{ flex: 1, minWidth: 0 }}>
@@ -3477,19 +3511,17 @@ function SlotActionDrawer({
                             </div>
                           </div>
                         ) : null}
-                        {!hasSelectedExistingClient ? (
-                          <button
-                            type="button"
-                            className="cs-choice"
-                            onClick={() => setManualNewClient(true)}
-                          >
-                            <span className="cs-choice__avatar cs-choice__avatar--new" aria-hidden="true">+</span>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div className="cs-choice__name">Add new client</div>
-                              <div className="cs-choice__meta">Enter name, phone, and email</div>
-                            </div>
-                          </button>
-                        ) : null}
+                        <button
+                          type="button"
+                          className="cs-choice"
+                          onClick={() => setManualNewClient(true)}
+                        >
+                          <span className="cs-choice__avatar cs-choice__avatar--new" aria-hidden="true">+</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div className="cs-choice__name">Add new client</div>
+                            <div className="cs-choice__meta">Enter name, phone, and email</div>
+                          </div>
+                        </button>
                       </div>
                     ) : null}
                     {customerLookupState.kind === "loading" ? (
