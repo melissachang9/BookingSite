@@ -723,7 +723,7 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   text-transform: uppercase; color: var(--cs-label);
 }
 .cs-when-card__time {
-  font: 700 18px var(--cs-font); letter-spacing: -.03em; color: var(--cs-ink); margin-top: 3px;
+  font: 800 24px var(--cs-font); letter-spacing: -.035em; color: var(--cs-ink); margin-top: 4px; white-space: nowrap;
 }
 
 /* Alert icon (pink consent card) */
@@ -764,6 +764,7 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   border: 0; cursor: pointer; border-radius: var(--cs-r-pill);
   padding: 14px 20px; font: 600 12px var(--cs-font);
   background: var(--cs-hover); color: var(--cs-ink);
+  white-space: nowrap;
 }
 .cs-btn:hover { background: var(--cs-hover-2); }
 .cs-btn--primary { background: var(--cs-ink); color: #fff; flex: 1; text-align: center; }

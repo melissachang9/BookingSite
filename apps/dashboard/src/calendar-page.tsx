@@ -4180,7 +4180,6 @@ function AppointmentDetailsDrawer({
   const isCompleted = selectedAppointment.status === "completed";
   const isNoShow = selectedAppointment.status === "no_show";
   const showFooter = isConfirmed || isCompleted || isNoShow;
-
   if (drawerView === "checkout" && api) {
     return (
       <>
@@ -4211,7 +4210,10 @@ function AppointmentDetailsDrawer({
   const chipFamily = getChipFamily(selectedAppointment.serviceName, categoryName);
   const familyBg = FAMILY_SWATCH[chipFamily] ?? "#F0EDEA";
   const familyLabel = (categoryName ?? statusLabel).toUpperCase();
-  const timeRangeLabel = formatTimeRange(selectedAppointment.startAt, selectedAppointment.endAt);
+  // Compact 24-hour en-dash range for the when-card ("10:00 – 11:00"),
+  // matching the mockup and keeping the time on a single line next to the
+  // Reschedule / Check-in actions.
+  const timeRangeLabel = `${tenantTimePartsFormatter.format(new Date(selectedAppointment.startAt))} \u2013 ${tenantTimePartsFormatter.format(new Date(selectedAppointment.endAt))}`;
   const showConsentAlert = isConfirmed && (intakeStatus === "missing" || intakeStatus === "partial");
   const consentTitle = intakeStatus === "missing" ? "Intake forms unsigned" : "Intake needs review";
   const consentBody =
@@ -4309,7 +4311,7 @@ function AppointmentDetailsDrawer({
                 )}
               </div>
             </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "nowrap", justifyContent: "flex-end" }}>
               {isConfirmed ? (
                 <div style={{ position: "relative" }} ref={datePickerContainerRef}>
                   <button
