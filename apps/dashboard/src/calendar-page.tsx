@@ -3296,7 +3296,10 @@ function SlotActionDrawer({
   const [showDatePopover, setShowDatePopover] = useState(false);
   const [showTimeInput, setShowTimeInput] = useState(false);
   const [manualNewClient, setManualNewClient] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSummary | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<
+    { id: string; name: string; email?: string | null; phone?: string | null } | null
+  >(null);
+  const appliedCreatedCustomerIdRef = useRef<string | null>(null);
   const [showTreatmentMenu, setShowTreatmentMenu] = useState(false);
   const [pickerMonth, setPickerMonth] = useState<string>(monthAnchor(getUpcomingDate(1)));
   const pickerGrid = useMemo(() => buildMonthGrid(pickerMonth), [pickerMonth]);
@@ -3308,8 +3311,27 @@ function SlotActionDrawer({
     setShowTimeInput(false);
     setManualNewClient(false);
     setSelectedCustomer(null);
+    appliedCreatedCustomerIdRef.current = null;
     setShowTreatmentMenu(false);
   }, [slotKey]);
+  // When a brand-new client is successfully created via the manual form, promote
+  // them into the locked-in profile card so the operator sees the same UI as
+  // when picking an existing client from search results.
+  useEffect(() => {
+    if (customerCreateState.kind !== "success") return;
+    if (!manualNewClient) return;
+    if (appliedCreatedCustomerIdRef.current === customerCreateState.customerId) return;
+    const combinedName = `${customer.firstName.trim()} ${customer.lastName.trim()}`.trim();
+    if (!combinedName) return;
+    appliedCreatedCustomerIdRef.current = customerCreateState.customerId;
+    setSelectedCustomer({
+      id: customerCreateState.customerId,
+      name: combinedName,
+      email: customer.email.trim() || null,
+      phone: customer.phone.trim() || null,
+    });
+    setManualNewClient(false);
+  }, [customerCreateState, manualNewClient, customer.firstName, customer.lastName, customer.email, customer.phone]);
   useEffect(() => {
     if (!showTreatmentMenu) return;
     const handler = (event: Event) => {
