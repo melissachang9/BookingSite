@@ -3639,7 +3639,10 @@ function SlotActionDrawer({
                 <div className="message-banner message-banner--error" role="alert">{draftCreationState.message}</div>
               ) : null}
               {draftCreationState.kind === "success" ? (
-                <div className="message-banner" role="status">Booking draft created and slot held for 15 minutes.</div>
+                <div className="cs-panel cs-panel--success cs-alert" role="status">
+                  <span className="cs-alert__icon" aria-hidden="true" style={{ background: "var(--cs-ok-text)" }}>✓</span>
+                  <div className="cs-alert__body">Booking draft created and slot held for 15 minutes.</div>
+                </div>
               ) : null}
             </>
           ) : (
@@ -4041,8 +4044,9 @@ function TimeBlockDetailsDrawer({
           </div>
         ) : null}
         {draftCreated ? (
-          <div className="message-banner" role="status">
-            Booking draft created and slot held for 15 minutes.
+          <div className="cs-panel cs-panel--success cs-alert" role="status">
+            <span className="cs-alert__icon" aria-hidden="true" style={{ background: "var(--cs-ok-text)" }}>✓</span>
+            <div className="cs-alert__body">Booking draft created and slot held for 15 minutes.</div>
           </div>
         ) : null}
 
@@ -4129,6 +4133,7 @@ function AppointmentDetailsDrawer({
 }: AppointmentDetailsDrawerProps): ReactElement | null {
   const [viewingFormEntry, setViewingFormEntry] = useState<BookingFormResponseEntry | null>(null);
   const [drawerView, setDrawerView] = useState<"details" | "checkout">("details");
+  const [checkedIn, setCheckedIn] = useState(false);
   const [showRescheduleDatePopover, setShowRescheduleDatePopover] = useState(false);
   const [showRescheduleTimeInput, setShowRescheduleTimeInput] = useState(false);
   const [pickerMonth, setPickerMonth] = useState<string>(monthAnchor(getUpcomingDate(1)));
@@ -4152,6 +4157,7 @@ function AppointmentDetailsDrawer({
   // Reset drawer view when switching appointments
   useEffect(() => {
     setDrawerView("details");
+    setCheckedIn(false);
     setShowRescheduleDatePopover(false);
     setShowRescheduleTimeInput(false);
     setRescheduleSaveState("idle");
@@ -4252,7 +4258,26 @@ function AppointmentDetailsDrawer({
   const showFormsPanel =
     formResponsesState.kind === "loading" ||
     formResponsesState.kind === "error" ||
-    hasFormsContent;
+    hasFormsContent ||
+    showConsentAlert;
+
+  // Position the reschedule date popover relative to the Reschedule button,
+  // rendered through a portal so it is never clipped by the drawer's scroll
+  // container.
+  const reschedulePopoverStyle = (() => {
+    const rect = datePickerContainerRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return { position: "fixed" as const, top: 0, left: "auto" as const, right: 12, width: 280, zIndex: 1000 };
+    }
+    return {
+      position: "fixed" as const,
+      top: rect.bottom + 6,
+      left: "auto" as const,
+      right: Math.max(12, window.innerWidth - rect.right),
+      width: 280,
+      zIndex: 1000,
+    };
+  })();
 
   return (
     <>
@@ -4326,57 +4351,17 @@ function AppointmentDetailsDrawer({
                   >
                     Reschedule
                   </button>
-                  {showRescheduleDatePopover ? (
-                    <div className="appointment-drawer-date-popover" style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 50 }}>
-                      <div className="month-rail__header">
-                        <h5>{monthLabelFormatter.format(parseIsoDate(pickerMonth))}</h5>
-                        <div className="month-rail__controls">
-                          <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, -1))}>Prev</button>
-                          <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, 1))}>Next</button>
-                        </div>
-                      </div>
-                      <div className="month-grid-labels" role="presentation">{monthDayLabel.map((label) => (<span key={label}>{label}</span>))}</div>
-                      <div className="month-grid" role="grid">
-                        {pickerGrid.map((date) => {
-                          const isInCurrentMonth = date.slice(0, 7) === pickerMonth.slice(0, 7);
-                          const currentDate = new Date(selectedAppointment.startAt).toISOString().slice(0, 10);
-                          const isSelected = date === currentDate;
-                          return (
-                            <button
-                              key={date}
-                              type="button"
-                              role="gridcell"
-                              disabled={!isInCurrentMonth}
-                              aria-pressed={isSelected}
-                              aria-label={getDateLabel(date)}
-                              className={["month-day", !isInCurrentMonth ? "month-day--outside" : "", isSelected ? "month-day--focused" : ""].filter(Boolean).join(" ")}
-                              onClick={async () => {
-                                if (!onUpdate) return;
-                                setShowRescheduleDatePopover(false);
-                                const current = new Date(selectedAppointment.startAt);
-                                const timeStr = current.toTimeString().slice(0, 5);
-                                setRescheduleSaveState("submitting"); setRescheduleErrorMessage("");
-                                try {
-                                  const newStartsAt = new Date(`${date}T${timeStr}:00`).toISOString();
-                                  await onUpdate(selectedAppointment, { startsAt: newStartsAt, sendConfirmation: true });
-                                  setRescheduleSaveState("idle");
-                                } catch (err) {
-                                  setRescheduleSaveState("error");
-                                  setRescheduleErrorMessage(err instanceof Error ? err.message : "Unable to reschedule.");
-                                }
-                              }}
-                            >
-                              <span>{parseIsoDate(date).getUTCDate()}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : null}
                 </div>
               ) : null}
               {isConfirmed ? (
-                <button type="button" className="cs-btn cs-btn--sm">Check in</button>
+                <button
+                  type="button"
+                  className={`cs-btn cs-btn--sm${checkedIn ? " cs-btn--checked" : ""}`}
+                  onClick={() => setCheckedIn((prev) => !prev)}
+                  aria-pressed={checkedIn}
+                >
+                  {checkedIn ? "Checked in" : "Check in"}
+                </button>
               ) : null}
             </div>
           </div>
@@ -4412,6 +4397,19 @@ function AppointmentDetailsDrawer({
                     {formReminderState?.kind === "sending" ? "Sending…" : "Resend link"}
                   </button>
                 ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Forms completed (green) */}
+          {isConfirmed && intakeStatus === "submitted" ? (
+            <div className="cs-panel cs-panel--success cs-alert">
+              <span className="cs-alert__icon" aria-hidden="true" style={{ background: "var(--cs-ok-text)" }}>✓</span>
+              <div className="cs-alert__body">
+                <span style={{ font: "700 13px var(--cs-font)", color: "var(--cs-ink)" }}>Forms complete</span>
+                <div style={{ font: "500 12px/1.6 var(--cs-font)", color: "rgba(20,17,15,.6)", marginTop: 4 }}>
+                  All required intake forms have been submitted.
+                </div>
               </div>
             </div>
           ) : null}
@@ -4552,6 +4550,56 @@ function AppointmentDetailsDrawer({
           <div className="message-banner message-banner--error" role="alert" style={{ margin: "0 24px 12px" }}>{completionState.message}</div>
         ) : null}
       </aside>
+      {showRescheduleDatePopover
+        ? createPortal(
+            <div className="appointment-drawer-date-popover" style={reschedulePopoverStyle}>
+              <div className="month-rail__header">
+                <h5>{monthLabelFormatter.format(parseIsoDate(pickerMonth))}</h5>
+                <div className="month-rail__controls">
+                  <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, -1))}>Prev</button>
+                  <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, 1))}>Next</button>
+                </div>
+              </div>
+              <div className="month-grid-labels" role="presentation">{monthDayLabel.map((label) => (<span key={label}>{label}</span>))}</div>
+              <div className="month-grid" role="grid">
+                {pickerGrid.map((date) => {
+                  const isInCurrentMonth = date.slice(0, 7) === pickerMonth.slice(0, 7);
+                  const currentDate = new Date(selectedAppointment.startAt).toISOString().slice(0, 10);
+                  const isSelected = date === currentDate;
+                  return (
+                    <button
+                      key={date}
+                      type="button"
+                      role="gridcell"
+                      disabled={!isInCurrentMonth}
+                      aria-pressed={isSelected}
+                      aria-label={getDateLabel(date)}
+                      className={["month-day", !isInCurrentMonth ? "month-day--outside" : "", isSelected ? "month-day--focused" : ""].filter(Boolean).join(" ")}
+                      onClick={async () => {
+                        if (!onUpdate) return;
+                        setShowRescheduleDatePopover(false);
+                        const current = new Date(selectedAppointment.startAt);
+                        const timeStr = current.toTimeString().slice(0, 5);
+                        setRescheduleSaveState("submitting"); setRescheduleErrorMessage("");
+                        try {
+                          const newStartsAt = new Date(`${date}T${timeStr}:00`).toISOString();
+                          await onUpdate(selectedAppointment, { startsAt: newStartsAt, sendConfirmation: true });
+                          setRescheduleSaveState("idle");
+                        } catch (err) {
+                          setRescheduleSaveState("error");
+                          setRescheduleErrorMessage(err instanceof Error ? err.message : "Unable to reschedule.");
+                        }
+                      }}
+                    >
+                      <span>{parseIsoDate(date).getUTCDate()}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
       {createPortal(
         <FormResponseDrawer
           entry={viewingFormEntry}
@@ -5470,10 +5518,16 @@ function FormResponsesPanel({
                   const isCompleted = req.status === "satisfied";
                   const submittedAt = matchedResponse ? formatDateTime(matchedResponse.submittedAt) : null;
                   const timingLabel = req.customerPromptTiming?.replaceAll("_", " ") ?? req.scope;
+                  const viewableResponse = isCompleted && matchedResponse && onViewForm ? matchedResponse : null;
+                  const viewForm = onViewForm;
                   return (
                     <div
                       key={req.id}
                       className={`form-response-item form-response-item--${isCompleted ? "submitted" : "missing"}`}
+                      role={viewableResponse ? "button" : undefined}
+                      tabIndex={viewableResponse ? 0 : undefined}
+                      onClick={viewableResponse && viewForm ? () => viewForm(viewableResponse) : undefined}
+                      onKeyDown={viewableResponse && viewForm ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); viewForm(viewableResponse); } } : undefined}
                     >
                       <div className="form-response-item__name">
                         {req.formName}
@@ -5495,7 +5549,14 @@ function FormResponsesPanel({
                   const submittedAt = formatDateTime(entry.submittedAt);
                   const timingLabel = entry.customerPromptTiming?.replaceAll("_", " ") ?? entry.scope;
                   return (
-                    <div key={entry.id} className="form-response-item form-response-item--submitted">
+                    <div
+                      key={entry.id}
+                      className="form-response-item form-response-item--submitted"
+                      role={onViewForm ? "button" : undefined}
+                      tabIndex={onViewForm ? 0 : undefined}
+                      onClick={onViewForm ? () => onViewForm(entry) : undefined}
+                      onKeyDown={onViewForm ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onViewForm(entry); } } : undefined}
+                    >
                       <div className="form-response-item__name">
                         {entry.formName}
                         <span className="form-response-item__badge form-response-item__badge--submitted">Submitted</span>

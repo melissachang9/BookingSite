@@ -546,6 +546,7 @@
 .cs-panel--tint { background: var(--cs-pink); }
 .cs-panel--credit { background: var(--cs-mint); }
 .cs-panel--peach { background: var(--cs-peach); }
+.cs-panel--success { background: var(--cs-mint); }
 
 /* Alert row layout used inside .cs-panel--tint / .cs-panel--peach */
 .cs-alert { display: flex; gap: 10px; align-items: flex-start; }
@@ -771,6 +772,8 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .cs-btn--primary:hover { background: var(--cs-ink-hover); }
 .cs-btn--sm { padding: 9px 15px; font-size: 11px; background: var(--cs-surface); }
 .cs-btn--sm:hover { background: var(--cs-grey); }
+.cs-btn--checked { background: var(--cs-ink); color: #fff; }
+.cs-btn--checked:hover { background: var(--cs-ink-hover); color: #fff; }
 .cs-btn--onTint { background: rgba(255, 255, 255, .7); }
 .cs-btn--onTint:hover { background: #fff; }
 .cs-btn--ghost { background: none; color: var(--cs-secondary); }
