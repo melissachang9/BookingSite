@@ -4201,6 +4201,35 @@ function AppointmentDetailsDrawer({
   if (selectedAppointment.providerName) subtitleParts.push(selectedAppointment.providerName);
   const subtitle = subtitleParts.join(" · ");
 
+  // "TODAY" / "TOMORROW" kicker for the when-card; falls back to the stored dayLabel.
+  const apptDate = getTenantDate(selectedAppointment.startAt);
+  const todayIso = getTenantDate(new Date().toISOString());
+  const tomorrowIso = getUpcomingDate(1);
+  const whenKicker =
+    apptDate === todayIso ? "TODAY" : apptDate === tomorrowIso ? "TOMORROW" : selectedAppointment.dayLabel.toUpperCase();
+
+  // Earliest successful payment date — used to annotate the "Deposit paid" line
+  // ("Deposit paid 19 Aug" style, matching the mockup).
+  const depositPaidDate: string | null = (() => {
+    if (selectedAppointment.depositCents <= 0) return null;
+    const succeeded = selectedAppointment.payments
+      .filter((p) => p.status === "succeeded" && p.amountCents > 0)
+      .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+    if (succeeded.length === 0) return null;
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Los_Angeles",
+      day: "numeric",
+      month: "short",
+    }).format(new Date(succeeded[0].createdAt));
+  })();
+
+  const formsReady = formResponsesState.kind === "ready" ? formResponsesState : null;
+  const hasFormsContent = !!formsReady && (formsReady.items.length > 0 || formsReady.requirements.length > 0);
+  const showFormsPanel =
+    formResponsesState.kind === "loading" ||
+    formResponsesState.kind === "error" ||
+    hasFormsContent;
+
   return (
     <>
       <button
@@ -4224,7 +4253,7 @@ function AppointmentDetailsDrawer({
           {/* Today / time card with actions */}
           <div className="cs-panel cs-when-card">
             <div>
-              <div className="cs-when-card__kicker">{selectedAppointment.dayLabel}</div>
+              <div className="cs-when-card__kicker">{whenKicker}</div>
               <div className="cs-when-card__time">
                 {showRescheduleTimeInput ? (
                   <input
@@ -4321,9 +4350,6 @@ function AppointmentDetailsDrawer({
                     </div>
                   ) : null}
                 </div>
-              ) : null}
-              {isConfirmed ? (
-                <button type="button" className="cs-btn cs-btn--sm" disabled={rescheduleSaveState === "submitting"} onClick={() => setShowRescheduleTimeInput(true)}>Change time</button>
               ) : null}
               {isConfirmed ? (
                 <button type="button" className="cs-btn cs-btn--sm">Check in</button>
@@ -4433,7 +4459,10 @@ function AppointmentDetailsDrawer({
               <div className="cs-money"><span>Tax</span><span>{formatMoney(selectedAppointment.taxCents)}</span></div>
             ) : null}
             {selectedAppointment.depositCents > 0 ? (
-              <div className="cs-money cs-money--credit"><span>Deposit paid</span><span>−{formatMoney(selectedAppointment.depositCents)}</span></div>
+              <div className="cs-money cs-money--credit">
+                <span>{depositPaidDate ? `Deposit paid ${depositPaidDate}` : "Deposit paid"}</span>
+                <span>−{formatMoney(selectedAppointment.depositCents)}</span>
+              </div>
             ) : null}
             {selectedAppointment.amountPaidCents > 0 && selectedAppointment.amountPaidCents !== selectedAppointment.depositCents ? (
               <div className="cs-money cs-money--credit"><span>Paid</span><span>−{formatMoney(selectedAppointment.amountPaidCents)}</span></div>
@@ -4445,16 +4474,18 @@ function AppointmentDetailsDrawer({
           </div>
 
           {/* Forms panel — kept as operator tool for detailed review */}
-          <div data-forms-panel="true" className="booking-rail-section booking-rail-section--forms" aria-label="Intake forms">
-            <FormResponsesPanel
-              selectedAppointment={selectedAppointment}
-              state={formResponsesState}
-              intakeStatus={intakeStatus}
-              reminderState={formReminderState}
-              onSendReminder={onSendFormReminder ? () => onSendFormReminder(selectedAppointment) : undefined}
-              onViewForm={setViewingFormEntry}
-            />
-          </div>
+          {showFormsPanel ? (
+            <div data-forms-panel="true" className="booking-rail-section booking-rail-section--forms" aria-label="Intake forms">
+              <FormResponsesPanel
+                selectedAppointment={selectedAppointment}
+                state={formResponsesState}
+                intakeStatus={intakeStatus}
+                reminderState={formReminderState}
+                onSendReminder={onSendFormReminder ? () => onSendFormReminder(selectedAppointment) : undefined}
+                onViewForm={setViewingFormEntry}
+              />
+            </div>
+          ) : null}
         </div>
 
         {/* Footer */}
