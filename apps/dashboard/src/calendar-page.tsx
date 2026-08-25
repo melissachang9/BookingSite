@@ -845,6 +845,7 @@ export function CalendarPage({
   const [formResponsesState, setFormResponsesState] = useState<FormResponsesState>({ kind: "idle" });
   const [intakeStatusByBookingId, setIntakeStatusByBookingId] = useState<Record<string, IntakeStatus>>({});
   const [formReminderState, setFormReminderState] = useState<FormReminderState>({ kind: "idle" });
+  const [checkedInBookingIds, setCheckedInBookingIds] = useState<Set<string>>(new Set());
 
   // Persist the selected calendar view (day/week) so returning to the calendar
   // restores the last-used view.
@@ -1347,6 +1348,18 @@ export function CalendarPage({
     setSelectedAppointmentId(appointmentId);
     setSelectedTimeBlockId(null);
     setSelectedSlot(null);
+  };
+
+  const handleToggleCheckIn = (appointmentId: string) => {
+    setCheckedInBookingIds((current) => {
+      const next = new Set(current);
+      if (next.has(appointmentId)) {
+        next.delete(appointmentId);
+      } else {
+        next.add(appointmentId);
+      }
+      return next;
+    });
   };
 
   const handleSelectWeekProvider = (providerId: string | null) => {
@@ -2206,6 +2219,7 @@ export function CalendarPage({
           viewMode={viewMode}
           selectedAppointmentId={selectedAppointmentId}
           intakeStatusByBookingId={intakeStatusByBookingId}
+          checkedInBookingIds={checkedInBookingIds}
           selectedWeekProviderId={selectedWeekProviderId}
           selectedWeekProviderName={selectedWeekProvider?.name ?? null}
           fallbackProviderOptions={allKnownProviderOptions}
@@ -2271,6 +2285,8 @@ export function CalendarPage({
           intakeStatus={selectedAppointment ? (intakeStatusByBookingId[selectedAppointment.id] ?? "unknown") : "unknown"}
           formReminderState={formReminderState}
           onSendFormReminder={handleSendFormReminder}
+          checkedIn={selectedAppointment ? checkedInBookingIds.has(selectedAppointment.id) : false}
+          onToggleCheckIn={selectedAppointment ? () => handleToggleCheckIn(selectedAppointment.id) : undefined}
           services={calendarState.kind === "ready" ? calendarState.services : []}
           providers={calendarState.kind === "ready" ? calendarState.providers : []}
           categoryNameById={calendarState.kind === "ready" ? calendarState.categoryNameById : undefined}
@@ -2671,6 +2687,7 @@ function CalendarBoard({
   viewMode,
   selectedAppointmentId,
   intakeStatusByBookingId,
+  checkedInBookingIds,
   selectedWeekProviderId,
   selectedWeekProviderName,
   fallbackProviderOptions,
@@ -2691,6 +2708,7 @@ function CalendarBoard({
   viewMode: CalendarViewMode;
   selectedAppointmentId: string | null;
   intakeStatusByBookingId: Record<string, IntakeStatus>;
+  checkedInBookingIds: Set<string>;
   selectedWeekProviderId: string | null;
   selectedWeekProviderName: string | null;
   fallbackProviderOptions: CalendarProviderOption[];
@@ -3175,6 +3193,7 @@ function CalendarBoard({
                     appointment.status === "confirmed" &&
                     new Date(appointment.startAt).getTime() <= nowMs &&
                     nowMs < new Date(appointment.endAt).getTime();
+                  const isCheckedIn = checkedInBookingIds.has(appointment.id);
 
                   // Derive chip family from the service's category (falls back
                   // to service-name keywords when category is unset).
@@ -3187,7 +3206,7 @@ function CalendarBoard({
                   const familyClass =
                     appointment.status === "completed" ? "cs-chip--completed" :
                     appointment.status === "canceled" || appointment.status === "no_show" ? "cs-chip--block" :
-                    isInProgress ? "cs-chip--inprogress" :
+                    isInProgress || isCheckedIn ? "cs-chip--inprogress" :
                     bookedFamily;
 
                   const laneInfo = appointmentLanes.get(appointment.id);
@@ -3209,10 +3228,10 @@ function CalendarBoard({
                         ...(laneInfo ? { "--lane": laneInfo.lane, "--lanes": laneInfo.lanes } : {}),
                       } as CSSProperties}
                     >
-                      {isInProgress ? (
+                      {isInProgress || isCheckedIn ? (
                         <span className="cs-chip__live">
                           <span />
-                          <span>IN ROOM</span>
+                          <span>{isInProgress ? "IN ROOM" : "CHECKED IN"}</span>
                         </span>
                       ) : (
                         <span className="cs-chip__time">
@@ -4087,6 +4106,8 @@ type AppointmentDetailsDrawerProps = {
   intakeStatus: IntakeStatus;
   formReminderState: FormReminderState;
   onSendFormReminder?: (appointment: SelectedCalendarAppointment) => void;
+  checkedIn?: boolean;
+  onToggleCheckIn?: () => void;
   services: ServiceSummary[];
   providers: CalendarProviderOption[];
   categoryNameById?: Record<string, string>;
@@ -4114,6 +4135,8 @@ function AppointmentDetailsDrawer({
   intakeStatus,
   formReminderState,
   onSendFormReminder,
+  checkedIn = false,
+  onToggleCheckIn,
   services,
   providers,
   categoryNameById,
@@ -4133,7 +4156,6 @@ function AppointmentDetailsDrawer({
 }: AppointmentDetailsDrawerProps): ReactElement | null {
   const [viewingFormEntry, setViewingFormEntry] = useState<BookingFormResponseEntry | null>(null);
   const [drawerView, setDrawerView] = useState<"details" | "checkout">("details");
-  const [checkedIn, setCheckedIn] = useState(false);
   const [showRescheduleDatePopover, setShowRescheduleDatePopover] = useState(false);
   const [showRescheduleTimeInput, setShowRescheduleTimeInput] = useState(false);
   const [pickerMonth, setPickerMonth] = useState<string>(monthAnchor(getUpcomingDate(1)));
@@ -4157,7 +4179,6 @@ function AppointmentDetailsDrawer({
   // Reset drawer view when switching appointments
   useEffect(() => {
     setDrawerView("details");
-    setCheckedIn(false);
     setShowRescheduleDatePopover(false);
     setShowRescheduleTimeInput(false);
     setRescheduleSaveState("idle");
@@ -4357,7 +4378,7 @@ function AppointmentDetailsDrawer({
                 <button
                   type="button"
                   className={`cs-btn cs-btn--sm${checkedIn ? " cs-btn--checked" : ""}`}
-                  onClick={() => setCheckedIn((prev) => !prev)}
+                  onClick={onToggleCheckIn}
                   aria-pressed={checkedIn}
                 >
                   {checkedIn ? "Checked in" : "Check in"}
