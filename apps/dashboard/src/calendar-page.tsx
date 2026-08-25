@@ -1449,33 +1449,6 @@ export function CalendarPage({
         }
 
         setCustomerLookupState({ kind: "ready", items: response.items });
-        const normalizedSearch = search.toLowerCase();
-        const matchingCustomer = response.items.find((customer) => customer.name.toLowerCase().startsWith(normalizedSearch));
-        if (matchingCustomer) {
-          setSelectedSlotCustomer((current) => {
-            if (combineCustomerName(current.firstName, current.lastName).toLowerCase() !== normalizedSearch) {
-              return current;
-            }
-
-            const { firstName, lastName } = splitCustomerName(matchingCustomer.name);
-            const nextCustomer = {
-              firstName,
-              lastName,
-              email: matchingCustomer.email ?? "",
-              phone: matchingCustomer.phone ?? "",
-              referredBy: current.referredBy,
-            };
-            if (
-              current.firstName === nextCustomer.firstName &&
-              current.lastName === nextCustomer.lastName &&
-              current.email === nextCustomer.email &&
-              current.phone === nextCustomer.phone
-            ) {
-              return current;
-            }
-            return nextCustomer;
-          });
-        }
       })
       .catch((error: unknown) => {
         if (isCancelled) {
@@ -3478,6 +3451,10 @@ function SlotActionDrawer({
                       <div style={{ marginTop: 8, background: "var(--cs-canvas)", borderRadius: 20, padding: 6 }}>
                         {lookupItems.slice(0, 4).map((lookupCustomer) => {
                           const isSelected = selectedCustomerName === lookupCustomer.name;
+                          const contactLines = [
+                            lookupCustomer.email,
+                            lookupCustomer.phone,
+                          ].filter(Boolean).join(" · ");
                           return (
                             <button
                               key={lookupCustomer.id}
@@ -3488,7 +3465,7 @@ function SlotActionDrawer({
                               <span className="cs-choice__avatar" aria-hidden="true">{getInitials(lookupCustomer.name)}</span>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div className="cs-choice__name">{lookupCustomer.name}</div>
-                                <div className="cs-choice__meta">{lookupCustomer.email ?? lookupCustomer.phone ?? "Client record"}</div>
+                                <div className="cs-choice__meta">{contactLines || "Client record"}</div>
                               </div>
                             </button>
                           );
