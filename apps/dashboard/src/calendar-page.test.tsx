@@ -164,6 +164,7 @@ function createApi(
       slots: openingsByDate[request.date] ?? [],
     })),
     createBookingDraft: vi.fn().mockResolvedValue(options.draftSummary ?? baseDraftSummary),
+    createOrUpdateCustomer: vi.fn().mockResolvedValue({ customerId: "customer-new" }),
     lookupCustomers: vi.fn(async () => ({
       items: options.customerLookupItems ?? [baseBooking.customer],
       meta: {

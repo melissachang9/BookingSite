@@ -156,6 +156,12 @@ type DraftCreationState =
   | { kind: "success"; draftId: string }
   | { kind: "error"; message: string };
 
+type CustomerCreateState =
+  | { kind: "idle" }
+  | { kind: "submitting" }
+  | { kind: "success"; customerId: string }
+  | { kind: "error"; message: string };
+
 type CompletionState =
   | { kind: "idle" }
   | { kind: "submitting" }
@@ -205,6 +211,7 @@ export type CalendarPageApi = {
   lookupCustomers: (query: CustomerLookupQuery) => Promise<CustomerLookupResponse>;
   getAvailability: (request: AvailabilityRequest) => Promise<AvailabilityResponse>;
   createBookingDraft: (body: CreateBookingDraftRequest) => Promise<BookingDraftSummary>;
+  createOrUpdateCustomer: (body: { name: string; email?: string; phone?: string }) => Promise<{ customerId: string }>;
   listBookingFormResponses: (tenantSlug: string, bookingId: string) => Promise<BookingFormResponseList>;
   listBookingFormRequirements: (tenantSlug: string, bookingId: string) => Promise<BookingFormRequirementList>;
   sendBookingFormReminder: (tenantSlug: string, bookingId: string) => Promise<SendFormReminderResponse>;
@@ -813,6 +820,7 @@ export function CalendarPage({
   });
   const [selectedSlotBlockDurationMinutes, setSelectedSlotBlockDurationMinutes] = useState(60);
   const [customerLookupState, setCustomerLookupState] = useState<CustomerLookupState>({ kind: "idle" });
+  const [customerCreateState, setCustomerCreateState] = useState<CustomerCreateState>({ kind: "idle" });
   const [viewMode, setViewMode] = useState<CalendarViewMode>(() => {
     try {
       const saved = window.localStorage.getItem("calendar.viewMode");
@@ -958,6 +966,7 @@ export function CalendarPage({
     setSelectedSlotCustomer({ firstName: "", lastName: "", email: "", phone: "", referredBy: "" });
     setSelectedSlotBlockDurationMinutes(60);
     setCustomerLookupState({ kind: "idle" });
+    setCustomerCreateState({ kind: "idle" });
     setDraftCreationState({ kind: "idle" });
     setIntakeStatusByBookingId({});
     setSelectedWeekProviderId(null);
@@ -1623,6 +1632,29 @@ export function CalendarPage({
     setDraftCreationState({ kind: "idle" });
   };
 
+  const handleCreateSlotCustomer = async () => {
+    const name = combineCustomerName(selectedSlotCustomer.firstName, selectedSlotCustomer.lastName).trim();
+    const email = selectedSlotCustomer.email.trim();
+    const phone = selectedSlotCustomer.phone.trim();
+    if (!name || !email || !phone) {
+      return;
+    }
+    setCustomerCreateState({ kind: "submitting" });
+    try {
+      const result = await api.createOrUpdateCustomer({
+        name,
+        ...(email ? { email } : {}),
+        ...(phone ? { phone } : {}),
+      });
+      setCustomerCreateState({ kind: "success", customerId: result.customerId });
+    } catch (error) {
+      setCustomerCreateState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Unable to create the client.",
+      });
+    }
+  };
+
   const handleSelectSlotProvider = (providerId: string) => {
     setSelectedSlot((current) => {
       if (current === null) {
@@ -2248,9 +2280,11 @@ export function CalendarPage({
           onToggleBlockedService={handleToggleSlotBlockedService}
           customer={selectedSlotCustomer}
           customerLookupState={customerLookupState}
+          customerCreateState={customerCreateState}
           blockDurationMinutes={selectedSlotBlockDurationMinutes}
           onCustomerFieldChange={handleUpdateSlotCustomerField}
           onApplyCustomer={handleApplySlotCustomer}
+          onCreateCustomer={() => void handleCreateSlotCustomer()}
           onNotesChange={setSelectedSlotNotes}
           onBookAppointment={() => void handleCreateDraftFromSlot()}
           onAddTimeBlock={handleAddTimeBlockFromSlot}
@@ -3234,6 +3268,7 @@ type SlotActionDrawerProps = {
   blockedServiceIds: string[];
   customer: SlotCustomerForm;
   customerLookupState: CustomerLookupState;
+  customerCreateState: CustomerCreateState;
   blockDurationMinutes: number;
   notes: string;
   draftCreationState: DraftCreationState;
@@ -3248,6 +3283,7 @@ type SlotActionDrawerProps = {
   onToggleBlockedService: (serviceId: string) => void;
   onCustomerFieldChange: (field: keyof SlotCustomerForm, value: string) => void;
   onApplyCustomer: (customer: CustomerSummary) => void;
+  onCreateCustomer: () => void;
   onNotesChange: (notes: string) => void;
   onBookAppointment: () => void;
   onAddTimeBlock: () => void;
@@ -3260,6 +3296,7 @@ function SlotActionDrawer({
   blockedServiceIds,
   customer,
   customerLookupState,
+  customerCreateState,
   blockDurationMinutes,
   notes,
   draftCreationState,
@@ -3274,6 +3311,7 @@ function SlotActionDrawer({
   onToggleBlockedService,
   onCustomerFieldChange,
   onApplyCustomer,
+  onCreateCustomer,
   onNotesChange,
   onBookAppointment,
   onAddTimeBlock,
@@ -3378,6 +3416,12 @@ function SlotActionDrawer({
                   lookupReady && lookupItems.some((item) => item.name === selectedCustomerName);
                 const showEmptyState = lookupReady && lookupItems.length === 0 && trimmedSearch.length >= 2;
                 if (manualNewClient) {
+                  const canCreateClient =
+                    customer.firstName.trim().length > 0 &&
+                    customer.lastName.trim().length > 0 &&
+                    customer.email.trim().length > 0 &&
+                    customer.phone.trim().length > 0;
+                  const isCreating = customerCreateState.kind === "submitting";
                   return (
                     <div>
                       <div className="cs-section__label">Add new client</div>
@@ -3398,6 +3442,24 @@ function SlotActionDrawer({
                           <input className="cs-input" placeholder="Phone" value={customer.phone} onChange={(event) => onCustomerFieldChange("phone", event.target.value)} inputMode="tel" autoComplete="tel" />
                           <input className="cs-input" placeholder="Email" value={customer.email} onChange={(event) => onCustomerFieldChange("email", event.target.value)} inputMode="email" autoComplete="email" />
                         </div>
+                        <button
+                          type="button"
+                          className="cs-btn cs-btn--primary"
+                          style={{ width: "100%", marginTop: 12 }}
+                          disabled={!canCreateClient || isCreating}
+                          onClick={onCreateCustomer}
+                        >
+                          {isCreating
+                            ? "Creating client…"
+                            : customerCreateState.kind === "success"
+                            ? "Client created"
+                            : "Create client"}
+                        </button>
+                        {customerCreateState.kind === "error" ? (
+                          <div className="message-banner message-banner--error" role="alert" style={{ marginTop: 8 }}>
+                            {customerCreateState.message}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   );
