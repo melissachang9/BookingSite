@@ -178,7 +178,7 @@ type FormResponsesState =
     }
   | { kind: "error"; bookingId: string; message: string };
 
-type IntakeStatus = "unknown" | "loading" | "submitted" | "missing" | "partial" | "error";
+type IntakeStatus = "unknown" | "loading" | "submitted" | "missing" | "partial" | "not_required" | "error";
 
 type FormReminderState =
   | { kind: "idle" }
@@ -582,6 +582,8 @@ function getIntakeStatusLabel(status: IntakeStatus): string {
       return "Intake partial";
     case "missing":
       return "Intake pending";
+    case "not_required":
+      return "No forms required";
     case "error":
       return "Intake check failed";
     case "unknown":
@@ -930,7 +932,7 @@ export function CalendarPage({
           requirements.length === 0
             ? responses.items.length > 0
               ? "submitted"
-              : "missing"
+              : "not_required"
             : pendingCount === 0
               ? "submitted"
               : satisfiedCount === 0
@@ -5529,7 +5531,9 @@ function FormResponsesPanel({
           {state.message}
         </div>
       ) : requirements.length === 0 && responses.length === 0 ? (
-        <p className="form-responses-empty">No intake forms are attached to this booking.</p>
+        <p className="form-responses-empty">
+          {intakeStatus === "not_required" ? "No forms required for this service." : "No forms attached."}
+        </p>
       ) : (
         <>
           <div className="form-responses-list" aria-label="Intake forms">
