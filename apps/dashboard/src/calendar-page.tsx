@@ -3189,6 +3189,9 @@ function CalendarBoard({
                   const durationMinutes = Math.max(15, endMinutes - startMinutes);
                   const top = chipTop(startMinutes);
                   const h = chipHeight(durationMinutes);
+                  // Short appointments (<= 30 min) get a compact chip that
+                  // drops the treatment line so the time + client still fit.
+                  const isShort = durationMinutes <= 30;
 
                   const nowMs = Date.now();
                   const isInProgress =
@@ -3217,7 +3220,7 @@ function CalendarBoard({
                     <button
                       key={appointment.id}
                       type="button"
-                      className={`cs-chip ${familyClass}${isSelected ? " cs-chip--selected" : ""}`}
+                      className={`cs-chip ${familyClass}${isShort ? " cs-chip--short" : ""}${isSelected ? " cs-chip--selected" : ""}`}
                       aria-label={`View ${appointment.customerName} booked ${formatDateTime(appointment.startAt)} with ${appointment.providerName}. ${intakeLabel}.`}
                       aria-pressed={isSelected}
                       onClick={(event) => {
@@ -3240,7 +3243,9 @@ function CalendarBoard({
                         {formatTimeRange(appointment.startAt, appointment.endAt)}
                       </span>
                       <span className="cs-chip__client">{appointment.customerName}</span>
-                      <span className="cs-chip__treatment">{appointment.serviceName}</span>
+                      {!isShort ? (
+                        <span className="cs-chip__treatment">{appointment.serviceName}</span>
+                      ) : null}
                     </button>
                   );
                 })}

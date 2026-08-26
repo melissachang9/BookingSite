@@ -375,6 +375,18 @@
   font: 500 11px var(--cs-font); color: var(--cs-secondary);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+
+/* Short appointments (<= 30 min): tighter padding, time + client on one line
+   so the content still fits inside a ~26px chip. */
+.cs-chip--short {
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cs-chip--short .cs-chip__time { flex: none; }
+.cs-chip--short .cs-chip__client { margin-top: 0; }
+.cs-chip--short .cs-chip__live { flex: none; }
 .cs-chip__badge {
   margin-top: 6px; display: inline-block;
   font: 700 9px var(--cs-font);
