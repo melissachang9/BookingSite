@@ -740,6 +740,13 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .cs-when-card__time {
   font: 800 24px var(--cs-font); letter-spacing: -.035em; color: var(--cs-ink); margin-top: 4px; white-space: nowrap;
 }
+.cs-when-card__time-btn {
+  border: 0; background: none; padding: 0; cursor: pointer;
+  font: inherit; letter-spacing: inherit; color: inherit; white-space: nowrap;
+  border-bottom: 1px dashed rgba(20, 17, 15, .25);
+}
+.cs-when-card__time-btn:hover { color: var(--cs-ink-hover); border-bottom-color: var(--cs-ink); }
+.cs-when-card__time-btn:disabled { cursor: default; border-bottom-color: transparent; }
 
 /* Alert icon (pink consent card) */
 .cs-alert__icon {

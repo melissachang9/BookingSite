@@ -4363,7 +4363,15 @@ function AppointmentDetailsDrawer({
                     }}
                   />
                 ) : (
-                  timeRangeLabel
+                  <button
+                    type="button"
+                    className="cs-when-card__time-btn"
+                    onClick={() => setShowRescheduleTimeInput(true)}
+                    disabled={!isConfirmed || rescheduleSaveState === "submitting"}
+                    title="Change time"
+                  >
+                    {timeRangeLabel}
+                  </button>
                 )}
               </div>
             </div>
