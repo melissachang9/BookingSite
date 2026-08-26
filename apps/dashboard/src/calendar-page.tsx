@@ -4490,11 +4490,19 @@ function AppointmentDetailsDrawer({
                   ) : null}
                 </div>
                 {isEditingCustomerNotes ? (
-                  <div className="customer-notes-editor" style={{ marginTop: 12 }}>
-                    <textarea value={customerNotesDraft} onChange={(e) => setCustomerNotesDraft(e.target.value)} rows={3} placeholder="Add notes about this client..." disabled={customerNotesSaveState === "submitting"} />
-                    <div className="customer-notes-editor__actions">
-                      <button type="button" className="cs-btn cs-btn--ghost" onClick={() => { setIsEditingCustomerNotes(false); setCustomerNotesError(""); }} disabled={customerNotesSaveState === "submitting"}>Cancel</button>
-                      <button type="button" className="cs-btn cs-btn--primary" onClick={async () => { if (!onUpdateCustomerNotes) return; setCustomerNotesSaveState("submitting"); setCustomerNotesError(""); try { await onUpdateCustomerNotes(selectedAppointment, customerNotesDraft); setIsEditingCustomerNotes(false); setCustomerNotesSaveState("idle"); } catch (err) { setCustomerNotesSaveState("error"); setCustomerNotesError(err instanceof Error ? err.message : "Unable to save notes."); } }} disabled={customerNotesSaveState === "submitting"}>{customerNotesSaveState === "submitting" ? "Saving…" : "Save"}</button>
+                  <div style={{ marginTop: 12 }}>
+                    <textarea
+                      className="cs-note cs-note--input"
+                      value={customerNotesDraft}
+                      onChange={(e) => setCustomerNotesDraft(e.target.value)}
+                      rows={3}
+                      placeholder="Add notes about this client..."
+                      disabled={customerNotesSaveState === "submitting"}
+                      autoFocus
+                    />
+                    <div style={{ display: "flex", gap: 8, marginTop: 8, justifyContent: "flex-end" }}>
+                      <button type="button" className="cs-btn cs-btn--sm cs-btn--ghost" onClick={() => { setIsEditingCustomerNotes(false); setCustomerNotesError(""); }} disabled={customerNotesSaveState === "submitting"}>Cancel</button>
+                      <button type="button" className="cs-btn cs-btn--sm cs-btn--primary" style={{ flex: "none" }} onClick={async () => { if (!onUpdateCustomerNotes) return; setCustomerNotesSaveState("submitting"); setCustomerNotesError(""); try { await onUpdateCustomerNotes(selectedAppointment, customerNotesDraft); setIsEditingCustomerNotes(false); setCustomerNotesSaveState("idle"); } catch (err) { setCustomerNotesSaveState("error"); setCustomerNotesError(err instanceof Error ? err.message : "Unable to save notes."); } }} disabled={customerNotesSaveState === "submitting"}>{customerNotesSaveState === "submitting" ? "Saving…" : "Save"}</button>
                     </div>
                     {customerNotesSaveState === "error" ? <p role="alert" className="settings-error">{customerNotesError}</p> : null}
                   </div>
