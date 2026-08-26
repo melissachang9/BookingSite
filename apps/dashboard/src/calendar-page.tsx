@@ -3235,11 +3235,10 @@ function CalendarBoard({
                           <span />
                           <span>{isInProgress ? "IN ROOM" : "CHECKED IN"}</span>
                         </span>
-                      ) : (
-                        <span className="cs-chip__time">
-                          {formatTimeRange(appointment.startAt, appointment.endAt)}
-                        </span>
-                      )}
+                      ) : null}
+                      <span className="cs-chip__time">
+                        {formatTimeRange(appointment.startAt, appointment.endAt)}
+                      </span>
                       <span className="cs-chip__client">{appointment.customerName}</span>
                       <span className="cs-chip__treatment">{appointment.serviceName}</span>
                     </button>

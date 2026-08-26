@@ -399,6 +399,7 @@
 .cs-chip--inprogress { background: var(--cs-ink); }
 .cs-chip--inprogress .cs-chip__client { color: #fff; }
 .cs-chip--inprogress .cs-chip__treatment { color: rgba(255, 255, 255, .6); }
+.cs-chip--inprogress .cs-chip__time { color: rgba(255, 255, 255, .6); }
 .cs-chip__live { display: flex; align-items: center; gap: 5px; }
 .cs-chip__live span:first-child {
   width: 5px; height: 5px; border-radius: var(--cs-r-pill); background: var(--cs-peach); flex: none;
