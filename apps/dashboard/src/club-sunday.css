@@ -376,8 +376,9 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
-/* Short appointments (<= 30 min): tighter padding, time + client on one line
-   so the content still fits inside a ~26px chip. */
+/* Short appointments (<= 30 min): tighter padding, time + treatment on one line
+   so the content still fits inside a ~26px chip. The treatment name is the
+   most important info, so it is kept while the client name is dropped. */
 .cs-chip--short {
   padding: 4px 8px;
   display: flex;
@@ -385,7 +386,7 @@
   gap: 6px;
 }
 .cs-chip--short .cs-chip__time { flex: none; }
-.cs-chip--short .cs-chip__client { margin-top: 0; }
+.cs-chip--short .cs-chip__treatment { margin-top: 0; }
 .cs-chip--short .cs-chip__live { flex: none; }
 .cs-chip__badge {
   margin-top: 6px; display: inline-block;

@@ -3242,10 +3242,14 @@ function CalendarBoard({
                       <span className="cs-chip__time">
                         {formatTimeRange(appointment.startAt, appointment.endAt)}
                       </span>
-                      <span className="cs-chip__client">{appointment.customerName}</span>
-                      {!isShort ? (
+                      {isShort ? (
                         <span className="cs-chip__treatment">{appointment.serviceName}</span>
-                      ) : null}
+                      ) : (
+                        <>
+                          <span className="cs-chip__client">{appointment.customerName}</span>
+                          <span className="cs-chip__treatment">{appointment.serviceName}</span>
+                        </>
+                      )}
                     </button>
                   );
                 })}
