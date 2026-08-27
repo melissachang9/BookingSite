@@ -4566,10 +4566,10 @@ function AppointmentDetailsDrawer({
                   <button
                     type="button"
                     className="cs-btn"
-                    onClick={() => { if (onCancel && window.confirm("Cancel this booking?")) void onCancel(selectedAppointment); }}
+                    onClick={() => { if (onCancel && window.confirm(`Cancel this appointment for ${selectedAppointment.customerName}? This will release the slot and notify the client.`)) void onCancel(selectedAppointment); }}
                     disabled={!onCancel || completionState?.kind === "submitting"}
                   >
-                    Cancel
+                    Cancel appointment
                   </button>
                   <button
                     type="button"
