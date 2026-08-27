@@ -1307,6 +1307,23 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   color: var(--cs-label);
 }
 
+/* Suppress the global amber 3px focus ring on checkout inputs — it renders as
+   a hard rectangle outside the pill's rounded border, which visually overlaps
+   the notes label and helper text below. Use a soft ink shadow that follows
+   the input's border-radius instead. */
+.appointment-details-drawer.checkout-panel input:focus,
+.appointment-details-drawer.checkout-panel input:focus-visible,
+.appointment-details-drawer.checkout-panel textarea:focus,
+.appointment-details-drawer.checkout-panel textarea:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(20, 17, 15, .12);
+}
+.appointment-details-drawer.checkout-panel .checkout-panel__amount-input:focus,
+.appointment-details-drawer.checkout-panel .checkout-panel__amount-input:focus-visible {
+  border-color: var(--cs-ink);
+  box-shadow: 0 0 0 3px rgba(20, 17, 15, .08);
+}
+
 .checkout-panel__notes span {
   color: var(--cs-label);
   font: 700 11px var(--cs-font);
