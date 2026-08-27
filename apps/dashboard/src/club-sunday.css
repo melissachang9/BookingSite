@@ -1281,21 +1281,18 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   color: var(--cs-ink);
 }
 .appointment-details-drawer.checkout-panel .checkout-panel__amount-row {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) 130px;
-  grid-template-areas: "label label" "input helper";
-  gap: 6px 14px;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
 }
 .appointment-details-drawer.checkout-panel .checkout-panel__amount-row > span:first-child {
-  grid-area: label;
   font: 700 11px var(--cs-font);
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--cs-label);
 }
 .appointment-details-drawer.checkout-panel .checkout-panel__amount-input {
-  grid-area: input;
   width: 100%;
   padding: 15px 22px;
   border: 2px solid var(--cs-ink);
@@ -1304,11 +1301,6 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   color: var(--cs-ink);
   font: 700 20px var(--cs-font);
   text-align: left;
-}
-.checkout-panel__amount-helper {
-  grid-area: helper;
-  font: 500 12px/1.3 var(--cs-font);
-  color: var(--cs-label);
 }
 
 /* Suppress the global amber 3px focus ring on checkout inputs — it renders as

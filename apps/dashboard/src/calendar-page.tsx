@@ -5340,9 +5340,6 @@ function CheckoutPanel({
                     disabled={state === "submitting"}
                     autoFocus
                   />
-                  <span className="checkout-panel__amount-helper">
-                    Underpayment is blocked on POS
-                  </span>
                 </label>
                 <label className="checkout-panel__notes">
                   <span>Notes (optional)</span>
