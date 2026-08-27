@@ -795,6 +795,8 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .cs-btn--primary:hover { background: var(--cs-ink-hover); }
 .cs-btn--sm { padding: 9px 15px; font-size: 11px; background: var(--cs-surface); }
 .cs-btn--sm:hover { background: var(--cs-grey); }
+.cs-btn--sm.cs-btn--primary { background: var(--cs-ink); color: #fff; }
+.cs-btn--sm.cs-btn--primary:hover { background: var(--cs-ink-hover); }
 .cs-btn--checked { background: var(--cs-ink); color: #fff; }
 .cs-btn--checked:hover { background: var(--cs-ink-hover); color: #fff; }
 .cs-btn--onTint { background: rgba(255, 255, 255, .7); }
