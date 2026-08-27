@@ -938,6 +938,94 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .form-reminder-btn:hover { background: var(--cs-ink-hover); }
 
 /* ============================================================================
+   Form response drawer — re-skin legacy amber viewer to the design system
+   ========================================================================= */
+.form-response-drawer {
+  background: var(--cs-surface);
+  box-shadow: -18px 0 38px rgba(18, 42, 36, 0.22);
+}
+.form-response-drawer .appointment-details-drawer__header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--cs-hairline);
+}
+.form-response-drawer .appointment-status-chip {
+  background: var(--cs-mint);
+  color: var(--cs-ok-text);
+  font: 700 10px var(--cs-font);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+}
+.form-response-drawer .appointment-status-chip span { background: var(--cs-ok-text); }
+.form-response-drawer .appointment-drawer-outline-action {
+  border: 0;
+  background: var(--cs-hover);
+  color: var(--cs-ink);
+  border-radius: var(--cs-r-pill);
+  padding: 8px 16px;
+  font: 600 12px var(--cs-font);
+}
+.form-response-drawer .appointment-drawer-outline-action:hover { background: var(--cs-hover-2); }
+
+.form-response-viewer {
+  padding: 8px 24px 24px;
+  gap: 16px;
+}
+.form-response-viewer__header {
+  border-bottom: 1px solid var(--cs-hairline);
+  padding-bottom: 12px;
+}
+.form-response-viewer__title {
+  font: 700 18px var(--cs-font);
+  color: var(--cs-ink);
+  letter-spacing: -.02em;
+}
+.form-response-viewer__version {
+  background: var(--cs-grey);
+  color: var(--cs-label);
+  font: 600 11px var(--cs-font);
+  padding: 2px 8px;
+  border-radius: var(--cs-r-pill);
+}
+.form-response-viewer__meta {
+  font: 500 12px var(--cs-font);
+  color: var(--cs-label);
+}
+.form-response-viewer__label {
+  font: 700 10px var(--cs-font);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--cs-label);
+}
+.form-response-viewer__value {
+  font: 500 14px/1.6 var(--cs-font);
+  color: var(--cs-ink);
+}
+.form-response-viewer__section-divider { border-top: 1px solid var(--cs-hairline); }
+.form-response-viewer__section-label {
+  font: 700 11px var(--cs-font);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--cs-ink);
+}
+.form-response-viewer__static-text {
+  font: 500 13px/1.6 var(--cs-font);
+  color: var(--cs-secondary);
+  font-style: italic;
+}
+.form-response-viewer__empty { font: 500 13px var(--cs-font); color: var(--cs-label); }
+.form-response-viewer__thumbnail-btn {
+  border: 1px solid var(--cs-hairline);
+  border-radius: var(--cs-r-12);
+}
+.form-response-viewer__file-link {
+  border: 1px solid var(--cs-hairline);
+  border-radius: var(--cs-r-pill);
+  font: 500 12px var(--cs-font);
+  color: var(--cs-ink);
+}
+
+/* ============================================================================
    BANNED — do not reintroduce
    ----------------------------------------------------------------------------
    opacity on anything containing text   -> use #EDEAE6 ground + full-strength
