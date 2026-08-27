@@ -4992,25 +4992,33 @@ function CheckoutPanel({
   return (
     <aside className="appointment-details-drawer checkout-panel" role="dialog" aria-label="Checkout">
       <header className="appointment-details-drawer__header checkout-panel__header">
-        <button
-          type="button"
-          className="checkout-panel__back"
-          onClick={onBack}
-          aria-label="Back to appointment details"
-        >
-          ←
-        </button>
-        <h3 className="checkout-panel__title">Payments</h3>
-        <button type="button" className="appointment-drawer-outline-action" onClick={onClose}>
-          Close
-        </button>
+        <div className="checkout-panel__heading">
+          <p className="checkout-panel__kicker">Complete appointment</p>
+          <h3 className="checkout-panel__name">{appointment.customerName}</h3>
+          <p className="checkout-panel__subtitle">
+            {appointment.serviceName} · {appointment.providerName} · {timeFormatter.format(new Date(appointment.startAt))}
+          </p>
+        </div>
+        <div className="checkout-panel__header-actions">
+          <button
+            type="button"
+            className="checkout-panel__back"
+            onClick={onBack}
+            aria-label="Back to appointment details"
+          >
+            ←
+          </button>
+          <button
+            type="button"
+            className="checkout-panel__close"
+            onClick={onClose}
+            aria-label="Close checkout"
+          >
+            ×
+          </button>
+        </div>
       </header>
       <div className="checkout-panel__body">
-        <div className="checkout-panel__customer">
-          <strong>{appointment.customerName}</strong>
-          <span>{appointment.serviceName}</span>
-        </div>
-
         <section className="checkout-panel__totals">
           <div className="checkout-panel__totals-row">
             <span>Subtotal</span>
@@ -5332,6 +5340,9 @@ function CheckoutPanel({
                     disabled={state === "submitting"}
                     autoFocus
                   />
+                  <span className="checkout-panel__amount-helper">
+                    Underpayment is blocked on POS
+                  </span>
                 </label>
                 <label className="checkout-panel__notes">
                   <span>Notes (optional)</span>
@@ -5354,12 +5365,14 @@ function CheckoutPanel({
               </section>
             ) : (
               <section className="checkout-panel__methods">
+                <h4 className="checkout-panel__section-kicker">How was it settled?</h4>
                 <div className="checkout-panel__methods-grid">
                   {allMethods.map((m) => (
                     <button
                       key={m.id}
                       type="button"
-                      className="checkout-panel__method-button"
+                      className={`checkout-panel__method-button${selectedMethod === m.id ? " is-active" : ""}`}
+                      aria-pressed={selectedMethod === m.id}
                       onClick={() => { setSelectedMethod(m.id); setPaymentStep("register"); }}
                       disabled={state === "submitting"}
                     >
@@ -5405,7 +5418,7 @@ function CheckoutPanel({
               </section>
             )}
 
-            <section className="checkout-panel__resolutions">
+            <section className="checkout-panel__resolutions" hidden>
               <div className="checkout-panel__resolutions-buttons">
                 <button
                   type="button"
@@ -5456,43 +5469,57 @@ function CheckoutPanel({
         ) : null}
       </div>
       <footer className="checkout-panel__footer">
-        {!isReadOnly && remainingBalance > 0 ? (
-          <button
-            type="button"
-            className="text-action checkout-panel__payment-link-button"
-            onClick={() => void handleSendPaymentLink()}
-            disabled={state === "submitting"}
-          >
-            {state === "submitting" ? "Creating link..." : "Send payment link"}
-          </button>
-        ) : null}
-        {isReadOnly ? (
-          <>
+        <div className="checkout-panel__footer-left">
+          {!isReadOnly && !isSettled ? (
             <button
               type="button"
-              className="checkout-panel__complete-button checkout-panel__complete-button--done"
-              onClick={onClose}
+              className="checkout-panel__waive-link"
+              onClick={handleWaive}
+              disabled={state === "submitting"}
             >
-              Close
+              Cancel · no-show · refund
             </button>
+          ) : null}
+        </div>
+        <div className="checkout-panel__footer-right">
+          {!isReadOnly && remainingBalance > 0 ? (
             <button
               type="button"
-              className="text-action checkout-panel__reopen-button"
-              onClick={handleReopenSale}
+              className="text-action checkout-panel__payment-link-button"
+              onClick={() => void handleSendPaymentLink()}
+              disabled={state === "submitting"}
             >
-              Re-open Sale
+              {state === "submitting" ? "Creating link..." : "Send payment link"}
             </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            className="checkout-panel__complete-button"
-            onClick={handleComplete}
-            disabled={!isSettled || state === "submitting"}
-          >
-            {isSettled ? "COMPLETE" : `Collect ${formatMoney(remainingBalance)} to complete`}
-          </button>
-        )}
+          ) : null}
+          {isReadOnly ? (
+            <>
+              <button
+                type="button"
+                className="text-action checkout-panel__reopen-button"
+                onClick={handleReopenSale}
+              >
+                Re-open sale
+              </button>
+              <button
+                type="button"
+                className="checkout-panel__complete-button checkout-panel__complete-button--done"
+                onClick={onClose}
+              >
+                Close
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="checkout-panel__complete-button"
+              onClick={handleComplete}
+              disabled={!isSettled || state === "submitting"}
+            >
+              {isSettled ? "Complete & collect" : `Collect ${formatMoney(remainingBalance)}`}
+            </button>
+          )}
+        </div>
       </footer>
     </aside>
   );
