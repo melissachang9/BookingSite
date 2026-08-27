@@ -1266,7 +1266,11 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .checkout-panel .text-action:hover { color: var(--cs-ink); }
 
 /* Register step — amount input as large pill + helper text */
-.checkout-panel__register { gap: 14px; }
+.appointment-details-drawer.checkout-panel .checkout-panel__register {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
 .appointment-details-drawer.checkout-panel .checkout-panel__register-header .checkout-panel__back {
   width: 32px;
   height: 32px;
