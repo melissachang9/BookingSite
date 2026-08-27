@@ -193,7 +193,16 @@
   gap: 14px; flex-wrap: wrap; row-gap: 12px; margin-bottom: 6px;
 }
 .cs-toolbar__title-group { display: flex; align-items: center; gap: 12px; }
-.cs-range { font: 800 24px var(--cs-font); letter-spacing: -.035em; color: var(--cs-ink); white-space: nowrap; }
+.cs-range {
+  font: 800 24px var(--cs-font);
+  letter-spacing: -.035em;
+  color: var(--cs-ink);
+  white-space: nowrap;
+  /* Reserve enough width for the widest week label (e.g. "30 August – 5 September")
+     so the Today button and steppers to the right stay pinned in place
+     when the visible week changes. */
+  min-width: 300px;
+}
 .cs-todaytag {
   background: var(--cs-peach); border-radius: var(--cs-r-pill);
   padding: 5px 12px; font: 600 11px var(--cs-font); color: var(--cs-ink);
