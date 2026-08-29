@@ -1521,6 +1521,33 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   letter-spacing: 0;
 }
 
+/* Error / status banners — re-skin the legacy amber .message-banner to the
+   Club Sunday pastel palette. The base rule lives in styles.css and pulls the
+   old --ui-danger / --ui-success tokens from the shared UI package. */
+.appointment-details-drawer .message-banner {
+  border: 0;
+  border-radius: var(--cs-r-16);
+  padding: 12px 16px;
+  font: 600 13px/1.5 var(--cs-font);
+  letter-spacing: 0;
+}
+.appointment-details-drawer .message-banner--error {
+  background: var(--cs-risk-fill);
+  color: var(--cs-risk-text);
+}
+.appointment-details-drawer .message-banner--warning {
+  background: var(--cs-warn-fill);
+  color: var(--cs-warn-text);
+}
+.appointment-details-drawer .message-banner--muted {
+  background: var(--cs-grey);
+  color: var(--cs-label);
+}
+.appointment-details-drawer .message-banner:not(.message-banner--error):not(.message-banner--warning):not(.message-banner--muted) {
+  background: var(--cs-ok-fill);
+  color: var(--cs-ok-text);
+}
+
 /* ============================================================================
    BANNED — do not reintroduce
    ----------------------------------------------------------------------------
