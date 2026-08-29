@@ -4485,11 +4485,11 @@ function AppointmentDetailsDrawer({
           </div>
           {rescheduleSaveState === "error" ? <p role="alert" className="settings-error">{rescheduleErrorMessage}</p> : null}
           {pendingRescheduleDate ? (
-            <div className="cs-panel cs-panel--tint" style={{ marginTop: 12 }}>
-              <div style={{ font: "700 13px var(--cs-font)", color: "var(--cs-ink)" }}>
+            <div className="cs-reschedule-confirm" style={{ marginTop: 12 }}>
+              <div className="cs-reschedule-confirm__title">
                 Move to {getDateLabel(pendingRescheduleDate)}?
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+              <div className="cs-reschedule-confirm__time">
                 <input
                   type="time"
                   className="appointment-drawer-time-input"
@@ -4497,12 +4497,12 @@ function AppointmentDetailsDrawer({
                   disabled={rescheduleSaveState === "submitting"}
                   onChange={(event) => setRescheduleTimeDraft(event.target.value)}
                 />
-                <span className="cs-when-card__time-sep" aria-hidden="true">–</span>
-                <span className="cs-when-card__time-end">
+                <span className="cs-reschedule-confirm__sep" aria-hidden="true">–</span>
+                <span className="cs-reschedule-confirm__end">
                   {rescheduleTimeDraft ? addMinutesToTimeInput(rescheduleTimeDraft, appointmentDurationMinutes) : ""}
                 </span>
               </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <div className="cs-reschedule-confirm__actions">
                 <button
                   type="button"
                   className="cs-btn cs-btn--sm cs-btn--primary"

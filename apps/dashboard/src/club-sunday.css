@@ -778,6 +778,49 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .cs-when-card__time-sep { color: var(--cs-label); font: 800 20px var(--cs-font); }
 .cs-when-card__time-end { color: var(--cs-label); font: 800 20px var(--cs-font); letter-spacing: -.02em; }
 
+/* Reschedule confirmation panel — neutral surface, not the pink alert tint.
+   Sits below the when-card and holds the date confirmation + time input +
+   Confirm / Cancel actions. */
+.cs-reschedule-confirm {
+  background: var(--cs-canvas);
+  border: 1px solid var(--cs-hairline);
+  border-radius: var(--cs-r-inner);
+  padding: 16px 18px;
+}
+.cs-reschedule-confirm__title {
+  font: 700 13px var(--cs-font);
+  color: var(--cs-ink);
+}
+.cs-reschedule-confirm__time {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.cs-reschedule-confirm .appointment-drawer-time-input {
+  width: 104px;
+  padding: 10px 14px;
+  border: 1px solid var(--cs-hairline);
+  border-radius: var(--cs-r-pill);
+  background: var(--cs-surface);
+  color: var(--cs-ink);
+  font: 700 16px var(--cs-font);
+  letter-spacing: -.02em;
+}
+.cs-reschedule-confirm .appointment-drawer-time-input:focus-visible {
+  outline: none;
+  border-color: var(--cs-ink);
+  box-shadow: 0 0 0 3px rgba(20, 17, 15, .12);
+}
+.cs-reschedule-confirm__sep { color: var(--cs-label); font: 700 15px var(--cs-font); }
+.cs-reschedule-confirm__end { color: var(--cs-label); font: 700 15px var(--cs-font); letter-spacing: -.02em; }
+.cs-reschedule-confirm__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.cs-reschedule-confirm__actions .cs-btn--primary { flex: 1; }
+
 /* Alert icon (pink consent card) */
 .cs-alert__icon {
   width: 18px; height: 18px; border-radius: var(--cs-r-pill);
