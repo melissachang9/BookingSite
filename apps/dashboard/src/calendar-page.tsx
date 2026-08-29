@@ -4299,13 +4299,13 @@ function AppointmentDetailsDrawer({
     }
   };
   // First click on a date in the popover only navigates the background calendar
-  // to that day (so the operator can inspect the target schedule). The actual
-  // reschedule is committed on the second click, once the date is confirmed.
+  // to that day (so the operator can inspect the target schedule). The popover
+  // stays open so the operator can click the same date again to confirm, or
+  // pick a different date. The reschedule is committed on the second click.
   const confirmRescheduleDate = async (date: string) => {
     if (!onUpdate) return;
     if (pendingRescheduleDate !== date) {
       setPendingRescheduleDate(date);
-      setShowRescheduleDatePopover(false);
       onNavigateToDate?.(date);
       return;
     }
@@ -4318,6 +4318,7 @@ function AppointmentDetailsDrawer({
       await onUpdate(selectedAppointment, { startsAt: newStartsAt, sendConfirmation: true });
       setRescheduleSaveState("idle");
       setPendingRescheduleDate(null);
+      setShowRescheduleDatePopover(false);
     } catch (err) {
       setRescheduleSaveState("error");
       setRescheduleErrorMessage(err instanceof Error ? err.message : "Unable to reschedule.");
@@ -4488,7 +4489,7 @@ function AppointmentDetailsDrawer({
                 Move to {getDateLabel(pendingRescheduleDate)}?
               </div>
               <div style={{ font: "500 12px/1.6 var(--cs-font)", color: "rgba(20,17,15,.6)", marginTop: 4 }}>
-                The calendar below now shows this day. Click Reschedule and pick the date again to confirm.
+                The calendar below now shows this day. Click the date again to confirm, or pick a different date.
               </div>
             </div>
           ) : null}
