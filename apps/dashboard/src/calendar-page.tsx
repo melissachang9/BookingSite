@@ -2307,6 +2307,10 @@ export function CalendarPage({
           onComplete={handleCompleteAppointment}
           onNoShow={handleNoShowAppointment}
           onUpdate={handleUpdateAppointment}
+          onNavigateToDate={(date) => {
+            setFocusedDate(date);
+            setViewMode("day");
+          }}
           onCancel={handleCancelAppointment}
           onUpdateCustomerNotes={handleUpdateCustomerNotes}
           onUpdateCustomerContact={handleUpdateCustomerContact}
@@ -4136,6 +4140,7 @@ type AppointmentDetailsDrawerProps = {
   onComplete: (appointment: SelectedCalendarAppointment, resolution?: "collected" | "waived") => Promise<void>;
   onNoShow: (appointment: SelectedCalendarAppointment) => Promise<void>;
   onUpdate?: (appointment: SelectedCalendarAppointment, body: UpdateBookingRequest) => Promise<void>;
+  onNavigateToDate?: (date: string) => void;
   onCancel?: (appointment: SelectedCalendarAppointment) => Promise<void>;
   onUpdateCustomerNotes?: (appointment: SelectedCalendarAppointment, notes: string) => Promise<void>;
   onUpdateCustomerContact?: (
@@ -4165,6 +4170,7 @@ function AppointmentDetailsDrawer({
   onComplete,
   onNoShow,
   onUpdate,
+  onNavigateToDate,
   onCancel,
   onUpdateCustomerNotes,
   onUpdateCustomerContact,
@@ -4180,6 +4186,7 @@ function AppointmentDetailsDrawer({
   const [showRescheduleDatePopover, setShowRescheduleDatePopover] = useState(false);
   const [showRescheduleTimeInput, setShowRescheduleTimeInput] = useState(false);
   const [rescheduleTimeDraft, setRescheduleTimeDraft] = useState("");
+  const [pendingRescheduleDate, setPendingRescheduleDate] = useState<string | null>(null);
   const [pickerMonth, setPickerMonth] = useState<string>(monthAnchor(getUpcomingDate(1)));
   const pickerGrid = useMemo(() => buildMonthGrid(pickerMonth), [pickerMonth]);
   const datePickerContainerRef = useRef<HTMLDivElement | null>(null);
@@ -4205,6 +4212,7 @@ function AppointmentDetailsDrawer({
     setShowRescheduleDatePopover(false);
     setShowRescheduleTimeInput(false);
     setRescheduleTimeDraft("");
+    setPendingRescheduleDate(null);
     setRescheduleSaveState("idle");
     setRescheduleErrorMessage("");
   }, [selectedAppointment?.id]);
@@ -4285,6 +4293,31 @@ function AppointmentDetailsDrawer({
       await onUpdate(selectedAppointment, { startsAt: newStartsAt, sendConfirmation: true });
       setRescheduleSaveState("idle");
       setShowRescheduleTimeInput(false);
+    } catch (err) {
+      setRescheduleSaveState("error");
+      setRescheduleErrorMessage(err instanceof Error ? err.message : "Unable to reschedule.");
+    }
+  };
+  // First click on a date in the popover only navigates the background calendar
+  // to that day (so the operator can inspect the target schedule). The actual
+  // reschedule is committed on the second click, once the date is confirmed.
+  const confirmRescheduleDate = async (date: string) => {
+    if (!onUpdate) return;
+    if (pendingRescheduleDate !== date) {
+      setPendingRescheduleDate(date);
+      setShowRescheduleDatePopover(false);
+      onNavigateToDate?.(date);
+      return;
+    }
+    const timeStr = formatTimeInputValue(selectedAppointment.startAt);
+    const newStartsAt = isoFromTenantDateAndTime(date, timeStr);
+    if (!newStartsAt) return;
+    setRescheduleSaveState("submitting");
+    setRescheduleErrorMessage("");
+    try {
+      await onUpdate(selectedAppointment, { startsAt: newStartsAt, sendConfirmation: true });
+      setRescheduleSaveState("idle");
+      setPendingRescheduleDate(null);
     } catch (err) {
       setRescheduleSaveState("error");
       setRescheduleErrorMessage(err instanceof Error ? err.message : "Unable to reschedule.");
@@ -4449,6 +4482,16 @@ function AppointmentDetailsDrawer({
             </div>
           </div>
           {rescheduleSaveState === "error" ? <p role="alert" className="settings-error">{rescheduleErrorMessage}</p> : null}
+          {pendingRescheduleDate ? (
+            <div className="cs-panel cs-panel--tint" style={{ marginTop: 12 }}>
+              <div style={{ font: "700 13px var(--cs-font)", color: "var(--cs-ink)" }}>
+                Move to {getDateLabel(pendingRescheduleDate)}?
+              </div>
+              <div style={{ font: "500 12px/1.6 var(--cs-font)", color: "rgba(20,17,15,.6)", marginTop: 4 }}>
+                The calendar below now shows this day. Click Reschedule and pick the date again to confirm.
+              </div>
+            </div>
+          ) : null}
 
           {/* Consent alert (pink) */}
           {showConsentAlert ? (
@@ -4656,7 +4699,7 @@ function AppointmentDetailsDrawer({
                 {pickerGrid.map((date) => {
                   const isInCurrentMonth = date.slice(0, 7) === pickerMonth.slice(0, 7);
                   const currentDate = new Date(selectedAppointment.startAt).toISOString().slice(0, 10);
-                  const isSelected = date === currentDate;
+                  const isSelected = date === (pendingRescheduleDate ?? currentDate);
                   return (
                     <button
                       key={date}
@@ -4666,21 +4709,7 @@ function AppointmentDetailsDrawer({
                       aria-pressed={isSelected}
                       aria-label={getDateLabel(date)}
                       className={["month-day", !isInCurrentMonth ? "month-day--outside" : "", isSelected ? "month-day--focused" : ""].filter(Boolean).join(" ")}
-                      onClick={async () => {
-                        if (!onUpdate) return;
-                        setShowRescheduleDatePopover(false);
-                        const current = new Date(selectedAppointment.startAt);
-                        const timeStr = current.toTimeString().slice(0, 5);
-                        setRescheduleSaveState("submitting"); setRescheduleErrorMessage("");
-                        try {
-                          const newStartsAt = new Date(`${date}T${timeStr}:00`).toISOString();
-                          await onUpdate(selectedAppointment, { startsAt: newStartsAt, sendConfirmation: true });
-                          setRescheduleSaveState("idle");
-                        } catch (err) {
-                          setRescheduleSaveState("error");
-                          setRescheduleErrorMessage(err instanceof Error ? err.message : "Unable to reschedule.");
-                        }
-                      }}
+                      onClick={() => void confirmRescheduleDate(date)}
                     >
                       <span>{parseIsoDate(date).getUTCDate()}</span>
                     </button>
