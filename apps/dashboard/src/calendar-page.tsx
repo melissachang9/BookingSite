@@ -4183,6 +4183,7 @@ function AppointmentDetailsDrawer({
   const [pickerMonth, setPickerMonth] = useState<string>(monthAnchor(getUpcomingDate(1)));
   const pickerGrid = useMemo(() => buildMonthGrid(pickerMonth), [pickerMonth]);
   const datePickerContainerRef = useRef<HTMLDivElement | null>(null);
+  const datePopoverRef = useRef<HTMLDivElement | null>(null);
   const [rescheduleSaveState, setRescheduleSaveState] = useState<"idle" | "submitting" | "error">("idle");
   const [rescheduleErrorMessage, setRescheduleErrorMessage] = useState("");
   const [isEditingAppointmentNotes, setIsEditingAppointmentNotes] = useState(false);
@@ -4212,7 +4213,9 @@ function AppointmentDetailsDrawer({
     if (!showRescheduleDatePopover) return;
     const handler = (event: Event) => {
       const target = event.target as Node;
-      if (datePickerContainerRef.current && !datePickerContainerRef.current.contains(target)) {
+      const insideTrigger = datePickerContainerRef.current && datePickerContainerRef.current.contains(target);
+      const insidePopover = datePopoverRef.current && datePopoverRef.current.contains(target);
+      if (!insideTrigger && !insidePopover) {
         setShowRescheduleDatePopover(false);
       }
     };
@@ -4640,7 +4643,7 @@ function AppointmentDetailsDrawer({
       </aside>
       {showRescheduleDatePopover
         ? createPortal(
-            <div className="appointment-drawer-date-popover" style={reschedulePopoverStyle}>
+            <div className="appointment-drawer-date-popover" style={reschedulePopoverStyle} ref={datePopoverRef}>
               <div className="month-rail__header">
                 <h5>{monthLabelFormatter.format(parseIsoDate(pickerMonth))}</h5>
                 <div className="month-rail__controls">
