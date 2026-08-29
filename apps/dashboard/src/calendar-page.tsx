@@ -493,6 +493,17 @@ function formatTimeInputValue(value: string): string {
   return `${hour}:${minute}`;
 }
 
+function addMinutesToTimeInput(timeValue: string, durationMinutes: number): string {
+  const minuteOfDay = getMinutesFromTimeInput(timeValue);
+  if (minuteOfDay === null) {
+    return timeValue;
+  }
+  const total = minuteOfDay + Math.max(0, durationMinutes);
+  const hour = Math.floor(total / 60) % 24;
+  const minute = total % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
 function getMinutesFromTimeInput(value: string): number | null {
   const match = /^(\d{2}):(\d{2})$/.exec(value);
   if (!match) {
@@ -4168,6 +4179,7 @@ function AppointmentDetailsDrawer({
   const [drawerView, setDrawerView] = useState<"details" | "checkout">("details");
   const [showRescheduleDatePopover, setShowRescheduleDatePopover] = useState(false);
   const [showRescheduleTimeInput, setShowRescheduleTimeInput] = useState(false);
+  const [rescheduleTimeDraft, setRescheduleTimeDraft] = useState("");
   const [pickerMonth, setPickerMonth] = useState<string>(monthAnchor(getUpcomingDate(1)));
   const pickerGrid = useMemo(() => buildMonthGrid(pickerMonth), [pickerMonth]);
   const datePickerContainerRef = useRef<HTMLDivElement | null>(null);
@@ -4191,6 +4203,7 @@ function AppointmentDetailsDrawer({
     setDrawerView("details");
     setShowRescheduleDatePopover(false);
     setShowRescheduleTimeInput(false);
+    setRescheduleTimeDraft("");
     setRescheduleSaveState("idle");
     setRescheduleErrorMessage("");
   }, [selectedAppointment?.id]);
@@ -4251,6 +4264,29 @@ function AppointmentDetailsDrawer({
   // matching the mockup and keeping the time on a single line next to the
   // Reschedule / Check-in actions.
   const timeRangeLabel = `${tenantTimePartsFormatter.format(new Date(selectedAppointment.startAt))} \u2013 ${tenantTimePartsFormatter.format(new Date(selectedAppointment.endAt))}`;
+  // End time shown next to the editable start time. It is derived from the
+  // appointment's duration so the user only edits the start time while the
+  // end time stays visible and updates live.
+  const appointmentDurationMinutes = getDurationMinutes(selectedAppointment.startAt, selectedAppointment.endAt);
+  const rescheduleEndTime = rescheduleTimeDraft
+    ? addMinutesToTimeInput(rescheduleTimeDraft, appointmentDurationMinutes)
+    : formatTimeInputValue(selectedAppointment.endAt);
+  const confirmRescheduleTime = async () => {
+    if (!onUpdate || !rescheduleTimeDraft) return;
+    const dateStr = getTenantDate(selectedAppointment.startAt);
+    const newStartsAt = isoFromTenantDateAndTime(dateStr, rescheduleTimeDraft);
+    if (!newStartsAt) return;
+    setRescheduleSaveState("submitting");
+    setRescheduleErrorMessage("");
+    try {
+      await onUpdate(selectedAppointment, { startsAt: newStartsAt, sendConfirmation: true });
+      setRescheduleSaveState("idle");
+      setShowRescheduleTimeInput(false);
+    } catch (err) {
+      setRescheduleSaveState("error");
+      setRescheduleErrorMessage(err instanceof Error ? err.message : "Unable to reschedule.");
+    }
+  };
   const showConsentAlert = isConfirmed && (intakeStatus === "missing" || intakeStatus === "partial");
   const consentTitle = intakeStatus === "missing" ? "Intake forms unsigned" : "Intake needs review";
   const consentBody =
@@ -4336,37 +4372,42 @@ function AppointmentDetailsDrawer({
               <div className="cs-when-card__kicker">{whenKicker}</div>
               <div className="cs-when-card__time">
                 {showRescheduleTimeInput ? (
-                  <input
-                    type="time"
-                    className="appointment-drawer-time-input"
-                    defaultValue={new Date(selectedAppointment.startAt).toTimeString().slice(0, 5)}
-                    autoFocus
-                    disabled={rescheduleSaveState === "submitting"}
-                    onBlur={() => setShowRescheduleTimeInput(false)}
-                    onKeyDown={(event) => { if (event.key === "Enter") setShowRescheduleTimeInput(false); }}
-                    onChange={async (event) => {
-                      if (!onUpdate) return;
-                      const newTime = event.target.value;
-                      if (!newTime) return;
-                      const current = new Date(selectedAppointment.startAt);
-                      const dateStr = current.toISOString().slice(0, 10);
-                      setRescheduleSaveState("submitting"); setRescheduleErrorMessage("");
-                      try {
-                        const newStartsAt = new Date(`${dateStr}T${newTime}:00`).toISOString();
-                        await onUpdate(selectedAppointment, { startsAt: newStartsAt, sendConfirmation: true });
-                        setRescheduleSaveState("idle");
-                        setShowRescheduleTimeInput(false);
-                      } catch (err) {
-                        setRescheduleSaveState("error");
-                        setRescheduleErrorMessage(err instanceof Error ? err.message : "Unable to reschedule.");
-                      }
-                    }}
-                  />
+                  <div className="cs-when-card__time-editor">
+                    <input
+                      type="time"
+                      className="appointment-drawer-time-input"
+                      value={rescheduleTimeDraft}
+                      autoFocus
+                      disabled={rescheduleSaveState === "submitting"}
+                      onChange={(event) => setRescheduleTimeDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          confirmRescheduleTime();
+                        } else if (event.key === "Escape") {
+                          setShowRescheduleTimeInput(false);
+                        }
+                      }}
+                    />
+                    <span className="cs-when-card__time-sep" aria-hidden="true">–</span>
+                    <span className="cs-when-card__time-end">{rescheduleEndTime}</span>
+                    <button
+                      type="button"
+                      className="cs-btn cs-btn--sm cs-btn--primary"
+                      disabled={rescheduleSaveState === "submitting" || !rescheduleTimeDraft}
+                      onClick={confirmRescheduleTime}
+                    >
+                      {rescheduleSaveState === "submitting" ? "Saving…" : "Confirm"}
+                    </button>
+                  </div>
                 ) : (
                   <button
                     type="button"
                     className="cs-when-card__time-btn"
-                    onClick={() => setShowRescheduleTimeInput(true)}
+                    onClick={() => {
+                      setRescheduleTimeDraft(formatTimeInputValue(selectedAppointment.startAt));
+                      setShowRescheduleTimeInput(true);
+                    }}
                     disabled={!isConfirmed || rescheduleSaveState === "submitting"}
                     title="Change time"
                   >

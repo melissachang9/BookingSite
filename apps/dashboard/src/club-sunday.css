@@ -758,6 +758,25 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 }
 .cs-when-card__time-btn:hover { background: var(--cs-hover); }
 .cs-when-card__time-btn:disabled { cursor: default; }
+.cs-when-card__time-editor {
+  display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;
+}
+.cs-when-card__time-editor .appointment-drawer-time-input {
+  width: 96px;
+  padding: 6px 10px;
+  border: 2px solid var(--cs-ink);
+  border-radius: 10px;
+  background: var(--cs-surface);
+  color: var(--cs-ink);
+  font: 800 20px var(--cs-font);
+  letter-spacing: -.02em;
+}
+.cs-when-card__time-editor .appointment-drawer-time-input:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(20, 17, 15, .12);
+}
+.cs-when-card__time-sep { color: var(--cs-label); font: 800 20px var(--cs-font); }
+.cs-when-card__time-end { color: var(--cs-label); font: 800 20px var(--cs-font); letter-spacing: -.02em; }
 
 /* Alert icon (pink consent card) */
 .cs-alert__icon {
