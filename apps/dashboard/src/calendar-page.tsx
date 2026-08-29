@@ -4298,19 +4298,20 @@ function AppointmentDetailsDrawer({
       setRescheduleErrorMessage(err instanceof Error ? err.message : "Unable to reschedule.");
     }
   };
-  // First click on a date in the popover only navigates the background calendar
-  // to that day (so the operator can inspect the target schedule). The popover
-  // stays open so the operator can click the same date again to confirm, or
-  // pick a different date. The reschedule is committed on the second click.
-  const confirmRescheduleDate = async (date: string) => {
-    if (!onUpdate) return;
-    if (pendingRescheduleDate !== date) {
-      setPendingRescheduleDate(date);
-      onNavigateToDate?.(date);
-      return;
-    }
-    const timeStr = formatTimeInputValue(selectedAppointment.startAt);
-    const newStartsAt = isoFromTenantDateAndTime(date, timeStr);
+  // Clicking a date in the popover selects it, navigates the background
+  // calendar to that day, and closes the popover so the date + time
+  // confirmation panel in the drawer is visible. The reschedule is only
+  // committed when the operator confirms via that panel.
+  const selectRescheduleDate = (date: string) => {
+    setPendingRescheduleDate(date);
+    setRescheduleTimeDraft(formatTimeInputValue(selectedAppointment.startAt));
+    setShowRescheduleDatePopover(false);
+    onNavigateToDate?.(date);
+  };
+  // Commit the reschedule using the selected date + time.
+  const confirmReschedule = async () => {
+    if (!onUpdate || !pendingRescheduleDate || !rescheduleTimeDraft) return;
+    const newStartsAt = isoFromTenantDateAndTime(pendingRescheduleDate, rescheduleTimeDraft);
     if (!newStartsAt) return;
     setRescheduleSaveState("submitting");
     setRescheduleErrorMessage("");
@@ -4488,8 +4489,36 @@ function AppointmentDetailsDrawer({
               <div style={{ font: "700 13px var(--cs-font)", color: "var(--cs-ink)" }}>
                 Move to {getDateLabel(pendingRescheduleDate)}?
               </div>
-              <div style={{ font: "500 12px/1.6 var(--cs-font)", color: "rgba(20,17,15,.6)", marginTop: 4 }}>
-                The calendar below now shows this day. Click the date again to confirm, or pick a different date.
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                <input
+                  type="time"
+                  className="appointment-drawer-time-input"
+                  value={rescheduleTimeDraft}
+                  disabled={rescheduleSaveState === "submitting"}
+                  onChange={(event) => setRescheduleTimeDraft(event.target.value)}
+                />
+                <span className="cs-when-card__time-sep" aria-hidden="true">–</span>
+                <span className="cs-when-card__time-end">
+                  {rescheduleTimeDraft ? addMinutesToTimeInput(rescheduleTimeDraft, appointmentDurationMinutes) : ""}
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <button
+                  type="button"
+                  className="cs-btn cs-btn--sm cs-btn--primary"
+                  disabled={rescheduleSaveState === "submitting" || !rescheduleTimeDraft}
+                  onClick={() => void confirmReschedule()}
+                >
+                  {rescheduleSaveState === "submitting" ? "Saving…" : "Confirm change"}
+                </button>
+                <button
+                  type="button"
+                  className="cs-btn cs-btn--sm"
+                  disabled={rescheduleSaveState === "submitting"}
+                  onClick={() => setPendingRescheduleDate(null)}
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           ) : null}
@@ -4710,7 +4739,7 @@ function AppointmentDetailsDrawer({
                       aria-pressed={isSelected}
                       aria-label={getDateLabel(date)}
                       className={["month-day", !isInCurrentMonth ? "month-day--outside" : "", isSelected ? "month-day--focused" : ""].filter(Boolean).join(" ")}
-                      onClick={() => void confirmRescheduleDate(date)}
+                      onClick={() => selectRescheduleDate(date)}
                     >
                       <span>{parseIsoDate(date).getUTCDate()}</span>
                     </button>
