@@ -762,9 +762,8 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;
 }
 .cs-when-card__time-editor .appointment-drawer-time-input {
-  width: 138px;
+  width: 96px;
   padding: 6px 10px;
-  padding-right: 44px; /* room for the native clock indicator */
   border: 2px solid var(--cs-ink);
   border-radius: 10px;
   background: var(--cs-surface);
@@ -799,9 +798,8 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   margin-top: 12px;
 }
 .cs-reschedule-confirm .appointment-drawer-time-input {
-  width: 132px;
+  width: 104px;
   padding: 10px 14px;
-  padding-right: 46px; /* room for the native clock indicator */
   border: 1px solid var(--cs-hairline);
   border-radius: var(--cs-r-pill);
   background: var(--cs-surface);
