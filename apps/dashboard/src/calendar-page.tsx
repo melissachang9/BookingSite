@@ -4306,6 +4306,7 @@ function AppointmentDetailsDrawer({
     setPendingRescheduleDate(date);
     setRescheduleTimeDraft(formatTimeInputValue(selectedAppointment.startAt));
     setShowRescheduleDatePopover(false);
+    setShowRescheduleTimeInput(false);
     onNavigateToDate?.(date);
   };
   // Commit the reschedule using the selected date + time.
@@ -4445,6 +4446,7 @@ function AppointmentDetailsDrawer({
                     onClick={() => {
                       setRescheduleTimeDraft(formatTimeInputValue(selectedAppointment.startAt));
                       setShowRescheduleTimeInput(true);
+                      setPendingRescheduleDate(null);
                     }}
                     disabled={!isConfirmed || rescheduleSaveState === "submitting"}
                     title="Change time"
