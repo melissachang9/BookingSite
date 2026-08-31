@@ -1623,6 +1623,24 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   color: var(--cs-ok-text);
 }
 
+/* ------------------------------------------------------- board scrollbar - */
+/* The board body scrolls vertically (overflow-y: auto) but macOS overlay
+   scrollbars are invisible until you scroll. Give it a visible, on-brand
+   thumb so operators can see the day/week is vertically scrollable — e.g.
+   when checking a reschedule target date's available times. */
+.cs-board__body {
+  scrollbar-width: thin;
+  scrollbar-color: var(--cs-hover-2) transparent;
+}
+.cs-board__body::-webkit-scrollbar { width: 10px; }
+.cs-board__body::-webkit-scrollbar-track { background: transparent; }
+.cs-board__body::-webkit-scrollbar-thumb {
+  background: var(--cs-hover-2);
+  border-radius: var(--cs-r-pill);
+  border: 2px solid var(--cs-surface);
+}
+.cs-board__body::-webkit-scrollbar-thumb:hover { background: var(--cs-label); }
+
 /* ============================================================================
    BANNED — do not reintroduce
    ----------------------------------------------------------------------------
