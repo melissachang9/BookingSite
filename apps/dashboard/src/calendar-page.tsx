@@ -855,6 +855,7 @@ export function CalendarPage({
   const [completionState, setCompletionState] = useState<CompletionState>({ kind: "idle" });
   const [reloadKey, setReloadKey] = useState(0);
   const isInitialLoad = useRef(true);
+  const previousCalendarContextRef = useRef<{ api: CalendarPageApi; tenantSlug: string } | null>(null);
   const [formResponsesState, setFormResponsesState] = useState<FormResponsesState>({ kind: "idle" });
   const [intakeStatusByBookingId, setIntakeStatusByBookingId] = useState<Record<string, IntakeStatus>>({});
   const [formReminderState, setFormReminderState] = useState<FormReminderState>({ kind: "idle" });
@@ -892,21 +893,28 @@ export function CalendarPage({
     return () => document.removeEventListener("click", handler, true);
   }, [availMenuOpen]);
 
+  const selectedAppointmentRef = useRef<SelectedCalendarAppointment | null>(null);
   const selectedAppointment = useMemo<SelectedCalendarAppointment | null>(() => {
-    if (calendarState.kind !== "ready" || selectedAppointmentId === null) {
+    if (selectedAppointmentId === null) {
+      selectedAppointmentRef.current = null;
       return null;
     }
-
-    for (const day of calendarState.days) {
-      const appointment = day.appointments.find((candidate) => candidate.id === selectedAppointmentId);
-      if (appointment) {
-        return {
-          ...appointment,
-          dayLabel: day.label,
-        };
+    if (calendarState.kind === 'ready') {
+      for (const day of calendarState.days) {
+        const appointment = day.appointments.find((candidate) => candidate.id === selectedAppointmentId);
+        if (appointment) {
+          selectedAppointmentRef.current = { ...appointment, dayLabel: day.label };
+          return selectedAppointmentRef.current;
+        }
       }
     }
-
+    // Keep the currently open appointment alive even when it drops out of the
+    // loaded calendar window — most importantly during a reschedule, when
+    // navigating the calendar to a different date reloads the data and the
+    // appointment being edited is no longer present.
+    if (selectedAppointmentRef.current && selectedAppointmentRef.current.id === selectedAppointmentId) {
+      return selectedAppointmentRef.current;
+    }
     return null;
   }, [calendarState, selectedAppointmentId]);
 
@@ -973,17 +981,32 @@ export function CalendarPage({
 
   useEffect(() => {
     let isCancelled = false;
-    setSelectedAppointmentId(null);
-    setTimeBlocks([]);
-    setSelectedTimeBlockId(null);
-    setSelectedSlot(null);
-    setSelectedSlotCustomer({ firstName: "", lastName: "", email: "", phone: "", referredBy: "" });
-    setSelectedSlotBlockDurationMinutes(60);
-    setCustomerLookupState({ kind: "idle" });
-    setCustomerCreateState({ kind: "idle" });
-    setDraftCreationState({ kind: "idle" });
-    setIntakeStatusByBookingId({});
-    setSelectedWeekProviderId(null);
+    // Only clear the open appointment drawer and in-progress slot/customer
+    // forms when the tenant or api actually changes. reloadKey also bumps
+    // this effect when the operator navigates the calendar (e.g. picking a
+    // reschedule target date outside the loaded window) — that reload should
+    // refresh the data in the background without closing whatever the
+    // operator currently has open.
+    const previousContext = previousCalendarContextRef.current;
+    const contextChanged =
+      previousContext === null ||
+      previousContext.api !== api ||
+      previousContext.tenantSlug !== tenantSlug;
+    previousCalendarContextRef.current = { api, tenantSlug };
+
+    if (contextChanged) {
+      setSelectedAppointmentId(null);
+      setTimeBlocks([]);
+      setSelectedTimeBlockId(null);
+      setSelectedSlot(null);
+      setSelectedSlotCustomer({ firstName: "", lastName: "", email: "", phone: "", referredBy: "" });
+      setSelectedSlotBlockDurationMinutes(60);
+      setCustomerLookupState({ kind: "idle" });
+      setCustomerCreateState({ kind: "idle" });
+      setDraftCreationState({ kind: "idle" });
+      setIntakeStatusByBookingId({});
+      setSelectedWeekProviderId(null);
+    }
 
     const loadCalendar = async () => {
       try {
