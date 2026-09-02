@@ -4191,6 +4191,7 @@ function AppointmentDetailsDrawer({
   const pickerGrid = useMemo(() => buildMonthGrid(pickerMonth), [pickerMonth]);
   const datePickerContainerRef = useRef<HTMLDivElement | null>(null);
   const datePopoverRef = useRef<HTMLDivElement | null>(null);
+  const backdropRef = useRef<HTMLButtonElement | null>(null);
   const [rescheduleSaveState, setRescheduleSaveState] = useState<"idle" | "submitting" | "error">("idle");
   const [rescheduleErrorMessage, setRescheduleErrorMessage] = useState("");
   const [isEditingAppointmentNotes, setIsEditingAppointmentNotes] = useState(false);
@@ -4230,6 +4231,22 @@ function AppointmentDetailsDrawer({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [showRescheduleDatePopover]);
+
+  // The drawer backdrop sits on top of the page and swallows wheel events, so
+  // the calendar underneath can't be scrolled to inspect a reschedule target
+  // time. Forward wheel events on the backdrop to the calendar board.
+  useEffect(() => {
+    const backdrop = backdropRef.current;
+    if (!backdrop) return;
+    const onWheel = (e: WheelEvent) => {
+      const board = document.querySelector<HTMLElement>('.cs-board__body');
+      if (!board) return;
+      e.preventDefault();
+      board.scrollTop += e.deltaY;
+    };
+    backdrop.addEventListener('wheel', onWheel, { passive: false });
+    return () => backdrop.removeEventListener('wheel', onWheel);
+  }, []);
 
   if (!selectedAppointment) {
     return null;
@@ -4392,6 +4409,9 @@ function AppointmentDetailsDrawer({
         className="appointment-drawer-backdrop"
         aria-label="Close appointment details"
         onClick={onClose}
+        // Forward the ref so we can relay wheel events to the calendar board
+        // (without breaking click-outside-to-close).
+        ref={backdropRef}
       />
       <aside className="appointment-details-drawer cs-drawer-shim" role="dialog" aria-label="Appointment details">
         <div className="cs-drawer__inner">
