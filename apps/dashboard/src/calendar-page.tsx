@@ -4322,7 +4322,6 @@ function AppointmentDetailsDrawer({
   const selectRescheduleDate = (date: string) => {
     setPendingRescheduleDate(date);
     setRescheduleTimeDraft(formatTimeInputValue(selectedAppointment.startAt));
-    setShowRescheduleDatePopover(false);
     setShowRescheduleTimeInput(false);
     onNavigateToDate?.(date);
   };
