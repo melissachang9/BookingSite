@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactElement } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactElement } from "react";
 import { createPortal } from "react-dom";
 import type {
   AvailabilityRequest,
@@ -4258,17 +4258,22 @@ function AppointmentDetailsDrawer({
   // The drawer backdrop sits on top of the page and swallows wheel events, so
   // the calendar underneath can't be scrolled to inspect a reschedule target
   // time. Forward wheel events on the backdrop to the calendar board.
-  useEffect(() => {
-    const backdrop = backdropRef.current;
-    if (!backdrop) return;
+  //
+  // This backdrop button only exists in the DOM while selectedAppointment is
+  // truthy, so a plain useEffect([]) (which only runs on this component's
+  // very first mount, when selectedAppointment is still null) would attach
+  // to a null ref and never retry. Use a callback ref instead so the
+  // listener is (re)attached every time the backdrop node itself mounts.
+  const attachBackdropWheelForwarding = useCallback((node: HTMLButtonElement | null) => {
+    backdropRef.current = node;
+    if (!node) return;
     const onWheel = (e: WheelEvent) => {
       const board = document.querySelector<HTMLElement>('.cs-board__body');
       if (!board) return;
       e.preventDefault();
       board.scrollTop += e.deltaY;
     };
-    backdrop.addEventListener('wheel', onWheel, { passive: false });
-    return () => backdrop.removeEventListener('wheel', onWheel);
+    node.addEventListener('wheel', onWheel, { passive: false });
   }, []);
 
   if (!selectedAppointment) {
@@ -4433,7 +4438,7 @@ function AppointmentDetailsDrawer({
         onClick={onClose}
         // Forward the ref so we can relay wheel events to the calendar board
         // (without breaking click-outside-to-close).
-        ref={backdropRef}
+        ref={attachBackdropWheelForwarding}
       />
       <aside className="appointment-details-drawer cs-drawer-shim" role="dialog" aria-label="Appointment details">
         <div className="cs-drawer__inner">
