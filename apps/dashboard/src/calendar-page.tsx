@@ -206,6 +206,7 @@ export type CalendarPageDefinition = {
 export type CalendarPageApi = {
   listBookings: (tenantSlug: string, query?: BookingListQuery) => Promise<BookingListResponse>;
   listServices: (tenantSlug: string) => Promise<ServiceListResponse>;
+  getBooking: (tenantSlug: string, bookingId: string) => Promise<BookingSummary>;
   listServiceProviders: (tenantSlug: string, serviceId: string) => Promise<ProviderListResponse>;
   listServiceCategories: (tenantSlug: string) => Promise<ServiceCategoryListResponse>;
   lookupCustomers: (query: CustomerLookupQuery) => Promise<CustomerLookupResponse>;
@@ -855,11 +856,43 @@ export function CalendarPage({
   const [completionState, setCompletionState] = useState<CompletionState>({ kind: "idle" });
   const [reloadKey, setReloadKey] = useState(0);
   const isInitialLoad = useRef(true);
+  // When arriving at /calendar?bookingId=..., fetch that booking up front so we
+  // can focus the calendar on the booking's date and open its details after the
+  // load finishes (rather than landing on today and ignoring the param).
+  const pendingBookingIdRef = useRef<string | null>(null);
+  const pendingBookingDateRef = useRef<string | null>(null);
   const previousCalendarContextRef = useRef<{ api: CalendarPageApi; tenantSlug: string } | null>(null);
   const [formResponsesState, setFormResponsesState] = useState<FormResponsesState>({ kind: "idle" });
   const [intakeStatusByBookingId, setIntakeStatusByBookingId] = useState<Record<string, IntakeStatus>>({});
   const [formReminderState, setFormReminderState] = useState<FormReminderState>({ kind: "idle" });
   const [checkedInBookingIds, setCheckedInBookingIds] = useState<Set<string>>(new Set());
+
+  // Read ?bookingId= from the URL once and resolve its date for focusing.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const bookingId = params.get("bookingId");
+    if (!bookingId) return;
+    pendingBookingIdRef.current = bookingId;
+    // Remove the param from the URL so a manual reload doesn't re-focus.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("bookingId");
+    window.history.replaceState({}, "", url.toString());
+    let cancelled = false;
+    api.getBooking(tenantSlug, bookingId)
+      .then((booking) => {
+        if (cancelled) return;
+        const date = booking.startsAt.slice(0, 10);
+        pendingBookingDateRef.current = date;
+        // Focus on the booking's date.
+        setFocusedDate(date);
+        setMonthCursorDate(monthAnchor(date));
+        setViewMode("day");
+      })
+      .catch(() => {
+        // If the booking can't be fetched, leave the calendar on its default date.
+      });
+    return () => { cancelled = true; };
+  }, [api, tenantSlug]);
 
   // Persist the selected calendar view (day/week) so returning to the calendar
   // restores the last-used view.
@@ -1092,14 +1125,37 @@ export function CalendarPage({
         startTransition(() => {
           setCalendarState({ kind: "ready", days, services, providers, categoryNameById });
           if (days.length > 0 && isInitialLoad.current) {
-            isInitialLoad.current = false;
-            const todayDate = toIsoDate(new Date());
-            const todayIndex = days.findIndex((d) => d.date === todayDate);
-            const initialDate = todayIndex >= 0 ? days[todayIndex].date : days[0].date;
-            setFocusedDate(initialDate);
-            setMonthCursorDate(monthAnchor(initialDate));
+            if (pendingBookingIdRef.current === null) {
+              isInitialLoad.current = false;
+              const todayDate = toIsoDate(new Date());
+              const todayIndex = days.findIndex((d) => d.date === todayDate);
+              const initialDate = todayIndex >= 0 ? days[todayIndex].date : days[0].date;
+              setFocusedDate(initialDate);
+              setMonthCursorDate(monthAnchor(initialDate));
+            } else {
+              // Keep focusedDate set by the ?bookingId= handler; just stop
+              // treating this as the initial load.
+              isInitialLoad.current = false;
+            }
           }
           setSelectedServiceId((current) => (current !== null && services.some((service) => service.id === current) ? current : null));
+
+          // If we arrived here via ?bookingId=..., focus the booking's date and
+          // open its details once it's present in the loaded window.
+          const pendingId = pendingBookingIdRef.current;
+          if (pendingId) {
+            const match = days
+              .flatMap((d) => d.appointments.map((a) => ({ day: d, appointment: a })))
+              .find(({ appointment }) => appointment.id === pendingId);
+            if (match) {
+              setFocusedDate(match.day.date);
+              setMonthCursorDate(monthAnchor(match.day.date));
+              setViewMode("day");
+              setSelectedAppointmentId(pendingId);
+              pendingBookingIdRef.current = null;
+              pendingBookingDateRef.current = null;
+            }
+          }
         });
       } catch (error) {
         if (isCancelled) {
