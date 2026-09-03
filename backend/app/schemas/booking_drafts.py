@@ -52,6 +52,7 @@ class CustomerSummaryResponse(CamelModel):
     address_zip: str | None = None
     blocked_from_online_booking: bool = False
     stripe_customer_id: str | None = None
+    wallet_balance_cents: int = 0
 
 
 class CreateBookingDraftRequest(CamelModel):

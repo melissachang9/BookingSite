@@ -285,6 +285,7 @@ def customer_to_summary(customer: Customer) -> CustomerSummaryResponse:
         address_zip=customer.address_zip,
         blocked_from_online_booking=customer.blocked_from_online_booking,
         stripe_customer_id=customer.stripe_customer_id,
+        wallet_balance_cents=customer.wallet_balance_cents,
     )
 
 

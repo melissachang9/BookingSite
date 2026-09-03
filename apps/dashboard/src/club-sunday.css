@@ -2195,3 +2195,14 @@ a.client-history-row__body:hover .client-history-row__title {
 @media (max-width: 520px) {
   .client-edit-form__row { grid-template-columns: 1fr; }
 }
+
+/* Client profile address + muted tag */
+.client-tag--muted {
+  background: var(--cs-hover);
+  color: var(--cs-label);
+}
+.client-profile-header__address {
+  margin: 3px 0 0;
+  font: 500 12px var(--cs-font);
+  color: var(--cs-label);
+}

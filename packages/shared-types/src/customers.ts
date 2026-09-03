@@ -19,6 +19,7 @@ export type CustomerSummary = AuditFields &
     addressZip?: string | null;
     blockedFromOnlineBooking?: boolean;
     stripeCustomerId?: string | null;
+    walletBalanceCents?: number;
   };
 
 export type CustomerProfile = CustomerSummary & {

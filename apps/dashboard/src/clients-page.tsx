@@ -327,7 +327,7 @@ export function CustomersPage({
           onEdit={() => setShowEditInfo(true)}
         />
 
-        <ClientStatCards profileState={profileState} />
+        <ClientStatCards customer={selectedCustomer} profileState={profileState} />
 
         <div className="client-detail-page__tabs" role="tablist">
           {(
@@ -467,12 +467,14 @@ function ClientProfileHeader({
   profileState: ProfileState;
   onEdit: () => void;
 }) {
-  const contactLine = [
-    customer.email,
-    customer.notes ? null : null,
+  const addressLine = [
+    customer.addressStreet,
+    customer.addressCity,
+    customer.addressState,
+    customer.addressZip,
   ]
     .filter(Boolean)
-    .join("  ·  ");
+    .join(", ");
 
   return (
     <header className="client-profile-header">
@@ -490,11 +492,25 @@ function ClientProfileHeader({
             .filter(Boolean)
             .join("  ·  ")}
         </p>
-        {contactLine ? null : null}
+        {addressLine ? (
+          <p className="client-profile-header__address">{addressLine}</p>
+        ) : null}
         <div className="client-profile-header__tags">
           {customer.stripeCustomerId ? (
-            <span className="client-tag client-tag--mint">Card on file</span>
-          ) : null}
+            <span
+              className="client-tag client-tag--mint"
+              title="Card details are stored by the payment processor. Showing card brand/last4/expiry is a future phase."
+            >
+              Card on file · details coming soon
+            </span>
+          ) : (
+            <span
+              className="client-tag client-tag--muted"
+              title="Storing client card details is a future phase."
+            >
+              No card on file
+            </span>
+          )}
           {profileState.kind === "ready" &&
           profileState.profile.outstandingBalanceCents > 0 ? (
             <span className="client-tag client-tag--peach">
@@ -525,11 +541,17 @@ function ClientProfileHeader({
   );
 }
 
-function ClientStatCards({ profileState }: { profileState: ProfileState }) {
+function ClientStatCards({
+  customer,
+  profileState,
+}: {
+  customer: CustomerSummary;
+  profileState: ProfileState;
+}) {
   const ready = profileState.kind === "ready" ? profileState.profile : null;
   const lifetime = ready ? ready.lifetimeSpendCents : 0;
   const visits = ready ? ready.bookings.length : 0;
-  const outstanding = ready ? ready.outstandingBalanceCents : 0;
+  const wallet = customer.walletBalanceCents ?? 0;
   return (
     <div className="client-stat-cards">
       <div className="client-stat-card client-stat-card--mint">
@@ -539,9 +561,9 @@ function ClientStatCards({ profileState }: { profileState: ProfileState }) {
         </span>
       </div>
       <div className="client-stat-card client-stat-card--blue">
-        <span className="client-stat-card__label">Outstanding</span>
+        <span className="client-stat-card__label">Wallet</span>
         <span className="client-stat-card__value">
-          {profileState.kind === "ready" ? formatMoney(outstanding) : "–"}
+          {formatMoney(wallet)}
         </span>
       </div>
       <div className="client-stat-card client-stat-card--lilac">
