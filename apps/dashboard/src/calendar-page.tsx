@@ -4903,11 +4903,16 @@ function CheckoutPanel({
   const [walletApplyText, setWalletApplyText] = useState("");
 
   const builtinMethods = [
-    { id: "cash", label: "Cash" },
-    { id: "external_pos", label: "External POS" },
-    { id: "manual", label: "Manual / Card" },
+    { id: "cash", label: "Cash", description: "Drawer count", tone: "neutral" },
+    { id: "external_pos", label: "External POS", description: "Enter exact amount", tone: "peach" },
+    { id: "manual", label: "Manual / Card", description: "Card or other", tone: "lilac" },
   ];
   const allMethods = [...builtinMethods, ...localCustomMethods];
+
+  const paymentMethodDescription = (methodId: string): string =>
+    builtinMethods.find((method) => method.id === methodId)?.description ?? "Custom payment method";
+  const paymentMethodTone = (methodId: string): string =>
+    builtinMethods.find((method) => method.id === methodId)?.tone ?? "neutral";
 
   const labelForPayment = (p: BookingPaymentSummary): string => {
     if (p.checkoutSessionKind && p.checkoutSessionKind.includes("deposit")) return "Deposit";
@@ -5148,7 +5153,7 @@ function CheckoutPanel({
           <p className="checkout-panel__kicker">Complete appointment</p>
           <h3 className="checkout-panel__name">{appointment.customerName}</h3>
           <p className="checkout-panel__subtitle">
-            {appointment.serviceName} · {appointment.providerName} · {timeFormatter.format(new Date(appointment.startAt))}
+            {appointment.providerName} · {appointment.dayLabel} · {timeFormatter.format(new Date(appointment.startAt))}
           </p>
         </div>
         <div className="checkout-panel__header-actions">
@@ -5173,7 +5178,7 @@ function CheckoutPanel({
       <div className="checkout-panel__body">
         <section className="checkout-panel__totals">
           <div className="checkout-panel__totals-row">
-            <span>Subtotal</span>
+            <span className="checkout-panel__line-item-name">{appointment.serviceName}</span>
             {!isReadOnly ? (
               editingSubtotal ? (
                 <span className="checkout-panel__editable-price">
@@ -5460,7 +5465,7 @@ function CheckoutPanel({
         ) : null}
 
         <section className="checkout-panel__balance">
-          <span>Remaining Balance</span>
+          <span>Balance due</span>
           <strong>{formatMoney(remainingBalance)}</strong>
         </section>
 
@@ -5520,12 +5525,13 @@ function CheckoutPanel({
                     <button
                       key={m.id}
                       type="button"
-                      className={`checkout-panel__method-button${selectedMethod === m.id ? " is-active" : ""}`}
+                      className={`checkout-panel__method-button checkout-panel__method-button--${paymentMethodTone(m.id)}${selectedMethod === m.id ? " is-active" : ""}`}
                       aria-pressed={selectedMethod === m.id}
                       onClick={() => { setSelectedMethod(m.id); setPaymentStep("register"); }}
                       disabled={state === "submitting"}
                     >
-                      {m.label}
+                      <span className="checkout-panel__method-name">{m.label}</span>
+                      <span className="checkout-panel__method-description">{paymentMethodDescription(m.id)}</span>
                     </button>
                   ))}
                 </div>

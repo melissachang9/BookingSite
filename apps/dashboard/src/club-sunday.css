@@ -1653,3 +1653,113 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
    fixed px widths on day columns        -> minmax(0, 1fr) only
    margin/flow positioning of .cs-chip   -> --top / --h only
    ========================================================================= */
+
+
+/* Checkout completion sheet — reference-matched refinements. */
+.appointment-details-drawer.checkout-panel {
+  width: min(100vw, 460px);
+  padding: 0;
+  gap: 0;
+  border-left: 0;
+  overflow: hidden;
+}
+.checkout-panel__header {
+  padding: 24px 26px 20px;
+}
+.checkout-panel__name,
+.checkout-panel__totals-row--total strong,
+.appointment-details-drawer.checkout-panel .checkout-panel__balance strong {
+  letter-spacing: 0;
+}
+.appointment-details-drawer.checkout-panel .checkout-panel__body {
+  padding: 18px 26px 22px;
+  gap: 14px;
+  background: var(--cs-surface);
+}
+.appointment-details-drawer.checkout-panel .checkout-panel__totals {
+  border-radius: var(--cs-r-12);
+  padding: 16px 18px;
+  gap: 9px;
+}
+.checkout-panel__totals-row {
+  font-size: 13px;
+}
+.checkout-panel__line-item-name {
+  max-width: 68%;
+  font-weight: 650;
+}
+.appointment-details-drawer.checkout-panel .checkout-panel__balance {
+  padding: 14px 2px;
+  background: var(--cs-surface);
+  border-top: 1px solid var(--cs-hairline);
+  border-bottom: 1px solid var(--cs-hairline);
+  border-radius: 0;
+}
+.appointment-details-drawer.checkout-panel .checkout-panel__balance strong {
+  font-size: 27px;
+}
+.checkout-panel__section-kicker {
+  margin: 2px 0 7px;
+  font-size: 10px;
+}
+.appointment-details-drawer.checkout-panel .checkout-panel__methods-grid {
+  gap: 8px;
+}
+.appointment-details-drawer.checkout-panel .checkout-panel__method-button {
+  min-height: 62px;
+  padding: 13px 14px;
+  gap: 3px;
+  border: 0;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.appointment-details-drawer.checkout-panel .checkout-panel__method-button:hover:not(:disabled) {
+  filter: brightness(.97);
+  opacity: 1;
+}
+.appointment-details-drawer.checkout-panel .checkout-panel__method-button.is-active {
+  box-shadow: inset 0 0 0 2px var(--cs-ink);
+}
+.appointment-details-drawer.checkout-panel .checkout-panel__method-button--peach {
+  background: var(--cs-peach);
+}
+.appointment-details-drawer.checkout-panel .checkout-panel__method-button--lilac {
+  background: var(--cs-lilac);
+}
+.appointment-details-drawer.checkout-panel .checkout-panel__method-button--neutral {
+  background: var(--cs-hover);
+}
+.checkout-panel__method-name,
+.checkout-panel__method-description {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+.checkout-panel__method-description {
+  color: var(--cs-secondary);
+  font: 500 10px/1.25 var(--cs-font);
+}
+.appointment-details-drawer.checkout-panel .checkout-panel__footer {
+  padding: 14px 20px 16px;
+}
+.appointment-details-drawer.checkout-panel .checkout-panel__payment-link-button.text-action {
+  padding: 10px 15px;
+}
+.appointment-details-drawer.checkout-panel .checkout-panel__complete-button {
+  padding: 12px 20px;
+}
+@media (max-width: 560px) {
+  .checkout-panel__header,
+  .appointment-details-drawer.checkout-panel .checkout-panel__body {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  .checkout-panel__footer-left,
+  .checkout-panel__footer-right {
+    width: 100%;
+  }
+  .appointment-details-drawer.checkout-panel .checkout-panel__complete-button,
+  .appointment-details-drawer.checkout-panel .checkout-panel__payment-link-button.text-action {
+    flex: 1;
+  }
+}
