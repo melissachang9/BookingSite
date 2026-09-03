@@ -39,6 +39,15 @@ def _build_customer_profile(customer: Customer, bookings: list[Booking]) -> Cust
     outstanding = sum(
         booking_balance_due_cents(b) for b in bookings if b.status in {"confirmed", "completed"}
     )
+    def _latest_payment_note(payment: Payment) -> str | None:
+        # Payment notes live on append-only PaymentEvent rows, not on the
+        # Payment itself. Use the most recent event that carries a note.
+        events = [e for e in (payment.events or []) if e.notes]
+        if not events:
+            return None
+        events.sort(key=lambda e: e.occurred_at)
+        return events[-1].notes
+
     payment_entries = [
         CustomerPaymentEntry(
             id=payment.id,
@@ -47,7 +56,7 @@ def _build_customer_profile(customer: Customer, bookings: list[Booking]) -> Cust
             payment_method_type=payment.payment_method_type or "unknown",
             status=payment.status,
             recorded_at=payment.created_at,
-            notes=None,
+            notes=_latest_payment_note(payment),
         )
         for booking in bookings
         for payment in (booking.payments or [])
@@ -158,7 +167,11 @@ async def get_customer_profile(
     bookings = (
         await session.scalars(
             select(Booking)
-            .options(selectinload(Booking.service), selectinload(Booking.provider), selectinload(Booking.payments))
+            .options(
+                selectinload(Booking.service),
+                selectinload(Booking.provider),
+                selectinload(Booking.payments).selectinload(Payment.events),
+            )
             .where(Booking.tenant_id == tenant.id, Booking.customer_id == customer_id)
             .order_by(Booking.starts_at.desc())
             .limit(50)
@@ -234,7 +247,11 @@ async def update_customer(
     bookings = (
         await session.scalars(
             select(Booking)
-            .options(selectinload(Booking.service), selectinload(Booking.provider), selectinload(Booking.payments))
+            .options(
+                selectinload(Booking.service),
+                selectinload(Booking.provider),
+                selectinload(Booking.payments).selectinload(Payment.events),
+            )
             .where(Booking.tenant_id == tenant.id, Booking.customer_id == customer_id)
             .order_by(Booking.starts_at.desc())
             .limit(50)
