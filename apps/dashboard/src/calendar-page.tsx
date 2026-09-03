@@ -5607,7 +5607,9 @@ function CheckoutPanel({
           </section>
         ) : (
           <p className="checkout-panel__settled-note">
-            All payments collected. Add a tip above if needed before completing.
+            {tipCents > 0
+              ? "All payments collected. Ready to complete."
+              : "All payments collected. Add a tip above if needed before completing."}
           </p>
         )}
 
