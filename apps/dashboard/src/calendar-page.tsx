@@ -5667,14 +5667,21 @@ function CheckoutPanel({
               </button>
             </>
           ) : (
-            <button
-              type="button"
-              className="checkout-panel__complete-button"
-              onClick={handleComplete}
-              disabled={!isSettled || state === "submitting"}
-            >
-              {isSettled ? "Complete & collect" : `Collect ${formatMoney(remainingBalance)}`}
-            </button>
+            <div className="checkout-panel__complete-wrap">
+              <button
+                type="button"
+                className="checkout-panel__complete-button"
+                onClick={handleComplete}
+                disabled={!isSettled || state === "submitting"}
+              >
+                Complete & collect
+              </button>
+              {!isSettled ? (
+                <span className="checkout-panel__complete-hint">
+                  Balance due {formatMoney(remainingBalance)}
+                </span>
+              ) : null}
+            </div>
           )}
         </div>
       </footer>

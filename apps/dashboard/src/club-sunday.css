@@ -1763,3 +1763,16 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
     flex: 1;
   }
 }
+
+
+/* Complete button hint — clarify collect vs complete. */
+.checkout-panel__complete-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.checkout-panel__complete-hint {
+  color: var(--cs-label);
+  font: 500 11px var(--cs-font);
+}
