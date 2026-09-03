@@ -7,7 +7,7 @@ import type {
   CustomerProfileResponse,
 } from "@booking/shared-types";
 
-import { CustomersPage } from "./customers-page";
+import { CustomersPage } from "./clients-page";
 import { platformApi } from "./platform-api";
 
 const definition = {
@@ -48,6 +48,7 @@ const customerList: CustomerListResponse = {
 const profileResponse: CustomerProfileResponse = {
   customer: customerList.items[0],
   bookings: [],
+  payments: [],
   lifetimeSpendCents: 0,
   outstandingBalanceCents: 0,
 };

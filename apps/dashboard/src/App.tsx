@@ -28,7 +28,7 @@ import { CalendarPage } from "./calendar-page";
 import { SettingsPage } from "./settings-page";
 import { StaffPage } from "./staff-page";
 import { ServicesPage } from "./services-page";
-import { CustomersPage } from "./customers-page";
+import { CustomersPage } from "./clients-page";
 import { LocationsPage } from "./locations-page";
 import { FormsPage } from "./forms-page";
 import { ResourcesPage } from "./resources-page";

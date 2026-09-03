@@ -47,7 +47,7 @@ def _build_customer_profile(customer: Customer, bookings: list[Booking]) -> Cust
             payment_method_type=payment.payment_method_type or "unknown",
             status=payment.status,
             recorded_at=payment.created_at,
-            notes=payment.notes,
+            notes=None,
         )
         for booking in bookings
         for payment in (booking.payments or [])
