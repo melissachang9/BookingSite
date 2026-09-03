@@ -143,6 +143,7 @@ export function CustomersPage({
     useState<FormResponsesState>({ kind: "idle" });
   const [clientOwnershipEnabled, setClientOwnershipEnabled] = useState(false);
   const [activeTab, setActiveTab] = useState<ClientTab>("history");
+  const [showEditInfo, setShowEditInfo] = useState(false);
 
   // Read customerId from URL query param on mount
   useEffect(() => {
@@ -323,6 +324,7 @@ export function CustomersPage({
         <ClientProfileHeader
           customer={selectedCustomer}
           profileState={profileState}
+          onEdit={() => setShowEditInfo(true)}
         />
 
         <ClientStatCards profileState={profileState} />
@@ -363,6 +365,43 @@ export function CustomersPage({
             />
           )}
         </section>
+
+        {showEditInfo ? (
+          <>
+            <div
+              className="appointment-drawer-backdrop"
+              onClick={() => setShowEditInfo(false)}
+            />
+            <aside
+              className="appointment-details-drawer client-edit-drawer"
+              role="dialog"
+              aria-label="Edit client info"
+            >
+              <header className="appointment-details-drawer__header">
+                <h3 className="client-edit-drawer__title">Edit client info</h3>
+                <button
+                  type="button"
+                  className="appointment-drawer-close"
+                  onClick={() => setShowEditInfo(false)}
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </header>
+              <div className="appointment-drawer-body">
+                <ClientEditForm
+                  customer={selectedCustomer}
+                  tenantSlug={tenantSlug}
+                  onCustomerUpdated={async () => {
+                    await reloadProfile();
+                    setShowEditInfo(false);
+                  }}
+                  onCancel={() => setShowEditInfo(false)}
+                />
+              </div>
+            </aside>
+          </>
+        ) : null}
       </main>
     );
   }
@@ -422,9 +461,11 @@ export function CustomersPage({
 function ClientProfileHeader({
   customer,
   profileState,
+  onEdit,
 }: {
   customer: CustomerSummary;
   profileState: ProfileState;
+  onEdit: () => void;
 }) {
   const contactLine = [
     customer.email,
@@ -451,6 +492,9 @@ function ClientProfileHeader({
         </p>
         {contactLine ? null : null}
         <div className="client-profile-header__tags">
+          {customer.stripeCustomerId ? (
+            <span className="client-tag client-tag--mint">Card on file</span>
+          ) : null}
           {profileState.kind === "ready" &&
           profileState.profile.outstandingBalanceCents > 0 ? (
             <span className="client-tag client-tag--peach">
@@ -465,9 +509,18 @@ function ClientProfileHeader({
           ) : null}
         </div>
       </div>
-      <a className="client-profile-header__cta" href="/calendar">
-        Book from calendar
-      </a>
+      <div className="client-profile-header__actions">
+        <a className="client-profile-header__cta" href="/calendar">
+          Book from calendar
+        </a>
+        <button
+          type="button"
+          className="client-profile-header__edit"
+          onClick={onEdit}
+        >
+          Edit client info
+        </button>
+      </div>
     </header>
   );
 }
@@ -753,6 +806,164 @@ function ClientNotesTab({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function ClientEditForm({
+  customer,
+  tenantSlug,
+  onCustomerUpdated,
+  onCancel,
+}: {
+  customer: CustomerSummary;
+  tenantSlug: string;
+  onCustomerUpdated: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState({
+    name: customer.name,
+    email: customer.email ?? "",
+    phone: customer.phone ?? "",
+    addressStreet: customer.addressStreet ?? "",
+    addressCity: customer.addressCity ?? "",
+    addressState: customer.addressState ?? "",
+    addressZip: customer.addressZip ?? "",
+  });
+  const [saveState, setSaveState] = useState<
+    "idle" | "submitting" | "error"
+  >("idle");
+  const [error, setError] = useState("");
+
+  const handleSave = async () => {
+    if (!draft.name.trim()) {
+      setSaveState("error");
+      setError("Name is required.");
+      return;
+    }
+    setSaveState("submitting");
+    setError("");
+    try {
+      const body: UpdateCustomerRequest = {
+        name: draft.name.trim(),
+        email: draft.email.trim(),
+        phone: draft.phone.trim(),
+        addressStreet: draft.addressStreet.trim() || undefined,
+        addressCity: draft.addressCity.trim() || undefined,
+        addressState: draft.addressState.trim() || undefined,
+        addressZip: draft.addressZip.trim() || undefined,
+      };
+      await platformApi.updateCustomer(tenantSlug, customer.id, body);
+      setSaveState("idle");
+      await onCustomerUpdated();
+    } catch (err) {
+      setSaveState("error");
+      setError(err instanceof Error ? err.message : "Unable to save.");
+    }
+  };
+
+  return (
+    <div className="customer-notes-editor client-edit-form">
+      <label className="client-edit-form__field">
+        <span>Name</span>
+        <input
+          type="text"
+          value={draft.name}
+          onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+          disabled={saveState === "submitting"}
+          autoComplete="name"
+        />
+      </label>
+      <label className="client-edit-form__field">
+        <span>Email</span>
+        <input
+          type="email"
+          value={draft.email}
+          onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))}
+          disabled={saveState === "submitting"}
+          autoComplete="email"
+        />
+      </label>
+      <label className="client-edit-form__field">
+        <span>Phone</span>
+        <input
+          type="tel"
+          value={draft.phone}
+          onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
+          disabled={saveState === "submitting"}
+          autoComplete="tel"
+        />
+      </label>
+      <label className="client-edit-form__field">
+        <span>Street address</span>
+        <input
+          type="text"
+          value={draft.addressStreet}
+          onChange={(e) =>
+            setDraft((d) => ({ ...d, addressStreet: e.target.value }))
+          }
+          disabled={saveState === "submitting"}
+          autoComplete="street-address"
+        />
+      </label>
+      <div className="client-edit-form__row">
+        <label className="client-edit-form__field">
+          <span>City</span>
+          <input
+            type="text"
+            value={draft.addressCity}
+            onChange={(e) =>
+              setDraft((d) => ({ ...d, addressCity: e.target.value }))
+            }
+            disabled={saveState === "submitting"}
+          />
+        </label>
+        <label className="client-edit-form__field">
+          <span>State</span>
+          <input
+            type="text"
+            value={draft.addressState}
+            onChange={(e) =>
+              setDraft((d) => ({ ...d, addressState: e.target.value }))
+            }
+            disabled={saveState === "submitting"}
+          />
+        </label>
+        <label className="client-edit-form__field">
+          <span>ZIP</span>
+          <input
+            type="text"
+            value={draft.addressZip}
+            onChange={(e) =>
+              setDraft((d) => ({ ...d, addressZip: e.target.value }))
+            }
+            disabled={saveState === "submitting"}
+          />
+        </label>
+      </div>
+      <div className="customer-notes-editor__actions">
+        <button
+          type="button"
+          className="text-action"
+          onClick={onCancel}
+          disabled={saveState === "submitting"}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="primary-action"
+          onClick={handleSave}
+          disabled={saveState === "submitting"}
+        >
+          {saveState === "submitting" ? "Saving…" : "Save changes"}
+        </button>
+      </div>
+      {saveState === "error" ? (
+        <p role="alert" className="settings-error">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }
