@@ -2206,3 +2206,21 @@ a.client-history-row__body:hover .client-history-row__title {
   font: 500 12px var(--cs-font);
   color: var(--cs-label);
 }
+
+/* Client profile placeholder tabs (Photos / Messages) */
+.client-placeholder-tab {
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.client-placeholder-tab__title {
+  margin: 0;
+  font: 700 15px var(--cs-font);
+  color: var(--cs-ink);
+}
+.client-placeholder-tab__message {
+  margin: 0;
+  font: 500 13px var(--cs-font);
+  color: var(--cs-secondary);
+}

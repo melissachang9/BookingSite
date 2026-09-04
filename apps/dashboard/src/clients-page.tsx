@@ -36,7 +36,7 @@ type FormResponsesState =
   | { kind: "ready"; items: BookingFormResponseEntry[] }
   | { kind: "error"; message: string };
 
-type ClientTab = "history" | "forms" | "notes";
+type ClientTab = "history" | "forms" | "photos" | "notes" | "messages";
 
 function hasPermission(user: AuthenticatedUser, key: string): boolean {
   return user.permissions.some(
@@ -334,7 +334,9 @@ export function CustomersPage({
             [
               ["history", "History"],
               ["forms", "Forms"],
+              ["photos", "Photos"],
               ["notes", "Notes"],
+              ["messages", "Messages"],
             ] as [ClientTab, string][]
           ).map(([tab, label]) => (
             <button
@@ -357,6 +359,16 @@ export function CustomersPage({
             <ClientHistoryTab profileState={profileState} />
           ) : activeTab === "forms" ? (
             <ClientFormsTab formResponsesState={formResponsesState} />
+          ) : activeTab === "photos" ? (
+            <ClientPlaceholderTab
+              title="Photos"
+              message="Before/after photos aren't stored yet. This tab is a placeholder for a future phase."
+            />
+          ) : activeTab === "messages" ? (
+            <ClientPlaceholderTab
+              title="Messages"
+              message="Client messaging isn't implemented yet. This tab is a placeholder for a future phase."
+            />
           ) : (
             <ClientNotesTab
               customer={selectedCustomer}
@@ -986,6 +998,21 @@ function ClientEditForm({
           {error}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+function ClientPlaceholderTab({
+  title,
+  message,
+}: {
+  title: string;
+  message: string;
+}) {
+  return (
+    <div className="client-placeholder-tab">
+      <h4 className="client-placeholder-tab__title">{title}</h4>
+      <p className="client-placeholder-tab__message">{message}</p>
     </div>
   );
 }
