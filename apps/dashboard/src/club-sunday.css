@@ -2456,3 +2456,28 @@ a.client-history-row__body:hover .client-history-row__title {
   font: 500 12px var(--cs-font);
   color: var(--cs-label);
 }
+
+/* Client overlay tabs */
+.customer-overlay__tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--cs-r-pill);
+  background: var(--cs-hover);
+  margin-bottom: 10px;
+  align-self: flex-start;
+  flex-wrap: wrap;
+}
+.customer-overlay__tab {
+  border: 0;
+  border-radius: var(--cs-r-pill);
+  background: transparent;
+  color: var(--cs-label);
+  font: 600 12px var(--cs-font);
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.customer-overlay__tab.is-active {
+  background: var(--cs-ink);
+  color: #fff;
+}
