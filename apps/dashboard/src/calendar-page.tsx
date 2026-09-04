@@ -4286,6 +4286,26 @@ function AppointmentDetailsDrawer({
   const [isEditingCustomerContact, setIsEditingCustomerContact] = useState(false);
   const [showCustomerOverlay, setShowCustomerOverlay] = useState(false);
   const [customerProfileForOverlay, setCustomerProfileForOverlay] = useState<CustomerProfileResponse | null>(null);
+
+  // Load the full customer profile once the overlay opens so the tabs can show
+  // wallet/lifetime/forms/history instead of just the few fields the booking
+  // already carries.
+  useEffect(() => {
+    if (!showCustomerOverlay || !api) {
+      return;
+    }
+    let cancelled = false;
+    setCustomerProfileForOverlay(null);
+    api.getCustomerProfile(tenantSlug, selectedAppointment.customerId)
+      .then((profile) => {
+        if (!cancelled) setCustomerProfileForOverlay(profile);
+      })
+      .catch(() => {
+        if (!cancelled) setCustomerProfileForOverlay(null);
+      });
+    return () => { cancelled = true; };
+  }, [showCustomerOverlay, api, tenantSlug, selectedAppointment?.customerId]);
+
   const [customerOverlayTab, setCustomerOverlayTab] = useState<"history" | "forms" | "photos" | "notes" | "messages">("history");
 
 
