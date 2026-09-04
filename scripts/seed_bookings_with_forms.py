@@ -169,18 +169,18 @@ async def main() -> None:
         ivy = await ensure_customer("Ivy Chen", "ivy.chen@example.com", "555-0101")
 
         # --- bookings on the microneedling service (form-attached) ---
-        today = datetime.now(LA).date()
-        fri = today + timedelta(days=2)   # confirmed, form required
-        sat = today + timedelta(days=3)   # confirmed, form required
-        mon = today + timedelta(days=5)   # confirmed, form required
-
-        specs = [
-            (anouk, microneedling, fri, 10, 0),
-            (maya, microneedling, sat, 11, 30),
-            (ivy, microneedling, mon, 14, 0),
-            # a facial too (shows a booking without the microneedling form)
-            (maya, facial, sat, 13, 0),
-        ]
+        # Sept 6-11, back-to-back from 10:00 a.m. daily, alternating callers so
+        # the calendar shows a dense, easy-to-scan week of form-attached
+        # bookings for testing.
+        base = datetime(2026, 9, 6)  # Sun Sep 6
+        customers_cycle = [anouk, maya, ivy]
+        specs = []
+        for day_offset in range(6):  # Sep 6..Sep 11
+            day = base + timedelta(days=day_offset)
+            for i, customer in enumerate(customers_cycle):
+                # 10:00, 12:00, 14:00 — spaced throughout the day so the
+                # calendar shows multiple form-attached bookings per day.
+                specs.append((customer, microneedling, day, 10 + i * 2, 0))
 
         from app.services.booking_drafts import (
             create_booking_draft,
