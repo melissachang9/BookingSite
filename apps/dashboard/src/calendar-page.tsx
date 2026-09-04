@@ -4712,18 +4712,16 @@ function AppointmentDetailsDrawer({
                             .join("  ·  ") || "No contact on file"}
                         </div>
                       </div>
-                      {onUpdateCustomerContact ? (
-                        <button
-                          type="button"
-                          className="cs-btn cs-btn--sm"
-                          onClick={() => {
-                            setCustomerContactDraft({ name: selectedAppointment.customerName, email: selectedAppointment.customerEmail ?? "", phone: selectedAppointment.customerPhone ?? "" });
-                            setIsEditingCustomerContact(true);
-                          }}
-                        >
-                          Profile
-                        </button>
-                      ) : null}
+                      <button
+                        type="button"
+                        className="cs-btn cs-btn--sm"
+                        onClick={() => {
+                          // Open the full client profile page for this customer.
+                          window.location.href = `/customers?customerId=${selectedAppointment.customerId}`;
+                        }}
+                      >
+                        Profile
+                      </button>
                     </div>
                     <div className="cs-clientrow__stats">
                       <div className="cs-clientrow__stat cs-clientrow__stat--credits">
