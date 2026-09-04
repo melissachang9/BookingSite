@@ -2308,3 +2308,144 @@ a.client-history-row__body:hover .client-history-row__title {
   font: 500 13px var(--cs-font);
   color: var(--cs-secondary);
 }
+
+/* Client profile overlay — slide-out over the appointment drawer */
+.customer-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 80;
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+.customer-overlay__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 17, 15, .36);
+  border: 0;
+  cursor: pointer;
+}
+.customer-overlay__panel {
+  pointer-events: auto;
+  width: min(440px, calc(100vw - 40px));
+  height: 100%;
+  background: var(--cs-surface);
+  border-left: 1px solid var(--cs-hairline);
+  box-shadow: -18px 0 38px rgba(18, 42, 36, .22);
+  display: flex;
+  flex-direction: column;
+}
+.customer-overlay__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 22px 22px 18px;
+  border-bottom: 1px solid var(--cs-hairline);
+  background: var(--cs-surface);
+}
+.customer-overlay__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--cs-lilac);
+  color: var(--cs-ink);
+  font: 700 16px var(--cs-font);
+  flex: none;
+}
+.customer-overlay__identity { min-width: 0; flex: 1; }
+.customer-overlay__name {
+  margin: 0;
+  font: 700 20px/1.15 var(--cs-font);
+  color: var(--cs-ink);
+}
+.customer-overlay__meta {
+  margin: 4px 0 0;
+  font: 500 12px var(--cs-font);
+  color: var(--cs-secondary);
+}
+.customer-overlay__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 22px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.customer-overlay__stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.customer-overlay__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 11px 12px;
+  border-radius: var(--cs-r-12);
+  background: var(--cs-canvas);
+}
+.customer-overlay__stat--credits { background: var(--cs-mint); }
+.customer-overlay__stat--wallet { background: var(--cs-blue); }
+.customer-overlay__stat--lifetime { background: var(--cs-lilac); }
+.customer-overlay__stat-label {
+  font: 700 9px var(--cs-font);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--cs-label);
+}
+.customer-overlay__stat-value {
+  font: 700 18px/1.1 var(--cs-font);
+  color: var(--cs-ink);
+}
+.customer-overlay__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.customer-overlay__loading {
+  margin: 4px 0 0;
+  font: 500 12px var(--cs-font);
+  color: var(--cs-label);
+}
+.customer-overlay__note {
+  background: var(--cs-canvas);
+  border-radius: var(--cs-r-inner);
+  padding: 12px 14px;
+}
+.customer-overlay__note-label {
+  display: block;
+  font: 700 9px var(--cs-font);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--cs-label);
+  margin-bottom: 4px;
+}
+.customer-overlay__note-text {
+  margin: 0;
+  font: 500 13px/1.55 var(--cs-font);
+  color: var(--cs-ink);
+}
+.customer-overlay__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--cs-hairline);
+}
+.customer-overlay__footer .cs-btn {
+  text-decoration: none;
+}
+@media (max-width: 560px) {
+  .customer-overlay__panel {
+    width: 100vw;
+    border-left: 0;
+  }
+}

@@ -4284,6 +4284,9 @@ function AppointmentDetailsDrawer({
   const [customerNotesSaveState, setCustomerNotesSaveState] = useState<"idle" | "submitting" | "error">("idle");
   const [customerNotesError, setCustomerNotesError] = useState("");
   const [isEditingCustomerContact, setIsEditingCustomerContact] = useState(false);
+  const [showCustomerOverlay, setShowCustomerOverlay] = useState(false);
+  const [customerProfileForOverlay, setCustomerProfileForOverlay] = useState<CustomerProfileResponse | null>(null);
+
   const [customerContactDraft, setCustomerContactDraft] = useState({ name: "", email: "", phone: "" });
   const [customerContactSaveState, setCustomerContactSaveState] = useState<"idle" | "submitting" | "error">("idle");
   const [customerContactError, setCustomerContactError] = useState("");
@@ -4716,8 +4719,13 @@ function AppointmentDetailsDrawer({
                         type="button"
                         className="cs-btn cs-btn--sm"
                         onClick={() => {
-                          // Open the full client profile page for this customer.
-                          window.location.href = `/customers?customerId=${selectedAppointment.customerId}`;
+                          setShowCustomerOverlay(true);
+                          setCustomerProfileForOverlay(null);
+                          if (api) {
+                            void api.getCustomerProfile(tenantSlug, selectedAppointment.customerId)
+                              .then(setCustomerProfileForOverlay)
+                              .catch(() => {});
+                          }
                         }}
                       >
                         Profile
@@ -4866,6 +4874,99 @@ function AppointmentDetailsDrawer({
           <div className="message-banner message-banner--error" role="alert" style={{ margin: "0 24px 12px" }}>{completionState.message}</div>
         ) : null}
       </aside>
+      {showCustomerOverlay ? (
+        <>
+          <button
+            type="button"
+            className="customer-overlay__backdrop"
+            aria-label="Close customer profile"
+            onClick={() => setShowCustomerOverlay(false)}
+          />
+          <div className="customer-overlay" role="dialog" aria-label="Customer profile" aria-modal="true">
+            <div className="customer-overlay__panel">
+              <header className="customer-overlay__head">
+                <span className="customer-overlay__avatar" aria-hidden="true">
+                  {selectedAppointment.customerName.split(" ").map(p => p[0]).join("").slice(0,2).toUpperCase()}
+                </span>
+                <div className="customer-overlay__identity">
+                  <h3 className="customer-overlay__name">{selectedAppointment.customerName}</h3>
+                  <p className="customer-overlay__meta">
+                    {[selectedAppointment.customerEmail, selectedAppointment.customerPhone]
+                      .filter(Boolean)
+                      .join("  ·  ") || "No contact on file"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="cs-drawer__close"
+                  onClick={() => setShowCustomerOverlay(false)}
+                  aria-label="Close customer profile"
+                >
+                  ×
+                </button>
+              </header>
+
+              <div className="customer-overlay__body">
+                <div className="customer-overlay__stats">
+                  <div className="customer-overlay__stat customer-overlay__stat--credits">
+                    <span className="customer-overlay__stat-label">Credits</span>
+                    <span className="customer-overlay__stat-value">–</span>
+                  </div>
+                  <div className="customer-overlay__stat customer-overlay__stat--wallet">
+                    <span className="customer-overlay__stat-label">Wallet</span>
+                    <span className="customer-overlay__stat-value">
+                      {formatMoney(selectedAppointment.walletBalanceCents)}
+                    </span>
+                  </div>
+                  <div className="customer-overlay__stat customer-overlay__stat--lifetime">
+                    <span className="customer-overlay__stat-label">Lifetime</span>
+                    <span className="customer-overlay__stat-value">
+                      {formatMoney(customerProfileForOverlay?.lifetimeSpendCents ?? selectedAppointment.amountPaidCents)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="customer-overlay__chips">
+                  <span className="cs-clientrow__chip">
+                    Forms{intakeStatus === "submitted" ? " · submitted" : intakeStatus === "partial" ? " · partial" : intakeStatus === "missing" ? " · 1 pending" : ""}
+                  </span>
+                  <span className="cs-clientrow__chip cs-clientrow__chip--muted" title="Before/after photos aren't stored yet. Placeholder.">
+                    Photos
+                  </span>
+                  <span className="cs-clientrow__chip cs-clientrow__chip--muted" title="Client messaging isn't implemented yet. Placeholder.">
+                    Messages
+                  </span>
+                </div>
+
+                {customerProfileForOverlay === null ? (
+                  <p className="customer-overlay__loading">Loading profile…</p>
+                ) : null}
+
+                {selectedAppointment.customerNotes ? (
+                  <div className="customer-overlay__note">
+                    <span className="customer-overlay__note-label">Note for staff</span>
+                    <p className="customer-overlay__note-text">{selectedAppointment.customerNotes}</p>
+                  </div>
+                ) : null}
+
+                <div className="customer-overlay__footer">
+                  <a className="cs-btn cs-btn--ghost" href={`/customers?customerId=${selectedAppointment.customerId}`}>
+                    Open full profile
+                  </a>
+                  <button
+                    type="button"
+                    className="cs-btn cs-btn--primary"
+                    onClick={() => setShowCustomerOverlay(false)}
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
+
       {showRescheduleDatePopover
         ? createPortal(
             <div className="appointment-drawer-date-popover" style={reschedulePopoverStyle} ref={datePopoverRef}>
