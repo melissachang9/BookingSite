@@ -2481,3 +2481,30 @@ a.client-history-row__body:hover .client-history-row__title {
   background: var(--cs-ink);
   color: #fff;
 }
+
+/* Client card tabs (appointment drawer) */
+.cs-clientrow__tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--cs-r-pill);
+  background: var(--cs-hover);
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+.cs-clientrow__tab {
+  border: 0;
+  border-radius: var(--cs-r-pill);
+  background: transparent;
+  color: var(--cs-label);
+  font: 600 11px var(--cs-font);
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.cs-clientrow__tab.is-active {
+  background: var(--cs-ink);
+  color: #fff;
+}
+.cs-clientrow__tab-panel {
+  margin-top: 8px;
+}

@@ -4296,7 +4296,7 @@ function AppointmentDetailsDrawer({
     }
     let cancelled = false;
     setCustomerProfileForOverlay(null);
-    api.getCustomerProfile(tenantSlug, selectedAppointment.customerId)
+    api.getCustomerProfile(tenantSlug, selectedAppointment?.customerId ?? "")
       .then((profile) => {
         if (!cancelled) setCustomerProfileForOverlay(profile);
       })
@@ -4307,6 +4307,27 @@ function AppointmentDetailsDrawer({
   }, [showCustomerOverlay, api, tenantSlug, selectedAppointment?.customerId]);
 
   const [customerOverlayTab, setCustomerOverlayTab] = useState<"history" | "forms" | "photos" | "notes" | "messages">("history");
+  const [clientCardTab, setClientCardTab] = useState<"history" | "forms" | "photos" | "notes" | "messages">("history");
+  const [clientCardProfile, setClientCardProfile] = useState<CustomerProfileResponse | null>(null);
+
+  // Load the customer profile for the drawer's client card so the History tab
+  // can show recent visits at first glance.
+  useEffect(() => {
+    if (!api || selectedAppointment === null) {
+      setClientCardProfile(null);
+      return;
+    }
+    let cancelled = false;
+    api.getCustomerProfile(tenantSlug, selectedAppointment.customerId)
+      .then((profile) => {
+        if (!cancelled) setClientCardProfile(profile);
+      })
+      .catch(() => {
+        if (!cancelled) setClientCardProfile(null);
+      });
+    return () => { cancelled = true; };
+  }, [api, tenantSlug, selectedAppointment?.customerId]);
+
 
 
   const [customerContactDraft, setCustomerContactDraft] = useState({ name: "", email: "", phone: "" });
@@ -4767,18 +4788,40 @@ function AppointmentDetailsDrawer({
                         <span className="cs-clientrow__stat-value">{formatMoney(selectedAppointment.amountPaidCents ?? 0)}</span>
                       </div>
                     </div>
-                    <div className="cs-clientrow__chips">
-                      <span
-                        className="cs-clientrow__chip"
-                      >
-                        Forms{intakeStatus === "submitted" ? " · submitted" : intakeStatus === "partial" ? " · partial" : intakeStatus === "missing" ? " · 1 pending" : ""}
-                      </span>
-                      <span className="cs-clientrow__chip cs-clientrow__chip--muted" title="Before/after photos aren't stored yet. This is a placeholder for a future phase.">
-                        Photos
-                      </span>
-                      <span className="cs-clientrow__chip cs-clientrow__chip--muted" title="Client messaging isn't implemented yet. This is a placeholder for a future phase.">
-                        Messages
-                      </span>
+                    <div className="cs-clientrow__tabs" role="tablist">
+                      {(
+                        [
+                          ["history", "History"],
+                          ["forms", "Forms"],
+                          ["photos", "Photos"],
+                          ["notes", "Notes"],
+                          ["messages", "Messages"],
+                        ] as const
+                      ).map(([tab, label]) => (
+                        <button
+                          key={tab}
+                          type="button"
+                          role="tab"
+                          aria-selected={clientCardTab === tab}
+                          className={`cs-clientrow__tab${clientCardTab === tab ? " is-active" : ""}`}
+                          onClick={() => setClientCardTab(tab)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="cs-clientrow__tab-panel">
+                      {clientCardTab === "history" ? (
+                        <ClientCardHistory profile={clientCardProfile} />
+                      ) : clientCardTab === "forms" ? (
+                        <ClientCardForms profile={clientCardProfile} />
+                      ) : clientCardTab === "photos" ? (
+                        <p className="staff-list-empty">Before/after photos aren't stored yet. Placeholder for a future phase.</p>
+                      ) : clientCardTab === "notes" ? (
+                        <p className="staff-list-empty">{selectedAppointment.customerNotes ? selectedAppointment.customerNotes : "No staff note for this client."}</p>
+                      ) : (
+                        <p className="staff-list-empty">Client messaging isn't implemented yet. Placeholder for a future phase.</p>
+                      )}
                     </div>
                     {selectedAppointment.customerNotes ? (
                       <div className="cs-clientrow__note">
@@ -6128,3 +6171,70 @@ function FormResponseDrawer({ entry, onClose }: FormResponseDrawerProps): ReactE
 
 
 
+
+function ClientCardHistory({ profile }: { profile: CustomerProfileResponse | null }) {
+  const bookings = (profile?.bookings ?? []).slice().sort(
+    (a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime(),
+  );
+  if (profile === null) {
+    return <p className="staff-list-empty">Loading visits…</p>;
+  }
+  if (bookings.length === 0) {
+    return <p className="staff-list-empty">No bookings yet.</p>;
+  }
+  return (
+    <ul className="client-history-list">
+      {bookings.slice(0, 5).map((booking) => (
+        <li key={booking.id} className="client-history-row">
+          <span className="client-history-row__date">
+            <strong className="client-history-row__day">
+              {new Intl.DateTimeFormat("en-US", { day: "2-digit" }).format(new Date(booking.startsAt))}
+            </strong>
+            <span className="client-history-row__month">
+              {new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date(booking.startsAt)).toUpperCase()}
+            </span>
+          </span>
+          <a className="client-history-row__body" href={`/calendar?bookingId=${booking.id}`}>
+            <strong className="client-history-row__title">{booking.serviceName}</strong>
+            <span className="client-history-row__meta">
+              {booking.providerName} · {new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric" }).format(new Date(booking.startsAt))}
+            </span>
+          </a>
+          <span className="client-history-row__amount">{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(booking.priceCents / 100)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ClientCardForms({ profile }: { profile: CustomerProfileResponse | null }) {
+  const payments = profile?.payments ?? [];
+  if (profile === null) {
+    return <p className="staff-list-empty">Loading forms…</p>;
+  }
+  if (payments.length === 0) {
+    return <p className="staff-list-empty">No form responses yet.</p>;
+  }
+  return (
+    <ul className="client-history-list">
+      {payments.slice(0, 5).map((payment) => (
+        <li key={payment.id} className="client-history-row">
+          <span className="client-history-row__date">
+            <strong className="client-history-row__day">
+              {new Intl.DateTimeFormat("en-US", { day: "2-digit" }).format(new Date(payment.recordedAt))}
+            </strong>
+            <span className="client-history-row__month">
+              {new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date(payment.recordedAt)).toUpperCase()}
+            </span>
+          </span>
+          <div className="client-history-row__body">
+            <strong className="client-history-row__title">{payment.paymentMethodType}</strong>
+            <span className="client-history-row__meta">
+              {new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric" }).format(new Date(payment.recordedAt))}
+            </span>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
