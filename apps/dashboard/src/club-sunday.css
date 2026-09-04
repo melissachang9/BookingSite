@@ -2449,3 +2449,10 @@ a.client-history-row__body:hover .client-history-row__title {
     border-left: 0;
   }
 }
+
+/* Client overlay address line */
+.customer-overlay__address {
+  margin: 4px 0 0;
+  font: 500 12px var(--cs-font);
+  color: var(--cs-label);
+}

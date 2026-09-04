@@ -4895,6 +4895,20 @@ function AppointmentDetailsDrawer({
                       .filter(Boolean)
                       .join("  ·  ") || "No contact on file"}
                   </p>
+                  {[customerProfileForOverlay?.customer?.addressStreet, customerProfileForOverlay?.customer?.addressCity, customerProfileForOverlay?.customer?.addressState, customerProfileForOverlay?.customer?.addressZip]
+                    .filter(Boolean)
+                    .length > 0 ? (
+                    <p className="customer-overlay__address">
+                      {[
+                        customerProfileForOverlay?.customer?.addressStreet,
+                        customerProfileForOverlay?.customer?.addressCity,
+                        customerProfileForOverlay?.customer?.addressState,
+                        customerProfileForOverlay?.customer?.addressZip,
+                      ]
+                        .filter(Boolean)
+                        .join(", ")}
+                    </p>
+                  ) : null}
                 </div>
                 <button
                   type="button"
