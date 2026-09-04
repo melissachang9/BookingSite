@@ -4946,8 +4946,46 @@ function AppointmentDetailsDrawer({
                   ))}
                 </div>
 
+                <div className="customer-overlay__stats">
+                  <div className="customer-overlay__stat customer-overlay__stat--credits">
+                    <span className="customer-overlay__stat-label">Credits</span>
+                    <span className="customer-overlay__stat-value">–</span>
+                  </div>
+                  <div className="customer-overlay__stat customer-overlay__stat--wallet">
+                    <span className="customer-overlay__stat-label">Wallet</span>
+                    <span className="customer-overlay__stat-value">
+                      {formatMoney(selectedAppointment.walletBalanceCents)}
+                    </span>
+                  </div>
+                  <div className="customer-overlay__stat customer-overlay__stat--lifetime">
+                    <span className="customer-overlay__stat-label">Lifetime</span>
+                    <span className="customer-overlay__stat-value">
+                      {formatMoney(customerProfileForOverlay?.lifetimeSpendCents ?? selectedAppointment.amountPaidCents)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="customer-overlay__chips">
+                  <span className="cs-clientrow__chip">
+                    Forms{intakeStatus === "submitted" ? " · submitted" : intakeStatus === "partial" ? " · partial" : intakeStatus === "missing" ? " · 1 pending" : ""}
+                  </span>
+                  <span className="cs-clientrow__chip cs-clientrow__chip--muted" title="Before/after photos aren't stored yet. Placeholder.">
+                    Photos
+                  </span>
+                  <span className="cs-clientrow__chip cs-clientrow__chip--muted" title="Client messaging isn't implemented yet. Placeholder.">
+                    Messages
+                  </span>
+                </div>
+
                 {customerProfileForOverlay === null ? (
                   <p className="customer-overlay__loading">Loading profile…</p>
+                ) : null}
+
+                {selectedAppointment.customerNotes ? (
+                  <div className="customer-overlay__note">
+                    <span className="customer-overlay__note-label">Note for staff</span>
+                    <p className="customer-overlay__note-text">{selectedAppointment.customerNotes}</p>
+                  </div>
                 ) : null}
 
                 <div className="customer-overlay__footer">
