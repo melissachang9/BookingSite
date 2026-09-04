@@ -17,6 +17,7 @@ import type {
   CreateCheckoutSessionResponse,
   CustomerLookupQuery,
   CustomerLookupResponse,
+  CustomerProfileResponse,
   CustomerSummary,
   CustomPaymentMethod,
   ProviderListResponse,
@@ -207,6 +208,7 @@ export type CalendarPageApi = {
   listBookings: (tenantSlug: string, query?: BookingListQuery) => Promise<BookingListResponse>;
   listServices: (tenantSlug: string) => Promise<ServiceListResponse>;
   getBooking: (tenantSlug: string, bookingId: string) => Promise<BookingSummary>;
+  getCustomerProfile: (tenantSlug: string, customerId: string) => Promise<CustomerProfileResponse>;
   listServiceProviders: (tenantSlug: string, serviceId: string) => Promise<ProviderListResponse>;
   listServiceCategories: (tenantSlug: string) => Promise<ServiceCategoryListResponse>;
   lookupCustomers: (query: CustomerLookupQuery) => Promise<CustomerLookupResponse>;
@@ -4467,6 +4469,8 @@ function AppointmentDetailsDrawer({
     hasFormsContent ||
     showConsentAlert;
 
+  // Load the customer's profile so the compact client card can show wallet
+  // and lifetime spend, not just what's on this booking.
   // Position the reschedule date popover relative to the Reschedule button,
   // rendered through a portal so it is never clipped by the drawer's scroll
   // container.
@@ -4691,25 +4695,70 @@ function AppointmentDetailsDrawer({
               </div>
             ) : (
               <>
-                <div className="cs-clientrow">
-                  <span className="cs-clientrow__avatar" aria-hidden="true">
-                    {providerRecord?.imageUrl ? null : getInitials(selectedAppointment.customerName)}
+                <div className="cs-clientrow cs-clientrow--profile-card">
+                  <span className="cs-clientrow__avatar cs-clientrow__avatar--round" aria-hidden="true">
+                    {getInitials(selectedAppointment.customerName)}
                   </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="cs-clientrow__name">{selectedAppointment.customerName}</div>
-                    <div className="cs-clientrow__meta">
-                      {[selectedAppointment.customerPhone, selectedAppointment.customerEmail].filter(Boolean).join(" · ") || "No contact on file"}
+                  <div className="cs-clientrow__body">
+                    <div className="cs-clientrow__top">
+                      <div className="cs-clientrow__identity">
+                        <div className="cs-clientrow__name">{selectedAppointment.customerName}</div>
+                        <div className="cs-clientrow__meta">
+                          {[
+                            selectedAppointment.customerPhone,
+                            selectedAppointment.customerEmail,
+                          ]
+                            .filter(Boolean)
+                            .join("  ·  ") || "No contact on file"}
+                        </div>
+                      </div>
+                      {onUpdateCustomerContact ? (
+                        <button
+                          type="button"
+                          className="cs-btn cs-btn--sm"
+                          onClick={() => {
+                            setCustomerContactDraft({ name: selectedAppointment.customerName, email: selectedAppointment.customerEmail ?? "", phone: selectedAppointment.customerPhone ?? "" });
+                            setIsEditingCustomerContact(true);
+                          }}
+                        >
+                          Profile
+                        </button>
+                      ) : null}
                     </div>
+                    <div className="cs-clientrow__stats">
+                      <div className="cs-clientrow__stat cs-clientrow__stat--credits">
+                        <span className="cs-clientrow__stat-label">Credits</span>
+                        <span className="cs-clientrow__stat-value">–</span>
+                      </div>
+                      <div className="cs-clientrow__stat cs-clientrow__stat--wallet">
+                        <span className="cs-clientrow__stat-label">Wallet</span>
+                        <span className="cs-clientrow__stat-value">{formatMoney(selectedAppointment.walletBalanceCents ?? 0)}</span>
+                      </div>
+                      <div className="cs-clientrow__stat cs-clientrow__stat--lifetime">
+                        <span className="cs-clientrow__stat-label">Lifetime</span>
+                        <span className="cs-clientrow__stat-value">{formatMoney(selectedAppointment.amountPaidCents ?? 0)}</span>
+                      </div>
+                    </div>
+                    <div className="cs-clientrow__chips">
+                      <span
+                        className="cs-clientrow__chip"
+                      >
+                        Forms{intakeStatus === "submitted" ? " · submitted" : intakeStatus === "partial" ? " · partial" : intakeStatus === "missing" ? " · 1 pending" : ""}
+                      </span>
+                      <span className="cs-clientrow__chip cs-clientrow__chip--muted" title="Before/after photos aren't stored yet. This is a placeholder for a future phase.">
+                        Photos
+                      </span>
+                      <span className="cs-clientrow__chip cs-clientrow__chip--muted" title="Client messaging isn't implemented yet. This is a placeholder for a future phase.">
+                        Messages
+                      </span>
+                    </div>
+                    {selectedAppointment.customerNotes ? (
+                      <div className="cs-clientrow__note">
+                        <span className="cs-clientrow__note-label">Note for staff</span>
+                        <p className="cs-clientrow__note-text">{selectedAppointment.customerNotes}</p>
+                      </div>
+                    ) : null}
                   </div>
-                  {onUpdateCustomerContact ? (
-                    <button
-                      type="button"
-                      className="cs-btn cs-btn--sm"
-                      onClick={() => { setCustomerContactDraft({ name: selectedAppointment.customerName, email: selectedAppointment.customerEmail ?? "", phone: selectedAppointment.customerPhone ?? "" }); setIsEditingCustomerContact(true); }}
-                    >
-                      Profile
-                    </button>
-                  ) : null}
                 </div>
                 {isEditingCustomerNotes ? (
                   <div style={{ marginTop: 12 }}>

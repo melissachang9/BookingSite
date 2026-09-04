@@ -873,6 +873,90 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .cs-clientrow__name { font: 600 14px var(--cs-font); color: var(--cs-ink); }
 .cs-clientrow__meta { font: 500 11px var(--cs-font); color: var(--cs-label); margin-top: 2px; }
 
+/* Compact client profile panel (appointment drawer) */
+.cs-clientrow--profile-card {
+  align-items: flex-start;
+  gap: 14px;
+}
+.cs-clientrow__avatar--round { border-radius: 50%; }
+.cs-clientrow__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cs-clientrow__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.cs-clientrow__identity { min-width: 0; }
+.cs-clientrow__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.cs-clientrow__stat {
+  padding: 10px 12px;
+  border-radius: var(--cs-r-12);
+  background: var(--cs-canvas);
+}
+.cs-clientrow__stat--credits { background: var(--cs-mint); }
+.cs-clientrow__stat--wallet { background: var(--cs-blue); }
+.cs-clientrow__stat--lifetime { background: var(--cs-lilac); }
+.cs-clientrow__stat-label {
+  display: block;
+  font: 700 9px var(--cs-font);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--cs-label);
+}
+.cs-clientrow__stat-value {
+  display: block;
+  font: 700 18px/1.1 var(--cs-font);
+  color: var(--cs-ink);
+}
+.cs-clientrow__chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cs-clientrow__chip {
+  border: 1px solid var(--cs-hairline);
+  border-radius: var(--cs-r-pill);
+  background: var(--cs-surface);
+  color: var(--cs-ink);
+  font: 600 11px var(--cs-font);
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.cs-clientrow__chip:hover { background: var(--cs-hover); }
+.cs-clientrow__chip--muted {
+  background: var(--cs-hover);
+  color: var(--cs-label);
+  cursor: default;
+}
+.cs-clientrow__note {
+  background: var(--cs-canvas);
+  border-radius: var(--cs-r-inner);
+  padding: 10px 12px;
+}
+.cs-clientrow__note-label {
+  display: block;
+  font: 700 9px var(--cs-font);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--cs-label);
+  margin-bottom: 4px;
+}
+.cs-clientrow__note-text {
+  margin: 0;
+  font: 500 13px/1.55 var(--cs-font);
+  color: var(--cs-ink);
+}
+
 /* ------------------------------------------------------------ status pills */
 .cs-pill {
   display: inline-flex; align-items: center; gap: 6px;
