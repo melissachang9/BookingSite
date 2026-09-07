@@ -198,8 +198,8 @@ export function SettingsPage({
 
   return (
     <main className="ops-page-stack">
-      <div className="settings-layout">
-        <nav className="settings-anchor-nav" aria-label="Settings sections">
+      <div className="settings-layout cs-settings-layout">
+        <nav className="settings-anchor-nav cs-settings-nav" aria-label="Settings sections">
           {groupedSections.map(([groupTitle, sections]) => (
             <div key={groupTitle} className="settings-anchor-group">
               <p className="settings-anchor-group__title">{groupTitle}</p>
@@ -220,7 +220,7 @@ export function SettingsPage({
           ))}
         </nav>
 
-        <div className="settings-content">
+        <div className="settings-content cs-settings-content">
           {SECTION_DEFINITIONS.map((section) => (
             <SettingsSection key={section.id} section={section}>
               {section.id === "calendar" ? (
@@ -326,8 +326,12 @@ function SettingsSection({
   section: SectionDefinition;
   children: ReactNode;
 }) {
+  const categoryClass = `settings-section--cat-${section.eyebrow
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")}`;
   return (
-    <section id={section.id} className="settings-section">
+    <section id={section.id} className={`settings-section ${categoryClass}`}>
       <header className="settings-section__header">
         <p className="eyebrow">{section.eyebrow}</p>
         <h4>{section.title}</h4>
@@ -1054,6 +1058,84 @@ function defaultBusinessHoursWeek(): BusinessHoursWeek {
   };
 }
 
+type TimeFormat = "12h" | "24h";
+
+function to12h(hhmm: string): { hour: number; minute: number; period: "AM" | "PM" } {
+  const [rawHour, rawMinute] = hhmm.split(":");
+  const hour24 = Number(rawHour);
+  const minute = Number(rawMinute);
+  const period: "AM" | "PM" = hour24 >= 12 ? "PM" : "AM";
+  const hour = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return { hour, minute, period };
+}
+
+function from12h(hour: number, minute: number, period: "AM" | "PM"): string {
+  let hour24 = hour % 12;
+  if (period === "PM") hour24 += 12;
+  return `${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function TimeField({
+  value,
+  onChange,
+  disabled,
+  format,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  format: TimeFormat;
+  ariaLabel: string;
+}) {
+  if (format === "24h") {
+    return (
+      <input
+        type="time"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
+        aria-label={ariaLabel}
+      />
+    );
+  }
+  const { hour, minute, period } = to12h(value);
+  return (
+    <span className="business-hours-time12">
+      <select
+        value={hour}
+        onChange={(event) => onChange(from12h(Number(event.target.value), minute, period))}
+        disabled={disabled}
+        aria-label={`${ariaLabel} hour`}
+      >
+        {Array.from({ length: 12 }, (_, index) => index + 1).map((h) => (
+          <option key={h} value={h}>{h}</option>
+        ))}
+      </select>
+      <span className="business-hours-time12__colon" aria-hidden="true">:</span>
+      <select
+        value={minute}
+        onChange={(event) => onChange(from12h(hour, Number(event.target.value), period))}
+        disabled={disabled}
+        aria-label={`${ariaLabel} minute`}
+      >
+        {Array.from({ length: 60 }, (_, index) => index).map((m) => (
+          <option key={m} value={m}>{String(m).padStart(2, "0")}</option>
+        ))}
+      </select>
+      <select
+        value={period}
+        onChange={(event) => onChange(from12h(hour, minute, event.target.value as "AM" | "PM"))}
+        disabled={disabled}
+        aria-label={`${ariaLabel} period`}
+      >
+        <option value="AM">AM</option>
+        <option value="PM">PM</option>
+      </select>
+    </span>
+  );
+}
+
 function BusinessHoursSection({
   canManageSettings,
   tenant,
@@ -1068,6 +1150,7 @@ function BusinessHoursSection({
   const [enabled, setEnabled] = useState<boolean>(false);
   const [restrict, setRestrict] = useState<boolean>(false);
   const [week, setWeek] = useState<BusinessHoursWeek>(() => defaultBusinessHoursWeek());
+  const [timeFormat, setTimeFormat] = useState<TimeFormat>("12h");
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
   useEffect(() => {
@@ -1148,6 +1231,25 @@ function BusinessHoursSection({
         <p className="settings-panel-help">Availability follows each provider&rsquo;s schedule.</p>
       ) : (
         <div className="business-hours-grid">
+          <div className="business-hours-format">
+            <span className="business-hours-format__label">Time format</span>
+            <div className="cs-seg" role="group" aria-label="Time format">
+              <button
+                type="button"
+                aria-pressed={timeFormat === "12h"}
+                onClick={() => setTimeFormat("12h")}
+              >
+                12-hour
+              </button>
+              <button
+                type="button"
+                aria-pressed={timeFormat === "24h"}
+                onClick={() => setTimeFormat("24h")}
+              >
+                24-hour
+              </button>
+            </div>
+          </div>
           {BUSINESS_HOURS_WEEKDAY_KEYS.map((key) => {
             const day = week[key];
             return (
@@ -1155,23 +1257,23 @@ function BusinessHoursSection({
                 <span className="business-hours-row__label">{WEEKDAY_LABELS[key]}</span>
                 <label className="business-hours-row__field">
                   <span className="visually-hidden">{WEEKDAY_LABELS[key]} open</span>
-                  <input
-                    type="time"
+                  <TimeField
                     value={day.open}
-                    onChange={(event) => updateDay(key, { open: event.target.value })}
+                    onChange={(value) => updateDay(key, { open: value })}
                     disabled={editorDisabled || day.closed}
-                    aria-label={`${WEEKDAY_LABELS[key]} open`}
+                    format={timeFormat}
+                    ariaLabel={`${WEEKDAY_LABELS[key]} open`}
                   />
                 </label>
                 <span aria-hidden="true">–</span>
                 <label className="business-hours-row__field">
                   <span className="visually-hidden">{WEEKDAY_LABELS[key]} close</span>
-                  <input
-                    type="time"
+                  <TimeField
                     value={day.close}
-                    onChange={(event) => updateDay(key, { close: event.target.value })}
+                    onChange={(value) => updateDay(key, { close: value })}
                     disabled={editorDisabled || day.closed}
-                    aria-label={`${WEEKDAY_LABELS[key]} close`}
+                    format={timeFormat}
+                    ariaLabel={`${WEEKDAY_LABELS[key]} close`}
                   />
                 </label>
                 <label className="business-hours-row__closed">

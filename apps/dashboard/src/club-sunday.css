@@ -87,7 +87,7 @@
   grid-template-columns: var(--cs-sidebar-w) minmax(0, 1fr);
   background: var(--cs-surface);
   border-radius: 0;
-  overflow: hidden;
+  overflow-x: clip;
   min-height: 100vh;
 }
 .cs-shell > * { min-width: 0; }   /* load-bearing: without it the board widens the page */
@@ -762,12 +762,9 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;
 }
 .cs-when-card__time-editor .appointment-drawer-time-input {
-  width: 130px;
-  padding: 6px 14px;
-  /* hide the native clock indicator — it overlays the last digit; the control
-     is already clearly a time field from context */
-  -webkit-appearance: none;
-  appearance: none;
+  width: 138px;
+  padding: 6px 10px;
+  padding-right: 44px; /* room for the native clock indicator */
   border: 2px solid var(--cs-ink);
   border-radius: 10px;
   background: var(--cs-surface);
@@ -778,10 +775,6 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .cs-when-card__time-editor .appointment-drawer-time-input:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px rgba(20, 17, 15, .12);
-}
-.cs-when-card__time-editor .appointment-drawer-time-input::-webkit-calendar-picker-indicator,
-.cs-reschedule-confirm .appointment-drawer-time-input::-webkit-calendar-picker-indicator {
-  display: none;
 }
 .cs-when-card__time-sep { color: var(--cs-label); font: 800 20px var(--cs-font); }
 .cs-when-card__time-end { color: var(--cs-label); font: 800 20px var(--cs-font); letter-spacing: -.02em; }
@@ -806,12 +799,9 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   margin-top: 12px;
 }
 .cs-reschedule-confirm .appointment-drawer-time-input {
-  width: 130px;
+  width: 132px;
   padding: 10px 14px;
-  /* hide the native clock indicator — it overlays the last digit; the control
-     is already clearly a time field from context */
-  -webkit-appearance: none;
-  appearance: none;
+  padding-right: 46px; /* room for the native clock indicator */
   border: 1px solid var(--cs-hairline);
   border-radius: var(--cs-r-pill);
   background: var(--cs-surface);
@@ -872,90 +862,6 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 }
 .cs-clientrow__name { font: 600 14px var(--cs-font); color: var(--cs-ink); }
 .cs-clientrow__meta { font: 500 11px var(--cs-font); color: var(--cs-label); margin-top: 2px; }
-
-/* Compact client profile panel (appointment drawer) */
-.cs-clientrow--profile-card {
-  align-items: flex-start;
-  gap: 14px;
-}
-.cs-clientrow__avatar--round { border-radius: 50%; }
-.cs-clientrow__body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.cs-clientrow__top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-.cs-clientrow__identity { min-width: 0; }
-.cs-clientrow__stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-.cs-clientrow__stat {
-  padding: 10px 12px;
-  border-radius: var(--cs-r-12);
-  background: var(--cs-canvas);
-}
-.cs-clientrow__stat--credits { background: var(--cs-mint); }
-.cs-clientrow__stat--wallet { background: var(--cs-blue); }
-.cs-clientrow__stat--lifetime { background: var(--cs-lilac); }
-.cs-clientrow__stat-label {
-  display: block;
-  font: 700 9px var(--cs-font);
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--cs-label);
-}
-.cs-clientrow__stat-value {
-  display: block;
-  font: 700 18px/1.1 var(--cs-font);
-  color: var(--cs-ink);
-}
-.cs-clientrow__chips {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.cs-clientrow__chip {
-  border: 1px solid var(--cs-hairline);
-  border-radius: var(--cs-r-pill);
-  background: var(--cs-surface);
-  color: var(--cs-ink);
-  font: 600 11px var(--cs-font);
-  padding: 5px 10px;
-  cursor: pointer;
-}
-.cs-clientrow__chip:hover { background: var(--cs-hover); }
-.cs-clientrow__chip--muted {
-  background: var(--cs-hover);
-  color: var(--cs-label);
-  cursor: default;
-}
-.cs-clientrow__note {
-  background: var(--cs-canvas);
-  border-radius: var(--cs-r-inner);
-  padding: 10px 12px;
-}
-.cs-clientrow__note-label {
-  display: block;
-  font: 700 9px var(--cs-font);
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--cs-label);
-  margin-bottom: 4px;
-}
-.cs-clientrow__note-text {
-  margin: 0;
-  font: 500 13px/1.55 var(--cs-font);
-  color: var(--cs-ink);
-}
 
 /* ------------------------------------------------------------ status pills */
 .cs-pill {
@@ -1104,6 +1010,113 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   text-transform: uppercase;
   padding: 3px 8px;
   border-radius: var(--cs-r-pill);
+  .svc-staff-notoffered__label {
+    margin: 18px 0 6px;
+    font: 700 11px var(--cs-font);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--cs-label);
+  }
+
+  /* Staff Services owns its tracks so the editor stays aligned at every pane width. */
+  .staff-detail-form,
+  .staff-services-fieldset,
+  .staff-services-groups,
+  .staff-services-group {
+    min-width: 0;
+  }
+  .staff-detail-form .staff-services-fieldset {
+    width: 100%;
+    container-type: inline-size;
+  }
+  .staff-services-fieldset .staff-list-toolbar,
+  .staff-services-fieldset .staff-list-search {
+    width: 100%;
+    min-width: 0;
+  }
+  .staff-services-fieldset .staff-list-search {
+    flex: 1 1 100%;
+  }
+  .staff-services-fieldset .svc-staff-trow {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) minmax(84px, 110px) minmax(92px, 120px) minmax(170px, 220px);
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .staff-services-fieldset .svc-staff-trow__provider,
+  .staff-services-fieldset .svc-staff-trow__provider > span,
+  .staff-services-fieldset .svc-staff-trow__cell {
+    min-width: 0;
+  }
+  .staff-services-fieldset .svc-staff-trow__provider > span {
+    overflow: hidden;
+  }
+  .staff-services-fieldset .svc-provider-card__name,
+  .staff-services-fieldset .svc-staff-subtitle {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .staff-services-fieldset .svc-staff-trow__cell::before {
+    display: none;
+  }
+  .staff-services-fieldset .svc-staff-trow__commission {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+  }
+  .staff-services-fieldset .svc-staff-trow__commission .svc-provider-row__input {
+    width: 100%;
+  }
+
+  @container (max-width: 619px) {
+    .staff-services-fieldset .staff-services-group__header {
+      align-items: baseline;
+    }
+    .staff-services-fieldset .svc-staff-trow {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      align-items: start;
+      gap: 12px 8px;
+      padding: 14px;
+    }
+    .staff-services-fieldset .svc-staff-trow__provider {
+      grid-column: 1 / -1;
+      align-items: flex-start;
+    }
+    .staff-services-fieldset .svc-staff-trow__cell {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 5px;
+      justify-content: stretch;
+      text-align: left;
+    }
+    .staff-services-fieldset .svc-staff-trow__cell::before {
+      display: block;
+      font: 700 9px var(--cs-font);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--cs-label);
+    }
+    .staff-services-fieldset .svc-staff-trow__cell:nth-child(2)::before {
+      content: "Duration";
+    }
+    .staff-services-fieldset .svc-staff-trow__cell:nth-child(3)::before {
+      content: "Price";
+    }
+    .staff-services-fieldset .svc-staff-trow__commission {
+      grid-column: 1 / -1;
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+    .staff-services-fieldset .svc-staff-trow__commission::before {
+      content: "Commission";
+      grid-column: 1 / -1;
+    }
+  }
 }
 .form-response-item__badge--submitted { background: rgba(255, 255, 255, .7); color: var(--cs-ok-text); }
 .form-response-item__badge--missing { background: rgba(255, 255, 255, .7); color: var(--cs-warn-text); }
@@ -1112,6 +1125,104 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   font: 500 12px/1.6 var(--cs-font);
   color: var(--cs-label);
   margin: 0.4rem 0 0;
+  .staff-detail-form,
+  .staff-services-fieldset,
+  .staff-services-groups,
+  .staff-services-group {
+    min-width: 0;
+  }
+  .staff-detail-form .staff-services-fieldset {
+    width: 100%;
+    container-type: inline-size;
+  }
+  .staff-services-fieldset .staff-list-toolbar,
+  .staff-services-fieldset .staff-list-search {
+    width: 100%;
+    min-width: 0;
+  }
+  .staff-services-fieldset .staff-list-search {
+    flex: 1 1 100%;
+  }
+  .staff-services-fieldset .svc-staff-trow {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) minmax(84px, 110px) minmax(92px, 120px) minmax(170px, 220px);
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .staff-services-fieldset .svc-staff-trow__provider,
+  .staff-services-fieldset .svc-staff-trow__provider > span,
+  .staff-services-fieldset .svc-staff-trow__cell {
+    min-width: 0;
+  }
+  .staff-services-fieldset .svc-staff-trow__provider > span {
+    overflow: hidden;
+  }
+  .staff-services-fieldset .svc-provider-card__name,
+  .staff-services-fieldset .svc-staff-subtitle {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .staff-services-fieldset .svc-staff-trow__cell::before {
+    display: none;
+  }
+  .staff-services-fieldset .svc-staff-trow__commission {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+  }
+  .staff-services-fieldset .svc-staff-trow__commission .svc-provider-row__input {
+    width: 100%;
+  }
+
+  @container (max-width: 619px) {
+    .staff-services-fieldset .staff-services-group__header {
+      align-items: baseline;
+    }
+    .staff-services-fieldset .svc-staff-trow {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      align-items: start;
+      gap: 12px 8px;
+      padding: 14px;
+    }
+    .staff-services-fieldset .svc-staff-trow__provider {
+      grid-column: 1 / -1;
+      align-items: flex-start;
+    }
+    .staff-services-fieldset .svc-staff-trow__cell {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 5px;
+      justify-content: stretch;
+      text-align: left;
+    }
+    .staff-services-fieldset .svc-staff-trow__cell::before {
+      display: block;
+      font: 700 9px var(--cs-font);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--cs-label);
+    }
+    .staff-services-fieldset .svc-staff-trow__cell:nth-child(2)::before {
+      content: "Duration";
+    }
+    .staff-services-fieldset .svc-staff-trow__cell:nth-child(3)::before {
+      content: "Price";
+    }
+    .staff-services-fieldset .svc-staff-trow__commission {
+      grid-column: 1 / -1;
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+    .staff-services-fieldset .svc-staff-trow__commission::before {
+      content: "Commission";
+      grid-column: 1 / -1;
+    }
+  }
 }
 
 .form-reminder-btn {
@@ -1216,10 +1327,15 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
    Checkout panel — re-skin legacy amber checkout to the design system
    ========================================================================= */
 .appointment-details-drawer.checkout-panel {
+  width: min(100vw, 460px);
+  padding: 0;
+  gap: 0;
+  border-left: 0;
   background: var(--cs-surface);
   box-shadow: -18px 0 38px rgba(18, 42, 36, 0.22);
   font-family: var(--cs-font);
   color: var(--cs-ink);
+  overflow: hidden;
 }
 
 /* Header — kicker + big name + subtitle + circular back / close */
@@ -1228,7 +1344,7 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 22px 24px 18px;
+  padding: 24px 26px 20px;
   border-bottom: 1px solid var(--cs-hairline);
 }
 .checkout-panel__heading {
@@ -1247,7 +1363,7 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .checkout-panel__name {
   margin: 0;
   font: 700 26px/1.15 var(--cs-font);
-  letter-spacing: -.02em;
+  letter-spacing: 0;
   color: var(--cs-ink);
 }
 .checkout-panel__subtitle {
@@ -1283,20 +1399,25 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 
 /* Body spacing */
 .appointment-details-drawer.checkout-panel .checkout-panel__body {
-  padding: 20px 24px 24px;
-  gap: 18px;
+  padding: 18px 26px 22px;
+  gap: 14px;
+  background: var(--cs-surface);
 }
 
 /* Line-items panel */
 .appointment-details-drawer.checkout-panel .checkout-panel__totals {
   background: var(--cs-canvas);
-  border-radius: var(--cs-r-inner);
-  padding: 18px 22px;
-  gap: 10px;
+  border-radius: var(--cs-r-12);
+  padding: 16px 18px;
+  gap: 9px;
 }
 .checkout-panel__totals-row {
-  font: 500 14px var(--cs-font);
+  font: 500 13px var(--cs-font);
   color: var(--cs-ink);
+}
+.checkout-panel__line-item-name {
+  max-width: 68%;
+  font-weight: 650;
 }
 .checkout-panel__totals-row--total {
   margin-top: 10px;
@@ -1307,7 +1428,7 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 }
 .checkout-panel__totals-row--total strong {
   font: 700 26px var(--cs-font);
-  letter-spacing: -.01em;
+  letter-spacing: 0;
   color: var(--cs-ink);
 }
 
@@ -1382,22 +1503,24 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 
 /* Remaining balance callout */
 .appointment-details-drawer.checkout-panel .checkout-panel__balance {
-  background: var(--cs-canvas);
-  border-radius: var(--cs-r-inner);
-  padding: 16px 22px;
+  background: var(--cs-surface);
+  border-top: 1px solid var(--cs-hairline);
+  border-bottom: 1px solid var(--cs-hairline);
+  border-radius: 0;
+  padding: 14px 2px;
   font: 600 15px var(--cs-font);
   color: var(--cs-ink);
 }
 .appointment-details-drawer.checkout-panel .checkout-panel__balance strong {
   color: var(--cs-ink);
-  font: 700 24px var(--cs-font);
-  letter-spacing: -.01em;
+  font: 700 27px var(--cs-font);
+  letter-spacing: 0;
 }
 
 /* HOW WAS IT SETTLED kicker */
 .checkout-panel__section-kicker {
-  margin: 4px 0 8px;
-  font: 700 11px var(--cs-font);
+  margin: 2px 0 7px;
+  font: 700 10px var(--cs-font);
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--cs-label);
@@ -1405,7 +1528,7 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 
 /* Payment method tiles — 2×2 pastel grid */
 .appointment-details-drawer.checkout-panel .checkout-panel__methods-grid {
-  gap: 12px;
+  gap: 8px;
 }
 .appointment-details-drawer.checkout-panel .checkout-panel__method-button {
   display: flex;
@@ -1413,28 +1536,46 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   align-items: flex-start;
   justify-content: center;
   gap: 2px;
-  padding: 16px 18px;
+  padding: 13px 14px;
   background: var(--cs-canvas);
   color: var(--cs-ink);
-  border: 1px solid var(--cs-hairline);
-  border-radius: var(--cs-r-16);
+  border: 0;
+  border-radius: 8px;
   text-transform: none;
   letter-spacing: 0;
-  font: 700 14px var(--cs-font);
-  min-height: 68px;
+  font: 700 13px var(--cs-font);
+  min-height: 62px;
   cursor: pointer;
   transition: background .15s, border-color .15s;
 }
 .appointment-details-drawer.checkout-panel .checkout-panel__method-button:hover:not(:disabled) {
-  background: var(--cs-hover);
+  filter: brightness(.97);
   opacity: 1;
 }
 .appointment-details-drawer.checkout-panel .checkout-panel__method-button.is-active {
-  background: var(--cs-peach);
-  border-color: var(--cs-peach);
+  box-shadow: inset 0 0 0 2px var(--cs-ink);
 }
 .appointment-details-drawer.checkout-panel .checkout-panel__method-button:disabled {
   opacity: .5;
+}
+.appointment-details-drawer.checkout-panel .checkout-panel__method-button--peach {
+  background: var(--cs-peach);
+}
+.appointment-details-drawer.checkout-panel .checkout-panel__method-button--lilac {
+  background: var(--cs-lilac);
+}
+.appointment-details-drawer.checkout-panel .checkout-panel__method-button--neutral {
+  background: var(--cs-hover);
+}
+.checkout-panel__method-name,
+.checkout-panel__method-description {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+.checkout-panel__method-description {
+  color: var(--cs-secondary);
+  font: 500 10px/1.25 var(--cs-font);
 }
 
 .checkout-panel__add-method input {
@@ -1594,7 +1735,7 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 
 /* Footer — left link cluster | right buttons */
 .appointment-details-drawer.checkout-panel .checkout-panel__footer {
-  padding: 16px 20px 20px;
+  padding: 14px 20px 16px;
   border-top: 1px solid var(--cs-hairline);
   background: var(--cs-surface);
   display: flex;
@@ -1631,7 +1772,7 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .checkout-panel__waive-link:disabled { opacity: .5; cursor: not-allowed; }
 
 .appointment-details-drawer.checkout-panel .checkout-panel__payment-link-button.text-action {
-  padding: 12px 18px;
+  padding: 10px 15px;
   background: var(--cs-hover);
   color: var(--cs-ink);
   border: 0;
@@ -1650,7 +1791,7 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .appointment-details-drawer.checkout-panel .checkout-panel__complete-button {
   width: auto;
   min-width: 160px;
-  padding: 14px 22px;
+  padding: 12px 20px;
   background: var(--cs-ink);
   color: #fff;
   border: 0;
@@ -1707,24 +1848,6 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   color: var(--cs-ok-text);
 }
 
-/* ------------------------------------------------------- board scrollbar - */
-/* The board body scrolls vertically (overflow-y: auto) but macOS overlay
-   scrollbars are invisible until you scroll. Give it a visible, on-brand
-   thumb so operators can see the day/week is vertically scrollable — e.g.
-   when checking a reschedule target date's available times. */
-.cs-board__body {
-  scrollbar-width: thin;
-  scrollbar-color: var(--cs-hover-2) transparent;
-}
-.cs-board__body::-webkit-scrollbar { width: 10px; }
-.cs-board__body::-webkit-scrollbar-track { background: transparent; }
-.cs-board__body::-webkit-scrollbar-thumb {
-  background: var(--cs-hover-2);
-  border-radius: var(--cs-r-pill);
-  border: 2px solid var(--cs-surface);
-}
-.cs-board__body::-webkit-scrollbar-thumb:hover { background: var(--cs-label); }
-
 /* ============================================================================
    BANNED — do not reintroduce
    ----------------------------------------------------------------------------
@@ -1737,778 +1860,3 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
    fixed px widths on day columns        -> minmax(0, 1fr) only
    margin/flow positioning of .cs-chip   -> --top / --h only
    ========================================================================= */
-
-
-/* Checkout completion sheet — reference-matched refinements. */
-.appointment-details-drawer.checkout-panel {
-  width: min(100vw, 460px);
-  padding: 0;
-  gap: 0;
-  border-left: 0;
-  overflow: hidden;
-}
-.checkout-panel__header {
-  padding: 24px 26px 20px;
-}
-.checkout-panel__name,
-.checkout-panel__totals-row--total strong,
-.appointment-details-drawer.checkout-panel .checkout-panel__balance strong {
-  letter-spacing: 0;
-}
-.appointment-details-drawer.checkout-panel .checkout-panel__body {
-  padding: 18px 26px 22px;
-  gap: 14px;
-  background: var(--cs-surface);
-}
-.appointment-details-drawer.checkout-panel .checkout-panel__totals {
-  border-radius: var(--cs-r-12);
-  padding: 16px 18px;
-  gap: 9px;
-}
-.checkout-panel__totals-row {
-  font-size: 13px;
-}
-.checkout-panel__line-item-name {
-  max-width: 68%;
-  font-weight: 650;
-}
-.appointment-details-drawer.checkout-panel .checkout-panel__balance {
-  padding: 14px 2px;
-  background: var(--cs-surface);
-  border-top: 1px solid var(--cs-hairline);
-  border-bottom: 1px solid var(--cs-hairline);
-  border-radius: 0;
-}
-.appointment-details-drawer.checkout-panel .checkout-panel__balance strong {
-  font-size: 27px;
-}
-.checkout-panel__section-kicker {
-  margin: 2px 0 7px;
-  font-size: 10px;
-}
-.appointment-details-drawer.checkout-panel .checkout-panel__methods-grid {
-  gap: 8px;
-}
-.appointment-details-drawer.checkout-panel .checkout-panel__method-button {
-  min-height: 62px;
-  padding: 13px 14px;
-  gap: 3px;
-  border: 0;
-  border-radius: 8px;
-  font-size: 13px;
-}
-.appointment-details-drawer.checkout-panel .checkout-panel__method-button:hover:not(:disabled) {
-  filter: brightness(.97);
-  opacity: 1;
-}
-.appointment-details-drawer.checkout-panel .checkout-panel__method-button.is-active {
-  box-shadow: inset 0 0 0 2px var(--cs-ink);
-}
-.appointment-details-drawer.checkout-panel .checkout-panel__method-button--peach {
-  background: var(--cs-peach);
-}
-.appointment-details-drawer.checkout-panel .checkout-panel__method-button--lilac {
-  background: var(--cs-lilac);
-}
-.appointment-details-drawer.checkout-panel .checkout-panel__method-button--neutral {
-  background: var(--cs-hover);
-}
-.checkout-panel__method-name,
-.checkout-panel__method-description {
-  display: block;
-  width: 100%;
-  text-align: left;
-}
-.checkout-panel__method-description {
-  color: var(--cs-secondary);
-  font: 500 10px/1.25 var(--cs-font);
-}
-.appointment-details-drawer.checkout-panel .checkout-panel__footer {
-  padding: 14px 20px 16px;
-}
-.appointment-details-drawer.checkout-panel .checkout-panel__payment-link-button.text-action {
-  padding: 10px 15px;
-}
-.appointment-details-drawer.checkout-panel .checkout-panel__complete-button {
-  padding: 12px 20px;
-}
-@media (max-width: 560px) {
-  .checkout-panel__header,
-  .appointment-details-drawer.checkout-panel .checkout-panel__body {
-    padding-left: 18px;
-    padding-right: 18px;
-  }
-  .checkout-panel__footer-left,
-  .checkout-panel__footer-right {
-    width: 100%;
-  }
-  .appointment-details-drawer.checkout-panel .checkout-panel__complete-button,
-  .appointment-details-drawer.checkout-panel .checkout-panel__payment-link-button.text-action {
-    flex: 1;
-  }
-}
-
-
-/* Complete button hint — clarify collect vs complete. */
-.checkout-panel__complete-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-}
-.checkout-panel__complete-hint {
-  color: var(--cs-label);
-  font: 500 11px var(--cs-font);
-}
-
-/* ============================================================================
-   Clients — reference-matched client detail profile
-   ========================================================================= */
-.clients-page__header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 18px;
-}
-.clients-page__title {
-  margin: 0;
-  font: 700 24px/1.2 var(--cs-font);
-  letter-spacing: 0;
-  color: var(--cs-ink);
-}
-.clients-page__subtitle {
-  margin: 4px 0 0;
-  font: 500 13px var(--cs-font);
-  color: var(--cs-label);
-}
-.clients-page__search {
-  border: 1px solid var(--cs-hairline);
-  border-radius: var(--cs-r-pill);
-  background: var(--cs-surface);
-  color: var(--cs-ink);
-  font: 500 13px var(--cs-font);
-  padding: 10px 16px;
-  min-width: min(360px, 100%);
-}
-.clients-page__grid {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 10px;
-}
-.clients-page__card {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 14px 16px;
-  border: 1px solid var(--cs-hairline);
-  border-radius: var(--cs-r-inner);
-  background: var(--cs-surface);
-  color: var(--cs-ink);
-  font: 500 13px var(--cs-font);
-  text-align: left;
-  cursor: pointer;
-  transition: background .15s, border-color .15s, transform .15s;
-}
-.clients-page__card:hover {
-  background: var(--cs-hover);
-  border-color: var(--cs-label);
-}
-.clients-page__card-avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--cs-lilac);
-  color: var(--cs-ink);
-  font: 700 14px var(--cs-font);
-}
-.clients-page__card-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.clients-page__card-info strong {
-  font: 700 14px var(--cs-font);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.clients-page__card-info span {
-  color: var(--cs-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.clients-page__card-date {
-  color: var(--cs-label);
-  font: 500 12px var(--cs-font);
-  white-space: nowrap;
-}
-
-.client-detail-page {
-  max-width: 1080px;
-}
-.client-detail-page__breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  font: 500 13px var(--cs-font);
-  color: var(--cs-label);
-}
-.client-detail-page__breadcrumb-link {
-  border: 0;
-  background: none;
-  padding: 0;
-  color: var(--cs-label);
-  font: 500 13px var(--cs-font);
-  cursor: pointer;
-}
-.client-detail-page__breadcrumb-link:hover { color: var(--cs-ink); }
-.client-detail-page__breadcrumb-current { color: var(--cs-ink); font-weight: 600; }
-
-.client-profile-header {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 16px;
-  padding: 18px 20px;
-  background: var(--cs-surface);
-  border: 1px solid var(--cs-hairline);
-  border-radius: var(--cs-r-panel);
-}
-.client-profile-header__avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--cs-lilac);
-  color: var(--cs-ink);
-  font: 700 18px var(--cs-font);
-}
-.client-profile-header__info { min-width: 0; }
-.client-profile-header__name {
-  margin: 0;
-  font: 700 22px/1.15 var(--cs-font);
-  letter-spacing: 0;
-  color: var(--cs-ink);
-}
-.client-profile-header__contact {
-  margin: 5px 0 0;
-  font: 500 13px var(--cs-font);
-  color: var(--cs-secondary);
-}
-.client-profile-header__tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-}
-.client-tag {
-  display: inline-flex;
-  align-items: center;
-  border-radius: var(--cs-r-pill);
-  padding: 4px 10px;
-  font: 700 11px var(--cs-font);
-  color: var(--cs-ink);
-  background: var(--cs-hover);
-}
-.client-tag--mint { background: var(--cs-mint); }
-.client-tag--peach { background: var(--cs-peach); }
-.client-tag--risk { background: var(--cs-risk-fill); color: var(--cs-risk-text); }
-.client-profile-header__cta {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 11px 18px;
-  border-radius: var(--cs-r-pill);
-  background: var(--cs-ink);
-  color: #fff;
-  font: 700 13px var(--cs-font);
-  text-decoration: none;
-  white-space: nowrap;
-}
-.client-profile-header__cta:hover { background: var(--cs-ink-hover); }
-
-.client-stat-cards {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin: 16px 0 18px;
-}
-.client-stat-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-height: 84px;
-  padding: 14px 16px;
-  border-radius: var(--cs-r-inner);
-  background: var(--cs-hover);
-}
-.client-stat-card--mint { background: var(--cs-mint); }
-.client-stat-card--blue { background: var(--cs-blue); }
-.client-stat-card--lilac { background: var(--cs-lilac); }
-.client-stat-card__label {
-  font: 700 10px var(--cs-font);
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--cs-label);
-}
-.client-stat-card__value {
-  font: 700 26px/1.1 var(--cs-font);
-  letter-spacing: 0;
-  color: var(--cs-ink);
-}
-
-.client-detail-page__tabs {
-  display: inline-flex;
-  gap: 4px;
-  padding: 4px;
-  border-radius: var(--cs-r-pill);
-  background: var(--cs-hover);
-  margin-bottom: 16px;
-}
-.client-detail-page__tab {
-  border: 0;
-  border-radius: var(--cs-r-pill);
-  background: transparent;
-  color: var(--cs-label);
-  font: 600 13px var(--cs-font);
-  padding: 7px 16px;
-  cursor: pointer;
-}
-.client-detail-page__tab.is-active {
-  background: var(--cs-ink);
-  color: #fff;
-}
-
-.client-detail-page__tab-panel {
-  background: var(--cs-surface);
-  border: 1px solid var(--cs-hairline);
-  border-radius: var(--cs-r-panel);
-  padding: 8px 0;
-}
-.client-history-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.client-history-row {
-  display: grid;
-  grid-template-columns: 44px 1fr auto;
-  gap: 14px;
-  align-items: center;
-  padding: 12px 18px;
-}
-.client-history-row + .client-history-row {
-  border-top: 1px solid var(--cs-hairline-2);
-}
-.client-history-row.is-muted {
-  opacity: .72;
-  background: var(--cs-canvas);
-}
-.client-history-row__date {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
-}
-.client-history-row__day {
-  font: 700 18px/1 var(--cs-font);
-  color: var(--cs-ink);
-}
-.client-history-row__month {
-  font: 700 10px var(--cs-font);
-  letter-spacing: .08em;
-  color: var(--cs-label);
-}
-.client-history-row__body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  color: inherit;
-  text-decoration: none;
-}
-a.client-history-row__body:hover .client-history-row__title {
-  text-decoration: underline;
-}
-.client-history-row__title {
-  font: 700 14px var(--cs-font);
-  color: var(--cs-ink);
-}
-.client-history-row__meta {
-  font: 500 12px var(--cs-font);
-  color: var(--cs-secondary);
-}
-.client-history-row__badge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: var(--cs-r-pill);
-  padding: 4px 10px;
-  font: 700 11px var(--cs-font);
-  white-space: nowrap;
-  background: var(--cs-hover);
-  color: var(--cs-ink);
-}
-.client-history-row__badge--risk {
-  background: var(--cs-risk-fill);
-  color: var(--cs-risk-text);
-}
-.client-history-row__badge--peach {
-  background: var(--cs-peach);
-  color: var(--cs-ink);
-}
-.client-history-row__badge--neutral {
-  background: var(--cs-hover);
-  color: var(--cs-label);
-}
-.client-history-row__amount {
-  font: 700 14px var(--cs-font);
-  color: var(--cs-ink);
-  white-space: nowrap;
-}
-.client-notes-tab {
-  padding: 12px 18px 18px;
-}
-.client-notes-tab__empty {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-@media (max-width: 760px) {
-  .client-profile-header {
-    grid-template-columns: auto 1fr;
-  }
-  .client-profile-header__cta {
-    grid-column: 1 / -1;
-    justify-self: start;
-  }
-  .client-stat-cards {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Client profile header actions + edit form */
-.client-profile-header__actions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-}
-.client-profile-header .client-profile-header__cta,
-.client-profile-header a.client-profile-header__cta {
-  font-family: var(--cs-font);
-  font-weight: 700;
-  color: #fff;
-}
-.client-profile-header .client-profile-header__cta:hover,
-.client-profile-header a.client-profile-header__cta:hover {
-  color: #fff;
-  text-decoration: none;
-}
-.client-profile-header__edit {
-  border: 1px solid var(--cs-hairline);
-  border-radius: var(--cs-r-pill);
-  background: var(--cs-surface);
-  color: var(--cs-ink);
-  font: 600 12px var(--cs-font);
-  padding: 7px 14px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.client-profile-header__edit:hover {
-  background: var(--cs-hover);
-  border-color: var(--cs-label);
-}
-.client-edit-drawer__title {
-  margin: 0;
-  font: 700 18px var(--cs-font);
-  color: var(--cs-ink);
-}
-.client-edit-form {
-  gap: 4px;
-  display: flex;
-  flex-direction: column;
-}
-.client-edit-form__field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.client-edit-form__field > span {
-  font: 700 10px var(--cs-font);
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--cs-label);
-}
-.client-edit-form__field input {
-  border: 1px solid var(--cs-hairline);
-  border-radius: var(--cs-r-12);
-  background: var(--cs-surface);
-  color: var(--cs-ink);
-  font: 500 13px var(--cs-font);
-  padding: 10px 12px;
-  width: 100%;
-}
-.client-edit-form__field input:focus,
-.client-edit-form__field input:focus-visible {
-  outline: none;
-  border-color: var(--cs-ink);
-  box-shadow: 0 0 0 3px rgba(20, 17, 15, .08);
-}
-.client-edit-form__row {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
-  gap: 8px;
-}
-@media (max-width: 520px) {
-  .client-edit-form__row { grid-template-columns: 1fr; }
-}
-
-/* Client profile address + muted tag */
-.client-tag--muted {
-  background: var(--cs-hover);
-  color: var(--cs-label);
-}
-.client-profile-header__address {
-  margin: 3px 0 0;
-  font: 500 12px var(--cs-font);
-  color: var(--cs-label);
-}
-
-/* Client profile placeholder tabs (Photos / Messages) */
-.client-placeholder-tab {
-  padding: 24px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.client-placeholder-tab__title {
-  margin: 0;
-  font: 700 15px var(--cs-font);
-  color: var(--cs-ink);
-}
-.client-placeholder-tab__message {
-  margin: 0;
-  font: 500 13px var(--cs-font);
-  color: var(--cs-secondary);
-}
-
-/* Client profile overlay — slide-out over the appointment drawer */
-.customer-overlay {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 80;
-  display: flex;
-  align-items: stretch;
-  justify-content: flex-end;
-  pointer-events: none;
-}
-.customer-overlay__backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(20, 17, 15, .36);
-  border: 0;
-  cursor: pointer;
-}
-.customer-overlay__panel {
-  pointer-events: auto;
-  width: min(440px, calc(100vw - 40px));
-  height: 100%;
-  background: var(--cs-surface);
-  border-left: 1px solid var(--cs-hairline);
-  box-shadow: -18px 0 38px rgba(18, 42, 36, .22);
-  display: flex;
-  flex-direction: column;
-}
-.customer-overlay__head {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 22px 22px 18px;
-  border-bottom: 1px solid var(--cs-hairline);
-  background: var(--cs-surface);
-}
-.customer-overlay__avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: var(--cs-lilac);
-  color: var(--cs-ink);
-  font: 700 16px var(--cs-font);
-  flex: none;
-}
-.customer-overlay__identity { min-width: 0; flex: 1; }
-.customer-overlay__name {
-  margin: 0;
-  font: 700 20px/1.15 var(--cs-font);
-  color: var(--cs-ink);
-}
-.customer-overlay__meta {
-  margin: 4px 0 0;
-  font: 500 12px var(--cs-font);
-  color: var(--cs-secondary);
-}
-.customer-overlay__body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 18px 22px 22px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.customer-overlay__stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-.customer-overlay__stat {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 11px 12px;
-  border-radius: var(--cs-r-12);
-  background: var(--cs-canvas);
-}
-.customer-overlay__stat--credits { background: var(--cs-mint); }
-.customer-overlay__stat--wallet { background: var(--cs-blue); }
-.customer-overlay__stat--lifetime { background: var(--cs-lilac); }
-.customer-overlay__stat-label {
-  font: 700 9px var(--cs-font);
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--cs-label);
-}
-.customer-overlay__stat-value {
-  font: 700 18px/1.1 var(--cs-font);
-  color: var(--cs-ink);
-}
-.customer-overlay__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.customer-overlay__loading {
-  margin: 4px 0 0;
-  font: 500 12px var(--cs-font);
-  color: var(--cs-label);
-}
-.customer-overlay__note {
-  background: var(--cs-canvas);
-  border-radius: var(--cs-r-inner);
-  padding: 12px 14px;
-}
-.customer-overlay__note-label {
-  display: block;
-  font: 700 9px var(--cs-font);
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--cs-label);
-  margin-bottom: 4px;
-}
-.customer-overlay__note-text {
-  margin: 0;
-  font: 500 13px/1.55 var(--cs-font);
-  color: var(--cs-ink);
-}
-.customer-overlay__footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid var(--cs-hairline);
-}
-.customer-overlay__footer .cs-btn {
-  text-decoration: none;
-}
-@media (max-width: 560px) {
-  .customer-overlay__panel {
-    width: 100vw;
-    border-left: 0;
-  }
-}
-
-/* Client overlay address line */
-.customer-overlay__address {
-  margin: 4px 0 0;
-  font: 500 12px var(--cs-font);
-  color: var(--cs-label);
-}
-
-/* Client overlay tabs */
-.customer-overlay__tabs {
-  display: inline-flex;
-  gap: 4px;
-  padding: 4px;
-  border-radius: var(--cs-r-pill);
-  background: var(--cs-hover);
-  margin-bottom: 10px;
-  align-self: flex-start;
-  flex-wrap: wrap;
-}
-.customer-overlay__tab {
-  border: 0;
-  border-radius: var(--cs-r-pill);
-  background: transparent;
-  color: var(--cs-label);
-  font: 600 12px var(--cs-font);
-  padding: 6px 14px;
-  cursor: pointer;
-}
-.customer-overlay__tab.is-active {
-  background: var(--cs-ink);
-  color: #fff;
-}
-
-/* Client card tabs (appointment drawer) */
-.cs-clientrow__tabs {
-  display: flex;
-  width: 100%;
-  gap: 2px;
-  padding: 4px;
-  border-radius: var(--cs-r-pill);
-  background: var(--cs-hover);
-  margin-top: 2px;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-}
-.cs-clientrow__tab {
-  flex: 1 1 auto;
-  white-space: nowrap;
-  border: 0;
-  border-radius: var(--cs-r-pill);
-  background: transparent;
-  color: var(--cs-label);
-  font: 600 11px var(--cs-font);
-  padding: 5px 8px;
-  cursor: pointer;
-}
-.cs-clientrow__tab.is-active {
-  background: var(--cs-ink);
-  color: #fff;
-}
-.cs-clientrow__tab-panel {
-  margin-top: 8px;
-}

@@ -29,11 +29,12 @@ import { SettingsPage } from "./settings-page";
 import { StaffPage } from "./staff-page";
 import { ServicesPage } from "./services-page";
 import { CustomersPage } from "./clients-page";
-import { LocationsPage } from "./locations-page";
+
 import { FormsPage } from "./forms-page";
 import { ResourcesPage } from "./resources-page";
 import "./styles.css";
 import "./club-sunday.css";
+import "./staff-services.css";
 
 type RouteGroupKey = "settings-management";
 
@@ -111,16 +112,6 @@ const routeDefinitions: RouteDefinition[] = [
     actions: ["Find customer", "Open profile", "Add internal note"],
   },
   {
-    path: "/locations",
-    title: "Locations",
-    eyebrow: "Multi-location setup",
-    description: "Location-aware services, providers, schedules, and customer booking filters.",
-    metric: "Foundation planned",
-    tone: "planned",
-    workstreams: ["Location catalog", "Provider links", "Service availability"],
-    actions: ["Add location", "Assign staff", "Audit coverage"],
-  },
-  {
     path: "/services",
     title: "Services",
     eyebrow: "Catalog",
@@ -144,7 +135,7 @@ const routeDefinitions: RouteDefinition[] = [
   {
     path: "/settings",
     title: "Settings",
-    eyebrow: "Tenant policy",
+    eyebrow: "Business setup",
     description: "Cancellation windows, refunds, reminders, deposits, taxes, payment links, and branding settings.",
     metric: "Policy source",
     tone: "progress",
@@ -817,7 +808,7 @@ export function App() {
             element={<ServicesPage definition={pageByPath.get("services") ?? routeDefinitions[0]} currentUser={session.user} />}
           />
           <Route path="/customers" element={<CustomersPage definition={pageByPath.get("customers") ?? routeDefinitions[0]} currentUser={session.user} />} />
-          <Route path="/locations" element={<LocationsPage definition={pageByPath.get("locations") ?? routeDefinitions[0]} currentUser={session.user} />} />
+          <Route path="/locations" element={<Navigate to="/settings#locations" replace />} />
           <Route path="/providers" element={<Navigate to="/staff" replace />} />
           <Route path="/forms" element={<FormsPage definition={pageByPath.get("forms") ?? routeDefinitions[0]} currentUser={session.user} />} />
           <Route
@@ -837,6 +828,7 @@ export function App() {
               <StaffPage
                 definition={pageByPath.get("staff") ?? routeDefinitions[0]}
                 currentUser={session.user}
+                tenant={tenantSummary}
               />
             }
           />

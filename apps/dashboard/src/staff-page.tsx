@@ -9,6 +9,7 @@ import type {
   PermissionCatalogResponse,
   PermissionDefinition,
   PermissionKey,
+  ProviderEarningsSummaryResponse,
   ProviderSchedule,
   ProviderScheduleEntry,
   ProviderSummary,
@@ -17,6 +18,7 @@ import type {
   ReplaceUserPermissionsRequest,
   ServiceSummary,
   ServiceCategorySummary,
+  TenantSummary,
   TenantUserSummary,
   UpdateProviderRequest,
   WorkHoursSummary,
@@ -85,6 +87,16 @@ function initialsOf(name: string): string {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
+}
+
+// Pastel avatar fallback colors matching the Club Sunday palette
+// (--cs-mint / --cs-blue / --cs-peach / --cs-lilac / --cs-pink).
+const AVATAR_PLACEHOLDER_COLORS = ["#DFEBE1", "#DCE7F6", "#F6DFCE", "#EAE1F6", "#F6E0E3"];
+
+function avatarColorFor(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i += 1) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  return AVATAR_PLACEHOLDER_COLORS[hash % AVATAR_PLACEHOLDER_COLORS.length]!;
 }
 
 async function uploadAvatarFile(tenantSlug: string, file: File): Promise<string> {
@@ -441,9 +453,11 @@ function AvatarUploader({
 export function StaffPage({
   definition,
   currentUser,
+  tenant,
 }: {
   definition: RouteDefinitionLike;
   currentUser: AuthenticatedUser;
+  tenant: TenantSummary | null;
 }) {
   const canManage = hasPermission(currentUser, "settings.manage");
   const location = useLocation();
@@ -556,7 +570,11 @@ export function StaffPage({
                               loading="lazy"
                             />
                           ) : (
-                            <span className="staff-avatar staff-avatar--initials" aria-hidden>
+                            <span
+                              className="staff-avatar staff-avatar--initials"
+                              style={{ background: avatarColorFor(user.id) }}
+                              aria-hidden
+                            >
                               {initialsOf(user.name)}
                             </span>
                           )}
@@ -582,6 +600,7 @@ export function StaffPage({
               ) : (
                 <StaffDetail
                   tenantSlug={currentUser.tenantSlug}
+                  tenant={tenant}
                   user={selectedUser}
                   provider={selectedProvider}
                   locations={locations}
@@ -630,8 +649,39 @@ export function StaffPage({
   );
 }
 
+function ProviderRequiredEmptyState({
+  userName,
+  creating,
+  onLinkProvider,
+}: {
+  userName: string;
+  creating: boolean;
+  onLinkProvider: () => void;
+}) {
+  return (
+    <div className="staff-empty-state">
+      <p className="staff-empty-state__title">
+        {creating
+          ? `Setting up ${userName.split(" ")[0] || userName} as a provider…`
+          : `Set up ${userName.split(" ")[0] || userName}'s schedule & pay`}
+      </p>
+      <p className="staff-empty-state__body">
+        {creating
+          ? "Creating a provider record so you can configure booking settings, work hours, and compensation."
+          : "Work hours, compensation, and services are stored on a provider record. Create one (it won't be bookable online until you turn that on) to manage these here."}
+      </p>
+      {!creating ? (
+        <button type="button" className="primary-action" onClick={onLinkProvider}>
+          Set up provider record
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function StaffDetail({
   tenantSlug,
+  tenant,
   user,
   provider,
   locations,
@@ -644,6 +694,7 @@ function StaffDetail({
   onSaved,
 }: {
   tenantSlug: string;
+  tenant: TenantSummary | null;
   user: TenantUserSummary;
   provider: ProviderSummary | null;
   locations: LocationSummary[];
@@ -657,16 +708,59 @@ function StaffDetail({
 }) {
   const tabs: Array<{ key: TabKey; label: string; disabled?: boolean }> = [
     { key: "details", label: "Details" },
-    { key: "services", label: "Services", disabled: !provider },
-    { key: "workHours", label: "Work hours", disabled: !provider },
-    { key: "compensation", label: "Compensation", disabled: !provider },
+    { key: "services", label: "Services" },
+    { key: "workHours", label: "Work hours" },
+    { key: "compensation", label: "Compensation" },
     { key: "permissions", label: "Permissions" },
   ];
 
   const bookingLinkBase = `${storefrontBaseUrl}/${tenantSlug}/p/`;
 
+  // Work hours, compensation, and services live on a provider record. When a
+  // staff member without one opens one of those tabs, silently create a
+  // minimal, not-online-bookable provider record so the tab can render its
+  // real editing UI immediately. `onLinkProvider` still opens the full
+  // location/service picker from the header action.
+  const providerTabActive =
+    activeTab === "services" || activeTab === "workHours" || activeTab === "compensation";
+  const [creatingProvider, setCreatingProvider] = useState(false);
+  const [providerCreateError, setProviderCreateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!providerTabActive || provider !== null || creatingProvider) return;
+    let cancelled = false;
+    setCreatingProvider(true);
+    setProviderCreateError(null);
+    platformApi
+      .createProvider(tenantSlug, {
+        name: user.name,
+        email: user.email,
+        userId: user.id,
+        isBookableOnline: false,
+      })
+      .then(() => {
+        if (!cancelled) onSaved();
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setProviderCreateError(readErrorMessage(error, "Unable to set up provider record."));
+      })
+      .finally(() => {
+        if (!cancelled) setCreatingProvider(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providerTabActive, provider, user.id, tenantSlug]);
+
   return (
     <div className="staff-detail-inner">
+      {providerCreateError ? (
+        <div className="message-banner" role="alert">
+          {providerCreateError}
+          <button type="button" className="ghost-action" onClick={() => setProviderCreateError(null)}>Dismiss</button>
+        </div>
+      ) : null}
       <header className="staff-detail-header">
         <div>
           <p className="eyebrow">{ROLE_LABELS[user.role] ?? user.role}</p>
@@ -714,21 +808,45 @@ function StaffDetail({
           onSaved={onSaved}
         />
       ) : null}
-      {activeTab === "services" && provider ? (
-        <ServicesTab
-          tenantSlug={tenantSlug}
-          provider={provider}
-          locations={locations}
-          services={services}
-          categories={categories}
-          onSaved={onSaved}
-        />
+      {activeTab === "services" ? (
+        provider ? (
+          <ServicesTab
+            tenantSlug={tenantSlug}
+            provider={provider}
+            locations={locations}
+            services={services}
+            categories={categories}
+            onSaved={onSaved}
+          />
+        ) : (
+          <ProviderRequiredEmptyState
+            userName={user.name}
+            creating={creatingProvider}
+            onLinkProvider={onLinkProvider}
+          />
+        )
       ) : null}
-      {activeTab === "workHours" && provider ? (
-        <WorkHoursTab tenantSlug={tenantSlug} provider={provider} locations={locations} services={services} />
+      {activeTab === "workHours" ? (
+        provider ? (
+          <WorkHoursTab tenantSlug={tenantSlug} tenant={tenant} provider={provider} locations={locations} services={services} />
+        ) : (
+          <ProviderRequiredEmptyState
+            userName={user.name}
+            creating={creatingProvider}
+            onLinkProvider={onLinkProvider}
+          />
+        )
       ) : null}
-      {activeTab === "compensation" && provider ? (
-        <CompensationTab tenantSlug={tenantSlug} provider={provider} onSaved={onSaved} />
+      {activeTab === "compensation" ? (
+        provider ? (
+          <CompensationTab tenantSlug={tenantSlug} provider={provider} services={services} onSaved={onSaved} />
+        ) : (
+          <ProviderRequiredEmptyState
+            userName={user.name}
+            creating={creatingProvider}
+            onLinkProvider={onLinkProvider}
+          />
+        )
       ) : null}
       {activeTab === "permissions" ? (
         <PermissionsTab tenantSlug={tenantSlug} user={user} />
@@ -1215,7 +1333,7 @@ function ServicesTab({
         )}
       </fieldset>
 
-      <fieldset className="staff-fieldset">
+      <fieldset className="staff-fieldset staff-services-fieldset">
         <legend>
           Services <span className="staff-fieldset-count">{serviceIds.length} of {services.length}</span>
         </legend>
@@ -1223,11 +1341,16 @@ function ServicesTab({
           <p className="settings-form-help">No services configured.</p>
         ) : (
           <>
+            <p className="svc-lead">
+              What she performs. Services come from the Treatments page, filtered to her. Leave a
+              field blank to inherit that treatment's price and duration; enter a value to override
+              it just for her.
+            </p>
             <div className="staff-list-toolbar">
               <input
                 type="search"
                 className="staff-list-search"
-                placeholder="Search services…"
+                placeholder="Find a treatment…"
                 value={serviceQuery}
                 onChange={(event) => setServiceQuery(event.target.value)}
                 aria-label="Search services"
@@ -1265,6 +1388,8 @@ function ServicesTab({
                       const groupIds = group.services.map((s) => s.id);
                       const allEnabled = groupIds.every((id) => serviceIds.includes(id));
                       const noneEnabled = groupIds.every((id) => !serviceIds.includes(id));
+                      const performed = group.services.filter((s) => serviceIds.includes(s.id));
+                      const notOffered = group.services.filter((s) => !serviceIds.includes(s.id));
                       return (
                         <section key={group.id ?? "uncategorized"} className="staff-services-group">
                           <header className="staff-services-group__header">
@@ -1286,8 +1411,9 @@ function ServicesTab({
                             </button>
                           </header>
 
-                          {group.services.map((svc) => {
+                          {[...performed, ...notOffered].map((svc) => {
                             const isAssigned = serviceIds.includes(svc.id);
+                            const showNotOfferedHeader = !isAssigned && svc.id === notOffered[0]?.id;
                             const ov = serviceOverrides[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" };
                             const commissionMode: "flat" | "percent" = ov.basisPoints ? "percent" : "flat";
                             // Auto-enable the service if the operator starts editing any override
@@ -1302,149 +1428,95 @@ function ServicesTab({
                                 [svc.id]: { ...(prev[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" }), ...partial },
                               }));
                             };
-                            const directLink = `${storefrontBaseUrl}/${tenantSlug}/services/${svc.id}?providerId=${provider.id}`;
                             return (
+                              <React.Fragment key={svc.id}>
+                                {showNotOfferedHeader ? (
+                                  <p className="svc-staff-notoffered__label">Not offered by her</p>
+                                ) : null}
                               <div
-                                key={svc.id}
-                                className={`svc-provider-card${isAssigned ? "" : " svc-provider-card--off"}`}
+                                className={`svc-staff-trow staff-service-trow${isAssigned ? "" : " svc-staff-trow--off"}`}
                               >
-                                <div className="svc-provider-card__header">
-                                  <button
-                                    type="button"
-                                    className={`svc-toggle${isAssigned ? "" : " svc-toggle--off"}`}
+                                <div className="svc-staff-trow__provider">
+                                  <input
+                                    type="checkbox"
+                                    className="svc-staff-checkbox"
                                     aria-label={`Toggle ${svc.name}`}
-                                    onClick={() => setServiceIds(toggle(serviceIds, svc.id))}
+                                    checked={isAssigned}
+                                    onChange={() => setServiceIds(toggle(serviceIds, svc.id))}
                                   />
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div className="svc-provider-card__name">{svc.name}</div>
+                                  <span>
+                                    <span className="svc-provider-card__name">{svc.name}</span>
                                     {svc.description ? (
-                                      <div className="svc-provider-card__subtitle">{svc.description}</div>
+                                      <span className="svc-staff-subtitle">{svc.description}</span>
                                     ) : null}
-                                  </div>
+                                  </span>
                                 </div>
-
-                                <div className="svc-provider-row">
-                                  <span className="svc-provider-row__label">Duration</span>
-                                  <div className="svc-provider-row__value">
-                                    <input
-                                      className="svc-input svc-provider-row__input"
-                                      type="text" inputMode="numeric"
-                                      placeholder={String(svc.durationMinutes)}
-                                      value={ov.durationMinutes !== "" ? ov.durationMinutes : String(svc.durationMinutes)}
-                                      onFocus={(e) => { ensureAssigned(); e.target.select(); }}
-                                      onMouseUp={(e) => e.preventDefault()}
-                                      onChange={(e) => patch({ durationMinutes: e.target.value })}
-                                    />
-                                    <span className="svc-provider-row__unit">min</span>
-                                  </div>
+                              
+                                <div className="svc-staff-trow__cell">
+                                  <input
+                                    className="svc-input svc-provider-row__input"
+                                    type="text" inputMode="numeric"
+                                    placeholder={`${svc.durationMinutes} min`}
+                                    value={ov.durationMinutes}
+                                    onFocus={(e) => { ensureAssigned(); e.target.select(); }}
+                                    onMouseUp={(e) => e.preventDefault()}
+                                    onChange={(e) => patch({ durationMinutes: e.target.value })}
+                                    aria-label={`${svc.name} duration`}
+                                  />
                                 </div>
-                                {ov.durationMinutes ? (
-                                  <div className="svc-provider-row__reset">
-                                    <button type="button" className="svc-text-btn"
-                                      onClick={() => patch({ durationMinutes: "" })}>
-                                      Reset to default
+                              
+                                <div className="svc-staff-trow__cell">
+                                  <input
+                                    className="svc-input svc-provider-row__input"
+                                    type="text" inputMode="decimal"
+                                    placeholder={`$${(svc.priceCents / 100).toFixed(2)}`}
+                                    value={ov.priceCents}
+                                    onFocus={(e) => { ensureAssigned(); e.target.select(); }}
+                                    onMouseUp={(e) => e.preventDefault()}
+                                    onChange={(e) => patch({ priceCents: e.target.value })}
+                                    aria-label={`${svc.name} price`}
+                                  />
+                                </div>
+                              
+                                <div className="svc-staff-trow__cell svc-staff-trow__commission">
+                                  <div className="service-card__pill-toggle" role="group" aria-label="Commission type">
+                                    <button type="button"
+                                      className={`service-card__pill${commissionMode === "flat" ? " is-active" : ""}`}
+                                      onClick={() => { ensureAssigned(); if (commissionMode === "flat") return; patch({ basisPoints: "" }); }}>
+                                      $
+                                    </button>
+                                    <button type="button"
+                                      className={`service-card__pill${commissionMode === "percent" ? " is-active" : ""}`}
+                                      onClick={() => { ensureAssigned(); if (commissionMode === "percent") return; patch({ flatCents: "" }); }}>
+                                      %
                                     </button>
                                   </div>
-                                ) : null}
-
-                                <div className="svc-provider-row">
-                                  <span className="svc-provider-row__label">Price</span>
-                                  <div className="svc-provider-row__value">
-                                    <span className="svc-provider-row__unit">$</span>
+                                  {commissionMode === "flat" ? (
                                     <input
                                       className="svc-input svc-provider-row__input"
                                       type="text" inputMode="decimal"
-                                      placeholder={(svc.priceCents / 100).toFixed(2)}
-                                      value={ov.priceCents !== "" ? ov.priceCents : (svc.priceCents / 100).toFixed(2)}
+                                      placeholder="0.00"
+                                      value={ov.flatCents}
                                       onFocus={(e) => { ensureAssigned(); e.target.select(); }}
                                       onMouseUp={(e) => e.preventDefault()}
-                                      onChange={(e) => patch({ priceCents: e.target.value })}
+                                      onChange={(e) => patch({ flatCents: e.target.value, basisPoints: "" })}
+                                      aria-label={`${svc.name} commission flat`}
                                     />
-                                  </div>
-                                </div>
-                                {ov.priceCents ? (
-                                  <div className="svc-provider-row__reset">
-                                    <button type="button" className="svc-text-btn"
-                                      onClick={() => patch({ priceCents: "" })}>
-                                      Reset to default
-                                    </button>
-                                  </div>
-                                ) : null}
-
-                                <div className="svc-provider-row">
-                                  <span className="svc-provider-row__label">Commission</span>
-                                  <div className="svc-provider-row__value">
-                                    <div className="service-card__pill-toggle" role="group" aria-label="Commission type">
-                                      <button
-                                        type="button"
-                                        className={`service-card__pill${commissionMode === "flat" ? " is-active" : ""}`}
-                                        onClick={() => { ensureAssigned(); if (commissionMode !== "flat") patch({ basisPoints: "" }); }}
-                                      >$</button>
-                                      <button
-                                        type="button"
-                                        className={`service-card__pill${commissionMode === "percent" ? " is-active" : ""}`}
-                                        onClick={() => { ensureAssigned(); if (commissionMode !== "percent") patch({ flatCents: "" }); }}
-                                      >%</button>
-                                    </div>
-                                    {commissionMode === "flat" ? (
-                                      <>
-                                        <span className="svc-provider-row__unit">$</span>
-                                        <input
-                                          className="svc-input svc-provider-row__input"
-                                          type="text" inputMode="decimal"
-                                          placeholder="0.00"
-                                          value={ov.flatCents !== "" ? ov.flatCents : "0.00"}
-                                          onFocus={(e) => { ensureAssigned(); e.target.select(); }}
-                                          onMouseUp={(e) => e.preventDefault()}
-                                          onChange={(e) => patch({ flatCents: e.target.value, basisPoints: "" })}
-                                        />
-                                      </>
-                                    ) : (
-                                      <>
-                                        <input
-                                          className="svc-input svc-provider-row__input"
-                                          type="text" inputMode="decimal"
-                                          placeholder="0"
-                                          value={ov.basisPoints !== "" ? ov.basisPoints : "0"}
-                                          onFocus={(e) => { ensureAssigned(); e.target.select(); }}
-                                          onMouseUp={(e) => e.preventDefault()}
-                                          onChange={(e) => patch({ flatCents: "", basisPoints: e.target.value })}
-                                        />
-                                        <span className="svc-provider-row__unit">%</span>
-                                      </>
-                                    )}
-                                  </div>
-                                </div>
-                                {(ov.flatCents || ov.basisPoints) ? (
-                                  <div className="svc-provider-row__reset">
-                                    <button type="button" className="svc-text-btn"
-                                      onClick={() => patch({ flatCents: "", basisPoints: "" })}>
-                                      Reset to default
-                                    </button>
-                                  </div>
-                                ) : null}
-
-                                <div className="svc-provider-card__divider" />
-
-                                <div className="svc-provider-row">
-                                  <span className="svc-provider-row__label">Online booking</span>
-                                  <div className="svc-provider-row__value">
-                                    <a
-                                      href={directLink}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="svc-provider-card__link"
-                                      onClick={async (e) => {
-                                        e.preventDefault();
-                                        try { await navigator.clipboard.writeText(directLink); } catch {}
-                                        window.open(directLink, "_blank", "noopener,noreferrer");
-                                      }}
-                                    >
-                                      Direct link
-                                    </a>
-                                  </div>
+                                  ) : (
+                                    <input
+                                      className="svc-input svc-provider-row__input"
+                                      type="text" inputMode="decimal"
+                                      placeholder="0"
+                                      value={ov.basisPoints}
+                                      onFocus={(e) => { ensureAssigned(); e.target.select(); }}
+                                      onMouseUp={(e) => e.preventDefault()}
+                                      onChange={(e) => patch({ flatCents: "", basisPoints: e.target.value })}
+                                      aria-label={`${svc.name} commission percent`}
+                                    />
+                                  )}
                                 </div>
                               </div>
+                              </React.Fragment>
                             );
                           })}
                         </section>
@@ -1541,6 +1613,43 @@ function normalizeTime(raw: string): string {
   return trimmed;
 }
 
+const BUSINESS_HOURS_DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+const BUSINESS_HOURS_DAY_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/** Condense a tenant's weekly business hours into consecutive-day groups, e.g. "Mon – Fri: 08:00 – 19:00". */
+function summarizeBusinessHours(
+  week: Record<string, { open: string; close: string; closed: boolean }> | undefined
+): Array<{ label: string; text: string }> {
+  if (!week) return [];
+  const days = BUSINESS_HOURS_DAY_KEYS.map((key, i) => {
+    const day = week[key];
+    return {
+      abbr: BUSINESS_HOURS_DAY_ABBR[i],
+      text: day && !day.closed ? `${day.open} – ${day.close}` : "Closed",
+    };
+  });
+  const groups: Array<{ label: string; text: string }> = [];
+  let i = 0;
+  while (i < days.length) {
+    let j = i;
+    while (j + 1 < days.length && days[j + 1].text === days[i].text) j++;
+    const label = j > i ? `${days[i].abbr} – ${days[j].abbr}` : days[i].abbr;
+    groups.push({ label, text: days[i].text });
+    i = j + 1;
+  }
+  return groups;
+}
+
+/** Human-friendly badge label for a provider-schedule conflict warning. */
+function warningBadgeLabel(warning: { type: string }, dayShifts: ProviderScheduleEntry[]): string {
+  if (warning.type === "day_closed") return "Studio closed";
+  if (warning.type === "outside_business_hours") {
+    const runsLate = dayShifts.some((s) => s.endTime && s.endTime > "18:00");
+    return runsLate ? "Late night" : "Outside hours";
+  }
+  return "Needs review";
+}
+
 
 // ===========================================================================
 // Work Hours tab (unified schedule + time off)
@@ -1548,11 +1657,12 @@ function normalizeTime(raw: string): string {
 
 type WorkHoursTabProps = {
   tenantSlug: string;
+  tenant: TenantSummary | null;
   provider: ProviderSummary;
   locations: LocationSummary[];
 };
 
-function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTabProps & { services: ServiceSummary[] }) {
+function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: WorkHoursTabProps & { services: ServiceSummary[] }) {
   const providerLocations = useMemo(
     () => locations.filter((loc) => provider.locationIds.includes(loc.id)),
     [locations, provider.locationIds],
@@ -1577,13 +1687,6 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
   const [blockedServiceIds, setBlockedServiceIds] = useState<string[]>([]);
   const [dayBlockedServices, setDayBlockedServices] = useState<Map<number, string[]>>(new Map());
 
-  const [editingOverrideId, setEditingOverrideId] = useState<string | null>(null);
-  const [editOverride, setEditOverride] = useState<{
-    startDate: string; endDate: string; reason: string;
-    overrideType: "closed" | "custom_hours"; startTime: string; endTime: string;
-  }>({ startDate: "", endDate: "", reason: "", overrideType: "closed", startTime: "09:00", endTime: "17:00" });
-  const [editBlockedServiceIds, setEditBlockedServiceIds] = useState<string[]>([]);
-
   // Add shift modal
   const [addShiftModal, setAddShiftModal] = useState<{ weekday: number } | null>(null);
   const [addShiftDate, setAddShiftDate] = useState("");
@@ -1605,11 +1708,10 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
   // Sub-tab within Work Hours: "regular" | "overrides"
   const [workHoursSubTab, setWorkHoursSubTab] = useState<"regular" | "overrides">("regular");
 
-  // Expanded override in the overrides list
-  const [expandedOverrideId, setExpandedOverrideId] = useState<string | null>(null);
-
-  // Week offset for regular hours date labels (0 = this week, +1 = next, -1 = previous)
-  const [regularHoursWeekOffset, setRegularHoursWeekOffset] = useState(0);
+  // Overrides list filter chips: "Time off" / "Custom hours"
+  const [overrideFilter, setOverrideFilter] = useState<{ timeOff: boolean; customHours: boolean }>({
+    timeOff: false, customHours: false,
+  });
 
   const latestLocationRef = useRef(selectedLocationId);
   latestLocationRef.current = selectedLocationId;
@@ -1762,6 +1864,34 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
     }
   };
 
+  // Copy this location's regular hours pattern onto the provider's other location.
+  const handleCopyToLocation = async (targetLocationId: string) => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const entries: ProviderScheduleEntry[] = [];
+      for (const [weekday, dayShifts] of shifts) {
+        for (const s of dayShifts) {
+          entries.push({
+            id: "",
+            weekday,
+            locationId: targetLocationId,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            isActive: s.isActive,
+            blockedServiceIds: dayBlockedServices.get(weekday) || null,
+          });
+        }
+      }
+      await platformApi.replaceProviderSchedule(tenantSlug, provider.id, { entries, locationId: targetLocationId });
+      setStatus("Hours copied to the other location");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to copy hours");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleAddShiftAsOverride = async () => {
     if (!addShiftModal || !addShiftDate) return;
     setSubmitting(true);
@@ -1817,48 +1947,6 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
       setReloadKey((k) => k + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add override");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleStartEditOverride = (ov: ProviderTimeOffEntry) => {
-    setEditingOverrideId(ov.id);
-    setEditOverride({
-      startDate: new Date(ov.startsAt).toISOString().split("T")[0],
-      endDate: new Date(ov.endsAt).toISOString().split("T")[0],
-      reason: ov.reason || "",
-      overrideType: (ov.overrideType as "closed" | "custom_hours") || "closed",
-      startTime: ov.startTime || "09:00",
-      endTime: ov.endTime || "17:00",
-    });
-    setEditBlockedServiceIds(ov.blockedServiceIds || []);
-  };
-
-  const handleCancelEditOverride = () => {
-    setEditingOverrideId(null);
-  };
-
-  const handleSaveEditOverride = async () => {
-    if (!editingOverrideId) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      await platformApi.updateProviderTimeOff(tenantSlug, provider.id, editingOverrideId, {
-        startsAt: new Date(editOverride.startDate).toISOString(),
-        endsAt: new Date(editOverride.endDate + "T23:59:59").toISOString(),
-        reason: editOverride.reason.trim() || null,
-        overrideType: editOverride.overrideType,
-        startTime: editOverride.overrideType === "custom_hours" ? editOverride.startTime : null,
-        endTime: editOverride.overrideType === "custom_hours" ? editOverride.endTime : null,
-        locationId: selectedLocationId,
-        blockedServiceIds: editBlockedServiceIds.length > 0 ? editBlockedServiceIds : null,
-      });
-      setEditingOverrideId(null);
-      setStatus("Override updated");
-      setReloadKey((k) => k + 1);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update override");
     } finally {
       setSubmitting(false);
     }
@@ -2075,255 +2163,144 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
     return <div className="staff-detail-form"><p className="settings-form-help">Assign this provider to at least one location first.</p></div>;
   }
 
+  const selectedLocationName = selectedLocationId
+    ? providerLocations.find((loc) => loc.id === selectedLocationId)?.name ?? null
+    : null;
+  const studioHours = summarizeBusinessHours(
+    tenant?.settings?.businessHoursEnabled ? (tenant.settings.businessHours as any) : undefined
+  );
+
   return (
-    <div className="staff-detail-form">
-      <div style={{ display: "flex", gap: "10px", marginBottom: "12px" }}>
-        <div className="svc-card" style={{ flex: 1, padding: "10px 14px" }}>
-          <div className="eyebrow">Hours per week</div>
-          <div className="serif" style={{ fontSize: "18px", fontWeight: 500, marginTop: "2px" }}>{summary.hoursPerWeek} hrs</div>
-        </div>
-        <div className="svc-card" style={{ flex: 1, padding: "10px 14px" }}>
-          <div className="eyebrow">Working days</div>
-          <div className="serif" style={{ fontSize: "18px", fontWeight: 500, marginTop: "2px" }}>{summary.workingDays} of 7</div>
-        </div>
-        <div className="svc-card" style={{ flex: 1, padding: "10px 14px" }}>
-          <div className="eyebrow">Upcoming overrides</div>
-          <div className="serif" style={{ fontSize: "18px", fontWeight: 500, marginTop: "2px" }}>{summary.upcomingOverridesCount}</div>
-        </div>
-      </div>
-
-      {warnings.length > 0 ? (
-        <div style={{ marginBottom: "12px" }}>
-          {warnings.map((w, i) => (
-            <div key={i} style={{
-              background: "#FFF8E7", border: "1px solid #E5D7BB",
-              borderRadius: "6px", padding: "8px 12px", marginBottom: "6px",
-              fontSize: "12px", color: "#6B5A47", display: "flex", alignItems: "center", gap: "8px"
-            }}>
-              <span style={{ fontSize: "14px" }}>&#9888;</span>
-              <span>{w.message}</span>
+    <div className="staff-detail-form wh-tab">
+      <div className="wh-layout">
+        <div className="wh-main">
+          <div className="svc-card wh-card">
+            {/* Sub-tab bar */}
+            <div className="wh-subtabs-row">
+              <div className="staff-detail-tabs wh-subtabs">
+                <button type="button"
+                  className={`staff-detail-tab${workHoursSubTab === "regular" ? " is-active" : ""}`}
+                  onClick={() => setWorkHoursSubTab("regular")}>Regular</button>
+                <button type="button"
+                  className={`staff-detail-tab${workHoursSubTab === "overrides" ? " is-active" : ""}`}
+                  onClick={() => setWorkHoursSubTab("overrides")}>Overrides &amp; time off</button>
+              </div>
+              {providerLocations.length > 1 ? (
+                <label className="wh-location-select">
+                  <span className="wh-location-select__label">Location</span>
+                  <select
+                    aria-label="Work hours location"
+                    value={selectedLocationId || ""}
+                    onChange={(e) => setSelectedLocationId(e.target.value || null)}>
+                    <option value="">Both locations</option>
+                    {providerLocations.map((loc) => (
+                      <option key={loc.id} value={loc.id}>{loc.name}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
             </div>
-          ))}
-        </div>
-      ) : null}
-
-      <div className="svc-card" style={{ marginBottom: "12px" }}>
-        {/* Sub-tab bar */}
-        <div style={{
-          display: "flex", gap: "0", marginBottom: "16px",
-          borderBottom: "1px solid #E5D7BB",
-        }}>
-          <button type="button" onClick={() => setWorkHoursSubTab("regular")} style={{
-            padding: "8px 16px", fontSize: "13px", fontWeight: 600,
-            background: "transparent", border: "none",
-            borderBottom: workHoursSubTab === "regular" ? "2px solid #D4A574" : "2px solid transparent",
-            color: workHoursSubTab === "regular" ? "#1F1612" : "#8B7960",
-            cursor: "pointer",
-          }}>Regular hours</button>
-          <button type="button" onClick={() => setWorkHoursSubTab("overrides")} style={{
-            padding: "8px 16px", fontSize: "13px", fontWeight: 600,
-            background: "transparent", border: "none",
-            borderBottom: workHoursSubTab === "overrides" ? "2px solid #D4A574" : "2px solid transparent",
-            color: workHoursSubTab === "overrides" ? "#1F1612" : "#8B7960",
-            cursor: "pointer",
-          }}>Overrides &amp; time off</button>
-          <div style={{ flex: 1 }} />
-          <div style={{ display: "flex", gap: "8px", alignItems: "center", paddingRight: "4px" }}>
             {providerLocations.length > 1 ? (
-              <select className="svc-input" style={{ padding: "5px 9px", fontSize: "12px" }}
-                aria-label="Work hours location"
-                value={selectedLocationId || ""}
-                onChange={(e) => setSelectedLocationId(e.target.value || null)}>
-                <option value="">Both locations</option>
-                {providerLocations.map((loc) => (
-                  <option key={loc.id} value={loc.id}>{loc.name}</option>
-                ))}
-              </select>
+              <p className="wh-helper-text">
+                Hours are per location.{selectedLocationName ? ` ${selectedLocationName} keeps its own pattern.` : " Each location keeps its own pattern."}
+              </p>
             ) : null}
-          </div>
-        </div>
 
-        {workHoursSubTab === "regular" ? (
+            {workHoursSubTab === "regular" ? (
           /* ===== REGULAR HOURS SUB-TAB ===== */
           <>
             {shifts.size === 0 ? (
-              <div style={{
-                padding: "18px", marginBottom: "14px",
-                background: "#FDF8F0",
-                border: "1px dashed #D4A574",
-                borderRadius: "8px",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                gap: "16px", flexWrap: "wrap",
-              }}>
+              <div className="wh-empty-state">
                 <div>
-                  <div style={{ fontSize: "14px", fontWeight: 600, color: "#1F1612", marginBottom: "4px" }}>
-                    No regular hours set yet
-                  </div>
-                  <div style={{ fontSize: "12px", color: "#6B5A47" }}>
+                  <div className="wh-empty-state__title">No regular hours set yet</div>
+                  <div className="wh-empty-state__body">
                     Set the recurring weekly hours in one step, then adjust individual days as needed.
                   </div>
                 </div>
-                <button type="button" className="svc-save-btn"
-                  onClick={() => setRegularHoursOpen(true)}
-                  style={{ padding: "8px 16px" }}>
+                <button type="button" className="svc-save-btn" onClick={() => setRegularHoursOpen(true)}>
                   Set regular hours
                 </button>
               </div>
             ) : (
               <>
-                {/* Week navigation + 7-day template summary */}
                 {(() => {
                   const today = new Date();
                   today.setHours(0, 0, 0, 0);
                   const jsDay = today.getDay();
                   const daysSinceMonday = (jsDay + 6) % 7;
                   const weekStart = new Date(today);
-                  weekStart.setDate(today.getDate() - daysSinceMonday + regularHoursWeekOffset * 7);
-                  const weekEnd = new Date(weekStart);
-                  weekEnd.setDate(weekStart.getDate() + 6);
-                  const fmtRange = (d: Date) =>
-                    `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+                  weekStart.setDate(today.getDate() - daysSinceMonday);
 
                   return (
-                    <>
-                      <div style={{
-                        display: "flex", alignItems: "center", justifyContent: "space-between",
-                        padding: "6px 0", marginBottom: "10px",
-                        borderTop: "0.5px solid #E5D7BB", borderBottom: "0.5px solid #E5D7BB",
-                      }}>
-                        <button type="button" className="svc-text-btn"
-                          onClick={() => setRegularHoursWeekOffset((v) => v - 1)}
-                          style={{ fontSize: "18px", padding: "4px 12px" }}
-                          aria-label="Previous week">‹</button>
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
-                          <div style={{ fontSize: "13px", fontWeight: 600, color: "#1F1612" }}>
-                            {fmtRange(weekStart)} – {fmtRange(weekEnd)}, {weekEnd.getFullYear()}
-                          </div>
-                          {regularHoursWeekOffset !== 0 ? (
-                            <button type="button" className="svc-text-btn"
-                              onClick={() => setRegularHoursWeekOffset(0)}
-                              style={{ fontSize: "10px", textDecoration: "underline", color: "#8B7960" }}>
-                              Jump to this week
+                    <div className="wh-day-list">
+                      {WEEKDAY_LABELS.map((label, wd) => {
+                        const rawShifts = shifts.get(wd) || [];
+                        const isOn = rawShifts.length > 0 && rawShifts[0].isActive;
+                        const dayWarning = warnings.find((w) => w.weekday === wd) || null;
+                        const badgeLabel = dayWarning ? warningBadgeLabel(dayWarning, rawShifts) : null;
+                        const d = new Date(weekStart);
+                        d.setDate(weekStart.getDate() + wd);
+                        const dateStr = d.toISOString().split("T")[0];
+                        return (
+                          <div key={wd} className={`wh-day-row${dayWarning ? " wh-day-row--warn" : ""}`}>
+                            <button type="button"
+                              className={`wh-toggle${isOn ? " is-on" : ""}`}
+                              role="switch" aria-checked={isOn}
+                              aria-label={`${isOn ? "Turn off" : "Turn on"} ${label}`}
+                              onClick={() => toggleDay(wd)}>
+                              <span className="wh-toggle__knob" />
                             </button>
-                          ) : (
-                            <div style={{ fontSize: "10px", color: "#8B7960" }}>This week</div>
-                          )}
-                        </div>
-                        <button type="button" className="svc-text-btn"
-                          onClick={() => setRegularHoursWeekOffset((v) => v + 1)}
-                          style={{ fontSize: "18px", padding: "4px 12px" }}
-                          aria-label="Next week">›</button>
-                      </div>
-
-                      <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "14px" }}>
-                        {WEEKDAY_LABELS.map((label, wd) => {
-                          const dayShifts = (shifts.get(wd) || []).filter((s) => s.isActive);
-                          const blocked = dayBlockedServices.get(wd) || [];
-                          const blockedNames = services.filter((s) => blocked.includes(s.id)).map((s) => s.name);
-                          // Compute date for this weekday in the selected week
-                          const d = new Date(weekStart);
-                          d.setDate(weekStart.getDate() + wd);
-                          const dateStr = d.toISOString().split("T")[0];
-                          const isToday = dateStr === today.toISOString().split("T")[0];
-                          // Check for date-specific override on this date
-                          const dateOverride = overrides.find((ov) => {
-                            const ovStart = new Date(ov.startsAt).toISOString().split("T")[0];
-                            const ovEnd = new Date(ov.endsAt).toISOString().split("T")[0];
-                            return dateStr >= ovStart && dateStr <= ovEnd;
-                          }) || null;
-                          const isCustomOverride = dateOverride?.overrideType === "custom_hours";
-                          const isClosedOverride = dateOverride?.overrideType === "closed";
-                          const cardBg = isClosedOverride ? "#F5EFE0"
-                            : isCustomOverride ? "#E8F0FE"
-                            : dayShifts.length > 0 ? "#FDF8F0"
-                            : "#FFFFFF";
-                          const cardBorderColor = isCustomOverride ? "#4A90D9"
-                            : isClosedOverride ? "#B8A88C"
-                            : isToday ? "#D4A574"
-                            : dayShifts.length > 0 ? "#D4A574"
-                            : "#E5D7BB";
-                          return (
-                            <button key={wd} type="button"
-                              onClick={() => setDayEditor({ dateStr, weekday: wd })}
-                              aria-label={`Edit ${label} hours`}
-                              style={{
-                                display: "flex", alignItems: "center", gap: "12px",
-                                padding: "10px 14px",
-                                background: cardBg,
-                                border: `1px solid ${cardBorderColor}`,
-                                borderLeft: isToday ? "4px solid #D4A574" : `1px solid ${cardBorderColor}`,
-                                borderRadius: "8px",
-                                cursor: "pointer",
-                                textAlign: "left", width: "100%",
-                                font: "inherit", color: "inherit",
-                              }}>
-                              <div style={{ width: "110px", flexShrink: 0 }}>
-                                <div style={{ fontSize: "13px", fontWeight: isToday ? 700 : 600, color: dayShifts.length > 0 || dateOverride ? "#1F1612" : "#8B7960" }}>
-                                  {label}
-                                </div>
-                                <div style={{ fontSize: "10px", color: isToday ? "#4A3D30" : "#8B7960", marginTop: "1px" }}>
-                                  {d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                                </div>
-                              </div>
-                              <div style={{ flex: 1 }}>
-                                {isCustomOverride ? (
-                                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                                    <div style={{ fontSize: "13px", color: "#4A90D9", fontWeight: 500 }}>
-                                      {dateOverride!.startTime || ""} – {dateOverride!.endTime || ""}
-                                    </div>
-                                    <div style={{ fontSize: "10px", color: "#4A90D9", fontStyle: "italic" }}>
-                                      Override shift
-                                    </div>
-                                  </div>
-                                ) : isClosedOverride ? (
-                                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                                    <div style={{ fontSize: "13px", color: "#8B7960", fontStyle: "italic" }}>
-                                      Blocked
-                                    </div>
-                                    <div style={{ fontSize: "10px", color: "#8B7960" }}>
-                                      {dateOverride!.reason || "Closed"}
-                                    </div>
-                                  </div>
-                                ) : dayShifts.length > 0 ? (
-                                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                                    {dayShifts.map((s, i) => (
-                                      <div key={i} style={{ fontSize: "13px", color: "#1F1612" }}>
-                                        {s.startTime} – {s.endTime}
-                                      </div>
-                                    ))}
-                                    {blockedNames.length > 0 ? (
-                                      <div style={{ fontSize: "10px", color: "#8B7960", marginTop: "2px" }}>
-                                        {blockedNames.length} service{blockedNames.length > 1 ? "s" : ""} blocked: {blockedNames.join(", ")}
-                                      </div>
+                            <button type="button" className="wh-day-row__label"
+                              onClick={() => setDayEditor({ dateStr, weekday: wd })}>
+                              {label}
+                            </button>
+                            {!isOn ? (
+                              <span className="wh-day-row__status">Not working</span>
+                            ) : (
+                              <div className="wh-day-row__shifts">
+                                {rawShifts.map((s, i) => (
+                                  <div className="wh-time-range" key={i}>
+                                    <input type="time" className="wh-time-input" value={s.startTime}
+                                      aria-label={`${label} start time`}
+                                      onChange={(e) => updateShift(wd, i, { startTime: e.target.value })} />
+                                    <span className="wh-time-sep">to</span>
+                                    <input type="time" className="wh-time-input" value={s.endTime}
+                                      aria-label={`${label} end time`}
+                                      onChange={(e) => updateShift(wd, i, { endTime: e.target.value })} />
+                                    {rawShifts.length > 1 ? (
+                                      <button type="button" className="wh-time-remove"
+                                        onClick={() => removeShift(wd, i)} aria-label="Remove shift">×</button>
                                     ) : null}
                                   </div>
-                                ) : (
-                                  <div style={{ fontSize: "12px", color: "#8B7960", fontStyle: "italic" }}>Closed</div>
-                                )}
+                                ))}
                               </div>
-                              {isCustomOverride ? (
-                                <span style={{
-                                  background: "#4A90D9", color: "#FFFFFF",
-                                  padding: "2px 8px", borderRadius: "4px",
-                                  fontSize: "10px", fontWeight: 600, letterSpacing: "0.5px",
-                                  flexShrink: 0,
-                                }}>OVERRIDE</span>
-                              ) : isClosedOverride ? (
-                                <span style={{
-                                  background: "#8B7960", color: "#FFFFFF",
-                                  padding: "2px 8px", borderRadius: "4px",
-                                  fontSize: "10px", fontWeight: 600, letterSpacing: "0.5px",
-                                  flexShrink: 0,
-                                }}>BLOCKED</span>
-                              ) : null}
-                              <span style={{ fontSize: "16px", color: "#8B7960", flexShrink: 0 }} aria-hidden>›</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </>
+                            )}
+                            {badgeLabel ? <span className="wh-late-badge">{badgeLabel}</span> : null}
+                            {isOn ? (
+                              <button type="button" className="wh-split-link" onClick={() => addShift(wd)}>
+                                + Split shift
+                              </button>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
                   );
                 })()}
+                <div className="wh-week-summary">
+                  <span className="wh-week-summary__text">
+                    {summary.hoursPerWeek} hours a week · {warnings.length === 0 ? "within studio hours" : "needs review"}
+                  </span>
+                  {providerLocations.length === 2 && selectedLocationId ? (
+                    <button type="button" className="svc-text-btn" disabled={submitting}
+                      onClick={() => {
+                        const other = providerLocations.find((l) => l.id !== selectedLocationId);
+                        if (other) void handleCopyToLocation(other.id);
+                      }}>
+                      Copy to {providerLocations.find((l) => l.id !== selectedLocationId)?.name}
+                    </button>
+                  ) : null}
+                </div>
                 <button type="button" className="svc-duplicate-btn"
                   onClick={() => setRegularHoursOpen(true)} disabled={submitting}
                   style={{ alignSelf: "flex-start" }}>
@@ -2335,238 +2312,117 @@ function WorkHoursTab({ tenantSlug, provider, locations, services }: WorkHoursTa
         ) : (
           /* ===== OVERRIDES & TIME OFF SUB-TAB ===== */
           <>
-            {/* Mini calendar heatmap — next 4 weeks */}
-            {(() => {
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              const jsDay = today.getDay();
-              const daysSinceMonday = (jsDay + 6) % 7;
-              const weekStart = new Date(today);
-              weekStart.setDate(today.getDate() - daysSinceMonday);
-
-              const weeks: Array<Array<{ dateStr: string; dayNum: number; isToday: boolean; status: "none" | "regular" | "override" | "timeoff" }>> = [];
-              for (let w = 0; w < 4; w++) {
-                const week: typeof weeks[0] = [];
-                for (let d = 0; d < 7; d++) {
-                  const date = new Date(weekStart);
-                  date.setDate(weekStart.getDate() + w * 7 + d);
-                  const dateStr = date.toISOString().split("T")[0];
-                  const dayNum = date.getDate();
-                  const isToday = dateStr === today.toISOString().split("T")[0];
-
-                  const dayShifts = (shifts.get(d) || []).filter((s) => s.isActive);
-                  const dateOverride = overrides.find((ov) => {
-                    const ovStart = new Date(ov.startsAt).toISOString().split("T")[0];
-                    const ovEnd = new Date(ov.endsAt).toISOString().split("T")[0];
-                    return dateStr >= ovStart && dateStr <= ovEnd;
-                  });
-
-                  let status: "none" | "regular" | "override" | "timeoff" = "none";
-                  if (dateOverride) {
-                    status = dateOverride.overrideType === "custom_hours" ? "override" : "timeoff";
-                  } else if (dayShifts.length > 0) {
-                    status = "regular";
-                  }
-                  week.push({ dateStr, dayNum, isToday, status });
-                }
-                weeks.push(week);
-              }
-
-              const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-              const dayHeaders = ["M", "T", "W", "T", "F", "S", "S"];
-
-              return (
-                <div style={{ marginBottom: "16px" }}>
-                  <div style={{ fontSize: "11px", color: "#8B7960", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Upcoming weeks</div>
-                  <div style={{ display: "flex", gap: "12px" }}>
-                    {weeks.map((week, wi) => {
-                      const firstDate = new Date(week[0].dateStr + "T00:00:00");
-                      const lastDate = new Date(week[6].dateStr + "T00:00:00");
-                      const label = `${monthNames[firstDate.getMonth()]} ${firstDate.getDate()}–${lastDate.getDate()}`;
-                      return (
-                        <div key={wi} style={{ flex: 1 }}>
-                          <div style={{ fontSize: "9px", color: "#8B7960", textAlign: "center", marginBottom: "4px" }}>{label}</div>
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "3px" }}>
-                            {week.map((day, di) => {
-                              const bg = day.status === "override" ? "#4A90D9"
-                                : day.status === "timeoff" ? "#8B7960"
-                                : day.status === "regular" ? "#D4A574"
-                                : "#F5EFE0";
-                              const textColor = day.status !== "none" ? "#FFFFFF" : "#8B7960";
-                              return (
-                                <div key={di} title={`${dayHeaders[di]} ${day.dateStr}: ${day.status}`} style={{
-                                  width: "100%", aspectRatio: "1",
-                                  background: bg,
-                                  borderRadius: "3px",
-                                  display: "flex", alignItems: "center", justifyContent: "center",
-                                  fontSize: "10px", fontWeight: day.isToday ? 700 : 400,
-                                  color: textColor,
-                                  border: day.isToday ? "2px solid #1F1612" : "none",
-                                  cursor: "default",
-                                }}>
-                                  {day.dayNum}
-                                </div>
-                              );
-                            })}
+            <div className="wh-overrides-header">
+              <div className="wh-overrides-header__title">Overrides &amp; time off</div>
+              <button type="button" className="svc-save-btn"
+                onClick={() => setTimeOffOpen(true)} disabled={submitting}>
+                + Block time off
+              </button>
+            </div>
+            <div className="wh-filter-row">
+              <label className="wh-filter-chip">
+                <input type="checkbox" checked={overrideFilter.timeOff}
+                  onChange={(e) => setOverrideFilter((prev) => ({ ...prev, timeOff: e.target.checked }))} />
+                Time off
+              </label>
+              <label className="wh-filter-chip">
+                <input type="checkbox" checked={overrideFilter.customHours}
+                  onChange={(e) => setOverrideFilter((prev) => ({ ...prev, customHours: e.target.checked }))} />
+                Custom hours
+              </label>
+            </div>
+            {overrides.length === 0 ? (
+              <div className="wh-overrides-empty">No overrides or time off scheduled.</div>
+            ) : (
+              <div className="wh-override-list">
+                {overrides
+                  .filter((ov) => {
+                    const isCustom = ov.overrideType === "custom_hours";
+                    if (!overrideFilter.timeOff && !overrideFilter.customHours) return true;
+                    return (overrideFilter.timeOff && !isCustom) || (overrideFilter.customHours && isCustom);
+                  })
+                  .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
+                  .map((ov) => {
+                    const startD = new Date(ov.startsAt);
+                    const endD = new Date(ov.endsAt);
+                    const startDateStr = startD.toISOString().split("T")[0];
+                    const endDateStr = endD.toISOString().split("T")[0];
+                    const sameDay = startDateStr === endDateStr;
+                    const fmtDateStr = (ds: string) => {
+                      const [y, m, d] = ds.split("-").map(Number);
+                      const date = new Date(Date.UTC(y, m - 1, d));
+                      return date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+                    };
+                    const isCustom = ov.overrideType === "custom_hours";
+                    const isPast = endD < new Date();
+                    return (
+                      <div key={ov.id}
+                        className={`wh-override-card${isCustom ? " wh-override-card--custom" : " wh-override-card--timeoff"}${isPast ? " wh-override-card--past" : ""}`}>
+                        <div className="wh-override-card__body">
+                          <div className="wh-override-card__dates">
+                            {sameDay
+                              ? (isCustom ? fmtDateStr(startDateStr) : `${fmtDateStr(startDateStr)} · all day`)
+                              : `${fmtDateStr(startDateStr)} – ${fmtDateStr(endDateStr)}`}
+                            {isCustom && ov.startTime ? ` · ${ov.startTime} – ${ov.endTime}` : ""}
+                          </div>
+                          <div className="wh-override-card__reason">
+                            {ov.reason || (isCustom ? "Custom hours" : "Time off")}
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                  <div style={{ display: "flex", gap: "12px", marginTop: "8px", fontSize: "10px", color: "#8B7960" }}>
-                    <span><span style={{ display: "inline-block", width: "10px", height: "10px", background: "#D4A574", borderRadius: "2px", marginRight: "4px" }} /> Regular</span>
-                    <span><span style={{ display: "inline-block", width: "10px", height: "10px", background: "#4A90D9", borderRadius: "2px", marginRight: "4px" }} /> Override</span>
-                    <span><span style={{ display: "inline-block", width: "10px", height: "10px", background: "#8B7960", borderRadius: "2px", marginRight: "4px" }} /> Time off</span>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* All overrides list */}
-            <div style={{ marginBottom: "14px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                <div style={{ fontSize: "11px", color: "#8B7960", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  All overrides &amp; time off
-                </div>
-                <button type="button" className="svc-duplicate-btn"
-                  onClick={() => setTimeOffOpen(true)} disabled={submitting}
-                  style={{ fontSize: "11px", padding: "4px 10px" }}>
-                  + Block time off
-                </button>
-              </div>
-              {overrides.length === 0 ? (
-                <div style={{
-                  padding: "14px", background: "#FDF8F0", borderRadius: "6px",
-                  border: "1px dashed #D9CBB1", textAlign: "center",
-                  fontSize: "12px", color: "#8B7960",
-                }}>
-                  No overrides or time off scheduled.
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                  {overrides
-                    .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
-                    .map((ov) => {
-                      const startD = new Date(ov.startsAt);
-                      const endD = new Date(ov.endsAt);
-                      const startDateStr = startD.toISOString().split("T")[0];
-                      const endDateStr = endD.toISOString().split("T")[0];
-                      const sameDay = startDateStr === endDateStr;
-                      const fmtDateStr = (ds: string) => {
-                        const [y, m, d] = ds.split("-").map(Number);
-                        const date = new Date(Date.UTC(y, m - 1, d));
-                        return date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
-                      };
-                      const isCustom = ov.overrideType === "custom_hours";
-                      const isPast = endD < new Date();
-                      const isExpanded = expandedOverrideId === ov.id;
-                      return (
-                        <React.Fragment key={ov.id}>
-                        <button type="button"
-                          onClick={() => setExpandedOverrideId(isExpanded ? null : ov.id)}
-                          style={{
-                            display: "flex", alignItems: "center", gap: "10px",
-                            padding: "10px 12px",
-                            background: isPast ? "#FAF7F2" : isCustom ? "#E8F0FE" : "#FDF8F0",
-                            borderRadius: "8px",
-                            border: `1px solid ${isCustom ? "#4A90D9" : "#E5D7BB"}`,
-                            opacity: isPast ? 0.6 : 1,
-                            cursor: "pointer",
-                            textAlign: "left", width: "100%",
-                            font: "inherit", color: "inherit",
-                          }}>
-                          <div style={{ minWidth: "110px", flexShrink: 0 }}>
-                            <div style={{ fontSize: "12px", fontWeight: 500, color: "#1F1612" }}>
-                              {sameDay ? fmtDateStr(startDateStr) : `${fmtDateStr(startDateStr)} – ${fmtDateStr(endDateStr)}`}
-                            </div>
-                            <div style={{ fontSize: "10px", color: "#8B7960", marginTop: "1px" }}>
-                              {sameDay ? "1 day" : `${Math.ceil((endD.getTime() - startD.getTime()) / 86400000) + 1} days`}
-                            </div>
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: "12px", color: "#4A3D30" }}>
-                              {ov.reason || (isCustom ? "Custom hours" : "Time off")}
-                            </div>
-                            {isCustom && ov.startTime ? (
-                              <div style={{ fontSize: "11px", color: "#4A90D9", marginTop: "2px" }}>
-                                {ov.startTime} – {ov.endTime}
-                              </div>
-                            ) : null}
-                            {ov.blockedServiceIds && ov.blockedServiceIds.length > 0 ? (
-                              <div style={{ fontSize: "10px", color: "#8B7960", marginTop: "2px" }}>
-                                {ov.blockedServiceIds.length} service{ov.blockedServiceIds.length > 1 ? "s" : ""} blocked
-                              </div>
-                            ) : null}
-                          </div>
-                          <span style={{
-                            padding: "2px 7px", borderRadius: "4px",
-                            fontSize: "10px", fontWeight: 600,
-                            background: isCustom ? "#4A90D9" : "#8B7960",
-                            color: "#FFFFFF",
-                          }}>
-                            {isCustom ? "OVERRIDE" : "BLOCKED"}
-                          </span>
-                          <button type="button" className="svc-text-btn"
-                            onClick={(e) => { e.stopPropagation(); handleDeleteOverride(ov.id); }}
-                            aria-label={`Remove ${isCustom ? "override" : "time off"} ${fmtDateStr(startDateStr)}`}
-                            style={{ fontSize: "14px" }}>×</button>
+                        <button type="button" className="wh-override-card__dismiss"
+                          onClick={() => handleDeleteOverride(ov.id)}
+                          aria-label={`Remove ${isCustom ? "override" : "time off"} ${fmtDateStr(startDateStr)}`}>
+                          ×
                         </button>
-                        {expandedOverrideId === ov.id ? (
-                          <div style={{
-                            marginTop: "-2px", padding: "12px 14px",
-                            background: "#FDF8F0", borderRadius: "0 0 8px 8px",
-                            border: "1px solid #E5D7BB", borderTop: "none",
-                            display: "flex", flexDirection: "column", gap: "8px",
-                          }}>
-                            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
-                              <div>
-                                <div style={{ fontSize: "10px", color: "#8B7960", textTransform: "uppercase" }}>Type</div>
-                                <div style={{ fontSize: "12px", color: "#1F1612" }}>
-                                  {isCustom ? "Custom hours override" : "Full-day block"}
-                                </div>
-                              </div>
-                              <div>
-                                <div style={{ fontSize: "10px", color: "#8B7960", textTransform: "uppercase" }}>Duration</div>
-                                <div style={{ fontSize: "12px", color: "#1F1612" }}>
-                                  {sameDay ? "1 day" : `${Math.ceil((endD.getTime() - startD.getTime()) / 86400000) + 1} days`}
-                                </div>
-                              </div>
-                              {isCustom && ov.startTime ? (
-                                <div>
-                                  <div style={{ fontSize: "10px", color: "#8B7960", textTransform: "uppercase" }}>Time</div>
-                                  <div style={{ fontSize: "12px", color: "#1F1612" }}>{ov.startTime} – {ov.endTime}</div>
-                                </div>
-                              ) : null}
-                            </div>
-                            {ov.reason ? (
-                              <div>
-                                <div style={{ fontSize: "10px", color: "#8B7960", textTransform: "uppercase" }}>Reason</div>
-                                <div style={{ fontSize: "12px", color: "#1F1612" }}>{ov.reason}</div>
-                              </div>
-                            ) : null}
-                            <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
-                              <button type="button" className="svc-text-btn"
-                                onClick={() => {
-                                  // Use UTC date from the override, not local time
-                                  const dateStr = startDateStr;
-                                  const weekday = startD.getUTCDay();
-                                  const wd = weekday === 0 ? 6 : weekday - 1;
-                                  setDayEditor({ dateStr, weekday: wd });
-                                }}
-                                style={{ fontSize: "11px", textDecoration: "underline" }}>
-                                Edit in day editor
-                              </button>
-                            </div>
-                          </div>
-                        ) : null}
-                        </React.Fragment>
-                      );
-                    })}
-                </div>
-              )}
-            </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
           </>
         )}
+          </div>
+        </div>
+
+        <aside className="wh-side">
+          <div className="wh-side-card">
+            <div className="wh-side-card__title">Studio hours, for reference</div>
+            {studioHours.length > 0 ? (
+              <div className="wh-side-hours">
+                {studioHours.map((g) => (
+                  <div key={g.label} className="wh-side-hours-row">
+                    <span className="wh-side-hours-row__label">{g.label}</span>
+                    <span className="wh-side-hours-row__value">{g.text}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="wh-side-empty">No business hours set for this tenant yet.</p>
+            )}
+          </div>
+
+          <div className="wh-side-card">
+            <div className="wh-side-card__title">This week at a glance</div>
+            <div className="wh-stat-rows">
+              <div className="wh-stat-row">
+                <span className="wh-stat-row__label">Scheduled hours</span>
+                <span className="wh-stat-row__value">{summary.hoursPerWeek}</span>
+              </div>
+              <div className="wh-stat-row">
+                <span className="wh-stat-row__label">Days working</span>
+                <span className="wh-stat-row__value">{summary.workingDays}</span>
+              </div>
+            </div>
+          </div>
+
+          {warnings.length > 0 ? (
+            <div className="wh-warning-callout">
+              {warnings.map((w, i) => (
+                <p key={i} className="wh-warning-callout__text">{w.message}</p>
+              ))}
+            </div>
+          ) : null}
+        </aside>
       </div>
 
       {dayEditor ? (
@@ -3877,12 +3733,50 @@ type PermissionsTabProps = {
 type CompensationTabProps = {
   tenantSlug: string;
   provider: ProviderSummary;
+  services: ServiceSummary[];
   onSaved: () => void;
 };
 
 type CompensationMode = "service_percent" | "sliding_scale" | "flat_per_booking" | "hourly" | "";
 
-function CompensationTab({ tenantSlug, provider, onSaved }: CompensationTabProps) {
+function formatCentsWhole(cents: number): string {
+  return `$${Math.round(cents / 100).toLocaleString("en-US")}`;
+}
+
+type ModeCardProps = {
+  value: CompensationMode;
+  title: string;
+  desc: string;
+  mode: CompensationMode;
+  onSelect: (value: CompensationMode) => void;
+  children?: React.ReactNode;
+  preview?: React.ReactNode;
+};
+
+function ModeCard({ value, title, desc, mode, onSelect, children, preview }: ModeCardProps) {
+  const selected = mode === value;
+  return (
+    <div className={`comp-mode-card${selected ? " comp-mode-card--selected" : ""}`}>
+      <label className="comp-mode-card__head">
+        <input
+          type="radio"
+          name="compensationMode"
+          value={value}
+          checked={selected}
+          onChange={() => onSelect(value)}
+          className="comp-mode-card__radio-input"
+        />
+        <span className="comp-mode-card__radio" aria-hidden="true" />
+        <span className="comp-mode-card__title">{title}</span>
+      </label>
+      <p className="comp-mode-card__desc">{desc}</p>
+      {selected && children ? <div className="comp-mode-card__body">{children}</div> : null}
+      {!selected && preview ? <div className="comp-mode-card__preview">{preview}</div> : null}
+    </div>
+  );
+}
+
+function CompensationTab({ tenantSlug, provider, services, onSaved }: CompensationTabProps) {
   const [mode, setMode] = useState<CompensationMode>(
     (provider.compensationMode as CompensationMode) ?? "",
   );
@@ -3916,6 +3810,8 @@ function CompensationTab({ tenantSlug, provider, onSaved }: CompensationTabProps
   );
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [earnings, setEarnings] = useState<ProviderEarningsSummaryResponse | null>(null);
+  const [earningsError, setEarningsError] = useState<string | null>(null);
 
   useEffect(() => {
     setMode((provider.compensationMode as CompensationMode) ?? "");
@@ -3944,6 +3840,42 @@ function CompensationTab({ tenantSlug, provider, onSaved }: CompensationTabProps
       (provider.compensationSlidingScale as Array<{ upToAmountCents: number; percentBp: number }>) ?? [],
     );
   }, [provider]);
+
+  const loadEarnings = useCallback(async () => {
+    try {
+      const session = await ensureActiveStoredSession();
+      const token = session?.accessToken ?? "";
+      const resp = await fetch(
+        `${apiBaseUrl}/tenants/${tenantSlug}/providers/${provider.id}/compensation/earnings-summary`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ detail: "Request failed" }));
+        throw new Error(err.detail || `HTTP ${resp.status}`);
+      }
+      const data: ProviderEarningsSummaryResponse = await resp.json();
+      setEarnings(data);
+      setEarningsError(null);
+    } catch (error) {
+      setEarningsError(readErrorMessage(error, "Unable to load earnings."));
+    }
+  }, [tenantSlug, provider.id]);
+
+  useEffect(() => {
+    loadEarnings();
+  }, [loadEarnings]);
+
+  const representativeService = useMemo(() => {
+    const linked = services.filter((s) => provider.serviceIds.includes(s.id) && s.isActive);
+    return linked[0] ?? null;
+  }, [services, provider.serviceIds]);
+
+  const servicePercentHelper = useMemo(() => {
+    const pct = Number(servicePercent);
+    if (!representativeService || !Number.isFinite(pct) || pct <= 0) return null;
+    const amount = Math.round(representativeService.priceCents * (pct / 100));
+    return `≈ ${formatCentsWhole(amount)} on a ${formatCentsWhole(representativeService.priceCents)} ${representativeService.name}`;
+  }, [servicePercent, representativeService]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -3978,6 +3910,7 @@ function CompensationTab({ tenantSlug, provider, onSaved }: CompensationTabProps
       }
       setStatus("Compensation saved.");
       onSaved();
+      loadEarnings();
     } catch (error) {
       setStatus(readErrorMessage(error, "Unable to save compensation."));
     } finally {
@@ -4001,11 +3934,25 @@ function CompensationTab({ tenantSlug, provider, onSaved }: CompensationTabProps
     setSlidingTiers((prev) =>
       prev.map((t, i) =>
         i === index
-          ? { ...t, [field]: field === "upToAmountCents" ? Math.round(num) : Math.round(num) }
+          ? { ...t, [field]: Math.round(num) }
           : t,
       ),
     );
   };
+
+  const overrideCount = earnings?.overrideBookingsCount ?? 0;
+
+  const slidingPreview = slidingTiers.length > 0 ? (
+    <span className="comp-tier-preview">
+      {slidingTiers.map((tier, i) => (
+        <span key={i} className="comp-tier-chip comp-tier-chip--readonly">
+          {i === slidingTiers.length - 1 && tier.upToAmountCents === 0
+            ? `above · ${tier.percentBp / 100}%`
+            : `to $${Math.round(tier.upToAmountCents / 100) / 1000}k · ${tier.percentBp / 100}%`}
+        </span>
+      ))}
+    </span>
+  ) : null;
 
   return (
     <div className="staff-detail-form">
@@ -4016,153 +3963,158 @@ function CompensationTab({ tenantSlug, provider, onSaved }: CompensationTabProps
         </div>
       ) : null}
 
-      <div className="staff-fieldset">
-        <h5 style={{ margin: "0 0 0.5rem" }}>Service Commission</h5>
-        <p className="settings-form-help" style={{ margin: "0 0 0.75rem" }}>
-          Compensation is calculated as a percentage of service sales
-        </p>
+      <p className="comp-lead">
+        Pick one model. Per-treatment overrides on the Services tab always win over what's set here.
+      </p>
 
-        <label className="settings-label" style={{ marginBottom: "0.5rem", display: "block" }}>
-          <input
-            type="radio"
-            name="compensationMode"
-            value="service_percent"
-            checked={mode === "service_percent"}
-            onChange={() => setMode("service_percent")}
-            style={{ marginRight: "0.5rem" }}
-          />
-          Basic Service Commission
-        </label>
-        <p className="settings-form-help" style={{ margin: "0 0 0.75rem 1.5rem" }}>
-          A flat percentage of total sales
-        </p>
-        {mode === "service_percent" ? (
-          <div style={{ marginLeft: "1.5rem", marginBottom: "0.75rem" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-              <input
-                className="settings-input"
-                type="number"
-                min={0}
-                max={100}
-                step="0.1"
-                value={servicePercent}
-                onChange={(e) => setServicePercent(e.target.value)}
-                placeholder="0"
-                style={{ width: "6rem" }}
-              />
-              <span>%</span>
-            </div>
+      <div className="comp-mode-list">
+        <ModeCard
+          value="service_percent"
+          title="Percent of service"
+          desc="A flat share of every treatment she performs."
+          mode={mode}
+          onSelect={setMode}
+        >
+          <div className="comp-value-row">
+            <input
+              className="comp-value-input"
+              type="number"
+              min={0}
+              max={100}
+              step="0.1"
+              value={servicePercent}
+              onChange={(e) => setServicePercent(e.target.value)}
+              placeholder="0"
+            />
+            <span className="comp-value-suffix">%</span>
+            {servicePercentHelper ? <span className="comp-helper">{servicePercentHelper}</span> : null}
           </div>
-        ) : null}
+        </ModeCard>
 
-        <label className="settings-label" style={{ marginBottom: "0.5rem", display: "block" }}>
-          <input
-            type="radio"
-            name="compensationMode"
-            value="sliding_scale"
-            checked={mode === "sliding_scale"}
-            onChange={() => setMode("sliding_scale")}
-            style={{ marginRight: "0.5rem" }}
-          />
-          Sliding Scale Service Commission
-        </label>
-        <p className="settings-form-help" style={{ margin: "0 0 0.75rem 1.5rem" }}>
-          Percentage depends on amount sold
-        </p>
-        {mode === "sliding_scale" ? (
-          <div style={{ marginLeft: "1.5rem", marginBottom: "0.75rem" }}>
+        <ModeCard
+          value="sliding_scale"
+          title="Sliding scale"
+          desc="Percentage rises with monthly revenue served."
+          mode={mode}
+          onSelect={setMode}
+          preview={slidingPreview}
+        >
+          <div className="comp-tier-list">
             {slidingTiers.map((tier, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.4rem" }}>
-                <span style={{ fontSize: "0.8rem", whiteSpace: "nowrap" }}>Up to</span>
-                <span>$</span>
+              <div key={i} className="comp-tier-chip">
+                <span className="comp-tier-chip__label">to $</span>
                 <input
-                  className="settings-input"
+                  className="comp-tier-chip__input"
                   type="number"
                   min={0}
-                  step="0.01"
-                  value={(tier.upToAmountCents / 100).toFixed(2)}
+                  step="1"
+                  value={Math.round(tier.upToAmountCents / 100)}
                   onChange={(e) => updateSlidingTier(i, "upToAmountCents", String(Number(e.target.value) * 100))}
-                  style={{ width: "6rem" }}
                 />
-                <span style={{ fontSize: "0.8rem" }}>→</span>
+                <span className="comp-tier-chip__label">·</span>
                 <input
-                  className="settings-input"
+                  className="comp-tier-chip__input comp-tier-chip__input--pct"
                   type="number"
                   min={0}
                   max={100}
                   step="0.1"
-                  value={(tier.percentBp / 100).toString()}
+                  value={tier.percentBp / 100}
                   onChange={(e) => updateSlidingTier(i, "percentBp", String(Number(e.target.value) * 100))}
-                  style={{ width: "5rem" }}
                 />
-                <span>%</span>
-                <button type="button" className="ghost-action" onClick={() => removeSlidingTier(i)} style={{ fontSize: "0.75rem" }}>
-                  Remove
+                <span className="comp-tier-chip__label">%</span>
+                <button
+                  type="button"
+                  className="comp-tier-chip__remove"
+                  onClick={() => removeSlidingTier(i)}
+                  aria-label="Remove tier"
+                >
+                  ×
                 </button>
               </div>
             ))}
-            <button type="button" className="ghost-action" onClick={addSlidingTier} style={{ fontSize: "0.8rem" }}>
-              + Add tier
+            <button type="button" className="comp-tier-add" onClick={addSlidingTier}>
+              + Tier
             </button>
           </div>
-        ) : null}
+        </ModeCard>
 
-        <label className="settings-label" style={{ marginBottom: "0.5rem", display: "block" }}>
-          <input
-            type="radio"
-            name="compensationMode"
-            value="flat_per_booking"
-            checked={mode === "flat_per_booking"}
-            onChange={() => setMode("flat_per_booking")}
-            style={{ marginRight: "0.5rem" }}
-          />
-          Flat Per Booking
-        </label>
-        <p className="settings-form-help" style={{ margin: "0 0 0.75rem 1.5rem" }}>
-          A fixed dollar amount paid for every completed booking
-        </p>
-        {mode === "flat_per_booking" ? (
-          <div style={{ marginLeft: "1.5rem", marginBottom: "0.75rem" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-              <span>$</span>
-              <input
-                className="settings-input"
-                type="number"
-                min={0}
-                step="0.01"
-                value={flatPerBooking}
-                onChange={(e) => setFlatPerBooking(e.target.value)}
-                placeholder="0.00"
-                style={{ width: "6rem" }}
-              />
-              <span>per booking</span>
-            </div>
+        <ModeCard
+          value="flat_per_booking"
+          title="Flat per booking"
+          desc="The same amount however long or costly the treatment."
+          mode={mode}
+          onSelect={setMode}
+        >
+          <div className="comp-value-row">
+            <span className="comp-value-prefix">$</span>
+            <input
+              className="comp-value-input"
+              type="number"
+              min={0}
+              step="0.01"
+              value={flatPerBooking}
+              onChange={(e) => setFlatPerBooking(e.target.value)}
+              placeholder="0.00"
+            />
+            <span className="comp-value-suffix">per booking</span>
           </div>
-        ) : null}
+        </ModeCard>
+
+        <ModeCard
+          value="hourly"
+          title="Hourly rate"
+          desc="Paid on hours worked, not on what she serves."
+          mode={mode}
+          onSelect={setMode}
+        >
+          <div className="comp-value-row">
+            <span className="comp-value-prefix">$</span>
+            <input
+              className="comp-value-input"
+              type="number"
+              min={0}
+              step="0.01"
+              value={hourlyRate}
+              onChange={(e) => setHourlyRate(e.target.value)}
+              placeholder="0.00"
+            />
+            <span className="comp-value-suffix">/ hr</span>
+          </div>
+        </ModeCard>
       </div>
 
-      <div className="staff-fieldset">
-        <h5 style={{ margin: "0 0 0.5rem" }}>Product Commission Bonus</h5>
-        <p className="settings-form-help" style={{ margin: "0 0 0.75rem" }}>
-          An additional percentage of product sales paid on top of the primary compensation above.
-          Leave disabled if product sales are not part of this provider's pay.
+      <div className="comp-section">
+        <div className="comp-section__head">
+          <h5 className="comp-section__title">Product commission</h5>
+          <span className="comp-section__note">Set separately from treatments</span>
+        </div>
+        <p className="comp-section__desc">
+          What she earns on retail sold at checkout — serums, SPF, aftercare kits. Applies to every product line unless one is excluded below.
         </p>
-        <label className="settings-toggle" style={{ marginBottom: "0.75rem" }}>
-          <input
-            type="checkbox"
-            checked={productCommissionEnabled}
-            onChange={(e) => {
-              setProductCommissionEnabled(e.target.checked);
-              if (!e.target.checked) setProductPercent("");
-            }}
-          />
-          <span>Pay product commission</span>
-        </label>
-        {productCommissionEnabled ? (
-          <div style={{ marginLeft: "1.5rem", marginBottom: "0.75rem" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+        <div className="comp-product-card">
+          <div className="cs-seg" role="group" aria-label="Product commission mode">
+            <button
+              type="button"
+              aria-pressed={productCommissionEnabled}
+              onClick={() => setProductCommissionEnabled(true)}
+            >
+              Percent
+            </button>
+            <button
+              type="button"
+              aria-pressed={!productCommissionEnabled}
+              onClick={() => {
+                setProductCommissionEnabled(false);
+                setProductPercent("");
+              }}
+            >
+              None
+            </button>
+          </div>
+          {productCommissionEnabled ? (
+            <div className="comp-value-row" style={{ marginTop: "12px" }}>
               <input
-                className="settings-input"
+                className="comp-value-input"
                 type="number"
                 min={0}
                 max={100}
@@ -4170,51 +4122,35 @@ function CompensationTab({ tenantSlug, provider, onSaved }: CompensationTabProps
                 value={productPercent}
                 onChange={(e) => setProductPercent(e.target.value)}
                 placeholder="0"
-                style={{ width: "6rem" }}
               />
-              <span>% of product sales</span>
+              <span className="comp-value-suffix">% of product sales</span>
             </div>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
 
-      <div className="staff-fieldset">
-        <h5 style={{ margin: "0 0 0.5rem" }}>Hourly</h5>
-        <p className="settings-form-help" style={{ margin: "0 0 0.75rem" }}>
-          Compensation is calculated using a flat rate per hour
-        </p>
-        <label className="settings-label" style={{ marginBottom: "0.5rem", display: "block" }}>
-          <input
-            type="radio"
-            name="compensationMode"
-            value="hourly"
-            checked={mode === "hourly"}
-            onChange={() => setMode("hourly")}
-            style={{ marginRight: "0.5rem" }}
-          />
-          Hourly Rate
-        </label>
-        {mode === "hourly" ? (
-          <div style={{ marginLeft: "1.5rem", marginBottom: "0.75rem" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-              <span>$</span>
-              <input
-                className="settings-input"
-                type="number"
-                min={0}
-                step="0.01"
-                value={hourlyRate}
-                onChange={(e) => setHourlyRate(e.target.value)}
-                placeholder="0.00"
-                style={{ width: "6rem" }}
-              />
-              <span>/ hr</span>
+      <div className="comp-summary">
+        <h5 className="comp-summary__title">{earnings ? `${earnings.monthLabel} so far` : "This month so far"}</h5>
+        {earningsError ? (
+          <p className="comp-summary__error">{earningsError}</p>
+        ) : earnings ? (
+          <div className="comp-summary__body">
+            <div className="comp-summary__breakdown">
+              <p>{formatCentsWhole(earnings.treatmentRevenueCents)} in treatments · {formatCentsWhole(earnings.retailRevenueCents)} in retail{overrideCount > 0 ? ` · ${overrideCount} treatment${overrideCount === 1 ? "" : "s"} on an override rate` : ""}</p>
+            </div>
+            <div className="comp-summary__total">
+              <span className="comp-summary__total-amount">{formatCentsWhole(earnings.totalPayoutCents)}</span>
+              <span className="comp-summary__total-split">
+                {formatCentsWhole(earnings.servicePayoutCents)} service + {formatCentsWhole(earnings.productPayoutCents)} product
+              </span>
             </div>
           </div>
-        ) : null}
+        ) : (
+          <p className="comp-summary__loading">Loading…</p>
+        )}
       </div>
 
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "18px" }}>
         <button type="button" className="primary-action" onClick={handleSave} disabled={saving}>
           {saving ? "Saving…" : "Save compensation"}
         </button>
@@ -4230,29 +4166,37 @@ function PermissionsTab({ tenantSlug, user }: PermissionsTabProps) {
   const [catalog, setCatalog] = useState<PermissionCatalogResponse | null>(null);
   const [permissions, setPermissions] = useState<UserPermissionsResponse | null>(null);
   const [overrides, setOverrides] = useState<Record<string, PermissionTriState>>({});
+  const [savedOverrides, setSavedOverrides] = useState<Record<string, PermissionTriState>>({});
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
+  const isOwner = user.role === "owner";
+
   useEffect(() => {
-    if (user.role === "owner") {
-      setLoadState({ kind: "ready" });
-      return;
-    }
     let cancelled = false;
     setLoadState({ kind: "loading" });
-    Promise.all([
-      platformApi.getPermissionsCatalog(),
-      platformApi.getUserPermissions(tenantSlug, user.id),
-    ])
+    const load = isOwner
+      ? platformApi
+          .getPermissionsCatalog()
+          .then((catalogResp): [PermissionCatalogResponse, UserPermissionsResponse | null] => [
+            catalogResp,
+            null,
+          ])
+      : Promise.all([
+          platformApi.getPermissionsCatalog(),
+          platformApi.getUserPermissions(tenantSlug, user.id),
+        ]);
+    load
       .then(([catalogResp, permsResp]) => {
         if (cancelled) return;
         setCatalog(catalogResp);
         setPermissions(permsResp);
         const next: Record<string, PermissionTriState> = {};
-        for (const entry of permsResp.overrides) {
+        for (const entry of permsResp?.overrides ?? []) {
           next[entry.key] = entry.allowed ? "allow" : "deny";
         }
         setOverrides(next);
+        setSavedOverrides(next);
         setLoadState({ kind: "ready" });
       })
       .catch((error: unknown) => {
@@ -4263,62 +4207,29 @@ function PermissionsTab({ tenantSlug, user }: PermissionsTabProps) {
     return () => {
       cancelled = true;
     };
-  }, [tenantSlug, user.id]);
+  }, [tenantSlug, user.id, isOwner]);
 
-  if (user.role === "owner") {
-    return (
-      <div className="permissions-tab">
-        <p className="settings-form-help">
-          Owners have full access to every permission. Customize permissions on managers, staff,
-          and providers instead.
-        </p>
-      </div>
-    );
-  }
+  const toApiOverrides = (map: Record<string, PermissionTriState>): ReplaceUserPermissionsRequest => ({
+    overrides: Object.entries(map).map(
+      ([key, value]): UserPermissionOverrideEntry => ({
+        key: key as PermissionKey,
+        allowed: value === "allow",
+      }),
+    ),
+  });
 
-  if (loadState.kind === "loading") {
-    return <p className="settings-form-help">Loading permissions…</p>;
-  }
-  if (loadState.kind === "error") {
-    return <p className="error-message">{loadState.message}</p>;
-  }
-  if (!catalog || !permissions) return null;
-
-  const roleDefaults = new Set<string>(permissions.roleDefaults);
-
-  const handleChange = (key: PermissionKey, next: PermissionTriState) => {
-    setOverrides((prev) => {
-      const copy = { ...prev };
-      if (next === "inherit") {
-        delete copy[key];
-      } else {
-        copy[key] = next;
-      }
-      return copy;
-    });
-    setStatus(null);
-  };
-
-  const handleSave = async () => {
+  const persist = async (map: Record<string, PermissionTriState>) => {
     setSaving(true);
     setStatus(null);
-    const payload: ReplaceUserPermissionsRequest = {
-      overrides: Object.entries(overrides).map(
-        ([key, value]): UserPermissionOverrideEntry => ({
-          key: key as PermissionKey,
-          allowed: value === "allow",
-        }),
-      ),
-    };
     try {
-      const updated = await platformApi.replaceUserPermissions(tenantSlug, user.id, payload);
+      const updated = await platformApi.replaceUserPermissions(tenantSlug, user.id, toApiOverrides(map));
       setPermissions(updated);
       const next: Record<string, PermissionTriState> = {};
       for (const entry of updated.overrides) {
         next[entry.key] = entry.allowed ? "allow" : "deny";
       }
       setOverrides(next);
-      setStatus("Permissions saved.");
+      setSavedOverrides(next);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to save permissions.";
       setStatus(message);
@@ -4327,75 +4238,243 @@ function PermissionsTab({ tenantSlug, user }: PermissionsTabProps) {
     }
   };
 
-  const grouped = new Map<string, PermissionDefinition[]>();
-  for (const def of catalog.permissions) {
-    const arr = grouped.get(def.category) ?? [];
-    arr.push(def);
-    grouped.set(def.category, arr);
-  }
+  const handleChange = (key: PermissionKey, next: PermissionTriState) => {
+    const nextMap: Record<string, PermissionTriState> = { ...overrides };
+    if (next === "inherit") {
+      delete nextMap[key];
+    } else {
+      nextMap[key] = next;
+    }
+    setOverrides(nextMap);
+    setStatus(null);
+    void persist(nextMap);
+  };
 
-  return (
-    <div className="permissions-tab">
-      <p className="settings-form-help">
-        Role defaults grant a baseline. Per-user overrides add or remove specific permissions on
-        top of the role.
-      </p>
-      <div className="permissions-groups">
-        {Array.from(grouped.entries()).map(([category, defs]) => (
-          <section key={category} className="permissions-group">
-            <h5>{category}</h5>
-            <ul className="permissions-list">
-              {defs.map((def) => {
-                const current: PermissionTriState = overrides[def.key] ?? "inherit";
-                const inheritedAllowed = roleDefaults.has(def.key);
-                return (
-                  <li key={def.key} className="permissions-row">
-                    <div className="permissions-row-label">
-                      <strong>{def.label}</strong>
-                      <span className="settings-form-help">{def.description}</span>
+  const handleReset = () => {
+    setOverrides({});
+    setStatus(null);
+    void persist({});
+  };
+
+  if (loadState.kind === "loading") {
+    return <p className="settings-form-help">Loading permissions…</p>;
+  }
+  if (loadState.kind === "error") {
+    return <p className="error-message">{loadState.message}</p>;
+  }
+  if (!catalog) return null;
+
+  const firstName = user.name.split(" ")[0] || user.name;
+
+  const groupAll = (defs: PermissionDefinition[]) => {
+    const grouped = new Map<string, PermissionDefinition[]>();
+    for (const def of defs) {
+      const arr = grouped.get(def.category) ?? [];
+      arr.push(def);
+      grouped.set(def.category, arr);
+    }
+    return Array.from(grouped.entries());
+  };
+
+  // Read-only full-access view for owners.
+  if (isOwner) {
+    return (
+      <div className="perm">
+        <div className="perm-banner">
+          <div className="perm-banner__text">
+            <strong>Owners have full access</strong>
+            <p className="perm-banner__sub">Every permission is granted automatically. Customize access on managers, providers, and staff instead.</p>
+          </div>
+        </div>
+
+        <div className="perm-grid-cols">
+          <span>Permission</span>
+          <span>Owner default</span>
+          <span>For {firstName}</span>
+        </div>
+
+        {groupAll(catalog.permissions).map(([category, defs]) => (
+          <section key={category} className="perm-group">
+            <p className="perm-group__label">{category}</p>
+            <div className="perm-group__list">
+              {defs.map((def) => (
+                <div key={def.key} className="perm-row">
+                  <div className="perm-row__label">
+                    <strong>{overrideLabel(def.key, def.label)}</strong>
+                    <span className="perm-row__key">{def.key}</span>
+                  </div>
+                  <div className="perm-row__default">
+                    <span className="perm-row__count-label">Allowed</span>
+                  </div>
+                  <div className="perm-row__control">
+                    <div className="perm-seg" role="radiogroup" aria-label={def.label}>
+                      <button type="button" className="perm-seg__btn" disabled>Inherit</button>
+                      <button type="button" className="perm-seg__btn" aria-pressed="true" disabled>Allow</button>
+                      <button type="button" className="perm-seg__btn" disabled>Deny</button>
                     </div>
-                    <div className="permissions-row-controls" role="radiogroup" aria-label={def.label}>
-                      <label>
-                        <input
-                          type="radio"
-                          name={`perm-${def.key}`}
-                          checked={current === "inherit"}
-                          onChange={() => handleChange(def.key, "inherit")}
-                        />
-                        Inherit ({inheritedAllowed ? "allow" : "deny"})
-                      </label>
-                      <label>
-                        <input
-                          type="radio"
-                          name={`perm-${def.key}`}
-                          checked={current === "allow"}
-                          onChange={() => handleChange(def.key, "allow")}
-                        />
-                        Allow
-                      </label>
-                      <label>
-                        <input
-                          type="radio"
-                          name={`perm-${def.key}`}
-                          checked={current === "deny"}
-                          onChange={() => handleChange(def.key, "deny")}
-                        />
-                        Deny
-                      </label>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+                  </div>
+                </div>
+              ))}
+            </div>
           </section>
         ))}
+
+        <div className="perm-summary">
+          <p className="perm-summary__text">{firstName} is an Owner — all permissions are always allowed and cannot be restricted from this screen.</p>
+        </div>
       </div>
-      <div className="permissions-actions">
-        <button type="button" className="primary-action" onClick={handleSave} disabled={saving}>
-          {saving ? "Saving…" : "Save permissions"}
+    );
+  }
+
+  if (!permissions) return null;
+
+  const roleDefaults = new Set<string>(permissions.roleDefaults);
+  const roleLabel = capitalize(permissions.role);
+  const overrideCount = Object.keys(overrides).length;
+  const dirty = JSON.stringify(normalizeOverrides(overrides)) !== JSON.stringify(normalizeOverrides(savedOverrides));
+  const savedCount = Object.keys(savedOverrides).length;
+
+  const activeOverrideEntry = Object.entries(savedOverrides)[0] ?? null;
+  const summaryOverrideKey = activeOverrideEntry ? (activeOverrideEntry[0] as PermissionKey) : null;
+  const summaryOverrideAllowed = activeOverrideEntry ? activeOverrideEntry[1] === "allow" : false;
+  const summaryDef = summaryOverrideKey
+    ? catalog.permissions.find((d) => d.key === summaryOverrideKey)
+    : undefined;
+  const summaryInheritedAllowed = summaryOverrideKey ? roleDefaults.has(summaryOverrideKey) : false;
+
+  return (
+    <div className="perm">
+      {status ? (
+        <div className="message-banner" role="alert">
+          {status}
+          <button type="button" className="ghost-action" onClick={() => setStatus(null)}>Dismiss</button>
+        </div>
+      ) : null}
+
+      <div className="perm-banner">
+        <div className="perm-banner__text">
+          <strong>{roleLabel} defaults apply</strong>
+          <p className="perm-banner__sub">Change the role on Details to move the whole baseline.</p>
+        </div>
+        <button
+          type="button"
+          className="perm-banner__reset"
+          onClick={handleReset}
+          disabled={saving || overrideCount === 0}
+        >
+          Reset overrides
         </button>
-        {status ? <span className="settings-form-help">{status}</span> : null}
+      </div>
+
+      <div className="perm-grid-cols">
+        <span>Permission</span>
+        <span>{roleLabel} default</span>
+        <span>For {firstName}</span>
+      </div>
+
+      {groupAll(catalog.permissions).map(([category, defs]) => (
+        <section key={category} className="perm-group">
+          <p className="perm-group__label">{category}</p>
+          <div className="perm-group__list">
+            {defs.map((def) => {
+              const current: PermissionTriState = overrides[def.key] ?? "inherit";
+              const inheritedAllowed = roleDefaults.has(def.key);
+              const overridden = savedOverrides[def.key] != null;
+              return (
+                <div key={def.key} className={`perm-row${overridden ? " perm-row--overridden" : ""}`}>
+                  <div className="perm-row__label">
+                    <strong>{overrideLabel(def.key, def.label)}</strong>
+                    <span className="perm-row__key">{def.key}</span>
+                  </div>
+                  <div className="perm-row__default">
+                    <span className="perm-row__count-label">{inheritedAllowed ? "Allowed" : "Denied"}</span>
+                  </div>
+                  <div className="perm-row__control">
+                    <div className="perm-seg" role="radiogroup" aria-label={def.label}>
+                      {(["inherit", "allow", "deny"] as const).map((opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          className={`perm-seg__btn${current === opt ? ` perm-seg__btn--${opt}` : ""}`}
+                          aria-pressed={current === opt}
+                          onClick={() => handleChange(def.key, opt)}
+                        >
+                          {opt === "inherit" ? "Inherit" : opt === "allow" ? "Allow" : "Deny"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+
+      <div className="perm-summary">
+        {dirty ? (
+          <p className="perm-summary__text">
+            {saving ? "Saving changes…" : "Saving your changes…"}
+          </p>
+        ) : savedCount > 0 && summaryDef ? (
+          <p className="perm-summary__text">
+            {savedCount === 1
+              ? summaryOverrideAllowed
+                ? summaryInheritedAllowed
+                  ? `One override is active — ${firstName} can ${summaryDef.label.toLowerCase()} explicitly, not just via the ${roleLabel} default.`
+                  : `One override is active — ${firstName} can ${summaryDef.label.toLowerCase()} even though ${roleLabel}s can't by default.`
+                : `One override is active — ${firstName} cannot ${summaryDef.label.toLowerCase()} even though ${roleLabel}s ${summaryInheritedAllowed ? "can by default" : "can't anyway"}.`
+              : `${savedCount} overrides are active for ${firstName} — including ${summaryDef.label.toLowerCase()} ${summaryOverrideAllowed ? "allowed" : "denied"} against the ${roleLabel} baseline.`}
+            {" "}Overrides are logged and surfaced to the owner.
+          </p>
+        ) : (
+          <p className="perm-summary__text">No overrides active for {firstName} — they follow the {roleLabel} defaults.</p>
+        )}
       </div>
     </div>
   );
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function normalizeOverrides(map: Record<string, PermissionTriState>): Record<string, PermissionTriState> {
+  const result: Record<string, PermissionTriState> = {};
+  for (const key of Object.keys(map).sort()) {
+    result[key] = map[key];
+  }
+  return result;
+}
+
+const PERMISSION_LABEL_OVERRIDES: Record<string, string> = {
+  "dashboard.view": "See the dashboard",
+  "calendar.view": "See the calendar",
+  "calendar.create_booking": "Book from a calendar slot",
+  "bookings.view": "Open a booking",
+  "bookings.manage": "Edit or reschedule",
+  "bookings.complete": "Complete an appointment",
+  "bookings.cancel": "Cancel or mark no-show",
+  "bookings.collect_payment": "Take payment at checkout",
+  "payments.view": "See the payments queue",
+  "payments.manage": "Collect, refund and correct",
+  "customers.view": "Open client records",
+  "customers.manage": "Edit clients and notes",
+  "forms.view": "Read submitted forms",
+  "forms.manage": "Build and edit forms",
+  "services.view": "See the treatment menu",
+  "services.manage": "Edit treatments and pricing",
+  "providers.view": "See the team",
+  "providers.manage": "Edit hours, comp and services",
+  "locations.view": "See locations",
+  "locations.manage": "Edit locations",
+  "settings.view": "See studio settings",
+  "settings.manage": "Change studio settings",
+  "reports.view": "See reports",
+  "reports.financial": "See financial reports",
+  "reports.export": "Export reports",
+};
+
+function overrideLabel(key: string, fallback: string): string {
+  return PERMISSION_LABEL_OVERRIDES[key] ?? fallback;
 }

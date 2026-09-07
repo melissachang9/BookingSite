@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.core.http import api_exception
 from app.core.security import hash_password
 from app.db.models import (
+    Booking,
     Location,
     Provider,
     ProviderLocation,
@@ -54,6 +55,7 @@ from app.schemas.catalog import (
     CreateStaffRequest,
     CreateStaffResponse,
     ProviderSummaryResponse,
+    ProviderEarningsSummaryResponse,
     WorkHoursResponse,
     WorkHoursSummary,
     CopyDayRequest,
@@ -1013,6 +1015,104 @@ async def update_provider_compensation(
     await session.commit()
     provider = await _load_provider_with_links(session, provider.id, tenant.id)
     return provider_to_summary(provider, tenant)
+
+
+def _sliding_scale_percent_bp(tiers: list[dict], revenue_cents: int) -> int:
+    """Pick the bracket percentage for a given month's revenue. Tiers are
+    evaluated in ascending `up_to_amount_cents` order; revenue above every
+    threshold falls into the last (highest) tier."""
+    if not tiers:
+        return 0
+    ordered = sorted(tiers, key=lambda t: t.get("up_to_amount_cents") or t.get("upToAmountCents") or 0)
+    for tier in ordered:
+        up_to = tier.get("up_to_amount_cents")
+        if up_to is None:
+            up_to = tier.get("upToAmountCents", 0)
+        if revenue_cents <= up_to:
+            return tier.get("percent_bp") or tier.get("percentBp") or 0
+    last = ordered[-1]
+    return last.get("percent_bp") or last.get("percentBp") or 0
+
+
+async def get_provider_earnings_summary(
+    session: AsyncSession, tenant_slug: str, provider_id: str
+) -> ProviderEarningsSummaryResponse:
+    """Real, computed month-to-date earnings for a provider: treatment revenue,
+    how many completed bookings used a per-service commission override, and
+    the resulting payout under the provider's current compensation mode.
+    There is no retail/product-sales concept in this system yet, so the
+    retail figures are always zero rather than fabricated."""
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    provider = await _load_provider_with_links(session, provider_id, tenant.id)
+
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    rows = (
+        await session.execute(
+            select(Booking.service_id, Service.price_cents, Service.duration_minutes)
+            .join(Service, Service.id == Booking.service_id)
+            .where(
+                Booking.tenant_id == tenant.id,
+                Booking.provider_id == provider.id,
+                Booking.status == "completed",
+                Booking.completed_at >= month_start,
+            )
+        )
+    ).all()
+
+    overrides_by_service = {
+        link.service_id: link
+        for link in provider.service_links
+        if link.commission_basis_points is not None or link.commission_flat_cents is not None
+    }
+
+    treatment_revenue_cents = 0
+    override_bookings_count = 0
+    override_payout_cents = 0
+    non_override_revenue_cents = 0
+    non_override_minutes = 0
+
+    for service_id, price_cents, duration_minutes in rows:
+        treatment_revenue_cents += price_cents
+        override = overrides_by_service.get(service_id)
+        if override is not None:
+            override_bookings_count += 1
+            if override.commission_basis_points is not None:
+                override_payout_cents += round(price_cents * override.commission_basis_points / 10_000)
+            elif override.commission_flat_cents is not None:
+                override_payout_cents += override.commission_flat_cents
+        else:
+            non_override_revenue_cents += price_cents
+            non_override_minutes += duration_minutes
+
+    mode = provider.compensation_mode
+    non_override_payout_cents = 0
+    if mode == "service_percent" and provider.compensation_service_percent_bp:
+        non_override_payout_cents = round(
+            non_override_revenue_cents * provider.compensation_service_percent_bp / 10_000
+        )
+    elif mode == "sliding_scale":
+        percent_bp = _sliding_scale_percent_bp(provider.compensation_sliding_scale or [], non_override_revenue_cents)
+        non_override_payout_cents = round(non_override_revenue_cents * percent_bp / 10_000)
+    elif mode == "flat_per_booking" and provider.compensation_flat_cents:
+        non_override_bookings_count = len(rows) - override_bookings_count
+        non_override_payout_cents = provider.compensation_flat_cents * non_override_bookings_count
+    elif mode == "hourly" and provider.compensation_hourly_cents:
+        hours = non_override_minutes / 60
+        non_override_payout_cents = round(hours * provider.compensation_hourly_cents)
+
+    service_payout_cents = override_payout_cents + non_override_payout_cents
+
+    return ProviderEarningsSummaryResponse(
+        month_label=now.strftime("%B"),
+        treatment_revenue_cents=treatment_revenue_cents,
+        retail_revenue_cents=0,
+        override_bookings_count=override_bookings_count,
+        service_payout_cents=service_payout_cents,
+        product_payout_cents=0,
+        total_payout_cents=service_payout_cents,
+    )
 
 
 async def create_tenant_staff(

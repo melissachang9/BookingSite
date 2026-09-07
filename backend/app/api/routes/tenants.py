@@ -19,6 +19,7 @@ from app.schemas.catalog import (
     EmailDnsResponse,
     LocationListResponse,
     LocationSummaryResponse,
+    ProviderEarningsSummaryResponse,
     ProviderListResponse,
     ProviderSummaryResponse,
     ResetTenantUserPasswordRequest,
@@ -544,6 +545,21 @@ async def patch_provider_compensation(
     result = await update_provider_compensation(session, tenant_slug, provider_id, payload)
     await record_audit(session, tenant_id=result.tenant_id, entity_type="provider", entity_id=provider_id, action="update_compensation", actor=actor)
     return result
+
+
+@router.get(
+    "/{tenant_slug}/providers/{provider_id}/compensation/earnings-summary",
+    response_model=ProviderEarningsSummaryResponse,
+    summary="Get a provider's month-to-date earnings summary",
+)
+async def get_provider_earnings_summary_route(
+    tenant_slug: str,
+    provider_id: str,
+    _: object = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ProviderEarningsSummaryResponse:
+    from app.services.tenants import get_provider_earnings_summary
+    return await get_provider_earnings_summary(session, tenant_slug, provider_id)
 
 
 @router.delete(

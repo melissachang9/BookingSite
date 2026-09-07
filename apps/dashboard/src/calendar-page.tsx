@@ -4742,11 +4742,11 @@ function AppointmentDetailsDrawer({
             ) : (
               <>
                 <div className="cs-clientrow cs-clientrow--profile-card">
-                  <span className="cs-clientrow__avatar cs-clientrow__avatar--round" aria-hidden="true">
-                    {getInitials(selectedAppointment.customerName)}
-                  </span>
                   <div className="cs-clientrow__body">
                     <div className="cs-clientrow__top">
+                      <span className="cs-clientrow__avatar cs-clientrow__avatar--round" aria-hidden="true">
+                        {getInitials(selectedAppointment.customerName)}
+                      </span>
                       <div className="cs-clientrow__identity">
                         <div className="cs-clientrow__name">{selectedAppointment.customerName}</div>
                         <div className="cs-clientrow__meta">
@@ -4814,7 +4814,7 @@ function AppointmentDetailsDrawer({
                       {clientCardTab === "history" ? (
                         <ClientCardHistory profile={clientCardProfile} />
                       ) : clientCardTab === "forms" ? (
-                        <ClientCardForms profile={clientCardProfile} />
+                        <ClientCardForms state={formResponsesState} onViewForm={setViewingFormEntry} />
                       ) : clientCardTab === "photos" ? (
                         <p className="staff-list-empty">Before/after photos aren't stored yet. Placeholder for a future phase.</p>
                       ) : clientCardTab === "notes" ? (
@@ -4986,6 +4986,26 @@ function AppointmentDetailsDrawer({
               </header>
 
               <div className="customer-overlay__body">
+
+                <div className="customer-overlay__stats">
+                  <div className="customer-overlay__stat customer-overlay__stat--credits">
+                    <span className="customer-overlay__stat-label">Credits</span>
+                    <span className="customer-overlay__stat-value">–</span>
+                  </div>
+                  <div className="customer-overlay__stat customer-overlay__stat--wallet">
+                    <span className="customer-overlay__stat-label">Wallet</span>
+                    <span className="customer-overlay__stat-value">
+                      {formatMoney(selectedAppointment.walletBalanceCents)}
+                    </span>
+                  </div>
+                  <div className="customer-overlay__stat customer-overlay__stat--lifetime">
+                    <span className="customer-overlay__stat-label">Lifetime</span>
+                    <span className="customer-overlay__stat-value">
+                      {formatMoney(customerProfileForOverlay?.lifetimeSpendCents ?? selectedAppointment.amountPaidCents)}
+                    </span>
+                  </div>
+                </div>
+
                 <div className="customer-overlay__tabs" role="tablist">
                   {(
                     [
@@ -5007,37 +5027,6 @@ function AppointmentDetailsDrawer({
                       {label}
                     </button>
                   ))}
-                </div>
-
-                <div className="customer-overlay__stats">
-                  <div className="customer-overlay__stat customer-overlay__stat--credits">
-                    <span className="customer-overlay__stat-label">Credits</span>
-                    <span className="customer-overlay__stat-value">–</span>
-                  </div>
-                  <div className="customer-overlay__stat customer-overlay__stat--wallet">
-                    <span className="customer-overlay__stat-label">Wallet</span>
-                    <span className="customer-overlay__stat-value">
-                      {formatMoney(selectedAppointment.walletBalanceCents)}
-                    </span>
-                  </div>
-                  <div className="customer-overlay__stat customer-overlay__stat--lifetime">
-                    <span className="customer-overlay__stat-label">Lifetime</span>
-                    <span className="customer-overlay__stat-value">
-                      {formatMoney(customerProfileForOverlay?.lifetimeSpendCents ?? selectedAppointment.amountPaidCents)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="customer-overlay__chips">
-                  <span className="cs-clientrow__chip">
-                    Forms{intakeStatus === "submitted" ? " · submitted" : intakeStatus === "partial" ? " · partial" : intakeStatus === "missing" ? " · 1 pending" : ""}
-                  </span>
-                  <span className="cs-clientrow__chip cs-clientrow__chip--muted" title="Before/after photos aren't stored yet. Placeholder.">
-                    Photos
-                  </span>
-                  <span className="cs-clientrow__chip cs-clientrow__chip--muted" title="Client messaging isn't implemented yet. Placeholder.">
-                    Messages
-                  </span>
                 </div>
 
                 {customerProfileForOverlay === null ? (
@@ -6207,34 +6196,55 @@ function ClientCardHistory({ profile }: { profile: CustomerProfileResponse | nul
   );
 }
 
-function ClientCardForms({ profile }: { profile: CustomerProfileResponse | null }) {
-  const payments = profile?.payments ?? [];
-  if (profile === null) {
+function ClientCardForms({
+  state,
+  onViewForm,
+}: {
+  state: FormResponsesState;
+  onViewForm: (entry: BookingFormResponseEntry) => void;
+}) {
+  if (state.kind === "idle" || state.kind === "loading") {
     return <p className="staff-list-empty">Loading forms…</p>;
   }
-  if (payments.length === 0) {
-    return <p className="staff-list-empty">No form responses yet.</p>;
+  if (state.kind === "error") {
+    return <p className="staff-list-empty" role="alert">{state.message}</p>;
   }
+  if (state.requirements.length === 0) {
+    return <p className="staff-list-empty">No forms attached to this appointment.</p>;
+  }
+
+  const responsesById = new Map(state.items.map((response) => [response.id, response]));
+
   return (
     <ul className="client-history-list">
-      {payments.slice(0, 5).map((payment) => (
-        <li key={payment.id} className="client-history-row">
-          <span className="client-history-row__date">
-            <strong className="client-history-row__day">
-              {new Intl.DateTimeFormat("en-US", { day: "2-digit" }).format(new Date(payment.recordedAt))}
-            </strong>
-            <span className="client-history-row__month">
-              {new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date(payment.recordedAt)).toUpperCase()}
-            </span>
-          </span>
-          <div className="client-history-row__body">
-            <strong className="client-history-row__title">{payment.paymentMethodType}</strong>
-            <span className="client-history-row__meta">
-              {new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric" }).format(new Date(payment.recordedAt))}
-            </span>
-          </div>
-        </li>
-      ))}
+      {state.requirements.map((requirement) => {
+        const response = requirement.satisfiedByResponseId
+          ? responsesById.get(requirement.satisfiedByResponseId)
+          : undefined;
+
+        return (
+          <li key={requirement.id} className="client-history-row client-history-row--form">
+            <button
+              type="button"
+              className="client-history-row__body client-history-row__button"
+              onClick={() => response && onViewForm(response)}
+              disabled={!response}
+            >
+              <span className="client-history-row__title-line">
+                <strong className="client-history-row__title">{requirement.formName}</strong>
+                <span className={`cs-pill ${response ? "cs-pill--ok" : "cs-pill--warn"}`}>
+                  {response ? "Submitted" : "Pending"}
+                </span>
+              </span>
+              <span className="client-history-row__meta">
+                {response
+                  ? `Submitted ${new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric" }).format(new Date(response.submittedAt))}`
+                  : "Awaiting client response"}
+              </span>
+            </button>
+          </li>
+        );
+      })}
     </ul>
   );
 }

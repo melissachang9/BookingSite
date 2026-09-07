@@ -98,6 +98,21 @@ function parseMoneyInput(value: string): number | null {
   return Math.round(parsedValue * 100);
 }
 
+const AVATAR_PLACEHOLDER_COLORS = ["#DFEBE1", "#DCE7F6", "#F6DFCE", "#EAE1F6", "#F6E0E3"];
+
+function initialsFor(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return `${parts[0]!.charAt(0)}${parts[parts.length - 1]!.charAt(0)}`.toUpperCase();
+}
+
+function avatarColorFor(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i += 1) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  return AVATAR_PLACEHOLDER_COLORS[hash % AVATAR_PLACEHOLDER_COLORS.length]!;
+}
+
 function readErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message;
   return fallback;
@@ -1019,6 +1034,53 @@ function ServiceDetailsTab({
           </div>
         </div>
 
+        {/* Client-facing description */}
+        <div className="svc-card">
+          <span className="svc-card__eyebrow" style={{ marginBottom: "12px", display: "block" }}>Client-facing description</span>
+          <textarea
+            className="svc-input svc-description-textarea"
+            rows={4}
+            value={form.description}
+            onChange={(e) => setForm((c) => ({ ...c, description: e.target.value }))}
+            placeholder="Describe the treatment as it appears on the storefront…"
+          />
+        </div>
+
+        {/* Slot footprint + featured controls */}
+        <div className="svc-card svc-card--footprint">
+          <div className="svc-footprint">
+            <span className="svc-field-label">Slot footprint</span>
+            <div className="svc-footprint__rail">
+              <div className="svc-footprint__bar">
+                <span
+                  className="svc-footprint__fill"
+                  style={{ width: `${Math.min(100, (Number(form.durationMinutes || 0) / 120) * 100)}%` }}
+                >
+                  Treatment {form.durationMinutes || 0} min
+                </span>
+              </div>
+              <span className="svc-footprint__meta">
+                Books {Number(form.durationMinutes || 0) + Number(form.setupBufferMinutes || 0) + Number(form.cleanupBufferMinutes || 0)} min
+              </span>
+            </div>
+          </div>
+          <div className="svc-featured">
+            <span className="svc-field-label">Featured label</span>
+            <div className="svc-featured__pills">
+              {["Signature", "Most popular", "New", "Limited", "None"].map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  className={`svc-featured__pill${label === "Signature" ? " is-active" : ""}`}
+                  onClick={() => {}}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
         {/* Locations card */}
         <div className="svc-card" style={{ marginBottom: 0 }}>
           <span className="svc-card__eyebrow" style={{ marginBottom: "12px", display: "block" }}>Available at locations</span>
@@ -1140,232 +1202,144 @@ function ServiceStaffTab({
         </div>
       ) : null}
 
-      {/* Per-provider cards, always expanded */}
+      {/* Per-provider table: one row per provider, like the reference. */}
       {!variantsLoaded ? (
         <div className="svc-card"><p className="svc-helper">Loading…</p></div>
       ) : (
-        eligibleProviders.map((provider) => {
-          const entry = variantByProvider.get(provider.id) ?? {
-            providerId: provider.id, priceCents: null, durationMinutes: null,
-            depositCents: null, commissionFlatCents: null, commissionBasisPoints: null,
-          };
-          const hasAnyOverride =
-            entry.priceCents != null ||
-            entry.durationMinutes != null ||
-            entry.depositCents != null ||
-            entry.commissionFlatCents != null ||
-            entry.commissionBasisPoints != null;
-          const commissionMode: "flat" | "percent" = entry.commissionFlatCents != null ? "flat" : "percent";
-          const isAssigned = assignedProviderIds.has(provider.id);
-          const text = variantTexts[provider.id] ?? { duration: "", price: "", flat: "", percent: "" };
-          // Auto-assign this provider to the service if the operator focuses/edits
-          // any override — without this the inputs feel dead ("clicked but nothing
-          // happens") whenever the provider isn't already assigned.
-          const ensureAssigned = () => {
-            if (!canManage) return;
-            if (!assignedProviderIds.has(provider.id)) {
-              void toggleProviderAssignment(provider.id);
-            }
-          };
-          // Deep-link to this specific service preselected with this provider.
-          const directLink = `${storefrontBaseUrl}/${tenantSlug}/services/${service.id}?providerId=${provider.id}`;
+        <>
+          <div className="svc-staff-table-head">
+            <span>Provider</span>
+            <span>Price</span>
+            <span>Duration</span>
+            <span>Deposit</span>
+            <span>Commission</span>
+          </div>
+          {eligibleProviders.map((provider) => {
+            const entry = variantByProvider.get(provider.id) ?? {
+              providerId: provider.id, priceCents: null, durationMinutes: null,
+              depositCents: null, commissionFlatCents: null, commissionBasisPoints: null,
+            };
+            const commissionMode: "flat" | "percent" = entry.commissionFlatCents != null ? "flat" : "percent";
+            const isAssigned = assignedProviderIds.has(provider.id);
+            const text = variantTexts[provider.id] ?? { duration: "", price: "", flat: "", percent: "" };
+            // Auto-assign this provider to the service if the operator edits any override.
+            const ensureAssigned = () => {
+              if (!canManage) return;
+              if (!assignedProviderIds.has(provider.id)) void toggleProviderAssignment(provider.id);
+            };
 
-          return (
-            <div
-              key={provider.id}
-              className={`svc-provider-card${isAssigned ? "" : " svc-provider-card--off"}`}
-            >
-              {/* Header: toggle + name */}
-              <div className="svc-provider-card__header">
-                <button
-                  type="button"
-                  className={`svc-toggle${isAssigned ? "" : " svc-toggle--off"}`}
-                  aria-label={`Toggle ${provider.name}`}
-                  disabled={!canManage}
-                  onClick={() => toggleProviderAssignment(provider.id)}
-                />
-                <span className="svc-provider-card__name">{provider.name}</span>
-              </div>
-
-              {/* Duration */}
-              <div className="svc-provider-row">
-                <span className="svc-provider-row__label">Duration</span>
-                <div className="svc-provider-row__value">
+            return (
+              <div
+                key={provider.id}
+                className={`svc-staff-trow${isAssigned ? "" : " svc-staff-trow--off"}`}
+              >
+                <div className="svc-staff-trow__provider">
                   <input
-                    className="svc-input svc-provider-row__input"
-                    type="text" inputMode="numeric"
+                    type="checkbox"
+                    className="svc-staff-checkbox"
+                    aria-label={`Toggle ${provider.name}`}
+                    checked={isAssigned}
                     disabled={!canManage}
-                    placeholder={String(baseDurationMinutes)}
-                    value={text.duration !== "" ? text.duration : String(baseDurationMinutes)}
-                    onFocus={(e) => { ensureAssigned(); e.target.select(); }}
-                    onMouseUp={(e) => e.preventDefault()}
-                    onChange={(e) => patchVariantText(provider.id, "duration", e.target.value)}
+                    onChange={() => toggleProviderAssignment(provider.id)}
                   />
-                  <span className="svc-provider-row__unit">min</span>
+                  {provider.imageUrl ? (
+                    <img
+                      src={provider.imageUrl}
+                      alt={provider.imageAltText ?? provider.name}
+                      className="svc-staff-avatar svc-staff-avatar--photo"
+                    />
+                  ) : (
+                    <span className="svc-staff-avatar" style={{ background: avatarColorFor(provider.id) }}>
+                      {initialsFor(provider.name)}
+                    </span>
+                  )}
+                  <span>
+                    <span className="svc-provider-card__name">{provider.name}</span>
+                    {provider.description ? (
+                      <span className="svc-staff-subtitle">{provider.description}</span>
+                    ) : null}
+                  </span>
                 </div>
-              </div>
-              {entry.durationMinutes != null && canManage ? (
-                <div className="svc-provider-row__reset">
-                  <button type="button" className="svc-text-btn"
-                    onClick={() => { patchVariantText(provider.id, "duration", ""); }}>
-                    Reset to default
-                  </button>
-                </div>
-              ) : null}
 
-              {/* Price */}
-              <div className="svc-provider-row">
-                <span className="svc-provider-row__label">Price</span>
-                <div className="svc-provider-row__value">
-                  <span className="svc-provider-row__unit">$</span>
+                <div className="svc-staff-trow__cell">
                   <input
                     className="svc-input svc-provider-row__input"
                     type="text" inputMode="decimal"
                     disabled={!canManage}
-                    placeholder={(basePriceCents / 100).toFixed(2)}
-                    value={text.price !== "" ? text.price : (basePriceCents / 100).toFixed(2)}
+                    placeholder={`$${(basePriceCents / 100).toFixed(2)}`}
+                    value={text.price}
                     onFocus={(e) => { ensureAssigned(); e.target.select(); }}
                     onMouseUp={(e) => e.preventDefault()}
                     onChange={(e) => patchVariantText(provider.id, "price", e.target.value)}
+                    aria-label={`${provider.name} price`}
                   />
                 </div>
-              </div>
-              {entry.priceCents != null && canManage ? (
-                <div className="svc-provider-row__reset">
-                  <button type="button" className="svc-text-btn"
-                    onClick={() => { patchVariantText(provider.id, "price", ""); }}>
-                    Reset to default
-                  </button>
-                </div>
-              ) : null}
 
-              {/* Commission */}
-              <div className="svc-provider-row">
-                <span className="svc-provider-row__label">Commission</span>
-                <div className="svc-provider-row__value">
+                <div className="svc-staff-trow__cell">
+                  <input
+                    className="svc-input svc-provider-row__input"
+                    type="text" inputMode="numeric"
+                    disabled={!canManage}
+                    placeholder={`${baseDurationMinutes} min`}
+                    value={text.duration}
+                    onFocus={(e) => { ensureAssigned(); e.target.select(); }}
+                    onMouseUp={(e) => e.preventDefault()}
+                    onChange={(e) => patchVariantText(provider.id, "duration", e.target.value)}
+                    aria-label={`${provider.name} duration`}
+                  />
+                </div>
+
+                <div className="svc-staff-trow__cell">
+                  <span className="svc-provider-row__value svc-provider-row__value--muted">
+                    ${(baseDepositCents / 100).toFixed(2)}
+                  </span>
+                </div>
+
+                <div className="svc-staff-trow__cell svc-staff-trow__commission">
                   <div className="service-card__pill-toggle" role="group" aria-label="Commission type">
-                    <button
-                      type="button"
+                    <button type="button"
                       className={`service-card__pill${commissionMode === "flat" ? " is-active" : ""}`}
                       disabled={!canManage}
-                      onClick={() => {
-                        ensureAssigned();
-                        if (commissionMode === "flat") return;
-                        patchVariantText(provider.id, "percent", "");
-                        updateVariant(provider.id, { commissionBasisPoints: null, commissionFlatCents: entry.commissionFlatCents ?? 0 });
-                      }}
-                    >$</button>
-                    <button
-                      type="button"
+                      onClick={() => { ensureAssigned(); if (commissionMode === "flat") return; patchVariantText(provider.id, "percent", ""); updateVariant(provider.id, { commissionBasisPoints: null, commissionFlatCents: entry.commissionFlatCents ?? 0 }); }}>
+                      $
+                    </button>
+                    <button type="button"
                       className={`service-card__pill${commissionMode === "percent" ? " is-active" : ""}`}
                       disabled={!canManage}
-                      onClick={() => {
-                        ensureAssigned();
-                        if (commissionMode === "percent") return;
-                        patchVariantText(provider.id, "flat", "");
-                        updateVariant(provider.id, { commissionFlatCents: null, commissionBasisPoints: entry.commissionBasisPoints ?? 0 });
-                      }}
-                    >%</button>
+                      onClick={() => { ensureAssigned(); if (commissionMode === "percent") return; patchVariantText(provider.id, "flat", ""); updateVariant(provider.id, { commissionFlatCents: null, commissionBasisPoints: entry.commissionBasisPoints ?? 0 }); }}>
+                      %
+                    </button>
                   </div>
                   {commissionMode === "flat" ? (
-                    <>
-                      <span className="svc-provider-row__unit">$</span>
-                      <input
-                        className="svc-input svc-provider-row__input"
-                        type="text" inputMode="decimal"
-                        disabled={!canManage}
-                        placeholder="0.00"
-                        value={text.flat !== "" ? text.flat : "0.00"}
-                        onFocus={(e) => { ensureAssigned(); e.target.select(); }}
-                        onMouseUp={(e) => e.preventDefault()}
-                        onChange={(e) => patchVariantText(provider.id, "flat", e.target.value)}
-                      />
-                    </>
+                    <input
+                      className="svc-input svc-provider-row__input"
+                      type="text" inputMode="decimal"
+                      disabled={!canManage}
+                      placeholder="0.00"
+                      value={text.flat}
+                      onFocus={(e) => { ensureAssigned(); e.target.select(); }}
+                      onMouseUp={(e) => e.preventDefault()}
+                      onChange={(e) => patchVariantText(provider.id, "flat", e.target.value)}
+                      aria-label={`${provider.name} commission flat`}
+                    />
                   ) : (
-                    <>
-                      <input
-                        className="svc-input svc-provider-row__input"
-                        type="text" inputMode="decimal"
-                        disabled={!canManage}
-                        placeholder="0"
-                        value={text.percent !== "" ? text.percent : "0"}
-                        onFocus={(e) => { ensureAssigned(); e.target.select(); }}
-                        onMouseUp={(e) => e.preventDefault()}
-                        onChange={(e) => patchVariantText(provider.id, "percent", e.target.value)}
-                      />
-                      <span className="svc-provider-row__unit">%</span>
-                    </>
+                    <input
+                      className="svc-input svc-provider-row__input"
+                      type="text" inputMode="decimal"
+                      disabled={!canManage}
+                      placeholder="0"
+                      value={text.percent}
+                      onFocus={(e) => { ensureAssigned(); e.target.select(); }}
+                      onMouseUp={(e) => e.preventDefault()}
+                      onChange={(e) => patchVariantText(provider.id, "percent", e.target.value)}
+                      aria-label={`${provider.name} commission percent`}
+                    />
                   )}
                 </div>
               </div>
-              {(entry.commissionFlatCents != null || entry.commissionBasisPoints != null) && canManage ? (
-                <div className="svc-provider-row__reset">
-                  <button type="button" className="svc-text-btn"
-                    onClick={() => {
-                      patchVariantText(provider.id, "flat", "");
-                      patchVariantText(provider.id, "percent", "");
-                    }}>
-                    Reset to default
-                  </button>
-                </div>
-              ) : null}
-
-              <div className="svc-provider-card__divider" />
-
-              {/* Enable in online booking */}
-              <div className="svc-provider-row">
-                <span className="svc-provider-row__label">Enable in online booking</span>
-                <div className="svc-provider-row__value">
-                  <button
-                    type="button"
-                    className={`svc-toggle${isAssigned ? "" : " svc-toggle--off"}`}
-                    aria-label={`Online booking for ${provider.name}`}
-                    disabled={!canManage}
-                    onClick={() => toggleProviderAssignment(provider.id)}
-                  />
-                </div>
-              </div>
-
-              {/* Direct link */}
-              <div className="svc-provider-row">
-                <span className="svc-provider-row__label">Online booking</span>
-                <div className="svc-provider-row__value">
-                  <a
-                    href={directLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="svc-provider-card__link"
-                    onClick={async (e) => {
-                      e.preventDefault();
-                      try { await navigator.clipboard.writeText(directLink); } catch {}
-                      window.open(directLink, "_blank", "noopener,noreferrer");
-                    }}
-                  >
-                    Direct link
-                  </a>
-                </div>
-              </div>
-
-              {hasAnyOverride && canManage ? (
-                <div className="svc-provider-card__reset-all">
-                  <button type="button" className="svc-text-btn"
-                    onClick={() => {
-                      patchVariantText(provider.id, "duration", "");
-                      patchVariantText(provider.id, "price", "");
-                      patchVariantText(provider.id, "flat", "");
-                      patchVariantText(provider.id, "percent", "");
-                      updateVariant(provider.id, {
-                        priceCents: null, durationMinutes: null, depositCents: null,
-                        commissionFlatCents: null, commissionBasisPoints: null,
-                      });
-                    }}>
-                    Reset all to service defaults
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          );
-        })
+            );
+          })}
+        </>
       )}
 
       {/* Client selection card */}

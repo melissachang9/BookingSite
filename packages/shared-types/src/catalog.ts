@@ -257,6 +257,16 @@ export type UpdateProviderCompensationRequest = {
   compensationSlidingScale?: SlidingScaleTier[] | null;
 };
 
+export type ProviderEarningsSummaryResponse = {
+  monthLabel: string;
+  treatmentRevenueCents: number;
+  retailRevenueCents: number;
+  overrideBookingsCount: number;
+  servicePayoutCents: number;
+  productPayoutCents: number;
+  totalPayoutCents: number;
+};
+
 export type ServiceListResponse = {
   services: ServiceSummary[];
 };

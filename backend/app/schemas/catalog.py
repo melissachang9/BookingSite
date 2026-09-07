@@ -679,6 +679,16 @@ class UpdateProviderCompensationRequest(CamelModel):
     compensation_sliding_scale: list[SlidingScaleTier] | None = None
 
 
+class ProviderEarningsSummaryResponse(CamelModel):
+    month_label: str
+    treatment_revenue_cents: int = 0
+    retail_revenue_cents: int = 0
+    override_bookings_count: int = 0
+    service_payout_cents: int = 0
+    product_payout_cents: int = 0
+    total_payout_cents: int = 0
+
+
 class ServiceListResponse(CamelModel):
     services: list[ServiceSummaryResponse]
 
