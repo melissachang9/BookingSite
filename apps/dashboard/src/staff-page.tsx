@@ -479,11 +479,18 @@ export function StaffPage({
   const [activeTab, setActiveTab] = useState<TabKey>("details");
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
   const [refreshKey, setRefreshKey] = useState(0);
+  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
     if (!canManage) return;
     let cancelled = false;
-    setState({ kind: "loading" });
+    // Only show the full-page "Loading roster…" placeholder on the very first
+    // load. Subsequent refreshes (e.g. after toggling a location pill or
+    // saving a field) refetch quietly in the background so the panel stays
+    // mounted and the scroll position doesn't jump.
+    if (!hasLoadedRef.current) {
+      setState({ kind: "loading" });
+    }
     Promise.all([
       platformApi.listTenantUsers(currentUser.tenantSlug),
       platformApi.listProvidersAdmin(currentUser.tenantSlug),
@@ -499,6 +506,7 @@ export function StaffPage({
         setServices(servicesRes.services);
         setCategories(categoriesRes.categories);
         setState({ kind: "ready" });
+        hasLoadedRef.current = true;
         setSelectedUserId((prev) => prev ?? usersRes.users[0]?.id ?? null);
       })
       .catch((error: unknown) => {
@@ -979,151 +987,172 @@ function DetailsTab({
   return (
     <form className="staff-detail-form dt-form" onSubmit={submit}>
       <div className="dt-grid">
-        <div className="dt-field">
-          <span className="dt-label">Name</span>
-          <input
-            className="dt-input"
-            type="text"
-            value={form.name}
-            onChange={(event) => setForm({ ...form, name: event.target.value })}
-            required
-          />
-        </div>
-        <div className="dt-field">
-          <span className="dt-label">Role</span>
-          <div className="dt-role-pills" role="group" aria-label="Role">
-            {ROLE_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                disabled={isProvider}
-                className={`dt-pill dt-pill--role${form.role === option.value ? " is-selected" : ""}`}
-                onClick={() => setForm({ ...form, role: option.value })}
-                aria-pressed={form.role === option.value}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          {isProvider ? (
-            <span className="dt-helper">Role is locked while this person takes bookings.</span>
-          ) : null}
-        </div>
-
-        <div className="dt-field">
-          <span className="dt-label">Email</span>
-          <input className="dt-input" type="email" value={user.email} disabled readOnly />
-        </div>
-        <div className="dt-field">
-          <span className="dt-label">Phone</span>
-          <input
-            className="dt-input"
-            type="text"
-            value={form.phone}
-            onChange={(event) => setForm({ ...form, phone: event.target.value })}
-            placeholder="+1 555-555-1212"
-          />
-        </div>
-
-        <div className="dt-field">
-          <span className="dt-label">Profile photo</span>
-          <div className="dt-photo">
-            <AvatarUploader
-              tenantSlug={tenantSlug}
-              value={form.avatarUrl}
-              name={form.name}
-              inputId={`user-${user.id}-avatar-upload`}
-              pill={true}
-              onChange={(next) => setForm({ ...form, avatarUrl: next })}
-            />
-            <small className="dt-photo__help">
-              JPG, PNG, GIF, WEBP, or HEIC up to 10&nbsp;MB.
-            </small>
-          </div>
-        </div>
-        {provider ? (
+        <div className="dt-grid-col">
           <div className="dt-field">
-            <span className="dt-label">Title shown to clients</span>
+            <span className="dt-label">Name</span>
             <input
               className="dt-input"
               type="text"
-              value={providerForm.title}
-              onChange={(event) => setProviderForm({ ...providerForm, title: event.target.value })}
-              placeholder="Lead therapist"
-            />
-            <span className="dt-label" style={{ marginTop: 12 }}>Bio</span>
-            <textarea
-              className="dt-input dt-textarea"
-              value={providerForm.bio}
-              onChange={(event) => setProviderForm({ ...providerForm, bio: event.target.value })}
-              placeholder="A short client-facing bio…"
-              rows={3}
+              value={form.name}
+              onChange={(event) => setForm({ ...form, name: event.target.value })}
+              required
             />
           </div>
-        ) : (
-          <div className="dt-field">
-            <span className="dt-label">Joined</span>
-            <input
-              className="dt-input"
-              type="text"
-              value={DATE_FORMAT.format(new Date(user.createdAt))}
-              disabled
-              readOnly
-            />
-          </div>
-        )}
 
-        {provider ? (
           <div className="dt-field">
-            <span className="dt-label">Works at</span>
-            <div className="dt-pill-row">
-              {provider.locationIds.length === 0 ? (
-                <span className="dt-helper">Assign locations on the Services tab.</span>
-              ) : (
-                provider.locationIds.map((locId) => {
-                  const loc = locations.find((l) => l.id === locId);
-                  return loc ? (
-                    <span key={loc.id} className="dt-pill dt-pill--dark">{loc.name}</span>
-                  ) : null;
-                })
-              )}
+            <span className="dt-label">Email</span>
+            <input className="dt-input" type="email" value={user.email} disabled readOnly />
+          </div>
+
+          <div className="dt-field">
+            <span className="dt-label">Profile photo</span>
+            <div className="dt-photo">
+              <AvatarUploader
+                tenantSlug={tenantSlug}
+                value={form.avatarUrl}
+                name={form.name}
+                inputId={`user-${user.id}-avatar-upload`}
+                pill={true}
+                onChange={(next) => setForm({ ...form, avatarUrl: next })}
+              />
+              <small className="dt-photo__help">
+                JPG, PNG, GIF, WEBP, or HEIC up to 10&nbsp;MB.
+              </small>
             </div>
           </div>
-        ) : null}
-        <div className="dt-field">
-          <span className="dt-label">Can sign in</span>
-          <label className="settings-toggle dt-toggle-row">
-            <input
-              type="checkbox"
-              checked={form.isActive}
-              onChange={(event) => setForm({ ...form, isActive: event.target.checked })}
-            />
-            <span>Active</span>
-          </label>
-        </div>
-        {provider ? (
+
+          {provider ? (
+            <div className="dt-field">
+              <span className="dt-label">Works at</span>
+              <div className="dt-pill-row">
+                {locations.map((loc) => {
+                  const assigned = provider.locationIds.includes(loc.id);
+                  return (
+                    <button
+                      key={loc.id}
+                      type="button"
+                      className={`dt-pill dt-pill--location${assigned ? " is-assigned" : ""}`}
+                      onClick={() => {
+                        const next = assigned
+                          ? provider.locationIds.filter((id) => id !== loc.id)
+                          : [...provider.locationIds, loc.id];
+                        platformApi
+                          .updateProvider(tenantSlug, provider.id, { locationIds: next })
+                          .then(() => onSaved())
+                          .catch((e: unknown) => setError(readErrorMessage(e, "Unable to update locations.")));
+                      }}
+                      aria-pressed={assigned}
+                    >
+                      {loc.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
           <div className="dt-field">
-            <span className="dt-label">Bookable online</span>
+            <span className="dt-label">Can sign in</span>
             <label className="settings-toggle dt-toggle-row">
               <input
                 type="checkbox"
-                checked={provider.isBookableOnline}
-                onChange={(event) => {
-                  platformApi
-                    .updateProvider(tenantSlug, provider.id, { isBookableOnline: event.target.checked })
-                    .then(() => onSaved())
-                    .catch((e: unknown) => setError(readErrorMessage(e, "Unable to update bookability.")));
-                }}
+                checked={form.isActive}
+                onChange={(event) => setForm({ ...form, isActive: event.target.checked })}
               />
-              <span className="dt-helper">Clients can request {user.name.split(" ")[0] || user.name} by name</span>
+              <span>Active</span>
             </label>
           </div>
-        ) : null}
+
+          {provider ? (
+            <div className="dt-field">
+              <span className="dt-label">Bookable online</span>
+              <label className="settings-toggle dt-toggle-row">
+                <input
+                  type="checkbox"
+                  checked={provider.isBookableOnline}
+                  onChange={(event) => {
+                    platformApi
+                      .updateProvider(tenantSlug, provider.id, { isBookableOnline: event.target.checked })
+                      .then(() => onSaved())
+                      .catch((e: unknown) => setError(readErrorMessage(e, "Unable to update bookability.")));
+                  }}
+                />
+                <span className="dt-helper">Clients can request {user.name.split(" ")[0] || user.name} by name</span>
+              </label>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="dt-grid-col">
+          <div className="dt-field">
+            <span className="dt-label">Role</span>
+            <div className="dt-role-pills" role="group" aria-label="Role">
+              {ROLE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  disabled={isProvider}
+                  className={`dt-pill dt-pill--role${form.role === option.value ? " is-selected" : ""}`}
+                  onClick={() => setForm({ ...form, role: option.value })}
+                  aria-pressed={form.role === option.value}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {isProvider ? (
+              <span className="dt-helper">Role is locked while this person takes bookings.</span>
+            ) : null}
+          </div>
+
+          <div className="dt-field">
+            <span className="dt-label">Phone</span>
+            <input
+              className="dt-input"
+              type="text"
+              value={form.phone}
+              onChange={(event) => setForm({ ...form, phone: event.target.value })}
+              placeholder="+1 555-555-1212"
+            />
+          </div>
+
+          {provider ? (
+            <div className="dt-field">
+              <span className="dt-label">Title shown to clients</span>
+              <input
+                className="dt-input"
+                type="text"
+                value={providerForm.title}
+                onChange={(event) => setProviderForm({ ...providerForm, title: event.target.value })}
+                placeholder="Lead therapist"
+              />
+              <span className="dt-label" style={{ marginTop: 12 }}>Bio</span>
+              <textarea
+                className="dt-input dt-textarea"
+                value={providerForm.bio}
+                onChange={(event) => setProviderForm({ ...providerForm, bio: event.target.value })}
+                placeholder="A short client-facing bio…"
+                rows={3}
+              />
+            </div>
+          ) : (
+            <div className="dt-field">
+              <span className="dt-label">Joined</span>
+              <input
+                className="dt-input"
+                type="text"
+                value={DATE_FORMAT.format(new Date(user.createdAt))}
+                disabled
+                readOnly
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {provider ? (
         <div className="dt-booking-link">
-          <p className="dt-label">Her booking link</p>
+          <p className="dt-label">Booking link</p>
           <div className="dt-booking-link__row">
             <span className="dt-booking-link__prefix">{bookingLinkBase}</span>
             <input
@@ -1172,7 +1201,7 @@ function DetailsTab({
             {slugError ? (
               <span role="alert" className="settings-error">{slugError}</span>
             ) : (
-              "Available. Lowercase letters, numbers and hyphens — changing it breaks any link already shared. Leave it blank and she is bookable only from the studio's main page."
+              "Available. Lowercase letters, numbers and hyphens — changing it breaks any link already shared. Leave it blank and this person is bookable only from the studio's main page."
             )}
           </p>
           {bookingSlug.trim() !== (provider.bookingSlug ?? "") ? (
@@ -1249,6 +1278,10 @@ function ServicesTab({
   const [serviceOverrides, setServiceOverrides] = useState<
     Record<string, { durationMinutes: string; priceCents: string; flatCents: string; basisPoints: string }>
   >({});
+  // Explicit $/% choice per service, independent of whether a value has been typed yet
+  // (without this, clicking % while the percent field is still blank would immediately
+  // fall back to showing the flat $ input, since the mode was derived only from the data).
+  const [commissionModeOverride, setCommissionModeOverride] = useState<Record<string, "flat" | "percent">>({});
   const [overridesLoaded, setOverridesLoaded] = useState(false);
 
   // Load existing per-service overrides
@@ -1472,9 +1505,11 @@ function ServicesTab({
         ) : (
           <>
             <p className="svc-lead">
-              What she performs. Services come from the Treatments page, filtered to her. Leave a
+              What they perform. Services come from the Treatments page, filtered to this person. Leave a
               field blank to inherit that treatment's price and duration; enter a value to override
-              it just for her.
+              it just for them. Commission follows the model set on the Compensation tab for every
+              service they perform — override a specific treatment's commission below only when it
+              needs to differ from that baseline.
             </p>
             <div className="staff-list-toolbar">
               <input
@@ -1514,6 +1549,12 @@ function ServicesTab({
                 const providerBookingSlug = provider.bookingSlug ?? provider.id;
                 return (
                   <div className="staff-services-groups">
+                    <div className="svc-staff-theader" aria-hidden="true">
+                      <span />
+                      <span>Duration</span>
+                      <span>Price</span>
+                      <span>Commission</span>
+                    </div>
                     {groups.map((group) => {
                       const groupIds = group.services.map((s) => s.id);
                       const allEnabled = groupIds.every((id) => serviceIds.includes(id));
@@ -1545,7 +1586,8 @@ function ServicesTab({
                             const isAssigned = serviceIds.includes(svc.id);
                             const showNotOfferedHeader = !isAssigned && svc.id === notOffered[0]?.id;
                             const ov = serviceOverrides[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" };
-                            const commissionMode: "flat" | "percent" = ov.basisPoints ? "percent" : "flat";
+                            const commissionMode: "flat" | "percent" =
+                              commissionModeOverride[svc.id] ?? (ov.basisPoints ? "percent" : "flat");
                             // Auto-enable the service if the operator starts editing any override
                             // so the value they type will actually persist on save.
                             const ensureAssigned = () => {
@@ -1561,7 +1603,7 @@ function ServicesTab({
                             return (
                               <React.Fragment key={svc.id}>
                                 {showNotOfferedHeader ? (
-                                  <p className="svc-staff-notoffered__label">Not offered by her</p>
+                                  <p className="svc-staff-notoffered__label">Not offered</p>
                                 ) : null}
                               <div
                                 className={`svc-staff-trow staff-service-trow${isAssigned ? "" : " svc-staff-trow--off"}`}
@@ -1612,12 +1654,22 @@ function ServicesTab({
                                   <div className="service-card__pill-toggle" role="group" aria-label="Commission type">
                                     <button type="button"
                                       className={`service-card__pill${commissionMode === "flat" ? " is-active" : ""}`}
-                                      onClick={() => { ensureAssigned(); if (commissionMode === "flat") return; patch({ basisPoints: "" }); }}>
+                                      onClick={() => {
+                                        ensureAssigned();
+                                        setCommissionModeOverride((prev) => ({ ...prev, [svc.id]: "flat" }));
+                                        if (commissionMode === "flat") return;
+                                        patch({ basisPoints: "" });
+                                      }}>
                                       $
                                     </button>
                                     <button type="button"
                                       className={`service-card__pill${commissionMode === "percent" ? " is-active" : ""}`}
-                                      onClick={() => { ensureAssigned(); if (commissionMode === "percent") return; patch({ flatCents: "" }); }}>
+                                      onClick={() => {
+                                        ensureAssigned();
+                                        setCommissionModeOverride((prev) => ({ ...prev, [svc.id]: "percent" }));
+                                        if (commissionMode === "percent") return;
+                                        patch({ flatCents: "" });
+                                      }}>
                                       %
                                     </button>
                                   </div>
@@ -1627,7 +1679,7 @@ function ServicesTab({
                                       type="text" inputMode="decimal"
                                       placeholder="0.00"
                                       value={ov.flatCents}
-                                      onFocus={(e) => { ensureAssigned(); e.target.select(); }}
+                                      onFocus={(e) => { ensureAssigned(); patch({ flatCents: "" }); e.target.select(); }}
                                       onMouseUp={(e) => e.preventDefault()}
                                       onChange={(e) => patch({ flatCents: e.target.value, basisPoints: "" })}
                                       aria-label={`${svc.name} commission flat`}
@@ -1638,7 +1690,7 @@ function ServicesTab({
                                       type="text" inputMode="decimal"
                                       placeholder="0"
                                       value={ov.basisPoints}
-                                      onFocus={(e) => { ensureAssigned(); e.target.select(); }}
+                                      onFocus={(e) => { ensureAssigned(); patch({ basisPoints: "" }); e.target.select(); }}
                                       onMouseUp={(e) => e.preventDefault()}
                                       onChange={(e) => patch({ flatCents: "", basisPoints: e.target.value })}
                                       aria-label={`${svc.name} commission percent`}
@@ -1689,7 +1741,7 @@ function ServicesTab({
       <div className="modal-actions">
         {isDirty ? <span className="settings-form-help">Unsaved changes</span> : null}
         <button type="submit" className="primary-action" disabled={submitting || !isDirty}>
-          {submitting ? "Saving…" : "Save provider"}
+          {submitting ? "Saving…" : "Save"}
         </button>
       </div>
     </form>
@@ -4101,7 +4153,7 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
         <ModeCard
           value="service_percent"
           title="Percent of service"
-          desc="A flat share of every treatment she performs."
+          desc="A flat share of every treatment they perform."
           mode={mode}
           onSelect={setMode}
         >
@@ -4193,7 +4245,7 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
         <ModeCard
           value="hourly"
           title="Hourly rate"
-          desc="Paid on hours worked, not on what she serves."
+          desc="Paid on hours worked, not on what they serve."
           mode={mode}
           onSelect={setMode}
         >
@@ -4219,7 +4271,7 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
           <span className="comp-section__note">Set separately from treatments</span>
         </div>
         <p className="comp-section__desc">
-          What she earns on retail sold at checkout — serums, SPF, aftercare kits. Applies to every product line unless one is excluded below.
+          What they earn on retail sold at checkout — serums, SPF, aftercare kits. Applies to every product line unless one is excluded below.
         </p>
         <div className="comp-product-card">
           <div className="cs-seg" role="group" aria-label="Product commission mode">
@@ -4438,7 +4490,7 @@ function PermissionsTab({ tenantSlug, user }: PermissionsTabProps) {
                   </div>
                   <div className="perm-row__control">
                     <div className="perm-seg" role="radiogroup" aria-label={def.label}>
-                      <button type="button" className="perm-seg__btn" disabled>Inherit</button>
+                      <button type="button" className="perm-seg__btn" disabled>Default</button>
                       <button type="button" className="perm-seg__btn" aria-pressed="true" disabled>Allow</button>
                       <button type="button" className="perm-seg__btn" disabled>Deny</button>
                     </div>
@@ -4529,7 +4581,7 @@ function PermissionsTab({ tenantSlug, user }: PermissionsTabProps) {
                           aria-pressed={current === opt}
                           onClick={() => handleChange(def.key, opt)}
                         >
-                          {opt === "inherit" ? "Inherit" : opt === "allow" ? "Allow" : "Deny"}
+                          {opt === "inherit" ? "Default" : opt === "allow" ? "Allow" : "Deny"}
                         </button>
                       ))}
                     </div>

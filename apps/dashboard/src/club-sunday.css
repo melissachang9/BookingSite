@@ -1010,15 +1010,16 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   text-transform: uppercase;
   padding: 3px 8px;
   border-radius: var(--cs-r-pill);
-  .svc-staff-notoffered__label {
-    margin: 18px 0 6px;
-    font: 700 11px var(--cs-font);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--cs-label);
-  }
+}
+.svc-staff-notoffered__label {
+  margin: 18px 0 6px;
+  font: 700 11px var(--cs-font);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cs-label);
+}
 
-  /* Staff Services owns its tracks so the editor stays aligned at every pane width. */
+/* Staff Services owns its tracks so the editor stays aligned at every pane width. */
   .staff-detail-form,
   .staff-services-fieldset,
   .staff-services-groups,
@@ -1117,7 +1118,6 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
       grid-column: 1 / -1;
     }
   }
-}
 .form-response-item__badge--submitted { background: rgba(255, 255, 255, .7); color: var(--cs-ok-text); }
 .form-response-item__badge--missing { background: rgba(255, 255, 255, .7); color: var(--cs-warn-text); }
 
