@@ -339,6 +339,8 @@ export type UpdateProviderRequest = {
   isActive?: boolean;
   isBookableOnline?: boolean;
   bookingSlug?: string | null;
+  description?: string | null;
+  availabilityLabel?: string | null;
 };
 
 export type CreateStaffRequest = {

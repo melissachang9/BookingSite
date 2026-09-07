@@ -372,12 +372,14 @@ function AvatarUploader({
   name,
   onChange,
   inputId,
+  pill = false,
 }: {
   tenantSlug: string;
   value: string;
   name: string;
   onChange: (next: string) => void;
   inputId: string;
+  pill?: boolean;
 }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -412,14 +414,15 @@ function AvatarUploader({
       {cropFile ? (
         <CropModal file={cropFile} onSave={handleCropSave} onCancel={handleCropCancel} />
       ) : null}
-      <div className="staff-avatar-uploader">
-        <div className="staff-avatar-uploader__preview" aria-hidden="true">
+      <div className={pill ? "dt-photo-uploader" : "staff-avatar-uploader"}>
+        <div className="staff-avatar-uploader__preview dt-photo-uploader__preview" aria-hidden="true">
           {value ? <img src={value} alt="" /> : <span>{initialsOf(name) || "?"}</span>}
         </div>
         <div className="staff-avatar-uploader__controls">
           <input
             id={inputId}
             type="file"
+            className={pill ? "dt-photo-uploader__input" : undefined}
             accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
             onChange={(event) => {
               const file = event.target.files?.[0] ?? null;
@@ -428,6 +431,11 @@ function AvatarUploader({
             }}
             disabled={uploading}
           />
+          {pill ? (
+            <label htmlFor={inputId} className="dt-upload-pill">
+              Upload &amp; crop
+            </label>
+          ) : null}
           {value ? (
             <button
               type="button"
@@ -762,14 +770,30 @@ function StaffDetail({
         </div>
       ) : null}
       <header className="staff-detail-header">
-        <div>
-          <p className="eyebrow">{ROLE_LABELS[user.role] ?? user.role}</p>
-          <h4>{user.name}</h4>
-          <p className="settings-form-help">
-            {user.email}
-            {user.phone ? ` · ${user.phone}` : ""}
-            {!user.isActive ? " · Inactive" : ""}
-          </p>
+        <div className="dt-header">
+          <span
+            className="dt-header__avatar"
+            aria-hidden="true"
+            style={{ background: user.avatarUrl ? undefined : avatarColorFor(user.id) }}
+          >
+            {user.avatarUrl ? (
+              <img src={user.avatarUrl} alt="" />
+            ) : (
+              initialsOf(user.name)
+            )}
+          </span>
+          <div className="dt-header__text">
+            <h4 className="dt-header__name">{user.name}</h4>
+            <div className="dt-header__pills">
+              <span className="dt-pill dt-pill--dark">{ROLE_LABELS[user.role] ?? user.role}</span>
+              {provider ? (
+                <span className="dt-pill dt-pill--light">Takes bookings</span>
+              ) : null}
+              {!user.isActive ? (
+                <span className="dt-pill dt-pill--warn">Inactive</span>
+              ) : null}
+            </div>
+          </div>
         </div>
         <div className="staff-detail-actions">
           <button type="button" className="ghost-action" onClick={onResetPassword}>
@@ -804,6 +828,7 @@ function StaffDetail({
           tenantSlug={tenantSlug}
           user={user}
           provider={provider}
+          locations={locations}
           bookingLinkBase={bookingLinkBase}
           onSaved={onSaved}
         />
@@ -859,12 +884,14 @@ function DetailsTab({
   tenantSlug,
   user,
   provider,
+  locations,
   bookingLinkBase,
   onSaved,
 }: {
   tenantSlug: string;
   user: TenantUserSummary;
   provider: ProviderSummary | null;
+  locations: LocationSummary[];
   bookingLinkBase: string;
   onSaved: () => void;
 }) {
@@ -881,12 +908,20 @@ function DetailsTab({
   const [slugSubmitting, setSlugSubmitting] = useState(false);
   const [slugError, setSlugError] = useState<string | null>(null);
   const [slugCopied, setSlugCopied] = useState(false);
+  const [providerForm, setProviderForm] = useState({
+    title: provider?.availabilityLabel ?? "",
+    bio: provider?.description ?? "",
+  });
 
   useEffect(() => {
     setBookingSlug(provider?.bookingSlug ?? "");
     setSlugError(null);
     setSlugCopied(false);
-  }, [provider?.id, provider?.bookingSlug]);
+    setProviderForm({
+      title: provider?.availabilityLabel ?? "",
+      bio: provider?.description ?? "",
+    });
+  }, [provider?.id, provider?.bookingSlug, provider?.availabilityLabel, provider?.description]);
 
   useEffect(() => {
     setForm({
@@ -898,24 +933,41 @@ function DetailsTab({
     });
   }, [user]);
 
+  const isProvider = provider !== null;
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
     const payload: UpdateTenantUserRequest = {};
     if (form.name.trim() !== user.name) payload.name = form.name.trim();
-    if (form.role !== user.role) payload.role = form.role;
+    // Service providers cannot change their in-system role.
+    if (!isProvider && form.role !== user.role) payload.role = form.role;
     if (form.isActive !== user.isActive) payload.isActive = form.isActive;
     const phone = form.phone.trim();
     if (phone !== (user.phone ?? "")) payload.phone = phone || null;
     const avatar = form.avatarUrl.trim();
     if (avatar !== (user.avatarUrl ?? "")) payload.avatarUrl = avatar || null;
-    if (Object.keys(payload).length === 0) {
+
+    const providerPayload: UpdateProviderRequest = {};
+    if (provider) {
+      const title = providerForm.title.trim();
+      if (title !== (provider.availabilityLabel ?? "")) providerPayload.availabilityLabel = title || null;
+      const bio = providerForm.bio.trim();
+      if (bio !== (provider.description ?? "")) providerPayload.description = bio || null;
+    }
+
+    if (Object.keys(payload).length === 0 && Object.keys(providerPayload).length === 0) {
       setSubmitting(false);
       return;
     }
     try {
-      await platformApi.updateTenantUser(tenantSlug, user.id, payload);
+      if (Object.keys(payload).length > 0) {
+        await platformApi.updateTenantUser(tenantSlug, user.id, payload);
+      }
+      if (provider && Object.keys(providerPayload).length > 0) {
+        await platformApi.updateProvider(tenantSlug, provider.id, providerPayload);
+      }
       onSaved();
     } catch (err) {
       setError(readErrorMessage(err, "Unable to update user."));
@@ -925,81 +977,157 @@ function DetailsTab({
   };
 
   return (
-    <form className="staff-detail-form" onSubmit={submit}>
-      <div className="staff-detail-grid">
-        <label>
-          <span>Name</span>
+    <form className="staff-detail-form dt-form" onSubmit={submit}>
+      <div className="dt-grid">
+        <div className="dt-field">
+          <span className="dt-label">Name</span>
           <input
+            className="dt-input"
             type="text"
             value={form.name}
             onChange={(event) => setForm({ ...form, name: event.target.value })}
             required
           />
-        </label>
-        <label>
-          <span>Email</span>
-          <input type="email" value={user.email} disabled readOnly />
-        </label>
-        <label>
-          <span>Role</span>
-          <select
-            value={form.role}
-            onChange={(event) => setForm({ ...form, role: event.target.value })}
-          >
+        </div>
+        <div className="dt-field">
+          <span className="dt-label">Role</span>
+          <div className="dt-role-pills" role="group" aria-label="Role">
             {ROLE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
+              <button
+                key={option.value}
+                type="button"
+                disabled={isProvider}
+                className={`dt-pill dt-pill--role${form.role === option.value ? " is-selected" : ""}`}
+                onClick={() => setForm({ ...form, role: option.value })}
+                aria-pressed={form.role === option.value}
+              >
                 {option.label}
-              </option>
+              </button>
             ))}
-          </select>
-        </label>
-        <label>
-          <span>Phone</span>
+          </div>
+          {isProvider ? (
+            <span className="dt-helper">Role is locked while this person takes bookings.</span>
+          ) : null}
+        </div>
+
+        <div className="dt-field">
+          <span className="dt-label">Email</span>
+          <input className="dt-input" type="email" value={user.email} disabled readOnly />
+        </div>
+        <div className="dt-field">
+          <span className="dt-label">Phone</span>
           <input
+            className="dt-input"
             type="text"
             value={form.phone}
             onChange={(event) => setForm({ ...form, phone: event.target.value })}
             placeholder="+1 555-555-1212"
           />
-        </label>
-        <label className="staff-detail-grid-wide">
-          <span>Profile photo</span>
-          <AvatarUploader
-            tenantSlug={tenantSlug}
-            value={form.avatarUrl}
-            name={form.name}
-            inputId={`user-${user.id}-avatar-upload`}
-            onChange={(next) => setForm({ ...form, avatarUrl: next })}
-          />
-          <small className="settings-form-help">
-            JPG, PNG, GIF, WEBP, or HEIC up to 10&nbsp;MB.
-          </small>
-        </label>
-        <label className="settings-toggle staff-detail-grid-wide">
-          <input
-            type="checkbox"
-            checked={form.isActive}
-            onChange={(event) => setForm({ ...form, isActive: event.target.checked })}
-          />
-          <span>Active (can sign in)</span>
-        </label>
-        <label>
-          <span>Joined</span>
-          <input
-            type="text"
-            value={DATE_FORMAT.format(new Date(user.createdAt))}
-            disabled
-            readOnly
-          />
-        </label>
+        </div>
+
+        <div className="dt-field">
+          <span className="dt-label">Profile photo</span>
+          <div className="dt-photo">
+            <AvatarUploader
+              tenantSlug={tenantSlug}
+              value={form.avatarUrl}
+              name={form.name}
+              inputId={`user-${user.id}-avatar-upload`}
+              pill={true}
+              onChange={(next) => setForm({ ...form, avatarUrl: next })}
+            />
+            <small className="dt-photo__help">
+              JPG, PNG, GIF, WEBP, or HEIC up to 10&nbsp;MB.
+            </small>
+          </div>
+        </div>
+        {provider ? (
+          <div className="dt-field">
+            <span className="dt-label">Title shown to clients</span>
+            <input
+              className="dt-input"
+              type="text"
+              value={providerForm.title}
+              onChange={(event) => setProviderForm({ ...providerForm, title: event.target.value })}
+              placeholder="Lead therapist"
+            />
+            <span className="dt-label" style={{ marginTop: 12 }}>Bio</span>
+            <textarea
+              className="dt-input dt-textarea"
+              value={providerForm.bio}
+              onChange={(event) => setProviderForm({ ...providerForm, bio: event.target.value })}
+              placeholder="A short client-facing bio…"
+              rows={3}
+            />
+          </div>
+        ) : (
+          <div className="dt-field">
+            <span className="dt-label">Joined</span>
+            <input
+              className="dt-input"
+              type="text"
+              value={DATE_FORMAT.format(new Date(user.createdAt))}
+              disabled
+              readOnly
+            />
+          </div>
+        )}
+
+        {provider ? (
+          <div className="dt-field">
+            <span className="dt-label">Works at</span>
+            <div className="dt-pill-row">
+              {provider.locationIds.length === 0 ? (
+                <span className="dt-helper">Assign locations on the Services tab.</span>
+              ) : (
+                provider.locationIds.map((locId) => {
+                  const loc = locations.find((l) => l.id === locId);
+                  return loc ? (
+                    <span key={loc.id} className="dt-pill dt-pill--dark">{loc.name}</span>
+                  ) : null;
+                })
+              )}
+            </div>
+          </div>
+        ) : null}
+        <div className="dt-field">
+          <span className="dt-label">Can sign in</span>
+          <label className="settings-toggle dt-toggle-row">
+            <input
+              type="checkbox"
+              checked={form.isActive}
+              onChange={(event) => setForm({ ...form, isActive: event.target.checked })}
+            />
+            <span>Active</span>
+          </label>
+        </div>
+        {provider ? (
+          <div className="dt-field">
+            <span className="dt-label">Bookable online</span>
+            <label className="settings-toggle dt-toggle-row">
+              <input
+                type="checkbox"
+                checked={provider.isBookableOnline}
+                onChange={(event) => {
+                  platformApi
+                    .updateProvider(tenantSlug, provider.id, { isBookableOnline: event.target.checked })
+                    .then(() => onSaved())
+                    .catch((e: unknown) => setError(readErrorMessage(e, "Unable to update bookability.")));
+                }}
+              />
+              <span className="dt-helper">Clients can request {user.name.split(" ")[0] || user.name} by name</span>
+            </label>
+          </div>
+        ) : null}
       </div>
 
       {provider ? (
-        <div className="staff-booking-link">
-          <p className="eyebrow">Direct booking link</p>
-          <div className="staff-booking-link-editor">
-            <span className="staff-booking-link-prefix">{bookingLinkBase}</span>
+        <div className="dt-booking-link">
+          <p className="dt-label">Her booking link</p>
+          <div className="dt-booking-link__row">
+            <span className="dt-booking-link__prefix">{bookingLinkBase}</span>
             <input
+              className="dt-input dt-booking-link__input"
               type="text"
               value={bookingSlug}
               onChange={(event) => {
@@ -1012,12 +1140,46 @@ function DetailsTab({
               spellCheck={false}
               autoCapitalize="off"
             />
+            {provider.bookingUrl ? (
+              <div className="dt-booking-link__actions">
+                <button
+                  type="button"
+                  className="ghost-action"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(provider.bookingUrl!);
+                      setSlugCopied(true);
+                      setTimeout(() => setSlugCopied(false), 2000);
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                >
+                  {slugCopied ? "Copied!" : "Copy"}
+                </button>
+                <a
+                  className="ghost-action"
+                  href={provider.bookingUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open
+                </a>
+              </div>
+            ) : null}
           </div>
-          <div className="staff-booking-link-actions">
+          <p className="dt-helper">
+            {slugError ? (
+              <span role="alert" className="settings-error">{slugError}</span>
+            ) : (
+              "Available. Lowercase letters, numbers and hyphens — changing it breaks any link already shared. Leave it blank and she is bookable only from the studio's main page."
+            )}
+          </p>
+          {bookingSlug.trim() !== (provider.bookingSlug ?? "") ? (
             <button
               type="button"
-              className="ghost-action"
-              disabled={slugSubmitting || (bookingSlug.trim() === (provider.bookingSlug ?? ""))}
+              className="dt-link-save"
+              disabled={slugSubmitting}
               onClick={async () => {
                 const trimmed = bookingSlug.trim();
                 if (trimmed && !/^[a-z0-9-]+$/i.test(trimmed)) {
@@ -1040,38 +1202,6 @@ function DetailsTab({
             >
               {slugSubmitting ? "Saving…" : "Save link"}
             </button>
-            {provider.bookingUrl ? (
-              <>
-                <button
-                  type="button"
-                  className="ghost-action"
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(provider.bookingUrl!);
-                      setSlugCopied(true);
-                      setTimeout(() => setSlugCopied(false), 2000);
-                    } catch {
-                      // ignore
-                    }
-                  }}
-                >
-                  {slugCopied ? "Copied!" : "Copy link"}
-                </button>
-                <a
-                  className="ghost-action"
-                  href={provider.bookingUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open
-                </a>
-              </>
-            ) : null}
-          </div>
-          {slugError ? (
-            <p role="alert" className="settings-error">
-              {slugError}
-            </p>
           ) : null}
         </div>
       ) : null}
@@ -1084,7 +1214,7 @@ function DetailsTab({
 
       <div className="modal-actions">
         <button type="submit" className="primary-action" disabled={submitting}>
-          {submitting ? "Saving…" : "Save changes"}
+          {submitting ? "Saving…" : "Save"}
         </button>
       </div>
     </form>
