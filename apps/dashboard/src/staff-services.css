@@ -599,40 +599,41 @@
   margin-bottom: 0;
 }
 
-/* Sub-tab bar row: Regular / Overrides pills + location selector */
-.wh-subtabs-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-.staff-detail-tabs.wh-subtabs { align-self: auto; }
-.wh-location-select {
+/* 'Editing hours for [Location]' header */
+.wh-editing-for {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-bottom: 14px;
 }
-.wh-location-select__label {
-  font: 700 10px var(--cs-font);
-  letter-spacing: .1em;
-  text-transform: uppercase;
+.wh-editing-for__label {
+  font: 500 12px var(--cs-font);
   color: var(--cs-label);
 }
-.wh-location-select select {
+.wh-editing-for__name {
+  font: 700 13px var(--cs-font);
+  color: var(--cs-ink);
+}
+.wh-editing-for__select {
   background: var(--cs-canvas);
   border: 1px solid var(--cs-hairline);
   border-radius: var(--cs-r-12);
-  padding: 8px 12px;
+  padding: 6px 10px;
   font: 600 12px var(--cs-font);
   color: var(--cs-ink);
   cursor: pointer;
 }
+.wh-section-title {
+  font: 700 11px var(--cs-font);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--cs-label);
+  margin: 0 0 6px;
+}
 .wh-helper-text {
   font: 500 12px var(--cs-font);
   color: var(--cs-label);
-  margin: -6px 0 14px;
+  margin: 0 0 14px;
 }
 
 /* Reference sidebar */
@@ -884,78 +885,157 @@
   color: var(--cs-label);
 }
 
-/* Overrides & time off sub-tab */
-.wh-overrides-header {
+/* Exceptions-by-date calendar */
+.wh-exceptions-card { padding-bottom: 18px; }
+.wh-exceptions-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 14px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
-.wh-overrides-header__title {
-  font: 700 15px var(--cs-font);
-  color: var(--cs-ink);
-}
-.wh-filter-row {
-  display: flex;
-  gap: 18px;
-  margin-bottom: 16px;
-}
-.wh-filter-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font: 500 12px var(--cs-font);
-  color: var(--cs-label);
-  cursor: pointer;
-}
-.wh-filter-chip input { accent-color: var(--cs-ink); }
-.wh-overrides-empty {
-  padding: 16px;
-  background: var(--cs-canvas);
-  border: 1px dashed var(--cs-hairline);
-  border-radius: var(--cs-r-12);
-  text-align: center;
-  font: 500 12px var(--cs-font);
-  color: var(--cs-label);
-}
-.wh-override-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.wh-override-card {
+.wh-exceptions-header .wh-side-card__title { margin-bottom: 0; }
+.wh-cal-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: var(--cs-r-12);
+  margin-bottom: 10px;
 }
-.wh-override-card--timeoff { background: var(--cs-canvas); }
-.wh-override-card--custom { background: var(--cs-info-fill, var(--cs-blue)); }
-.wh-override-card--past { opacity: .55; }
-.wh-override-card__body { min-width: 0; }
-.wh-override-card__dates {
-  font: 700 13px var(--cs-font);
-  color: var(--cs-ink);
-}
-.wh-override-card__reason {
-  font: 500 12px var(--cs-font);
-  color: var(--cs-label);
-  margin-top: 2px;
-}
-.wh-override-card__dismiss {
-  flex-shrink: 0;
+.wh-cal-nav__btn {
   border: 0;
   background: none;
   font-size: 16px;
+  color: var(--cs-label);
+  cursor: pointer;
+  padding: 2px 8px;
+}
+.wh-cal-nav__btn:hover { color: var(--cs-ink); }
+.wh-cal-nav__label {
+  font: 700 12px var(--cs-font);
+  color: var(--cs-ink);
+}
+.wh-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  margin-bottom: 10px;
+}
+.wh-cal-dow {
+  text-align: center;
+  font: 700 10px var(--cs-font);
+  color: var(--cs-label);
+  padding-bottom: 4px;
+}
+.wh-cal-day {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--cs-r-12);
+  background: none;
+  font: 600 11px var(--cs-font);
+  color: var(--cs-ink);
+  cursor: pointer;
+}
+.wh-cal-day--blank { cursor: default; }
+.wh-cal-day--today { box-shadow: inset 0 0 0 1px var(--cs-ink); }
+.wh-cal-day--timeoff { background: var(--cs-peach); }
+.wh-cal-day--custom { background: var(--cs-mint); }
+.wh-cal-day--selected { background: var(--cs-ink); color: #fff; }
+.wh-cal-legend {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+.wh-cal-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 500 11px var(--cs-font);
+  color: var(--cs-label);
+}
+.wh-cal-legend__swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  display: inline-block;
+  font-style: normal;
+}
+.wh-cal-legend__swatch--timeoff { background: var(--cs-peach); }
+.wh-cal-legend__swatch--custom { background: var(--cs-mint); }
+
+/* Inline exception editor panel, shown under the calendar for the selected date */
+.wh-exception-panel {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--cs-hairline);
+}
+.wh-exception-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.wh-exception-panel__title {
+  font: 700 13px var(--cs-font);
+  color: var(--cs-ink);
+}
+.wh-exception-panel__close {
+  border: 0;
+  background: none;
+  font-size: 15px;
   line-height: 1;
   color: var(--cs-label);
   cursor: pointer;
-  padding: 4px;
+  padding: 0 2px;
 }
-.wh-override-card__dismiss:hover { color: var(--cs-ink); }
+.wh-exception-panel__close:hover { color: var(--cs-ink); }
+.wh-exception-panel__pattern {
+  font: 500 12px var(--cs-font);
+  color: var(--cs-label);
+  margin: 4px 0 12px;
+}
+.wh-seg-toggle {
+  display: inline-flex;
+  background: var(--cs-canvas);
+  border-radius: var(--cs-r-pill);
+  padding: 3px;
+  gap: 3px;
+  margin-bottom: 12px;
+}
+.wh-seg-toggle__btn {
+  border: 0;
+  background: none;
+  border-radius: var(--cs-r-pill);
+  padding: 6px 14px;
+  font: 600 12px var(--cs-font);
+  color: var(--cs-label);
+  cursor: pointer;
+}
+.wh-seg-toggle__btn.is-active { background: var(--cs-ink); color: #fff; }
+.wh-exception-panel__times { margin-bottom: 12px; }
+.wh-exception-panel__reason-label {
+  display: block;
+  font: 500 11px var(--cs-font);
+  color: var(--cs-label);
+  margin-bottom: 6px;
+}
+.wh-exception-panel__note {
+  font: 500 11px/1.5 var(--cs-font);
+  color: var(--cs-label);
+  background: var(--cs-canvas);
+  border-radius: var(--cs-r-12);
+  padding: 10px 12px;
+  margin: 12px 0 0;
+}
+.wh-exception-panel__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
 
 @media (max-width: 860px) {
   .wh-layout { grid-template-columns: 1fr; }

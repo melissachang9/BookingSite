@@ -1887,24 +1887,40 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
   // Regular hours drawer (opens from "Set regular hours" button — bulk 7-day template)
   const [regularHoursOpen, setRegularHoursOpen] = useState(false);
 
-  // Sub-tab within Work Hours: "regular" | "overrides"
-  const [workHoursSubTab, setWorkHoursSubTab] = useState<"regular" | "overrides">("regular");
-
-  // Overrides list filter chips: "Time off" / "Custom hours"
-  const [overrideFilter, setOverrideFilter] = useState<{ timeOff: boolean; customHours: boolean }>({
-    timeOff: false, customHours: false,
+  // Exceptions-by-date calendar: which month is showing, and which date is selected for editing.
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    return d;
   });
+  const [selectedExceptionDate, setSelectedExceptionDate] = useState<string | null>(() =>
+    new Date().toISOString().split("T")[0]
+  );
+  const [panelMode, setPanelMode] = useState<"custom_hours" | "closed">("custom_hours");
+  const [panelStart, setPanelStart] = useState("09:00");
+  const [panelEnd, setPanelEnd] = useState("17:00");
+  const [panelReason, setPanelReason] = useState("");
 
   const latestLocationRef = useRef(selectedLocationId);
   latestLocationRef.current = selectedLocationId;
+  // Tracks which location's data is currently loaded so we can tell a real
+  // location switch (needs the full-page "Loading…" placeholder + cleared
+  // state) apart from a background refresh after save/delete (reloadKey
+  // bump), which should refetch quietly without unmounting the calendar
+  // panel or resetting scroll position.
+  const loadedLocationRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
     const locId = selectedLocationId;
-    setShifts(new Map());
-    setOverrides([]);
-    const doLoad = async () => {
+    const isNewLocation = loadedLocationRef.current !== locId;
+    if (isNewLocation) {
+      setShifts(new Map());
+      setOverrides([]);
       setLoading(true);
+    }
+    const doLoad = async () => {
       setError(null);
       try {
         const resp = await platformApi.getProviderWorkHours(tenantSlug, provider.id, locId);
@@ -1927,6 +1943,7 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
           }
         }
         setDayBlockedServices(dayBlocks);
+        loadedLocationRef.current = locId;
       } catch (err) {
         if (cancelled || latestLocationRef.current !== locId) return;
         setError(err instanceof Error ? err.message : "Failed to load work hours");
@@ -2000,6 +2017,38 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
       return next;
     });
   };
+
+  // Find the date-override (if any) whose range covers a given YYYY-MM-DD date.
+  const findOverrideForDate = (dateStr: string): ProviderTimeOffEntry | null => {
+    for (const ov of overrides) {
+      const s = new Date(ov.startsAt).toISOString().split("T")[0];
+      const e = new Date(ov.endsAt).toISOString().split("T")[0];
+      if (dateStr >= s && dateStr <= e) return ov;
+    }
+    return null;
+  };
+
+  // Seed the exception-editor panel whenever the selected calendar date (or the
+  // overrides loaded for it) changes, so it always reflects the current saved state.
+  useEffect(() => {
+    if (!selectedExceptionDate) return;
+    const existing = findOverrideForDate(selectedExceptionDate);
+    const weekdayIdx = (new Date(selectedExceptionDate + "T00:00:00").getDay() + 6) % 7;
+    const regularShiftsForDay = shifts.get(weekdayIdx) || [];
+    const regularIsOn = regularShiftsForDay.length > 0 && regularShiftsForDay[0].isActive;
+    if (existing) {
+      setPanelMode(existing.overrideType === "closed" ? "closed" : "custom_hours");
+      setPanelStart(existing.startTime || regularShiftsForDay[0]?.startTime || "09:00");
+      setPanelEnd(existing.endTime || regularShiftsForDay[0]?.endTime || "17:00");
+      setPanelReason(existing.reason || "");
+    } else {
+      setPanelMode(regularIsOn ? "custom_hours" : "closed");
+      setPanelStart(regularShiftsForDay[0]?.startTime || "09:00");
+      setPanelEnd(regularShiftsForDay[0]?.endTime || "17:00");
+      setPanelReason("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedExceptionDate, overrides, shifts]);
 
   const handleSave = async () => {
     setSubmitting(true);
@@ -2357,30 +2406,22 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
       <div className="wh-layout">
         <div className="wh-main">
           <div className="svc-card wh-card">
-            {/* Sub-tab bar */}
-            <div className="wh-subtabs-row">
-              <div className="staff-detail-tabs wh-subtabs">
-                <button type="button"
-                  className={`staff-detail-tab${workHoursSubTab === "regular" ? " is-active" : ""}`}
-                  onClick={() => setWorkHoursSubTab("regular")}>Regular</button>
-                <button type="button"
-                  className={`staff-detail-tab${workHoursSubTab === "overrides" ? " is-active" : ""}`}
-                  onClick={() => setWorkHoursSubTab("overrides")}>Overrides &amp; time off</button>
-              </div>
+            <div className="wh-editing-for">
+              <span className="wh-editing-for__label">Editing hours for</span>
               {providerLocations.length > 1 ? (
-                <label className="wh-location-select">
-                  <span className="wh-location-select__label">Location</span>
-                  <select
-                    aria-label="Work hours location"
-                    value={selectedLocationId || ""}
-                    onChange={(e) => setSelectedLocationId(e.target.value || null)}>
-                    <option value="">Both locations</option>
-                    {providerLocations.map((loc) => (
-                      <option key={loc.id} value={loc.id}>{loc.name}</option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
+                <select
+                  className="wh-editing-for__select"
+                  aria-label="Work hours location"
+                  value={selectedLocationId || ""}
+                  onChange={(e) => setSelectedLocationId(e.target.value || null)}>
+                  <option value="">Both locations</option>
+                  {providerLocations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>{loc.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <strong className="wh-editing-for__name">{providerLocations[0]?.name}</strong>
+              )}
             </div>
             {providerLocations.length > 1 ? (
               <p className="wh-helper-text">
@@ -2388,9 +2429,11 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
               </p>
             ) : null}
 
-            {workHoursSubTab === "regular" ? (
-          /* ===== REGULAR HOURS SUB-TAB ===== */
-          <>
+            <h4 className="wh-section-title">Regular weekly pattern</h4>
+            <p className="wh-helper-text">
+              This repeats every week. Click a date on the calendar to set a one-off exception instead.
+            </p>
+
             {shifts.size === 0 ? (
               <div className="wh-empty-state">
                 <div>
@@ -2490,83 +2533,154 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
                 </button>
               </>
             )}
-          </>
-        ) : (
-          /* ===== OVERRIDES & TIME OFF SUB-TAB ===== */
-          <>
-            <div className="wh-overrides-header">
-              <div className="wh-overrides-header__title">Overrides &amp; time off</div>
-              <button type="button" className="svc-save-btn"
-                onClick={() => setTimeOffOpen(true)} disabled={submitting}>
-                + Block time off
-              </button>
-            </div>
-            <div className="wh-filter-row">
-              <label className="wh-filter-chip">
-                <input type="checkbox" checked={overrideFilter.timeOff}
-                  onChange={(e) => setOverrideFilter((prev) => ({ ...prev, timeOff: e.target.checked }))} />
-                Time off
-              </label>
-              <label className="wh-filter-chip">
-                <input type="checkbox" checked={overrideFilter.customHours}
-                  onChange={(e) => setOverrideFilter((prev) => ({ ...prev, customHours: e.target.checked }))} />
-                Custom hours
-              </label>
-            </div>
-            {overrides.length === 0 ? (
-              <div className="wh-overrides-empty">No overrides or time off scheduled.</div>
-            ) : (
-              <div className="wh-override-list">
-                {overrides
-                  .filter((ov) => {
-                    const isCustom = ov.overrideType === "custom_hours";
-                    if (!overrideFilter.timeOff && !overrideFilter.customHours) return true;
-                    return (overrideFilter.timeOff && !isCustom) || (overrideFilter.customHours && isCustom);
-                  })
-                  .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
-                  .map((ov) => {
-                    const startD = new Date(ov.startsAt);
-                    const endD = new Date(ov.endsAt);
-                    const startDateStr = startD.toISOString().split("T")[0];
-                    const endDateStr = endD.toISOString().split("T")[0];
-                    const sameDay = startDateStr === endDateStr;
-                    const fmtDateStr = (ds: string) => {
-                      const [y, m, d] = ds.split("-").map(Number);
-                      const date = new Date(Date.UTC(y, m - 1, d));
-                      return date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
-                    };
-                    const isCustom = ov.overrideType === "custom_hours";
-                    const isPast = endD < new Date();
-                    return (
-                      <div key={ov.id}
-                        className={`wh-override-card${isCustom ? " wh-override-card--custom" : " wh-override-card--timeoff"}${isPast ? " wh-override-card--past" : ""}`}>
-                        <div className="wh-override-card__body">
-                          <div className="wh-override-card__dates">
-                            {sameDay
-                              ? (isCustom ? fmtDateStr(startDateStr) : `${fmtDateStr(startDateStr)} · all day`)
-                              : `${fmtDateStr(startDateStr)} – ${fmtDateStr(endDateStr)}`}
-                            {isCustom && ov.startTime ? ` · ${ov.startTime} – ${ov.endTime}` : ""}
-                          </div>
-                          <div className="wh-override-card__reason">
-                            {ov.reason || (isCustom ? "Custom hours" : "Time off")}
-                          </div>
-                        </div>
-                        <button type="button" className="wh-override-card__dismiss"
-                          onClick={() => handleDeleteOverride(ov.id)}
-                          aria-label={`Remove ${isCustom ? "override" : "time off"} ${fmtDateStr(startDateStr)}`}>
-                          ×
-                        </button>
-                      </div>
-                    );
-                  })}
-              </div>
-            )}
-          </>
-        )}
           </div>
         </div>
 
         <aside className="wh-side">
+          <div className="wh-side-card wh-exceptions-card">
+            <div className="wh-exceptions-header">
+              <div className="wh-side-card__title">Exceptions by date</div>
+              <button type="button" className="svc-text-btn" onClick={() => setTimeOffOpen(true)} disabled={submitting}>
+                + Block a range
+              </button>
+            </div>
+            {(() => {
+              const year = calendarMonth.getFullYear();
+              const month = calendarMonth.getMonth();
+              const monthLabel = calendarMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+              const firstOfMonth = new Date(year, month, 1);
+              const startOffset = firstOfMonth.getDay(); // 0 = Sunday
+              const daysInMonth = new Date(year, month + 1, 0).getDate();
+              const todayStr = new Date().toISOString().split("T")[0];
+              const cells: Array<{ dateStr: string; day: number } | null> = [];
+              for (let i = 0; i < startOffset; i++) cells.push(null);
+              for (let day = 1; day <= daysInMonth; day++) {
+                const d = new Date(year, month, day);
+                cells.push({ dateStr: d.toISOString().split("T")[0], day });
+              }
+              return (
+                <>
+                  <div className="wh-cal-nav">
+                    <button type="button" className="wh-cal-nav__btn" aria-label="Previous month"
+                      onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}>
+                      ‹
+                    </button>
+                    <span className="wh-cal-nav__label">{monthLabel}</span>
+                    <button type="button" className="wh-cal-nav__btn" aria-label="Next month"
+                      onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}>
+                      ›
+                    </button>
+                  </div>
+                  <div className="wh-cal-grid">
+                    {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+                      <span key={i} className="wh-cal-dow">{d}</span>
+                    ))}
+                    {cells.map((cell, i) => {
+                      if (!cell) return <span key={`blank-${i}`} className="wh-cal-day wh-cal-day--blank" />;
+                      const ov = findOverrideForDate(cell.dateStr);
+                      const isTimeOff = ov?.overrideType === "closed";
+                      const isCustom = ov?.overrideType === "custom_hours";
+                      const isToday = cell.dateStr === todayStr;
+                      const isSelected = cell.dateStr === selectedExceptionDate;
+                      return (
+                        <button type="button" key={cell.dateStr}
+                          className={`wh-cal-day${isTimeOff ? " wh-cal-day--timeoff" : ""}${isCustom ? " wh-cal-day--custom" : ""}${isToday ? " wh-cal-day--today" : ""}${isSelected ? " wh-cal-day--selected" : ""}`}
+                          onClick={() => setSelectedExceptionDate(cell.dateStr)}
+                          aria-label={`Edit hours for ${cell.dateStr}`}>
+                          {cell.day}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="wh-cal-legend">
+                    <span className="wh-cal-legend__item"><i className="wh-cal-legend__swatch wh-cal-legend__swatch--timeoff" />Time off</span>
+                    <span className="wh-cal-legend__item"><i className="wh-cal-legend__swatch wh-cal-legend__swatch--custom" />Custom hours</span>
+                  </div>
+                </>
+              );
+            })()}
+
+            {selectedExceptionDate ? (() => {
+              const dateObj = new Date(selectedExceptionDate + "T00:00:00");
+              const weekdayIdx = (dateObj.getDay() + 6) % 7;
+              const regularShiftsForDay = shifts.get(weekdayIdx) || [];
+              const regularIsOn = regularShiftsForDay.length > 0 && regularShiftsForDay[0].isActive;
+              const regularPatternLabel = regularIsOn
+                ? `${regularShiftsForDay[0].startTime} – ${regularShiftsForDay[0].endTime}`
+                : "Not working";
+              const existing = findOverrideForDate(selectedExceptionDate);
+              const dateLabel = dateObj.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+              return (
+                <div className="wh-exception-panel">
+                  <div className="wh-exception-panel__header">
+                    <div className="wh-exception-panel__title">{dateLabel}</div>
+                    <button type="button" className="wh-exception-panel__close"
+                      onClick={() => setSelectedExceptionDate(null)} aria-label="Close">×</button>
+                  </div>
+                  <p className="wh-exception-panel__pattern">Regular pattern: {regularPatternLabel}</p>
+
+                  <div className="wh-seg-toggle" role="group" aria-label="Exception type">
+                    <button type="button"
+                      className={`wh-seg-toggle__btn${panelMode === "custom_hours" ? " is-active" : ""}`}
+                      onClick={() => setPanelMode("custom_hours")}>
+                      Custom hours
+                    </button>
+                    <button type="button"
+                      className={`wh-seg-toggle__btn${panelMode === "closed" ? " is-active" : ""}`}
+                      onClick={() => setPanelMode("closed")}>
+                      Not working
+                    </button>
+                  </div>
+
+                  {panelMode === "custom_hours" ? (
+                    <div className="wh-time-range wh-exception-panel__times">
+                      <input type="time" className="wh-time-input" value={panelStart}
+                        aria-label="Exception start time"
+                        onChange={(e) => setPanelStart(e.target.value)} />
+                      <span className="wh-time-sep">to</span>
+                      <input type="time" className="wh-time-input" value={panelEnd}
+                        aria-label="Exception end time"
+                        onChange={(e) => setPanelEnd(e.target.value)} />
+                    </div>
+                  ) : null}
+
+                  <label className="wh-exception-panel__reason-label" htmlFor="wh-exception-reason">
+                    Reason — shown to staff, optional
+                  </label>
+                  <input id="wh-exception-reason" type="text" className="svc-input"
+                    value={panelReason} onChange={(e) => setPanelReason(e.target.value)}
+                    placeholder="e.g. Training session" />
+
+                  <p className="wh-exception-panel__note">
+                    This date only. {regularIsOn
+                      ? `Every other ${WEEKDAY_LABELS[weekdayIdx]} keeps the regular ${regularPatternLabel} pattern.`
+                      : `${WEEKDAY_LABELS[weekdayIdx]}s are normally not working.`}
+                  </p>
+
+                  <div className="wh-exception-panel__actions">
+                    {existing ? (
+                      <button type="button" className="ghost-action" disabled={submitting}
+                        onClick={() => handleDeleteOverride(existing.id)}>
+                        Remove exception
+                      </button>
+                    ) : null}
+                    <button type="button" className="svc-save-btn" disabled={submitting}
+                      onClick={() => handleSaveDateOverride(selectedExceptionDate, {
+                        closedAllDay: panelMode === "closed",
+                        startTime: panelStart,
+                        endTime: panelEnd,
+                        blockedServiceIds: existing?.blockedServiceIds || [],
+                        existingOverrideId: existing?.id || null,
+                        reason: panelReason,
+                      })}>
+                      Save this date
+                    </button>
+                  </div>
+                </div>
+              );
+            })() : null}
+          </div>
+
           <div className="wh-side-card">
             <div className="wh-side-card__title">Studio hours, for reference</div>
             {studioHours.length > 0 ? (
