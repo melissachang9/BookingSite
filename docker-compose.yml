@@ -60,6 +60,10 @@ services:
         condition: service_started
     ports:
       - "5173:5173"
+    volumes:
+      # Live-mount source so Vite HMR picks up host edits (CSS/TSX) without a rebuild.
+      - ./apps/dashboard/src:/app/apps/dashboard/src
+      - ./packages:/app/packages
 
   storefront:
     build:
