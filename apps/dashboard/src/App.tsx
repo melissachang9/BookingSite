@@ -32,6 +32,10 @@ import { CustomersPage } from "./clients-page";
 
 import { FormsPage } from "./forms-page";
 import { ResourcesPage } from "./resources-page";
+// Load order matters: staff-services.css must load AFTER styles.css so the
+// redesigned staff-tab rules (scoped under .staff-services-fieldset) override
+// the legacy .staff-*/.svc-* fallbacks in styles.css. Do not reorder or remove
+// this import without checking the Staff page's Services/Work Hours tabs.
 import "./styles.css";
 import "./club-sunday.css";
 import "./staff-services.css";
