@@ -89,16 +89,6 @@ function initialsOf(name: string): string {
     .join("");
 }
 
-// Pastel avatar fallback colors matching the Club Sunday palette
-// (--cs-mint / --cs-blue / --cs-peach / --cs-lilac / --cs-pink).
-const AVATAR_PLACEHOLDER_COLORS = ["#DFEBE1", "#DCE7F6", "#F6DFCE", "#EAE1F6", "#F6E0E3"];
-
-function avatarColorFor(id: string): string {
-  let hash = 0;
-  for (let i = 0; i < id.length; i += 1) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
-  return AVATAR_PLACEHOLDER_COLORS[hash % AVATAR_PLACEHOLDER_COLORS.length]!;
-}
-
 async function uploadAvatarFile(tenantSlug: string, file: File): Promise<string> {
   const body = new FormData();
   body.append("file", file);
@@ -372,14 +362,12 @@ function AvatarUploader({
   name,
   onChange,
   inputId,
-  pill = false,
 }: {
   tenantSlug: string;
   value: string;
   name: string;
   onChange: (next: string) => void;
   inputId: string;
-  pill?: boolean;
 }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -414,15 +402,14 @@ function AvatarUploader({
       {cropFile ? (
         <CropModal file={cropFile} onSave={handleCropSave} onCancel={handleCropCancel} />
       ) : null}
-      <div className={pill ? "dt-photo-uploader" : "staff-avatar-uploader"}>
-        <div className="staff-avatar-uploader__preview dt-photo-uploader__preview" aria-hidden="true">
+      <div className="staff-avatar-uploader">
+        <div className="staff-avatar-uploader__preview" aria-hidden="true">
           {value ? <img src={value} alt="" /> : <span>{initialsOf(name) || "?"}</span>}
         </div>
         <div className="staff-avatar-uploader__controls">
           <input
             id={inputId}
             type="file"
-            className={pill ? "dt-photo-uploader__input" : undefined}
             accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
             onChange={(event) => {
               const file = event.target.files?.[0] ?? null;
@@ -431,11 +418,6 @@ function AvatarUploader({
             }}
             disabled={uploading}
           />
-          {pill ? (
-            <label htmlFor={inputId} className="dt-upload-pill">
-              Upload &amp; crop
-            </label>
-          ) : null}
           {value ? (
             <button
               type="button"
@@ -479,18 +461,11 @@ export function StaffPage({
   const [activeTab, setActiveTab] = useState<TabKey>("details");
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
   const [refreshKey, setRefreshKey] = useState(0);
-  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
     if (!canManage) return;
     let cancelled = false;
-    // Only show the full-page "Loading roster…" placeholder on the very first
-    // load. Subsequent refreshes (e.g. after toggling a location pill or
-    // saving a field) refetch quietly in the background so the panel stays
-    // mounted and the scroll position doesn't jump.
-    if (!hasLoadedRef.current) {
-      setState({ kind: "loading" });
-    }
+    setState({ kind: "loading" });
     Promise.all([
       platformApi.listTenantUsers(currentUser.tenantSlug),
       platformApi.listProvidersAdmin(currentUser.tenantSlug),
@@ -506,7 +481,6 @@ export function StaffPage({
         setServices(servicesRes.services);
         setCategories(categoriesRes.categories);
         setState({ kind: "ready" });
-        hasLoadedRef.current = true;
         setSelectedUserId((prev) => prev ?? usersRes.users[0]?.id ?? null);
       })
       .catch((error: unknown) => {
@@ -586,11 +560,7 @@ export function StaffPage({
                               loading="lazy"
                             />
                           ) : (
-                            <span
-                              className="staff-avatar staff-avatar--initials"
-                              style={{ background: avatarColorFor(user.id) }}
-                              aria-hidden
-                            >
+                            <span className="staff-avatar staff-avatar--initials" aria-hidden>
                               {initialsOf(user.name)}
                             </span>
                           )}
@@ -665,36 +635,6 @@ export function StaffPage({
   );
 }
 
-function ProviderRequiredEmptyState({
-  userName,
-  creating,
-  onLinkProvider,
-}: {
-  userName: string;
-  creating: boolean;
-  onLinkProvider: () => void;
-}) {
-  return (
-    <div className="staff-empty-state">
-      <p className="staff-empty-state__title">
-        {creating
-          ? `Setting up ${userName.split(" ")[0] || userName} as a provider…`
-          : `Set up ${userName.split(" ")[0] || userName}'s schedule & pay`}
-      </p>
-      <p className="staff-empty-state__body">
-        {creating
-          ? "Creating a provider record so you can configure booking settings, work hours, and compensation."
-          : "Work hours, compensation, and services are stored on a provider record. Create one (it won't be bookable online until you turn that on) to manage these here."}
-      </p>
-      {!creating ? (
-        <button type="button" className="primary-action" onClick={onLinkProvider}>
-          Set up provider record
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
 function StaffDetail({
   tenantSlug,
   tenant,
@@ -724,84 +664,25 @@ function StaffDetail({
 }) {
   const tabs: Array<{ key: TabKey; label: string; disabled?: boolean }> = [
     { key: "details", label: "Details" },
-    { key: "services", label: "Services" },
-    { key: "workHours", label: "Work hours" },
-    { key: "compensation", label: "Compensation" },
+    { key: "services", label: "Services", disabled: !provider },
+    { key: "workHours", label: "Work hours", disabled: !provider },
+    { key: "compensation", label: "Compensation", disabled: !provider },
     { key: "permissions", label: "Permissions" },
   ];
 
   const bookingLinkBase = `${storefrontBaseUrl}/${tenantSlug}/p/`;
 
-  // Work hours, compensation, and services live on a provider record. When a
-  // staff member without one opens one of those tabs, silently create a
-  // minimal, not-online-bookable provider record so the tab can render its
-  // real editing UI immediately. `onLinkProvider` still opens the full
-  // location/service picker from the header action.
-  const providerTabActive =
-    activeTab === "services" || activeTab === "workHours" || activeTab === "compensation";
-  const [creatingProvider, setCreatingProvider] = useState(false);
-  const [providerCreateError, setProviderCreateError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!providerTabActive || provider !== null || creatingProvider) return;
-    let cancelled = false;
-    setCreatingProvider(true);
-    setProviderCreateError(null);
-    platformApi
-      .createProvider(tenantSlug, {
-        name: user.name,
-        email: user.email,
-        userId: user.id,
-        isBookableOnline: false,
-      })
-      .then(() => {
-        if (!cancelled) onSaved();
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) setProviderCreateError(readErrorMessage(error, "Unable to set up provider record."));
-      })
-      .finally(() => {
-        if (!cancelled) setCreatingProvider(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providerTabActive, provider, user.id, tenantSlug]);
-
   return (
     <div className="staff-detail-inner">
-      {providerCreateError ? (
-        <div className="message-banner" role="alert">
-          {providerCreateError}
-          <button type="button" className="ghost-action" onClick={() => setProviderCreateError(null)}>Dismiss</button>
-        </div>
-      ) : null}
       <header className="staff-detail-header">
-        <div className="dt-header">
-          <span
-            className="dt-header__avatar"
-            aria-hidden="true"
-            style={{ background: user.avatarUrl ? undefined : avatarColorFor(user.id) }}
-          >
-            {user.avatarUrl ? (
-              <img src={user.avatarUrl} alt="" />
-            ) : (
-              initialsOf(user.name)
-            )}
-          </span>
-          <div className="dt-header__text">
-            <h4 className="dt-header__name">{user.name}</h4>
-            <div className="dt-header__pills">
-              <span className="dt-pill dt-pill--dark">{ROLE_LABELS[user.role] ?? user.role}</span>
-              {provider ? (
-                <span className="dt-pill dt-pill--light">Takes bookings</span>
-              ) : null}
-              {!user.isActive ? (
-                <span className="dt-pill dt-pill--warn">Inactive</span>
-              ) : null}
-            </div>
-          </div>
+        <div>
+          <p className="eyebrow">{ROLE_LABELS[user.role] ?? user.role}</p>
+          <h4>{user.name}</h4>
+          <p className="settings-form-help">
+            {user.email}
+            {user.phone ? ` · ${user.phone}` : ""}
+            {!user.isActive ? " · Inactive" : ""}
+          </p>
         </div>
         <div className="staff-detail-actions">
           <button type="button" className="ghost-action" onClick={onResetPassword}>
@@ -836,50 +717,25 @@ function StaffDetail({
           tenantSlug={tenantSlug}
           user={user}
           provider={provider}
-          locations={locations}
           bookingLinkBase={bookingLinkBase}
           onSaved={onSaved}
         />
       ) : null}
-      {activeTab === "services" ? (
-        provider ? (
-          <ServicesTab
-            tenantSlug={tenantSlug}
-            provider={provider}
-            locations={locations}
-            services={services}
-            categories={categories}
-            onSaved={onSaved}
-          />
-        ) : (
-          <ProviderRequiredEmptyState
-            userName={user.name}
-            creating={creatingProvider}
-            onLinkProvider={onLinkProvider}
-          />
-        )
+      {activeTab === "services" && provider ? (
+        <ServicesTab
+          tenantSlug={tenantSlug}
+          provider={provider}
+          locations={locations}
+          services={services}
+          categories={categories}
+          onSaved={onSaved}
+        />
       ) : null}
-      {activeTab === "workHours" ? (
-        provider ? (
-          <WorkHoursTab tenantSlug={tenantSlug} tenant={tenant} provider={provider} locations={locations} services={services} />
-        ) : (
-          <ProviderRequiredEmptyState
-            userName={user.name}
-            creating={creatingProvider}
-            onLinkProvider={onLinkProvider}
-          />
-        )
+      {activeTab === "workHours" && provider ? (
+        <WorkHoursTab tenantSlug={tenantSlug} tenant={tenant} provider={provider} locations={locations} services={services} />
       ) : null}
-      {activeTab === "compensation" ? (
-        provider ? (
-          <CompensationTab tenantSlug={tenantSlug} provider={provider} services={services} onSaved={onSaved} />
-        ) : (
-          <ProviderRequiredEmptyState
-            userName={user.name}
-            creating={creatingProvider}
-            onLinkProvider={onLinkProvider}
-          />
-        )
+      {activeTab === "compensation" && provider ? (
+        <CompensationTab tenantSlug={tenantSlug} provider={provider} services={services} onSaved={onSaved} />
       ) : null}
       {activeTab === "permissions" ? (
         <PermissionsTab tenantSlug={tenantSlug} user={user} />
@@ -892,14 +748,12 @@ function DetailsTab({
   tenantSlug,
   user,
   provider,
-  locations,
   bookingLinkBase,
   onSaved,
 }: {
   tenantSlug: string;
   user: TenantUserSummary;
   provider: ProviderSummary | null;
-  locations: LocationSummary[];
   bookingLinkBase: string;
   onSaved: () => void;
 }) {
@@ -916,20 +770,12 @@ function DetailsTab({
   const [slugSubmitting, setSlugSubmitting] = useState(false);
   const [slugError, setSlugError] = useState<string | null>(null);
   const [slugCopied, setSlugCopied] = useState(false);
-  const [providerForm, setProviderForm] = useState({
-    title: provider?.availabilityLabel ?? "",
-    bio: provider?.description ?? "",
-  });
 
   useEffect(() => {
     setBookingSlug(provider?.bookingSlug ?? "");
     setSlugError(null);
     setSlugCopied(false);
-    setProviderForm({
-      title: provider?.availabilityLabel ?? "",
-      bio: provider?.description ?? "",
-    });
-  }, [provider?.id, provider?.bookingSlug, provider?.availabilityLabel, provider?.description]);
+  }, [provider?.id, provider?.bookingSlug]);
 
   useEffect(() => {
     setForm({
@@ -941,41 +787,24 @@ function DetailsTab({
     });
   }, [user]);
 
-  const isProvider = provider !== null;
-
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
     const payload: UpdateTenantUserRequest = {};
     if (form.name.trim() !== user.name) payload.name = form.name.trim();
-    // Service providers cannot change their in-system role.
-    if (!isProvider && form.role !== user.role) payload.role = form.role;
+    if (form.role !== user.role) payload.role = form.role;
     if (form.isActive !== user.isActive) payload.isActive = form.isActive;
     const phone = form.phone.trim();
     if (phone !== (user.phone ?? "")) payload.phone = phone || null;
     const avatar = form.avatarUrl.trim();
     if (avatar !== (user.avatarUrl ?? "")) payload.avatarUrl = avatar || null;
-
-    const providerPayload: UpdateProviderRequest = {};
-    if (provider) {
-      const title = providerForm.title.trim();
-      if (title !== (provider.availabilityLabel ?? "")) providerPayload.availabilityLabel = title || null;
-      const bio = providerForm.bio.trim();
-      if (bio !== (provider.description ?? "")) providerPayload.description = bio || null;
-    }
-
-    if (Object.keys(payload).length === 0 && Object.keys(providerPayload).length === 0) {
+    if (Object.keys(payload).length === 0) {
       setSubmitting(false);
       return;
     }
     try {
-      if (Object.keys(payload).length > 0) {
-        await platformApi.updateTenantUser(tenantSlug, user.id, payload);
-      }
-      if (provider && Object.keys(providerPayload).length > 0) {
-        await platformApi.updateProvider(tenantSlug, provider.id, providerPayload);
-      }
+      await platformApi.updateTenantUser(tenantSlug, user.id, payload);
       onSaved();
     } catch (err) {
       setError(readErrorMessage(err, "Unable to update user."));
@@ -985,178 +814,81 @@ function DetailsTab({
   };
 
   return (
-    <form className="staff-detail-form dt-form" onSubmit={submit}>
-      <div className="dt-grid">
-        <div className="dt-grid-col">
-          <div className="dt-field">
-            <span className="dt-label">Name</span>
-            <input
-              className="dt-input"
-              type="text"
-              value={form.name}
-              onChange={(event) => setForm({ ...form, name: event.target.value })}
-              required
-            />
-          </div>
-
-          <div className="dt-field">
-            <span className="dt-label">Email</span>
-            <input className="dt-input" type="email" value={user.email} disabled readOnly />
-          </div>
-
-          <div className="dt-field">
-            <span className="dt-label">Profile photo</span>
-            <div className="dt-photo">
-              <AvatarUploader
-                tenantSlug={tenantSlug}
-                value={form.avatarUrl}
-                name={form.name}
-                inputId={`user-${user.id}-avatar-upload`}
-                pill={true}
-                onChange={(next) => setForm({ ...form, avatarUrl: next })}
-              />
-              <small className="dt-photo__help">
-                JPG, PNG, GIF, WEBP, or HEIC up to 10&nbsp;MB.
-              </small>
-            </div>
-          </div>
-
-          {provider ? (
-            <div className="dt-field">
-              <span className="dt-label">Works at</span>
-              <div className="dt-pill-row">
-                {locations.map((loc) => {
-                  const assigned = provider.locationIds.includes(loc.id);
-                  return (
-                    <button
-                      key={loc.id}
-                      type="button"
-                      className={`dt-pill dt-pill--location${assigned ? " is-assigned" : ""}`}
-                      onClick={() => {
-                        const next = assigned
-                          ? provider.locationIds.filter((id) => id !== loc.id)
-                          : [...provider.locationIds, loc.id];
-                        platformApi
-                          .updateProvider(tenantSlug, provider.id, { locationIds: next })
-                          .then(() => onSaved())
-                          .catch((e: unknown) => setError(readErrorMessage(e, "Unable to update locations.")));
-                      }}
-                      aria-pressed={assigned}
-                    >
-                      {loc.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-
-          <div className="dt-field">
-            <span className="dt-label">Can sign in</span>
-            <label className="settings-toggle dt-toggle-row">
-              <input
-                type="checkbox"
-                checked={form.isActive}
-                onChange={(event) => setForm({ ...form, isActive: event.target.checked })}
-              />
-              <span>Active</span>
-            </label>
-          </div>
-
-          {provider ? (
-            <div className="dt-field">
-              <span className="dt-label">Bookable online</span>
-              <label className="settings-toggle dt-toggle-row">
-                <input
-                  type="checkbox"
-                  checked={provider.isBookableOnline}
-                  onChange={(event) => {
-                    platformApi
-                      .updateProvider(tenantSlug, provider.id, { isBookableOnline: event.target.checked })
-                      .then(() => onSaved())
-                      .catch((e: unknown) => setError(readErrorMessage(e, "Unable to update bookability.")));
-                  }}
-                />
-                <span className="dt-helper">Clients can request {user.name.split(" ")[0] || user.name} by name</span>
-              </label>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="dt-grid-col">
-          <div className="dt-field">
-            <span className="dt-label">Role</span>
-            <div className="dt-role-pills" role="group" aria-label="Role">
-              {ROLE_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  disabled={isProvider}
-                  className={`dt-pill dt-pill--role${form.role === option.value ? " is-selected" : ""}`}
-                  onClick={() => setForm({ ...form, role: option.value })}
-                  aria-pressed={form.role === option.value}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            {isProvider ? (
-              <span className="dt-helper">Role is locked while this person takes bookings.</span>
-            ) : null}
-          </div>
-
-          <div className="dt-field">
-            <span className="dt-label">Phone</span>
-            <input
-              className="dt-input"
-              type="text"
-              value={form.phone}
-              onChange={(event) => setForm({ ...form, phone: event.target.value })}
-              placeholder="+1 555-555-1212"
-            />
-          </div>
-
-          {provider ? (
-            <div className="dt-field">
-              <span className="dt-label">Title shown to clients</span>
-              <input
-                className="dt-input"
-                type="text"
-                value={providerForm.title}
-                onChange={(event) => setProviderForm({ ...providerForm, title: event.target.value })}
-                placeholder="Lead therapist"
-              />
-              <span className="dt-label" style={{ marginTop: 12 }}>Bio</span>
-              <textarea
-                className="dt-input dt-textarea"
-                value={providerForm.bio}
-                onChange={(event) => setProviderForm({ ...providerForm, bio: event.target.value })}
-                placeholder="A short client-facing bio…"
-                rows={3}
-              />
-            </div>
-          ) : (
-            <div className="dt-field">
-              <span className="dt-label">Joined</span>
-              <input
-                className="dt-input"
-                type="text"
-                value={DATE_FORMAT.format(new Date(user.createdAt))}
-                disabled
-                readOnly
-              />
-            </div>
-          )}
-        </div>
+    <form className="staff-detail-form" onSubmit={submit}>
+      <div className="staff-detail-grid">
+        <label>
+          <span>Name</span>
+          <input
+            type="text"
+            value={form.name}
+            onChange={(event) => setForm({ ...form, name: event.target.value })}
+            required
+          />
+        </label>
+        <label>
+          <span>Email</span>
+          <input type="email" value={user.email} disabled readOnly />
+        </label>
+        <label>
+          <span>Role</span>
+          <select
+            value={form.role}
+            onChange={(event) => setForm({ ...form, role: event.target.value })}
+          >
+            {ROLE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Phone</span>
+          <input
+            type="text"
+            value={form.phone}
+            onChange={(event) => setForm({ ...form, phone: event.target.value })}
+            placeholder="+1 555-555-1212"
+          />
+        </label>
+        <label className="staff-detail-grid-wide">
+          <span>Profile photo</span>
+          <AvatarUploader
+            tenantSlug={tenantSlug}
+            value={form.avatarUrl}
+            name={form.name}
+            inputId={`user-${user.id}-avatar-upload`}
+            onChange={(next) => setForm({ ...form, avatarUrl: next })}
+          />
+          <small className="settings-form-help">
+            JPG, PNG, GIF, WEBP, or HEIC up to 10&nbsp;MB.
+          </small>
+        </label>
+        <label className="settings-toggle staff-detail-grid-wide">
+          <input
+            type="checkbox"
+            checked={form.isActive}
+            onChange={(event) => setForm({ ...form, isActive: event.target.checked })}
+          />
+          <span>Active (can sign in)</span>
+        </label>
+        <label>
+          <span>Joined</span>
+          <input
+            type="text"
+            value={DATE_FORMAT.format(new Date(user.createdAt))}
+            disabled
+            readOnly
+          />
+        </label>
       </div>
 
       {provider ? (
-        <div className="dt-booking-link">
-          <p className="dt-label">Booking link</p>
-          <div className="dt-booking-link__row">
-            <span className="dt-booking-link__prefix">{bookingLinkBase}</span>
+        <div className="staff-booking-link">
+          <p className="eyebrow">Direct booking link</p>
+          <div className="staff-booking-link-editor">
+            <span className="staff-booking-link-prefix">{bookingLinkBase}</span>
             <input
-              className="dt-input dt-booking-link__input"
               type="text"
               value={bookingSlug}
               onChange={(event) => {
@@ -1169,46 +901,12 @@ function DetailsTab({
               spellCheck={false}
               autoCapitalize="off"
             />
-            {provider.bookingUrl ? (
-              <div className="dt-booking-link__actions">
-                <button
-                  type="button"
-                  className="ghost-action"
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(provider.bookingUrl!);
-                      setSlugCopied(true);
-                      setTimeout(() => setSlugCopied(false), 2000);
-                    } catch {
-                      // ignore
-                    }
-                  }}
-                >
-                  {slugCopied ? "Copied!" : "Copy"}
-                </button>
-                <a
-                  className="ghost-action"
-                  href={provider.bookingUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open
-                </a>
-              </div>
-            ) : null}
           </div>
-          <p className="dt-helper">
-            {slugError ? (
-              <span role="alert" className="settings-error">{slugError}</span>
-            ) : (
-              "Available. Lowercase letters, numbers and hyphens — changing it breaks any link already shared. Leave it blank and this person is bookable only from the studio's main page."
-            )}
-          </p>
-          {bookingSlug.trim() !== (provider.bookingSlug ?? "") ? (
+          <div className="staff-booking-link-actions">
             <button
               type="button"
-              className="dt-link-save"
-              disabled={slugSubmitting}
+              className="ghost-action"
+              disabled={slugSubmitting || (bookingSlug.trim() === (provider.bookingSlug ?? ""))}
               onClick={async () => {
                 const trimmed = bookingSlug.trim();
                 if (trimmed && !/^[a-z0-9-]+$/i.test(trimmed)) {
@@ -1231,6 +929,38 @@ function DetailsTab({
             >
               {slugSubmitting ? "Saving…" : "Save link"}
             </button>
+            {provider.bookingUrl ? (
+              <>
+                <button
+                  type="button"
+                  className="ghost-action"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(provider.bookingUrl!);
+                      setSlugCopied(true);
+                      setTimeout(() => setSlugCopied(false), 2000);
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                >
+                  {slugCopied ? "Copied!" : "Copy link"}
+                </button>
+                <a
+                  className="ghost-action"
+                  href={provider.bookingUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open
+                </a>
+              </>
+            ) : null}
+          </div>
+          {slugError ? (
+            <p role="alert" className="settings-error">
+              {slugError}
+            </p>
           ) : null}
         </div>
       ) : null}
@@ -1243,7 +973,7 @@ function DetailsTab({
 
       <div className="modal-actions">
         <button type="submit" className="primary-action" disabled={submitting}>
-          {submitting ? "Saving…" : "Save"}
+          {submitting ? "Saving…" : "Save changes"}
         </button>
       </div>
     </form>
@@ -1278,10 +1008,6 @@ function ServicesTab({
   const [serviceOverrides, setServiceOverrides] = useState<
     Record<string, { durationMinutes: string; priceCents: string; flatCents: string; basisPoints: string }>
   >({});
-  // Explicit $/% choice per service, independent of whether a value has been typed yet
-  // (without this, clicking % while the percent field is still blank would immediately
-  // fall back to showing the flat $ input, since the mode was derived only from the data).
-  const [commissionModeOverride, setCommissionModeOverride] = useState<Record<string, "flat" | "percent">>({});
   const [overridesLoaded, setOverridesLoaded] = useState(false);
 
   // Load existing per-service overrides
@@ -1496,7 +1222,7 @@ function ServicesTab({
         )}
       </fieldset>
 
-      <fieldset className="staff-fieldset staff-services-fieldset">
+      <fieldset className="staff-fieldset">
         <legend>
           Services <span className="staff-fieldset-count">{serviceIds.length} of {services.length}</span>
         </legend>
@@ -1504,18 +1230,11 @@ function ServicesTab({
           <p className="settings-form-help">No services configured.</p>
         ) : (
           <>
-            <p className="svc-lead">
-              What they perform. Services come from the Treatments page, filtered to this person. Leave a
-              field blank to inherit that treatment's price and duration; enter a value to override
-              it just for them. Commission follows the model set on the Compensation tab for every
-              service they perform — override a specific treatment's commission below only when it
-              needs to differ from that baseline.
-            </p>
             <div className="staff-list-toolbar">
               <input
                 type="search"
                 className="staff-list-search"
-                placeholder="Find a treatment…"
+                placeholder="Search services…"
                 value={serviceQuery}
                 onChange={(event) => setServiceQuery(event.target.value)}
                 aria-label="Search services"
@@ -1549,18 +1268,10 @@ function ServicesTab({
                 const providerBookingSlug = provider.bookingSlug ?? provider.id;
                 return (
                   <div className="staff-services-groups">
-                    <div className="svc-staff-theader" aria-hidden="true">
-                      <span />
-                      <span>Duration</span>
-                      <span>Price</span>
-                      <span>Commission</span>
-                    </div>
                     {groups.map((group) => {
                       const groupIds = group.services.map((s) => s.id);
                       const allEnabled = groupIds.every((id) => serviceIds.includes(id));
                       const noneEnabled = groupIds.every((id) => !serviceIds.includes(id));
-                      const performed = group.services.filter((s) => serviceIds.includes(s.id));
-                      const notOffered = group.services.filter((s) => !serviceIds.includes(s.id));
                       return (
                         <section key={group.id ?? "uncategorized"} className="staff-services-group">
                           <header className="staff-services-group__header">
@@ -1582,12 +1293,10 @@ function ServicesTab({
                             </button>
                           </header>
 
-                          {[...performed, ...notOffered].map((svc) => {
+                          {group.services.map((svc) => {
                             const isAssigned = serviceIds.includes(svc.id);
-                            const showNotOfferedHeader = !isAssigned && svc.id === notOffered[0]?.id;
                             const ov = serviceOverrides[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" };
-                            const commissionMode: "flat" | "percent" =
-                              commissionModeOverride[svc.id] ?? (ov.basisPoints ? "percent" : "flat");
+                            const commissionMode: "flat" | "percent" = ov.basisPoints ? "percent" : "flat";
                             // Auto-enable the service if the operator starts editing any override
                             // so the value they type will actually persist on save.
                             const ensureAssigned = () => {
@@ -1601,11 +1310,8 @@ function ServicesTab({
                               }));
                             };
                             return (
-                              <React.Fragment key={svc.id}>
-                                {showNotOfferedHeader ? (
-                                  <p className="svc-staff-notoffered__label">Not offered</p>
-                                ) : null}
                               <div
+                                key={svc.id}
                                 className={`svc-staff-trow staff-service-trow${isAssigned ? "" : " svc-staff-trow--off"}`}
                               >
                                 <div className="svc-staff-trow__provider">
@@ -1654,22 +1360,12 @@ function ServicesTab({
                                   <div className="service-card__pill-toggle" role="group" aria-label="Commission type">
                                     <button type="button"
                                       className={`service-card__pill${commissionMode === "flat" ? " is-active" : ""}`}
-                                      onClick={() => {
-                                        ensureAssigned();
-                                        setCommissionModeOverride((prev) => ({ ...prev, [svc.id]: "flat" }));
-                                        if (commissionMode === "flat") return;
-                                        patch({ basisPoints: "" });
-                                      }}>
+                                      onClick={() => { ensureAssigned(); if (commissionMode === "flat") return; patch({ basisPoints: "" }); }}>
                                       $
                                     </button>
                                     <button type="button"
                                       className={`service-card__pill${commissionMode === "percent" ? " is-active" : ""}`}
-                                      onClick={() => {
-                                        ensureAssigned();
-                                        setCommissionModeOverride((prev) => ({ ...prev, [svc.id]: "percent" }));
-                                        if (commissionMode === "percent") return;
-                                        patch({ flatCents: "" });
-                                      }}>
+                                      onClick={() => { ensureAssigned(); if (commissionMode === "percent") return; patch({ flatCents: "" }); }}>
                                       %
                                     </button>
                                   </div>
@@ -1679,7 +1375,7 @@ function ServicesTab({
                                       type="text" inputMode="decimal"
                                       placeholder="0.00"
                                       value={ov.flatCents}
-                                      onFocus={(e) => { ensureAssigned(); patch({ flatCents: "" }); e.target.select(); }}
+                                      onFocus={(e) => { ensureAssigned(); e.target.select(); }}
                                       onMouseUp={(e) => e.preventDefault()}
                                       onChange={(e) => patch({ flatCents: e.target.value, basisPoints: "" })}
                                       aria-label={`${svc.name} commission flat`}
@@ -1690,7 +1386,7 @@ function ServicesTab({
                                       type="text" inputMode="decimal"
                                       placeholder="0"
                                       value={ov.basisPoints}
-                                      onFocus={(e) => { ensureAssigned(); patch({ basisPoints: "" }); e.target.select(); }}
+                                      onFocus={(e) => { ensureAssigned(); e.target.select(); }}
                                       onMouseUp={(e) => e.preventDefault()}
                                       onChange={(e) => patch({ flatCents: "", basisPoints: e.target.value })}
                                       aria-label={`${svc.name} commission percent`}
@@ -1698,7 +1394,6 @@ function ServicesTab({
                                   )}
                                 </div>
                               </div>
-                              </React.Fragment>
                             );
                           })}
                         </section>
@@ -1741,7 +1436,7 @@ function ServicesTab({
       <div className="modal-actions">
         {isDirty ? <span className="settings-form-help">Unsaved changes</span> : null}
         <button type="submit" className="primary-action" disabled={submitting || !isDirty}>
-          {submitting ? "Saving…" : "Save"}
+          {submitting ? "Saving…" : "Save provider"}
         </button>
       </div>
     </form>
@@ -1887,40 +1582,24 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
   // Regular hours drawer (opens from "Set regular hours" button — bulk 7-day template)
   const [regularHoursOpen, setRegularHoursOpen] = useState(false);
 
-  // Exceptions-by-date calendar: which month is showing, and which date is selected for editing.
-  const [calendarMonth, setCalendarMonth] = useState(() => {
-    const d = new Date();
-    d.setDate(1);
-    d.setHours(0, 0, 0, 0);
-    return d;
+  // Sub-tab within Work Hours: "regular" | "overrides"
+  const [workHoursSubTab, setWorkHoursSubTab] = useState<"regular" | "overrides">("regular");
+
+  // Overrides list filter chips: "Time off" / "Custom hours"
+  const [overrideFilter, setOverrideFilter] = useState<{ timeOff: boolean; customHours: boolean }>({
+    timeOff: false, customHours: false,
   });
-  const [selectedExceptionDate, setSelectedExceptionDate] = useState<string | null>(() =>
-    new Date().toISOString().split("T")[0]
-  );
-  const [panelMode, setPanelMode] = useState<"custom_hours" | "closed">("custom_hours");
-  const [panelStart, setPanelStart] = useState("09:00");
-  const [panelEnd, setPanelEnd] = useState("17:00");
-  const [panelReason, setPanelReason] = useState("");
 
   const latestLocationRef = useRef(selectedLocationId);
   latestLocationRef.current = selectedLocationId;
-  // Tracks which location's data is currently loaded so we can tell a real
-  // location switch (needs the full-page "Loading…" placeholder + cleared
-  // state) apart from a background refresh after save/delete (reloadKey
-  // bump), which should refetch quietly without unmounting the calendar
-  // panel or resetting scroll position.
-  const loadedLocationRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
     const locId = selectedLocationId;
-    const isNewLocation = loadedLocationRef.current !== locId;
-    if (isNewLocation) {
-      setShifts(new Map());
-      setOverrides([]);
-      setLoading(true);
-    }
+    setShifts(new Map());
+    setOverrides([]);
     const doLoad = async () => {
+      setLoading(true);
       setError(null);
       try {
         const resp = await platformApi.getProviderWorkHours(tenantSlug, provider.id, locId);
@@ -1943,7 +1622,6 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
           }
         }
         setDayBlockedServices(dayBlocks);
-        loadedLocationRef.current = locId;
       } catch (err) {
         if (cancelled || latestLocationRef.current !== locId) return;
         setError(err instanceof Error ? err.message : "Failed to load work hours");
@@ -2017,38 +1695,6 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
       return next;
     });
   };
-
-  // Find the date-override (if any) whose range covers a given YYYY-MM-DD date.
-  const findOverrideForDate = (dateStr: string): ProviderTimeOffEntry | null => {
-    for (const ov of overrides) {
-      const s = new Date(ov.startsAt).toISOString().split("T")[0];
-      const e = new Date(ov.endsAt).toISOString().split("T")[0];
-      if (dateStr >= s && dateStr <= e) return ov;
-    }
-    return null;
-  };
-
-  // Seed the exception-editor panel whenever the selected calendar date (or the
-  // overrides loaded for it) changes, so it always reflects the current saved state.
-  useEffect(() => {
-    if (!selectedExceptionDate) return;
-    const existing = findOverrideForDate(selectedExceptionDate);
-    const weekdayIdx = (new Date(selectedExceptionDate + "T00:00:00").getDay() + 6) % 7;
-    const regularShiftsForDay = shifts.get(weekdayIdx) || [];
-    const regularIsOn = regularShiftsForDay.length > 0 && regularShiftsForDay[0].isActive;
-    if (existing) {
-      setPanelMode(existing.overrideType === "closed" ? "closed" : "custom_hours");
-      setPanelStart(existing.startTime || regularShiftsForDay[0]?.startTime || "09:00");
-      setPanelEnd(existing.endTime || regularShiftsForDay[0]?.endTime || "17:00");
-      setPanelReason(existing.reason || "");
-    } else {
-      setPanelMode(regularIsOn ? "custom_hours" : "closed");
-      setPanelStart(regularShiftsForDay[0]?.startTime || "09:00");
-      setPanelEnd(regularShiftsForDay[0]?.endTime || "17:00");
-      setPanelReason("");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedExceptionDate, overrides, shifts]);
 
   const handleSave = async () => {
     setSubmitting(true);
@@ -2406,22 +2052,30 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
       <div className="wh-layout">
         <div className="wh-main">
           <div className="svc-card wh-card">
-            <div className="wh-editing-for">
-              <span className="wh-editing-for__label">Editing hours for</span>
+            {/* Sub-tab bar */}
+            <div className="wh-subtabs-row">
+              <div className="staff-detail-tabs wh-subtabs">
+                <button type="button"
+                  className={`staff-detail-tab${workHoursSubTab === "regular" ? " is-active" : ""}`}
+                  onClick={() => setWorkHoursSubTab("regular")}>Regular</button>
+                <button type="button"
+                  className={`staff-detail-tab${workHoursSubTab === "overrides" ? " is-active" : ""}`}
+                  onClick={() => setWorkHoursSubTab("overrides")}>Overrides &amp; time off</button>
+              </div>
               {providerLocations.length > 1 ? (
-                <select
-                  className="wh-editing-for__select"
-                  aria-label="Work hours location"
-                  value={selectedLocationId || ""}
-                  onChange={(e) => setSelectedLocationId(e.target.value || null)}>
-                  <option value="">Both locations</option>
-                  {providerLocations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>{loc.name}</option>
-                  ))}
-                </select>
-              ) : (
-                <strong className="wh-editing-for__name">{providerLocations[0]?.name}</strong>
-              )}
+                <label className="wh-location-select">
+                  <span className="wh-location-select__label">Location</span>
+                  <select
+                    aria-label="Work hours location"
+                    value={selectedLocationId || ""}
+                    onChange={(e) => setSelectedLocationId(e.target.value || null)}>
+                    <option value="">Both locations</option>
+                    {providerLocations.map((loc) => (
+                      <option key={loc.id} value={loc.id}>{loc.name}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
             </div>
             {providerLocations.length > 1 ? (
               <p className="wh-helper-text">
@@ -2429,11 +2083,9 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
               </p>
             ) : null}
 
-            <h4 className="wh-section-title">Regular weekly pattern</h4>
-            <p className="wh-helper-text">
-              This repeats every week. Click a date on the calendar to set a one-off exception instead.
-            </p>
-
+            {workHoursSubTab === "regular" ? (
+          /* ===== REGULAR HOURS SUB-TAB ===== */
+          <>
             {shifts.size === 0 ? (
               <div className="wh-empty-state">
                 <div>
@@ -2533,154 +2185,83 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
                 </button>
               </>
             )}
+          </>
+        ) : (
+          /* ===== OVERRIDES & TIME OFF SUB-TAB ===== */
+          <>
+            <div className="wh-overrides-header">
+              <div className="wh-overrides-header__title">Overrides &amp; time off</div>
+              <button type="button" className="svc-save-btn"
+                onClick={() => setTimeOffOpen(true)} disabled={submitting}>
+                + Block time off
+              </button>
+            </div>
+            <div className="wh-filter-row">
+              <label className="wh-filter-chip">
+                <input type="checkbox" checked={overrideFilter.timeOff}
+                  onChange={(e) => setOverrideFilter((prev) => ({ ...prev, timeOff: e.target.checked }))} />
+                Time off
+              </label>
+              <label className="wh-filter-chip">
+                <input type="checkbox" checked={overrideFilter.customHours}
+                  onChange={(e) => setOverrideFilter((prev) => ({ ...prev, customHours: e.target.checked }))} />
+                Custom hours
+              </label>
+            </div>
+            {overrides.length === 0 ? (
+              <div className="wh-overrides-empty">No overrides or time off scheduled.</div>
+            ) : (
+              <div className="wh-override-list">
+                {overrides
+                  .filter((ov) => {
+                    const isCustom = ov.overrideType === "custom_hours";
+                    if (!overrideFilter.timeOff && !overrideFilter.customHours) return true;
+                    return (overrideFilter.timeOff && !isCustom) || (overrideFilter.customHours && isCustom);
+                  })
+                  .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
+                  .map((ov) => {
+                    const startD = new Date(ov.startsAt);
+                    const endD = new Date(ov.endsAt);
+                    const startDateStr = startD.toISOString().split("T")[0];
+                    const endDateStr = endD.toISOString().split("T")[0];
+                    const sameDay = startDateStr === endDateStr;
+                    const fmtDateStr = (ds: string) => {
+                      const [y, m, d] = ds.split("-").map(Number);
+                      const date = new Date(Date.UTC(y, m - 1, d));
+                      return date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+                    };
+                    const isCustom = ov.overrideType === "custom_hours";
+                    const isPast = endD < new Date();
+                    return (
+                      <div key={ov.id}
+                        className={`wh-override-card${isCustom ? " wh-override-card--custom" : " wh-override-card--timeoff"}${isPast ? " wh-override-card--past" : ""}`}>
+                        <div className="wh-override-card__body">
+                          <div className="wh-override-card__dates">
+                            {sameDay
+                              ? (isCustom ? fmtDateStr(startDateStr) : `${fmtDateStr(startDateStr)} · all day`)
+                              : `${fmtDateStr(startDateStr)} – ${fmtDateStr(endDateStr)}`}
+                            {isCustom && ov.startTime ? ` · ${ov.startTime} – ${ov.endTime}` : ""}
+                          </div>
+                          <div className="wh-override-card__reason">
+                            {ov.reason || (isCustom ? "Custom hours" : "Time off")}
+                          </div>
+                        </div>
+                        <button type="button" className="wh-override-card__dismiss"
+                          onClick={() => handleDeleteOverride(ov.id)}
+                          aria-label={`Remove ${isCustom ? "override" : "time off"} ${fmtDateStr(startDateStr)}`}>
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </>
+        )}
           </div>
         </div>
 
         <aside className="wh-side">
-          <div className="wh-side-card wh-exceptions-card">
-            <div className="wh-exceptions-header">
-              <div className="wh-side-card__title">Exceptions by date</div>
-              <button type="button" className="svc-text-btn" onClick={() => setTimeOffOpen(true)} disabled={submitting}>
-                + Block a range
-              </button>
-            </div>
-            {(() => {
-              const year = calendarMonth.getFullYear();
-              const month = calendarMonth.getMonth();
-              const monthLabel = calendarMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-              const firstOfMonth = new Date(year, month, 1);
-              const startOffset = firstOfMonth.getDay(); // 0 = Sunday
-              const daysInMonth = new Date(year, month + 1, 0).getDate();
-              const todayStr = new Date().toISOString().split("T")[0];
-              const cells: Array<{ dateStr: string; day: number } | null> = [];
-              for (let i = 0; i < startOffset; i++) cells.push(null);
-              for (let day = 1; day <= daysInMonth; day++) {
-                const d = new Date(year, month, day);
-                cells.push({ dateStr: d.toISOString().split("T")[0], day });
-              }
-              return (
-                <>
-                  <div className="wh-cal-nav">
-                    <button type="button" className="wh-cal-nav__btn" aria-label="Previous month"
-                      onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}>
-                      ‹
-                    </button>
-                    <span className="wh-cal-nav__label">{monthLabel}</span>
-                    <button type="button" className="wh-cal-nav__btn" aria-label="Next month"
-                      onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}>
-                      ›
-                    </button>
-                  </div>
-                  <div className="wh-cal-grid">
-                    {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-                      <span key={i} className="wh-cal-dow">{d}</span>
-                    ))}
-                    {cells.map((cell, i) => {
-                      if (!cell) return <span key={`blank-${i}`} className="wh-cal-day wh-cal-day--blank" />;
-                      const ov = findOverrideForDate(cell.dateStr);
-                      const isTimeOff = ov?.overrideType === "closed";
-                      const isCustom = ov?.overrideType === "custom_hours";
-                      const isToday = cell.dateStr === todayStr;
-                      const isSelected = cell.dateStr === selectedExceptionDate;
-                      return (
-                        <button type="button" key={cell.dateStr}
-                          className={`wh-cal-day${isTimeOff ? " wh-cal-day--timeoff" : ""}${isCustom ? " wh-cal-day--custom" : ""}${isToday ? " wh-cal-day--today" : ""}${isSelected ? " wh-cal-day--selected" : ""}`}
-                          onClick={() => setSelectedExceptionDate(cell.dateStr)}
-                          aria-label={`Edit hours for ${cell.dateStr}`}>
-                          {cell.day}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="wh-cal-legend">
-                    <span className="wh-cal-legend__item"><i className="wh-cal-legend__swatch wh-cal-legend__swatch--timeoff" />Time off</span>
-                    <span className="wh-cal-legend__item"><i className="wh-cal-legend__swatch wh-cal-legend__swatch--custom" />Custom hours</span>
-                  </div>
-                </>
-              );
-            })()}
-
-            {selectedExceptionDate ? (() => {
-              const dateObj = new Date(selectedExceptionDate + "T00:00:00");
-              const weekdayIdx = (dateObj.getDay() + 6) % 7;
-              const regularShiftsForDay = shifts.get(weekdayIdx) || [];
-              const regularIsOn = regularShiftsForDay.length > 0 && regularShiftsForDay[0].isActive;
-              const regularPatternLabel = regularIsOn
-                ? `${regularShiftsForDay[0].startTime} – ${regularShiftsForDay[0].endTime}`
-                : "Not working";
-              const existing = findOverrideForDate(selectedExceptionDate);
-              const dateLabel = dateObj.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
-              return (
-                <div className="wh-exception-panel">
-                  <div className="wh-exception-panel__header">
-                    <div className="wh-exception-panel__title">{dateLabel}</div>
-                    <button type="button" className="wh-exception-panel__close"
-                      onClick={() => setSelectedExceptionDate(null)} aria-label="Close">×</button>
-                  </div>
-                  <p className="wh-exception-panel__pattern">Regular pattern: {regularPatternLabel}</p>
-
-                  <div className="wh-seg-toggle" role="group" aria-label="Exception type">
-                    <button type="button"
-                      className={`wh-seg-toggle__btn${panelMode === "custom_hours" ? " is-active" : ""}`}
-                      onClick={() => setPanelMode("custom_hours")}>
-                      Custom hours
-                    </button>
-                    <button type="button"
-                      className={`wh-seg-toggle__btn${panelMode === "closed" ? " is-active" : ""}`}
-                      onClick={() => setPanelMode("closed")}>
-                      Not working
-                    </button>
-                  </div>
-
-                  {panelMode === "custom_hours" ? (
-                    <div className="wh-time-range wh-exception-panel__times">
-                      <input type="time" className="wh-time-input" value={panelStart}
-                        aria-label="Exception start time"
-                        onChange={(e) => setPanelStart(e.target.value)} />
-                      <span className="wh-time-sep">to</span>
-                      <input type="time" className="wh-time-input" value={panelEnd}
-                        aria-label="Exception end time"
-                        onChange={(e) => setPanelEnd(e.target.value)} />
-                    </div>
-                  ) : null}
-
-                  <label className="wh-exception-panel__reason-label" htmlFor="wh-exception-reason">
-                    Reason — shown to staff, optional
-                  </label>
-                  <input id="wh-exception-reason" type="text" className="svc-input"
-                    value={panelReason} onChange={(e) => setPanelReason(e.target.value)}
-                    placeholder="e.g. Training session" />
-
-                  <p className="wh-exception-panel__note">
-                    This date only. {regularIsOn
-                      ? `Every other ${WEEKDAY_LABELS[weekdayIdx]} keeps the regular ${regularPatternLabel} pattern.`
-                      : `${WEEKDAY_LABELS[weekdayIdx]}s are normally not working.`}
-                  </p>
-
-                  <div className="wh-exception-panel__actions">
-                    {existing ? (
-                      <button type="button" className="ghost-action" disabled={submitting}
-                        onClick={() => handleDeleteOverride(existing.id)}>
-                        Remove exception
-                      </button>
-                    ) : null}
-                    <button type="button" className="svc-save-btn" disabled={submitting}
-                      onClick={() => handleSaveDateOverride(selectedExceptionDate, {
-                        closedAllDay: panelMode === "closed",
-                        startTime: panelStart,
-                        endTime: panelEnd,
-                        blockedServiceIds: existing?.blockedServiceIds || [],
-                        existingOverrideId: existing?.id || null,
-                        reason: panelReason,
-                      })}>
-                      Save this date
-                    </button>
-                  </div>
-                </div>
-              );
-            })() : null}
-          </div>
-
           <div className="wh-side-card">
             <div className="wh-side-card__title">Studio hours, for reference</div>
             {studioHours.length > 0 ? (
@@ -4029,50 +3610,12 @@ type PermissionsTabProps = {
 type CompensationTabProps = {
   tenantSlug: string;
   provider: ProviderSummary;
-  services: ServiceSummary[];
   onSaved: () => void;
 };
 
 type CompensationMode = "service_percent" | "sliding_scale" | "flat_per_booking" | "hourly" | "";
 
-function formatCentsWhole(cents: number): string {
-  return `$${Math.round(cents / 100).toLocaleString("en-US")}`;
-}
-
-type ModeCardProps = {
-  value: CompensationMode;
-  title: string;
-  desc: string;
-  mode: CompensationMode;
-  onSelect: (value: CompensationMode) => void;
-  children?: React.ReactNode;
-  preview?: React.ReactNode;
-};
-
-function ModeCard({ value, title, desc, mode, onSelect, children, preview }: ModeCardProps) {
-  const selected = mode === value;
-  return (
-    <div className={`comp-mode-card${selected ? " comp-mode-card--selected" : ""}`}>
-      <label className="comp-mode-card__head">
-        <input
-          type="radio"
-          name="compensationMode"
-          value={value}
-          checked={selected}
-          onChange={() => onSelect(value)}
-          className="comp-mode-card__radio-input"
-        />
-        <span className="comp-mode-card__radio" aria-hidden="true" />
-        <span className="comp-mode-card__title">{title}</span>
-      </label>
-      <p className="comp-mode-card__desc">{desc}</p>
-      {selected && children ? <div className="comp-mode-card__body">{children}</div> : null}
-      {!selected && preview ? <div className="comp-mode-card__preview">{preview}</div> : null}
-    </div>
-  );
-}
-
-function CompensationTab({ tenantSlug, provider, services, onSaved }: CompensationTabProps) {
+function CompensationTab({ tenantSlug, provider, onSaved }: CompensationTabProps) {
   const [mode, setMode] = useState<CompensationMode>(
     (provider.compensationMode as CompensationMode) ?? "",
   );
@@ -4106,8 +3649,6 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
   );
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-  const [earnings, setEarnings] = useState<ProviderEarningsSummaryResponse | null>(null);
-  const [earningsError, setEarningsError] = useState<string | null>(null);
 
   useEffect(() => {
     setMode((provider.compensationMode as CompensationMode) ?? "");
@@ -4136,42 +3677,6 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
       (provider.compensationSlidingScale as Array<{ upToAmountCents: number; percentBp: number }>) ?? [],
     );
   }, [provider]);
-
-  const loadEarnings = useCallback(async () => {
-    try {
-      const session = await ensureActiveStoredSession();
-      const token = session?.accessToken ?? "";
-      const resp = await fetch(
-        `${apiBaseUrl}/tenants/${tenantSlug}/providers/${provider.id}/compensation/earnings-summary`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ detail: "Request failed" }));
-        throw new Error(err.detail || `HTTP ${resp.status}`);
-      }
-      const data: ProviderEarningsSummaryResponse = await resp.json();
-      setEarnings(data);
-      setEarningsError(null);
-    } catch (error) {
-      setEarningsError(readErrorMessage(error, "Unable to load earnings."));
-    }
-  }, [tenantSlug, provider.id]);
-
-  useEffect(() => {
-    loadEarnings();
-  }, [loadEarnings]);
-
-  const representativeService = useMemo(() => {
-    const linked = services.filter((s) => provider.serviceIds.includes(s.id) && s.isActive);
-    return linked[0] ?? null;
-  }, [services, provider.serviceIds]);
-
-  const servicePercentHelper = useMemo(() => {
-    const pct = Number(servicePercent);
-    if (!representativeService || !Number.isFinite(pct) || pct <= 0) return null;
-    const amount = Math.round(representativeService.priceCents * (pct / 100));
-    return `≈ ${formatCentsWhole(amount)} on a ${formatCentsWhole(representativeService.priceCents)} ${representativeService.name}`;
-  }, [servicePercent, representativeService]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -4206,7 +3711,6 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
       }
       setStatus("Compensation saved.");
       onSaved();
-      loadEarnings();
     } catch (error) {
       setStatus(readErrorMessage(error, "Unable to save compensation."));
     } finally {
@@ -4230,25 +3734,11 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
     setSlidingTiers((prev) =>
       prev.map((t, i) =>
         i === index
-          ? { ...t, [field]: Math.round(num) }
+          ? { ...t, [field]: field === "upToAmountCents" ? Math.round(num) : Math.round(num) }
           : t,
       ),
     );
   };
-
-  const overrideCount = earnings?.overrideBookingsCount ?? 0;
-
-  const slidingPreview = slidingTiers.length > 0 ? (
-    <span className="comp-tier-preview">
-      {slidingTiers.map((tier, i) => (
-        <span key={i} className="comp-tier-chip comp-tier-chip--readonly">
-          {i === slidingTiers.length - 1 && tier.upToAmountCents === 0
-            ? `above · ${tier.percentBp / 100}%`
-            : `to $${Math.round(tier.upToAmountCents / 100) / 1000}k · ${tier.percentBp / 100}%`}
-        </span>
-      ))}
-    </span>
-  ) : null;
 
   return (
     <div className="staff-detail-form">
@@ -4259,158 +3749,153 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
         </div>
       ) : null}
 
-      <p className="comp-lead">
-        Pick one model. Per-treatment overrides on the Services tab always win over what's set here.
-      </p>
+      <div className="staff-fieldset">
+        <h5 style={{ margin: "0 0 0.5rem" }}>Service Commission</h5>
+        <p className="settings-form-help" style={{ margin: "0 0 0.75rem" }}>
+          Compensation is calculated as a percentage of service sales
+        </p>
 
-      <div className="comp-mode-list">
-        <ModeCard
-          value="service_percent"
-          title="Percent of service"
-          desc="A flat share of every treatment they perform."
-          mode={mode}
-          onSelect={setMode}
-        >
-          <div className="comp-value-row">
-            <input
-              className="comp-value-input"
-              type="number"
-              min={0}
-              max={100}
-              step="0.1"
-              value={servicePercent}
-              onChange={(e) => setServicePercent(e.target.value)}
-              placeholder="0"
-            />
-            <span className="comp-value-suffix">%</span>
-            {servicePercentHelper ? <span className="comp-helper">{servicePercentHelper}</span> : null}
+        <label className="settings-label" style={{ marginBottom: "0.5rem", display: "block" }}>
+          <input
+            type="radio"
+            name="compensationMode"
+            value="service_percent"
+            checked={mode === "service_percent"}
+            onChange={() => setMode("service_percent")}
+            style={{ marginRight: "0.5rem" }}
+          />
+          Basic Service Commission
+        </label>
+        <p className="settings-form-help" style={{ margin: "0 0 0.75rem 1.5rem" }}>
+          A flat percentage of total sales
+        </p>
+        {mode === "service_percent" ? (
+          <div style={{ marginLeft: "1.5rem", marginBottom: "0.75rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <input
+                className="settings-input"
+                type="number"
+                min={0}
+                max={100}
+                step="0.1"
+                value={servicePercent}
+                onChange={(e) => setServicePercent(e.target.value)}
+                placeholder="0"
+                style={{ width: "6rem" }}
+              />
+              <span>%</span>
+            </div>
           </div>
-        </ModeCard>
+        ) : null}
 
-        <ModeCard
-          value="sliding_scale"
-          title="Sliding scale"
-          desc="Percentage rises with monthly revenue served."
-          mode={mode}
-          onSelect={setMode}
-          preview={slidingPreview}
-        >
-          <div className="comp-tier-list">
+        <label className="settings-label" style={{ marginBottom: "0.5rem", display: "block" }}>
+          <input
+            type="radio"
+            name="compensationMode"
+            value="sliding_scale"
+            checked={mode === "sliding_scale"}
+            onChange={() => setMode("sliding_scale")}
+            style={{ marginRight: "0.5rem" }}
+          />
+          Sliding Scale Service Commission
+        </label>
+        <p className="settings-form-help" style={{ margin: "0 0 0.75rem 1.5rem" }}>
+          Percentage depends on amount sold
+        </p>
+        {mode === "sliding_scale" ? (
+          <div style={{ marginLeft: "1.5rem", marginBottom: "0.75rem" }}>
             {slidingTiers.map((tier, i) => (
-              <div key={i} className="comp-tier-chip">
-                <span className="comp-tier-chip__label">to $</span>
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.4rem" }}>
+                <span style={{ fontSize: "0.8rem", whiteSpace: "nowrap" }}>Up to</span>
+                <span>$</span>
                 <input
-                  className="comp-tier-chip__input"
+                  className="settings-input"
                   type="number"
                   min={0}
-                  step="1"
-                  value={Math.round(tier.upToAmountCents / 100)}
+                  step="0.01"
+                  value={(tier.upToAmountCents / 100).toFixed(2)}
                   onChange={(e) => updateSlidingTier(i, "upToAmountCents", String(Number(e.target.value) * 100))}
+                  style={{ width: "6rem" }}
                 />
-                <span className="comp-tier-chip__label">·</span>
+                <span style={{ fontSize: "0.8rem" }}>→</span>
                 <input
-                  className="comp-tier-chip__input comp-tier-chip__input--pct"
+                  className="settings-input"
                   type="number"
                   min={0}
                   max={100}
                   step="0.1"
-                  value={tier.percentBp / 100}
+                  value={(tier.percentBp / 100).toString()}
                   onChange={(e) => updateSlidingTier(i, "percentBp", String(Number(e.target.value) * 100))}
+                  style={{ width: "5rem" }}
                 />
-                <span className="comp-tier-chip__label">%</span>
-                <button
-                  type="button"
-                  className="comp-tier-chip__remove"
-                  onClick={() => removeSlidingTier(i)}
-                  aria-label="Remove tier"
-                >
-                  ×
+                <span>%</span>
+                <button type="button" className="ghost-action" onClick={() => removeSlidingTier(i)} style={{ fontSize: "0.75rem" }}>
+                  Remove
                 </button>
               </div>
             ))}
-            <button type="button" className="comp-tier-add" onClick={addSlidingTier}>
-              + Tier
+            <button type="button" className="ghost-action" onClick={addSlidingTier} style={{ fontSize: "0.8rem" }}>
+              + Add tier
             </button>
           </div>
-        </ModeCard>
+        ) : null}
 
-        <ModeCard
-          value="flat_per_booking"
-          title="Flat per booking"
-          desc="The same amount however long or costly the treatment."
-          mode={mode}
-          onSelect={setMode}
-        >
-          <div className="comp-value-row">
-            <span className="comp-value-prefix">$</span>
-            <input
-              className="comp-value-input"
-              type="number"
-              min={0}
-              step="0.01"
-              value={flatPerBooking}
-              onChange={(e) => setFlatPerBooking(e.target.value)}
-              placeholder="0.00"
-            />
-            <span className="comp-value-suffix">per booking</span>
+        <label className="settings-label" style={{ marginBottom: "0.5rem", display: "block" }}>
+          <input
+            type="radio"
+            name="compensationMode"
+            value="flat_per_booking"
+            checked={mode === "flat_per_booking"}
+            onChange={() => setMode("flat_per_booking")}
+            style={{ marginRight: "0.5rem" }}
+          />
+          Flat Per Booking
+        </label>
+        <p className="settings-form-help" style={{ margin: "0 0 0.75rem 1.5rem" }}>
+          A fixed dollar amount paid for every completed booking
+        </p>
+        {mode === "flat_per_booking" ? (
+          <div style={{ marginLeft: "1.5rem", marginBottom: "0.75rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <span>$</span>
+              <input
+                className="settings-input"
+                type="number"
+                min={0}
+                step="0.01"
+                value={flatPerBooking}
+                onChange={(e) => setFlatPerBooking(e.target.value)}
+                placeholder="0.00"
+                style={{ width: "6rem" }}
+              />
+              <span>per booking</span>
+            </div>
           </div>
-        </ModeCard>
-
-        <ModeCard
-          value="hourly"
-          title="Hourly rate"
-          desc="Paid on hours worked, not on what they serve."
-          mode={mode}
-          onSelect={setMode}
-        >
-          <div className="comp-value-row">
-            <span className="comp-value-prefix">$</span>
-            <input
-              className="comp-value-input"
-              type="number"
-              min={0}
-              step="0.01"
-              value={hourlyRate}
-              onChange={(e) => setHourlyRate(e.target.value)}
-              placeholder="0.00"
-            />
-            <span className="comp-value-suffix">/ hr</span>
-          </div>
-        </ModeCard>
+        ) : null}
       </div>
 
-      <div className="comp-section">
-        <div className="comp-section__head">
-          <h5 className="comp-section__title">Product commission</h5>
-          <span className="comp-section__note">Set separately from treatments</span>
-        </div>
-        <p className="comp-section__desc">
-          What they earn on retail sold at checkout — serums, SPF, aftercare kits. Applies to every product line unless one is excluded below.
+      <div className="staff-fieldset">
+        <h5 style={{ margin: "0 0 0.5rem" }}>Product Commission Bonus</h5>
+        <p className="settings-form-help" style={{ margin: "0 0 0.75rem" }}>
+          An additional percentage of product sales paid on top of the primary compensation above.
+          Leave disabled if product sales are not part of this provider's pay.
         </p>
-        <div className="comp-product-card">
-          <div className="cs-seg" role="group" aria-label="Product commission mode">
-            <button
-              type="button"
-              aria-pressed={productCommissionEnabled}
-              onClick={() => setProductCommissionEnabled(true)}
-            >
-              Percent
-            </button>
-            <button
-              type="button"
-              aria-pressed={!productCommissionEnabled}
-              onClick={() => {
-                setProductCommissionEnabled(false);
-                setProductPercent("");
-              }}
-            >
-              None
-            </button>
-          </div>
-          {productCommissionEnabled ? (
-            <div className="comp-value-row" style={{ marginTop: "12px" }}>
+        <label className="settings-toggle" style={{ marginBottom: "0.75rem" }}>
+          <input
+            type="checkbox"
+            checked={productCommissionEnabled}
+            onChange={(e) => {
+              setProductCommissionEnabled(e.target.checked);
+              if (!e.target.checked) setProductPercent("");
+            }}
+          />
+          <span>Pay product commission</span>
+        </label>
+        {productCommissionEnabled ? (
+          <div style={{ marginLeft: "1.5rem", marginBottom: "0.75rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
               <input
-                className="comp-value-input"
+                className="settings-input"
                 type="number"
                 min={0}
                 max={100}
@@ -4418,35 +3903,51 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
                 value={productPercent}
                 onChange={(e) => setProductPercent(e.target.value)}
                 placeholder="0"
+                style={{ width: "6rem" }}
               />
-              <span className="comp-value-suffix">% of product sales</span>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="comp-summary">
-        <h5 className="comp-summary__title">{earnings ? `${earnings.monthLabel} so far` : "This month so far"}</h5>
-        {earningsError ? (
-          <p className="comp-summary__error">{earningsError}</p>
-        ) : earnings ? (
-          <div className="comp-summary__body">
-            <div className="comp-summary__breakdown">
-              <p>{formatCentsWhole(earnings.treatmentRevenueCents)} in treatments · {formatCentsWhole(earnings.retailRevenueCents)} in retail{overrideCount > 0 ? ` · ${overrideCount} treatment${overrideCount === 1 ? "" : "s"} on an override rate` : ""}</p>
-            </div>
-            <div className="comp-summary__total">
-              <span className="comp-summary__total-amount">{formatCentsWhole(earnings.totalPayoutCents)}</span>
-              <span className="comp-summary__total-split">
-                {formatCentsWhole(earnings.servicePayoutCents)} service + {formatCentsWhole(earnings.productPayoutCents)} product
-              </span>
+              <span>% of product sales</span>
             </div>
           </div>
-        ) : (
-          <p className="comp-summary__loading">Loading…</p>
-        )}
+        ) : null}
       </div>
 
-      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "18px" }}>
+      <div className="staff-fieldset">
+        <h5 style={{ margin: "0 0 0.5rem" }}>Hourly</h5>
+        <p className="settings-form-help" style={{ margin: "0 0 0.75rem" }}>
+          Compensation is calculated using a flat rate per hour
+        </p>
+        <label className="settings-label" style={{ marginBottom: "0.5rem", display: "block" }}>
+          <input
+            type="radio"
+            name="compensationMode"
+            value="hourly"
+            checked={mode === "hourly"}
+            onChange={() => setMode("hourly")}
+            style={{ marginRight: "0.5rem" }}
+          />
+          Hourly Rate
+        </label>
+        {mode === "hourly" ? (
+          <div style={{ marginLeft: "1.5rem", marginBottom: "0.75rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <span>$</span>
+              <input
+                className="settings-input"
+                type="number"
+                min={0}
+                step="0.01"
+                value={hourlyRate}
+                onChange={(e) => setHourlyRate(e.target.value)}
+                placeholder="0.00"
+                style={{ width: "6rem" }}
+              />
+              <span>/ hr</span>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <button type="button" className="primary-action" onClick={handleSave} disabled={saving}>
           {saving ? "Saving…" : "Save compensation"}
         </button>
@@ -4462,37 +3963,29 @@ function PermissionsTab({ tenantSlug, user }: PermissionsTabProps) {
   const [catalog, setCatalog] = useState<PermissionCatalogResponse | null>(null);
   const [permissions, setPermissions] = useState<UserPermissionsResponse | null>(null);
   const [overrides, setOverrides] = useState<Record<string, PermissionTriState>>({});
-  const [savedOverrides, setSavedOverrides] = useState<Record<string, PermissionTriState>>({});
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
-  const isOwner = user.role === "owner";
-
   useEffect(() => {
+    if (user.role === "owner") {
+      setLoadState({ kind: "ready" });
+      return;
+    }
     let cancelled = false;
     setLoadState({ kind: "loading" });
-    const load = isOwner
-      ? platformApi
-          .getPermissionsCatalog()
-          .then((catalogResp): [PermissionCatalogResponse, UserPermissionsResponse | null] => [
-            catalogResp,
-            null,
-          ])
-      : Promise.all([
-          platformApi.getPermissionsCatalog(),
-          platformApi.getUserPermissions(tenantSlug, user.id),
-        ]);
-    load
+    Promise.all([
+      platformApi.getPermissionsCatalog(),
+      platformApi.getUserPermissions(tenantSlug, user.id),
+    ])
       .then(([catalogResp, permsResp]) => {
         if (cancelled) return;
         setCatalog(catalogResp);
         setPermissions(permsResp);
         const next: Record<string, PermissionTriState> = {};
-        for (const entry of permsResp?.overrides ?? []) {
+        for (const entry of permsResp.overrides) {
           next[entry.key] = entry.allowed ? "allow" : "deny";
         }
         setOverrides(next);
-        setSavedOverrides(next);
         setLoadState({ kind: "ready" });
       })
       .catch((error: unknown) => {
@@ -4503,29 +3996,62 @@ function PermissionsTab({ tenantSlug, user }: PermissionsTabProps) {
     return () => {
       cancelled = true;
     };
-  }, [tenantSlug, user.id, isOwner]);
+  }, [tenantSlug, user.id]);
 
-  const toApiOverrides = (map: Record<string, PermissionTriState>): ReplaceUserPermissionsRequest => ({
-    overrides: Object.entries(map).map(
-      ([key, value]): UserPermissionOverrideEntry => ({
-        key: key as PermissionKey,
-        allowed: value === "allow",
-      }),
-    ),
-  });
+  if (user.role === "owner") {
+    return (
+      <div className="permissions-tab">
+        <p className="settings-form-help">
+          Owners have full access to every permission. Customize permissions on managers, staff,
+          and providers instead.
+        </p>
+      </div>
+    );
+  }
 
-  const persist = async (map: Record<string, PermissionTriState>) => {
+  if (loadState.kind === "loading") {
+    return <p className="settings-form-help">Loading permissions…</p>;
+  }
+  if (loadState.kind === "error") {
+    return <p className="error-message">{loadState.message}</p>;
+  }
+  if (!catalog || !permissions) return null;
+
+  const roleDefaults = new Set<string>(permissions.roleDefaults);
+
+  const handleChange = (key: PermissionKey, next: PermissionTriState) => {
+    setOverrides((prev) => {
+      const copy = { ...prev };
+      if (next === "inherit") {
+        delete copy[key];
+      } else {
+        copy[key] = next;
+      }
+      return copy;
+    });
+    setStatus(null);
+  };
+
+  const handleSave = async () => {
     setSaving(true);
     setStatus(null);
+    const payload: ReplaceUserPermissionsRequest = {
+      overrides: Object.entries(overrides).map(
+        ([key, value]): UserPermissionOverrideEntry => ({
+          key: key as PermissionKey,
+          allowed: value === "allow",
+        }),
+      ),
+    };
     try {
-      const updated = await platformApi.replaceUserPermissions(tenantSlug, user.id, toApiOverrides(map));
+      const updated = await platformApi.replaceUserPermissions(tenantSlug, user.id, payload);
       setPermissions(updated);
       const next: Record<string, PermissionTriState> = {};
       for (const entry of updated.overrides) {
         next[entry.key] = entry.allowed ? "allow" : "deny";
       }
       setOverrides(next);
-      setSavedOverrides(next);
+      setStatus("Permissions saved.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to save permissions.";
       setStatus(message);
@@ -4534,243 +4060,75 @@ function PermissionsTab({ tenantSlug, user }: PermissionsTabProps) {
     }
   };
 
-  const handleChange = (key: PermissionKey, next: PermissionTriState) => {
-    const nextMap: Record<string, PermissionTriState> = { ...overrides };
-    if (next === "inherit") {
-      delete nextMap[key];
-    } else {
-      nextMap[key] = next;
-    }
-    setOverrides(nextMap);
-    setStatus(null);
-    void persist(nextMap);
-  };
-
-  const handleReset = () => {
-    setOverrides({});
-    setStatus(null);
-    void persist({});
-  };
-
-  if (loadState.kind === "loading") {
-    return <p className="settings-form-help">Loading permissions…</p>;
+  const grouped = new Map<string, PermissionDefinition[]>();
+  for (const def of catalog.permissions) {
+    const arr = grouped.get(def.category) ?? [];
+    arr.push(def);
+    grouped.set(def.category, arr);
   }
-  if (loadState.kind === "error") {
-    return <p className="error-message">{loadState.message}</p>;
-  }
-  if (!catalog) return null;
-
-  const firstName = user.name.split(" ")[0] || user.name;
-
-  const groupAll = (defs: PermissionDefinition[]) => {
-    const grouped = new Map<string, PermissionDefinition[]>();
-    for (const def of defs) {
-      const arr = grouped.get(def.category) ?? [];
-      arr.push(def);
-      grouped.set(def.category, arr);
-    }
-    return Array.from(grouped.entries());
-  };
-
-  // Read-only full-access view for owners.
-  if (isOwner) {
-    return (
-      <div className="perm">
-        <div className="perm-banner">
-          <div className="perm-banner__text">
-            <strong>Owners have full access</strong>
-            <p className="perm-banner__sub">Every permission is granted automatically. Customize access on managers, providers, and staff instead.</p>
-          </div>
-        </div>
-
-        <div className="perm-grid-cols">
-          <span>Permission</span>
-          <span>Owner default</span>
-          <span>For {firstName}</span>
-        </div>
-
-        {groupAll(catalog.permissions).map(([category, defs]) => (
-          <section key={category} className="perm-group">
-            <p className="perm-group__label">{category}</p>
-            <div className="perm-group__list">
-              {defs.map((def) => (
-                <div key={def.key} className="perm-row">
-                  <div className="perm-row__label">
-                    <strong>{overrideLabel(def.key, def.label)}</strong>
-                    <span className="perm-row__key">{def.key}</span>
-                  </div>
-                  <div className="perm-row__default">
-                    <span className="perm-row__count-label">Allowed</span>
-                  </div>
-                  <div className="perm-row__control">
-                    <div className="perm-seg" role="radiogroup" aria-label={def.label}>
-                      <button type="button" className="perm-seg__btn" disabled>Default</button>
-                      <button type="button" className="perm-seg__btn" aria-pressed="true" disabled>Allow</button>
-                      <button type="button" className="perm-seg__btn" disabled>Deny</button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        ))}
-
-        <div className="perm-summary">
-          <p className="perm-summary__text">{firstName} is an Owner — all permissions are always allowed and cannot be restricted from this screen.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!permissions) return null;
-
-  const roleDefaults = new Set<string>(permissions.roleDefaults);
-  const roleLabel = capitalize(permissions.role);
-  const overrideCount = Object.keys(overrides).length;
-  const dirty = JSON.stringify(normalizeOverrides(overrides)) !== JSON.stringify(normalizeOverrides(savedOverrides));
-  const savedCount = Object.keys(savedOverrides).length;
-
-  const activeOverrideEntry = Object.entries(savedOverrides)[0] ?? null;
-  const summaryOverrideKey = activeOverrideEntry ? (activeOverrideEntry[0] as PermissionKey) : null;
-  const summaryOverrideAllowed = activeOverrideEntry ? activeOverrideEntry[1] === "allow" : false;
-  const summaryDef = summaryOverrideKey
-    ? catalog.permissions.find((d) => d.key === summaryOverrideKey)
-    : undefined;
-  const summaryInheritedAllowed = summaryOverrideKey ? roleDefaults.has(summaryOverrideKey) : false;
 
   return (
-    <div className="perm">
-      {status ? (
-        <div className="message-banner" role="alert">
-          {status}
-          <button type="button" className="ghost-action" onClick={() => setStatus(null)}>Dismiss</button>
-        </div>
-      ) : null}
-
-      <div className="perm-banner">
-        <div className="perm-banner__text">
-          <strong>{roleLabel} defaults apply</strong>
-          <p className="perm-banner__sub">Change the role on Details to move the whole baseline.</p>
-        </div>
-        <button
-          type="button"
-          className="perm-banner__reset"
-          onClick={handleReset}
-          disabled={saving || overrideCount === 0}
-        >
-          Reset overrides
-        </button>
-      </div>
-
-      <div className="perm-grid-cols">
-        <span>Permission</span>
-        <span>{roleLabel} default</span>
-        <span>For {firstName}</span>
-      </div>
-
-      {groupAll(catalog.permissions).map(([category, defs]) => (
-        <section key={category} className="perm-group">
-          <p className="perm-group__label">{category}</p>
-          <div className="perm-group__list">
-            {defs.map((def) => {
-              const current: PermissionTriState = overrides[def.key] ?? "inherit";
-              const inheritedAllowed = roleDefaults.has(def.key);
-              const overridden = savedOverrides[def.key] != null;
-              return (
-                <div key={def.key} className={`perm-row${overridden ? " perm-row--overridden" : ""}`}>
-                  <div className="perm-row__label">
-                    <strong>{overrideLabel(def.key, def.label)}</strong>
-                    <span className="perm-row__key">{def.key}</span>
-                  </div>
-                  <div className="perm-row__default">
-                    <span className="perm-row__count-label">{inheritedAllowed ? "Allowed" : "Denied"}</span>
-                  </div>
-                  <div className="perm-row__control">
-                    <div className="perm-seg" role="radiogroup" aria-label={def.label}>
-                      {(["inherit", "allow", "deny"] as const).map((opt) => (
-                        <button
-                          key={opt}
-                          type="button"
-                          className={`perm-seg__btn${current === opt ? ` perm-seg__btn--${opt}` : ""}`}
-                          aria-pressed={current === opt}
-                          onClick={() => handleChange(def.key, opt)}
-                        >
-                          {opt === "inherit" ? "Default" : opt === "allow" ? "Allow" : "Deny"}
-                        </button>
-                      ))}
+    <div className="permissions-tab">
+      <p className="settings-form-help">
+        Role defaults grant a baseline. Per-user overrides add or remove specific permissions on
+        top of the role.
+      </p>
+      <div className="permissions-groups">
+        {Array.from(grouped.entries()).map(([category, defs]) => (
+          <section key={category} className="permissions-group">
+            <h5>{category}</h5>
+            <ul className="permissions-list">
+              {defs.map((def) => {
+                const current: PermissionTriState = overrides[def.key] ?? "inherit";
+                const inheritedAllowed = roleDefaults.has(def.key);
+                return (
+                  <li key={def.key} className="permissions-row">
+                    <div className="permissions-row-label">
+                      <strong>{def.label}</strong>
+                      <span className="settings-form-help">{def.description}</span>
                     </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      ))}
-
-      <div className="perm-summary">
-        {dirty ? (
-          <p className="perm-summary__text">
-            {saving ? "Saving changes…" : "Saving your changes…"}
-          </p>
-        ) : savedCount > 0 && summaryDef ? (
-          <p className="perm-summary__text">
-            {savedCount === 1
-              ? summaryOverrideAllowed
-                ? summaryInheritedAllowed
-                  ? `One override is active — ${firstName} can ${summaryDef.label.toLowerCase()} explicitly, not just via the ${roleLabel} default.`
-                  : `One override is active — ${firstName} can ${summaryDef.label.toLowerCase()} even though ${roleLabel}s can't by default.`
-                : `One override is active — ${firstName} cannot ${summaryDef.label.toLowerCase()} even though ${roleLabel}s ${summaryInheritedAllowed ? "can by default" : "can't anyway"}.`
-              : `${savedCount} overrides are active for ${firstName} — including ${summaryDef.label.toLowerCase()} ${summaryOverrideAllowed ? "allowed" : "denied"} against the ${roleLabel} baseline.`}
-            {" "}Overrides are logged and surfaced to the owner.
-          </p>
-        ) : (
-          <p className="perm-summary__text">No overrides active for {firstName} — they follow the {roleLabel} defaults.</p>
-        )}
+                    <div className="permissions-row-controls" role="radiogroup" aria-label={def.label}>
+                      <label>
+                        <input
+                          type="radio"
+                          name={`perm-${def.key}`}
+                          checked={current === "inherit"}
+                          onChange={() => handleChange(def.key, "inherit")}
+                        />
+                        Inherit ({inheritedAllowed ? "allow" : "deny"})
+                      </label>
+                      <label>
+                        <input
+                          type="radio"
+                          name={`perm-${def.key}`}
+                          checked={current === "allow"}
+                          onChange={() => handleChange(def.key, "allow")}
+                        />
+                        Allow
+                      </label>
+                      <label>
+                        <input
+                          type="radio"
+                          name={`perm-${def.key}`}
+                          checked={current === "deny"}
+                          onChange={() => handleChange(def.key, "deny")}
+                        />
+                        Deny
+                      </label>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
+      </div>
+      <div className="permissions-actions">
+        <button type="button" className="primary-action" onClick={handleSave} disabled={saving}>
+          {saving ? "Saving…" : "Save permissions"}
+        </button>
+        {status ? <span className="settings-form-help">{status}</span> : null}
       </div>
     </div>
   );
-}
-
-function capitalize(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function normalizeOverrides(map: Record<string, PermissionTriState>): Record<string, PermissionTriState> {
-  const result: Record<string, PermissionTriState> = {};
-  for (const key of Object.keys(map).sort()) {
-    result[key] = map[key];
-  }
-  return result;
-}
-
-const PERMISSION_LABEL_OVERRIDES: Record<string, string> = {
-  "dashboard.view": "See the dashboard",
-  "calendar.view": "See the calendar",
-  "calendar.create_booking": "Book from a calendar slot",
-  "bookings.view": "Open a booking",
-  "bookings.manage": "Edit or reschedule",
-  "bookings.complete": "Complete an appointment",
-  "bookings.cancel": "Cancel or mark no-show",
-  "bookings.collect_payment": "Take payment at checkout",
-  "payments.view": "See the payments queue",
-  "payments.manage": "Collect, refund and correct",
-  "customers.view": "Open client records",
-  "customers.manage": "Edit clients and notes",
-  "forms.view": "Read submitted forms",
-  "forms.manage": "Build and edit forms",
-  "services.view": "See the treatment menu",
-  "services.manage": "Edit treatments and pricing",
-  "providers.view": "See the team",
-  "providers.manage": "Edit hours, comp and services",
-  "locations.view": "See locations",
-  "locations.manage": "Edit locations",
-  "settings.view": "See studio settings",
-  "settings.manage": "Change studio settings",
-  "reports.view": "See reports",
-  "reports.financial": "See financial reports",
-  "reports.export": "Export reports",
-};
-
-function overrideLabel(key: string, fallback: string): string {
-  return PERMISSION_LABEL_OVERRIDES[key] ?? fallback;
 }

@@ -821,8 +821,6 @@ class UpdateProviderRequest(CamelModel):
     is_active: bool | None = None
     is_bookable_online: bool | None = None
     booking_slug: str | None = Field(default=None, max_length=100)
-    description: str | None = Field(default=None, max_length=2000)
-    availability_label: str | None = Field(default=None, max_length=255)
 
     @model_validator(mode="after")
     def _validate(self) -> "UpdateProviderRequest":

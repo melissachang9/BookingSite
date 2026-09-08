@@ -936,21 +936,6 @@ async def update_tenant_provider(
     if payload.booking_slug is not None:
         provider.booking_slug = payload.booking_slug.strip() or None
 
-    if payload.description is not None or payload.availability_label is not None:
-        branding = dict(tenant.branding_json or {})
-        profiles = dict(branding.get("providerProfiles") or {})
-        existing = profiles.get(provider.id)
-        profile = dict(existing) if isinstance(existing, dict) else {}
-        if payload.description is not None:
-            cleaned = payload.description.strip()
-            profile["description"] = cleaned or None
-        if payload.availability_label is not None:
-            cleaned = payload.availability_label.strip()
-            profile["availabilityLabel"] = cleaned or None
-        profiles[provider.id] = profile
-        branding["providerProfiles"] = profiles
-        tenant.branding_json = branding
-
     if payload.location_ids is not None:
         await _validate_tenant_locations(session, tenant.id, payload.location_ids)
         existing = {link.location_id: link for link in provider.location_links}
