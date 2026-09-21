@@ -260,6 +260,7 @@ describe("ServicesPage", () => {
       expect(screen.getByText("Brow Shape")).toBeInTheDocument(),
     );
     fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("tab", { name: "Online booking" }));
 
     // The "Copy link" action is visible in the Online booking card
     await waitFor(() =>
@@ -276,6 +277,7 @@ describe("ServicesPage", () => {
       expect(screen.getByText("Brow Shape")).toBeInTheDocument(),
     );
     fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("tab", { name: "Online booking" }));
 
     await waitFor(() =>
       expect(screen.getByText("Copy link")).toBeInTheDocument(),
@@ -284,7 +286,7 @@ describe("ServicesPage", () => {
     fireEvent.click(screen.getByText("Copy link"));
     await waitFor(() => expect(screen.getByText("Link copied!")).toBeInTheDocument());
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      expect.stringContaining("?serviceId=svc-shape"),
+      expect.stringContaining("/services/svc-shape"),
     );
   });
 

@@ -822,6 +822,7 @@ from app.schemas.catalog import (
 )
 from app.services.tenants import (
     create_tenant_service_category,
+    delete_tenant_service,
     delete_tenant_service_category,
     duplicate_tenant_service,
     list_tenant_service_categories,
@@ -958,6 +959,23 @@ async def post_service_duplicate(
     result = await duplicate_tenant_service(session, tenant_slug, service_id)
     await record_audit(session, tenant_id=result.tenant_id, entity_type="service", entity_id=result.id, action="duplicate", actor=actor, notes=result.name)
     return result
+
+
+@router.delete(
+    "/{tenant_slug}/services/{service_id}",
+    status_code=204,
+    response_class=Response,
+    summary="Delete a service",
+)
+async def delete_service(
+    tenant_slug: str,
+    service_id: str,
+    actor: User = Depends(require_tenant_permission("services.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    await delete_tenant_service(session, tenant_slug, service_id)
+    await record_audit(session, tenant_id=actor.tenant_id, entity_type="service", entity_id=service_id, action="delete", actor=actor)
+    return Response(status_code=204)
 
 
 @router.get(

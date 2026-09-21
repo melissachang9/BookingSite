@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 
-import "@booking/ui-components/styles.css";
-import "./globals.css";
+import "./storefront.css";
 
 
 export const metadata = {

@@ -58,15 +58,36 @@ async def main() -> None:
             for s in (await session.scalars(select(Service).where(Service.tenant_id == tenant.id))).all()
         }
         facial = services.get("Signature Facial")
-        microneedling = services.get("microneedling")
         consult = services.get("New Client Consultation")
         brow = services.get("Brow Shape and Tint")
-        xerf = services.get("XERF RF Skin Tightening – Model Pricing Service")
-        if not all([facial, microneedling, consult, brow, xerf]):
-            print("Missing services:", [k for k, v in [("facial", facial), ("microneedling", microneedling), ("consult", consult), ("brow", brow), ("xerf", xerf)] if v is None])
+        if not all([facial, consult, brow]):
+            print("Missing services:", [k for k, v in [("facial", facial), ("consult", consult), ("brow", brow)] if v is None])
             return
 
         # --- wipe existing bookings for a clean, deterministic week ---
+        # Bookings are referenced by several child tables (payments, payment
+        # events, form responses, wallet transactions, drafts + their form
+        # requirements). Delete children first so the parent delete doesn't trip
+        # the FK constraints.
+        from app.db.models import (
+            BookingDraft,
+            BookingDraftFormRequirement,
+            BookingPaymentEvent,
+            FormResponse,
+            Payment,
+            PaymentEvent,
+            WalletTransaction,
+        )
+        booking_ids_q = select(Booking.id).where(Booking.tenant_id == tenant.id)
+        await session.execute(delete(BookingPaymentEvent).where(BookingPaymentEvent.booking_id.in_(booking_ids_q)))
+        payment_ids_q = select(Payment.id).where(Payment.booking_id.in_(booking_ids_q))
+        await session.execute(delete(PaymentEvent).where(PaymentEvent.payment_id.in_(payment_ids_q)))
+        await session.execute(delete(Payment).where(Payment.booking_id.in_(booking_ids_q)))
+        await session.execute(delete(FormResponse).where(FormResponse.booking_id.in_(booking_ids_q)))
+        await session.execute(delete(WalletTransaction).where(WalletTransaction.booking_id.in_(booking_ids_q)))
+        draft_ids_q = select(BookingDraft.id).where(BookingDraft.tenant_id == tenant.id)
+        await session.execute(delete(BookingDraftFormRequirement).where(BookingDraftFormRequirement.booking_draft_id.in_(draft_ids_q)))
+        await session.execute(delete(BookingDraft).where(BookingDraft.tenant_id == tenant.id))
         await session.execute(delete(Booking).where(Booking.tenant_id == tenant.id))
         await session.execute(delete(ProviderTimeOff).where(ProviderTimeOff.tenant_id == tenant.id))
 
@@ -122,45 +143,129 @@ async def main() -> None:
         sat = today + timedelta(days=6)
 
         # --- bookings: (customer, service, day, hour, minute, status, deposit, resolution) ---
+        # Services actually seeded: Signature Facial(60), Brow Shape and Tint(45),
+        # New Client Consultation(30). Populate across every open day this week.
+        svc_rotate = (facial, brow, consult)
         specs = [
-            # in-progress today (Sun): spans "now" so it renders ink-filled
-            ("Hana Ito", microneedling, sun, 20, 0, "confirmed", "paid", "pending_initial"),
-            # Wed 12:00 90-min (XERF) -> --top 192 / --h 92 (worked example)
-            ("Maya Sharif", xerf, wed, 12, 0, "confirmed", "paid", "pending_initial"),
-            # Wed 14:00 30-min (consult) -> --top 320 / --h 28
-            ("Tom Reyes", consult, wed, 14, 0, "confirmed", "not_required", "waived"),
-            # Thu 13:00 two concurrent 60-min (lanes)
-            ("Leah Barnes", facial, thu, 13, 0, "confirmed", "paid", "pending_initial"),
-            ("Anouk V.", microneedling, thu, 13, 0, "confirmed", "paid", "pending_initial"),
-            # Fri completed + canceled
-            ("Joy Adebayo", facial, fri, 12, 0, "completed", "paid", "collected"),
-            ("Zoe Adeyemi", brow, fri, 15, 0, "canceled", "refunded", "waived"),
-            # Sat 10:00 60-min -> --top 64 / --h 60 (worked example)
-            ("Ivy Chen", facial, sat, 10, 0, "confirmed", "paid", "pending_initial"),
-            ("Maya Sharif", microneedling, sat, 11, 30, "confirmed", "paid", "pending_initial"),
+            # --- Sun (today) — in-progress + a morning + afternoon ---
+            (customer_specs[0][0], facial, sun, 10, 0, "confirmed", "paid", "pending_initial"),
+            (customer_specs[1][0], brow, sun, 12, 0, "confirmed", "paid", "pending_initial"),
+            (customer_specs[2][0], facial, sun, 14, 0, "completed", "paid", "collected"),
+            # --- Mon ---
+            (customer_specs[3][0], brow, sun + timedelta(days=1), 10, 0, "confirmed", "paid", "pending_initial"),
+            (customer_specs[4][0], facial, sun + timedelta(days=1), 11, 30, "confirmed", "paid", "pending_initial"),
+            (customer_specs[5][0], consult, sun + timedelta(days=1), 13, 0, "confirmed", "not_required", "waived"),
+            (customer_specs[0][0], facial, sun + timedelta(days=1), 15, 30, "confirmed", "paid", "pending_initial"),
+            # --- Wed ---
+            (customer_specs[6][0], facial, wed, 12, 0, "confirmed", "paid", "pending_initial"),
+            (customer_specs[7][0], consult, wed, 14, 0, "confirmed", "not_required", "waived"),
+            (customer_specs[1][0], brow, wed, 16, 0, "confirmed", "paid", "pending_initial"),
+            # --- Thu (two concurrent 13:00 for lanes) ---
+            (customer_specs[3][0], facial, thu, 13, 0, "confirmed", "paid", "pending_initial"),
+            (customer_specs[4][0], brow, thu, 13, 0, "confirmed", "paid", "pending_initial"),
+            (customer_specs[5][0], consult, thu, 15, 30, "confirmed", "not_required", "waived"),
+            # --- Fri: completed + canceled ---
+            (customer_specs[6][0], facial, fri, 12, 0, "completed", "paid", "collected"),
+            (customer_specs[7][0], brow, fri, 15, 0, "canceled", "refunded", "waived"),
+            (customer_specs[0][0], consult, fri, 17, 30, "confirmed", "not_required", "waived"),
+            # --- Sat (worked examples + a 30-min) ---
+            (customer_specs[1][0], facial, sat, 10, 0, "confirmed", "paid", "pending_initial"),
+            (customer_specs[2][0], brow, sat, 11, 30, "confirmed", "paid", "pending_initial"),
+            (customer_specs[3][0], consult, sat, 14, 0, "confirmed", "not_required", "waived"),
         ]
 
+        # ensure provider can offer these services before booking them
+        from app.db.models import ProviderService, ServiceLocation
+        for svc in svc_rotate:
+            exists = await session.scalar(
+                select(ProviderService).where(
+                    ProviderService.tenant_id == tenant.id,
+                    ProviderService.provider_id == provider.id,
+                    ProviderService.service_id == svc.id,
+                )
+            )
+            if exists is None:
+                session.add(ProviderService(tenant_id=tenant.id, provider_id=provider.id, service_id=svc.id))
+
+        created_calendar_bookings: list = []
         for name, service, day, hour, minute, status, deposit, resolution in specs:
             starts_at = _la(datetime(day.year, day.month, day.day), hour, minute)
             ends_at = starts_at + timedelta(minutes=service.duration_minutes)
             completed_at = ends_at if status == "completed" else None
             canceled_at = _la(datetime(day.year, day.month, day.day), 18) if status == "canceled" else None
-            session.add(
-                Booking(
-                    tenant_id=tenant.id,
-                    customer_id=customers[name].id,
-                    service_id=service.id,
-                    provider_id=provider.id,
-                    status=status,
-                    booking_method="public_online",
-                    deposit_status=deposit,
-                    payment_resolution=resolution,
-                    starts_at=starts_at,
-                    ends_at=ends_at,
-                    completed_at=completed_at,
-                    canceled_at=canceled_at,
-                )
+            booking = Booking(
+                tenant_id=tenant.id,
+                customer_id=customers[name].id,
+                service_id=service.id,
+                provider_id=provider.id,
+                status=status,
+                booking_method="public_online",
+                deposit_status=deposit,
+                payment_resolution=resolution,
+                starts_at=starts_at,
+                ends_at=ends_at,
+                completed_at=completed_at,
+                canceled_at=canceled_at,
             )
+            session.add(booking)
+            created_calendar_bookings.append((booking, name, service, status, resolution))
+        await session.flush()
+
+        # --- payments: realise the deposit (and, for completed bookings, the
+        # collected balance) as immutable Payment records + events, so the
+        # deposit actually reduces the balance the operator sees at checkout. ---
+        for booking, name, service, status, resolution in created_calendar_bookings:
+            if service.deposit_cents > 0 and booking.deposit_status in ("paid", "refunded"):
+                dep_status = "succeeded" if booking.deposit_status == "paid" else "refunded"
+                session.add(
+                    Payment(
+                        tenant_id=tenant.id,
+                        booking_id=booking.id,
+                        customer_id=customers[name].id,
+                        status=dep_status,
+                        deposit_status="paid",
+                        amount_cents=service.deposit_cents,
+                        currency="USD",
+                        payment_method_type="card",
+                        checkout_session_kind="stripe_deposit_checkout",
+                        checkout_session_id=f"seed_deposit_{booking.id}",
+                    )
+                )
+                session.add(
+                    BookingPaymentEvent(
+                        tenant_id=tenant.id,
+                        booking_id=booking.id,
+                        event_kind="stripe_deposit_checkout",
+                        amount_cents=service.deposit_cents,
+                        payload_json={"status": dep_status, "session_id": f"seed_deposit_{booking.id}"},
+                    )
+                )
+            if status == "completed" and resolution == "collected":
+                balance_due = max(0, service.price_cents - service.deposit_cents)
+                if balance_due > 0:
+                    session.add(
+                        Payment(
+                            tenant_id=tenant.id,
+                            booking_id=booking.id,
+                            customer_id=customers[name].id,
+                            status="succeeded",
+                            deposit_status="paid",
+                            amount_cents=balance_due,
+                            currency="USD",
+                            payment_method_type="card",
+                            checkout_session_kind="stripe_balance_checkout",
+                            checkout_session_id=f"seed_balance_{booking.id}",
+                        )
+                    )
+                    session.add(
+                        BookingPaymentEvent(
+                            tenant_id=tenant.id,
+                            booking_id=booking.id,
+                            event_kind="stripe_balance_checkout",
+                            amount_cents=balance_due,
+                            payload_json={"status": "succeeded", "session_id": f"seed_balance_{booking.id}"},
+                        )
+                    )
 
         # --- a custom_hours time-off block (renders as a hatched "time block") ---
         # Sat 13:00-14:00 lunch block

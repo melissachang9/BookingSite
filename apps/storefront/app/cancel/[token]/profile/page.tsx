@@ -210,7 +210,7 @@ export default async function CustomerProfilePage({ params }: ProfileRouteProps)
                 <h2>No appointments yet</h2>
               </div>
             </div>
-            <p style={{ color: "var(--ui-ink-soft)" }}>
+            <p style={{ color: "var(--sf-ink-soft)" }}>
               When you book an appointment with {tenant.name}, it will appear here.
             </p>
           </section>

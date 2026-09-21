@@ -224,6 +224,56 @@ def test_duplicate_service_handles_repeated_copies(client) -> None:
     assert second["name"] == "Repeat Service G (Copy) 2"
 
 
+def test_delete_service_removes_unused_service(client) -> None:
+    headers = _auth_headers(client)
+    service = _create_service(client, headers, "Disposable Service G")
+    response = client.delete(
+        f"/api/v1/tenants/brow-beauty-lab/services/{service['id']}",
+        headers=headers,
+    )
+    assert response.status_code == 204
+    fetched = client.get("/api/v1/tenants/brow-beauty-lab/services")
+    assert fetched.status_code == 200
+    ids = [s["id"] for s in fetched.json()["services"]]
+    assert service["id"] not in ids
+
+
+def test_delete_service_rejects_unknown_id(client) -> None:
+    headers = _auth_headers(client)
+    response = client.delete(
+        "/api/v1/tenants/brow-beauty-lab/services/does-not-exist",
+        headers=headers,
+    )
+    assert response.status_code == 404
+
+
+def test_delete_service_rejects_when_bookings_reference_it(client) -> None:
+    headers = _auth_headers(client)
+    service = _create_service(client, headers, "Booked Service G")
+    # Create a booking draft referencing the service so deletion is blocked.
+    location_id = _first_location_id(client)
+    provider_id = _first_provider_id(client, headers)
+    draft = client.post(
+        "/api/v1/tenants/brow-beauty-lab/booking-drafts",
+        json={
+            "tenantSlug": "brow-beauty-lab",
+            "serviceId": service["id"],
+            "providerId": provider_id,
+            "locationId": location_id,
+            "startsAt": "2026-09-20T17:00:00.000Z",
+            "bookingMethod": "staff_entered",
+            "overrideAvailability": True,
+        },
+    )
+    assert draft.status_code in (200, 201), draft.json()
+    response = client.delete(
+        f"/api/v1/tenants/brow-beauty-lab/services/{service['id']}",
+        headers=headers,
+    )
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "service_in_use"
+
+
 # === Per-provider variants ===
 
 

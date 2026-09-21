@@ -66,20 +66,20 @@ function VariantField({
 }) {
   return (
     <div
-      className={`service-variant-row${
-        isOverridden ? " service-variant-row--overridden" : ""
+      className={`cs-service-variant-row${
+        isOverridden ? " cs-service-variant-row--overridden" : ""
       }`}
     >
-      <div className="service-variant-row__label">
+      <div className="cs-service-variant-row__label">
         <span>{label}</span>
-        <span className="service-variant-row__default">{defaultText}</span>
+        <span className="cs-service-variant-row__default">{defaultText}</span>
       </div>
-      <div className="service-variant-row__control">
-        <div className="service-variant-row__input">{children}</div>
+      <div className="cs-service-variant-row__control">
+        <div className="cs-service-variant-row__input">{children}</div>
         {isOverridden && canManage ? (
           <button
             type="button"
-            className="text-action service-variant-row__reset"
+            className="cs-btn cs-btn--ghost cs-btn--sm cs-service-variant-row__reset"
             onClick={onReset}
           >
             Reset to default
@@ -245,15 +245,15 @@ export function ServicesPage({
   );
 
   if (!currentUser) {
-    return <main className="ops-page-stack"><p className="staff-list-empty">Sign in required</p></main>;
+    return <main className="cs-page-stack"><p className="cs-empty">Sign in required</p></main>;
   }
 
   if (!canView) {
-    return <main className="ops-page-stack"><p className="staff-list-empty">You do not have permission to view the service catalog.</p></main>;
+    return <main className="cs-page-stack"><p className="cs-empty">You do not have permission to view the service catalog.</p></main>;
   }
 
   if (loadState.kind === "error") {
-    return <main className="ops-page-stack"><div className="message-banner message-banner--error" role="alert">{loadState.message}</div></main>;
+    return <main className="cs-page-stack"><div className="cs-banner cs-banner--error" role="alert">{loadState.message}</div></main>;
   }
 
   // ===== Grouping helpers =====
@@ -315,25 +315,25 @@ export function ServicesPage({
   };
 
   return (
-    <main className="ops-page-stack">
+    <main className="cs-page-stack">
       {status ? (
-        <div className="message-banner" role="status">
+        <div className="cs-banner" role="status">
           {status}
-          <button type="button" className="ghost-action" onClick={() => setStatus(null)}>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setStatus(null)}>
             Dismiss
           </button>
         </div>
       ) : null}
 
-      <section className="ops-panel staff-master-detail">
-        <div className="staff-grid">
-          <aside className="staff-list-rail">
-            <header className="staff-list-rail-header">
+      <section className="cs-md-shell">
+        <div className="cs-md-grid">
+          <aside className="cs-md-rail">
+            <header className="cs-md-rail__header">
               <h4>Services</h4>
               {canManage ? (
                 <button
                   type="button"
-                  className="primary-action"
+                  className="cs-btn cs-btn--primary cs-btn--sm"
                   onClick={async () => {
                     // Create a minimal draft service and select it so the full
                     // ServiceDetail panel opens with all tabs available.
@@ -363,48 +363,48 @@ export function ServicesPage({
                 </button>
               ) : null}
             </header>
-            <div className="staff-list" style={{ flexDirection: "column", gap: 0 }}>
+            <div className="cs-md-list" style={{ flexDirection: "column", gap: 0 }}>
               {orderedCategories.map((category) => {
                 const list = servicesByCategory.get(category.id) ?? [];
                 return (
-                  <div key={category.id} className="services-category-group">
-                    <div className="services-category-group-header">
-                      <span className="services-category-group-name">{category.name}</span>
+                  <div key={category.id} className="cs-services-category-group">
+                    <div className="cs-services-category-group-header">
+                      <span className="cs-services-category-group-name">{category.name}</span>
                       {category.subheadline ? (
-                        <span className="services-category-group-subheadline">{category.subheadline}</span>
+                        <span className="cs-services-category-group-subheadline">{category.subheadline}</span>
                       ) : null}
                       {category.featuredLabel ? (
-                        <span className={`services-category-badge services-category-badge--${category.featuredLabel}`}>
+                        <span className={`cs-services-category-badge cs-services-category-badge--${category.featuredLabel}`}>
                           {FEATURED_LABEL_DISPLAY[category.featuredLabel] ?? category.featuredLabel}
                         </span>
                       ) : null}
-                      <span className="services-category-count">{list.length}</span>
+                      <span className="cs-services-category-count">{list.length}</span>
                       {canManage ? (
-                        <span className="services-category-group-actions">
-                          <button type="button" className="text-action"
+                        <span className="cs-services-category-group-actions">
+                          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm"
                             onClick={() => handleRenameCategory(category)}>Rename</button>
-                          <button type="button" className="text-action"
+                          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm"
                             onClick={() => handleDeleteCategory(category)}>Delete</button>
                         </span>
                       ) : null}
                     </div>
                     {list.length === 0 ? (
-                      <p className="services-list-empty">No services yet.</p>
+                      <p className="cs-services-list-empty">No services yet.</p>
                     ) : (
-                      <ul className="staff-list">
+                      <ul className="cs-md-list">
                         {list.map((service) => (
                           <li key={service.id}>
                             <button
                               type="button"
-                              className={`staff-list-item${selection.kind === "service" && selection.serviceId === service.id ? " is-active" : ""}`}
+                              className={`cs-md-list__item${selection.kind === "service" && selection.serviceId === service.id ? " is-active" : ""}`}
                               onClick={() => { setSelection({ kind: "service", serviceId: service.id }); setActiveTab("details"); }}
                             >
-                              <span className="staff-avatar staff-avatar--initials" aria-hidden>
+                              <span className="cs-staff-avatar cs-staff-avatar--initials" aria-hidden>
                                 {service.name.charAt(0)}
                               </span>
-                              <span className="staff-list-meta">
-                                <span className="staff-list-name">{service.name}</span>
-                                <span className="staff-list-role">
+                              <span className="cs-md-list__meta">
+                                <span className="cs-md-list__name">{service.name}</span>
+                                <span className="cs-md-list__role">
                                   {formatDurationMinutes(service.durationMinutes)} · {formatMoney(service.priceCents)}
                                 </span>
                               </span>
@@ -420,25 +420,25 @@ export function ServicesPage({
                 const uncategorized = servicesByCategory.get(UNCATEGORIZED_KEY) ?? [];
                 if (uncategorized.length === 0) return null;
                 return (
-                  <div className="services-category-group">
-                    <div className="services-category-group-header">
-                      <span className="services-category-group-name">Uncategorized</span>
-                      <span className="services-category-count">{uncategorized.length}</span>
+                  <div className="cs-services-category-group">
+                    <div className="cs-services-category-group-header">
+                      <span className="cs-services-category-group-name">Uncategorized</span>
+                      <span className="cs-services-category-count">{uncategorized.length}</span>
                     </div>
-                    <ul className="staff-list">
+                    <ul className="cs-md-list">
                       {uncategorized.map((service) => (
                         <li key={service.id}>
                           <button
                             type="button"
-                            className={`staff-list-item${selection.kind === "service" && selection.serviceId === service.id ? " is-active" : ""}`}
+                            className={`cs-md-list__item${selection.kind === "service" && selection.serviceId === service.id ? " is-active" : ""}`}
                             onClick={() => { setSelection({ kind: "service", serviceId: service.id }); setActiveTab("details"); }}
                           >
-                            <span className="staff-avatar staff-avatar--initials" aria-hidden>
+                            <span className="cs-staff-avatar cs-staff-avatar--initials" aria-hidden>
                               {service.name.charAt(0)}
                             </span>
-                            <span className="staff-list-meta">
-                              <span className="staff-list-name">{service.name}</span>
-                              <span className="staff-list-role">
+                            <span className="cs-md-list__meta">
+                              <span className="cs-md-list__name">{service.name}</span>
+                              <span className="cs-md-list__role">
                                 {formatDurationMinutes(service.durationMinutes)} · {formatMoney(service.priceCents)}
                               </span>
                             </span>
@@ -451,20 +451,20 @@ export function ServicesPage({
               })()}
             </div>
             {canManage ? (
-              <div style={{ padding: "0.5rem 0.75rem", borderTop: "1px solid var(--ui-border, #e5e7eb)" }}>
-                <button type="button" className="ghost-action" onClick={handleCreateCategory}>
+              <div style={{ padding: "0.5rem 0.75rem", borderTop: "1px solid var(--cs-hairline)" }}>
+                <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={handleCreateCategory}>
                   + Add category
                 </button>
               </div>
             ) : null}
           </aside>
 
-          <div className="staff-detail">
+          <div className="cs-md-detail">
             {selection.kind === "service" ? (
               (() => {
                 const selectedService = services.find((s) => s.id === selection.serviceId);
                 if (!selectedService) {
-                  return <p className="settings-form-help">Service not found.</p>;
+                  return <p className="cs-settings-form-help">Service not found.</p>;
                 }
                 return (
                   <ServiceDetail
@@ -486,7 +486,7 @@ export function ServicesPage({
                 );
               })()
             ) : (
-              <p className="settings-form-help">Select a service to view details.</p>
+              <p className="cs-settings-form-help">Select a service to view details.</p>
             )}
           </div>
         </div>
@@ -787,7 +787,7 @@ function ServiceDetail({
   };
 
   // Single save action for the Staff tab: persist per-provider overrides (if any
-  // were edited) and the client-selection setting in one click.
+  // were edited) and the cs-client-selection setting in one click.
   const handleSaveStaffTab = async () => {
     if (!canManage) return;
     if (isVariantsDirty) {
@@ -856,17 +856,17 @@ function ServiceDetail({
   ];
 
   return (
-    <div className="staff-detail-inner">
-      <header className="staff-detail-header">
+    <div className="cs-md-detail__inner">
+      <header className="cs-md-detail__header">
         <div>
-          <p className="eyebrow">Service</p>
+          <p className="cs-eyebrow">Service</p>
           <h4>{service.name}</h4>
         </div>
-        <div className="staff-detail-actions">
+        <div className="cs-md-detail__actions">
           {canManage ? (
             <>
-              <button type="button" className="ghost-action" onClick={() => onDuplicate(service)}>Duplicate</button>
-              <button type="button" className="ghost-action ghost-action--danger" onClick={() => {
+              <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => onDuplicate(service)}>Duplicate</button>
+              <button type="button" className="cs-btn cs-btn--danger cs-btn--sm" onClick={() => {
                 if (window.confirm(`Delete "${service.name}"? This cannot be undone.`)) {
                   platformApi.deleteService(tenantSlug, service.id).then(() => onSaved(`"${service.name}" deleted.`)).catch((e) => onSaved(readErrorMessage(e, "Unable to delete service.")));
                 }
@@ -876,10 +876,10 @@ function ServiceDetail({
         </div>
       </header>
 
-      <nav className="staff-detail-tabs" role="tablist" aria-label="Service sections">
+      <nav className="cs-md-tabs" role="tablist" aria-label="Service sections">
         {tabs.map((tab) => (
           <button key={tab.key} type="button" role="tab" aria-selected={activeTab === tab.key}
-            className={`staff-detail-tab${activeTab === tab.key ? " is-active" : ""}`}
+            className={`cs-md-tab${activeTab === tab.key ? " is-active" : ""}`}
             onClick={() => onTabChange(tab.key)}>
             {tab.label}
           </button>
@@ -912,7 +912,7 @@ function ServiceDetail({
           canManage={canManage} onSaved={onSaved} />
       ) : null}
       {activeTab === "customizations" ? (
-        <div className="staff-detail-form"><p className="settings-form-help">Customizations coming soon.</p></div>
+        <div className="cs-md-form"><p className="cs-settings-form-help">Customizations coming soon.</p></div>
       ) : null}
       {activeTab === "onlineBooking" ? (
         <ServiceOnlineBookingTab form={form} setForm={setForm} canManage={canManage}
@@ -944,16 +944,16 @@ function ServiceDetailsTab({
   handleSave: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
   return (
-    <form className="svc-detail-form" onSubmit={handleSave}>
+    <form className="cs-svc-detail-form" onSubmit={handleSave}>
       <fieldset disabled={!canManage || saving} style={{ border: 0, padding: 0, margin: 0 }}>
 
         {/* Basics card */}
-        <div className="svc-card">
-          <div className="svc-card__row">
-            <span className="svc-card__eyebrow">Basics</span>
+        <div className="cs-svc-card">
+          <div className="cs-svc-card__row">
+            <span className="cs-svc-card__eyebrow">Basics</span>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <span style={{ fontSize: "12px", color: "#4A3D30" }}>Active</span>
-              <label className={`svc-toggle${form.isActive ? "" : " svc-toggle--off"}`} aria-label="Active toggle">
+              <label className={`cs-switch${form.isActive ? "" : " cs-switch--off"}`} aria-label="Active toggle">
                 <input type="checkbox" checked={form.isActive}
                   onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.checked }))}
                   style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
@@ -961,14 +961,14 @@ function ServiceDetailsTab({
             </div>
           </div>
           <div style={{ marginBottom: "12px" }}>
-            <label className="svc-field-label">Service name</label>
-            <input className="svc-input" value={form.name}
+            <label className="cs-svc-field-label">Service name</label>
+            <input className="cs-svc-input" value={form.name}
               onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))}
               placeholder="Service name" required />
           </div>
           <div>
-            <label className="svc-field-label">Category</label>
-            <select className="svc-input" value={form.categoryId}
+            <label className="cs-svc-field-label">Category</label>
+            <select className="cs-svc-input" value={form.categoryId}
               onChange={(e) => setForm((c) => ({ ...c, categoryId: e.target.value }))}>
               <option value="">Uncategorized</option>
               {categories.map((cat) => (
@@ -979,21 +979,21 @@ function ServiceDetailsTab({
         </div>
 
         {/* Pricing card */}
-        <div className="svc-card">
-          <div className="svc-card__row">
-            <span className="svc-card__eyebrow">Pricing</span>
+        <div className="cs-svc-card">
+          <div className="cs-svc-card__row">
+            <span className="cs-svc-card__eyebrow">Pricing</span>
             {Number(form.priceAmount) !== service.priceCents / 100 && canManage ? (
-              <span className="svc-reset-link" onClick={() => setForm((c) => ({
+              <span className="cs-svc-reset-link" onClick={() => setForm((c) => ({
                 ...c,
                 priceAmount: (service.priceCents / 100).toFixed(2),
               }))}>Reset to default</span>
             ) : null}
           </div>
           <div>
-            <label className="svc-field-label">Price</label>
+            <label className="cs-svc-field-label">Price</label>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
               <span style={{ fontSize: "13px", color: "#1F1612" }}>$</span>
-              <input className="svc-input" type="number" min={0} step="0.01"
+              <input className="cs-svc-input" type="number" min={0} step="0.01"
                 value={form.priceAmount}
                 onChange={(e) => setForm((c) => ({ ...c, priceAmount: e.target.value }))} required />
             </div>
@@ -1001,31 +1001,31 @@ function ServiceDetailsTab({
         </div>
 
         {/* Scheduling card */}
-        <div className="svc-card">
-          <span className="svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Scheduling</span>
-          <div className="svc-grid-3">
+        <div className="cs-svc-card">
+          <span className="cs-svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Scheduling</span>
+          <div className="cs-svc-grid-3">
             <div>
-              <label className="svc-field-label">Duration</label>
+              <label className="cs-svc-field-label">Duration</label>
               <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <input className="svc-input" type="number" min={15} step={15}
+                <input className="cs-svc-input" type="number" min={15} step={15}
                   value={form.durationMinutes}
                   onChange={(e) => setForm((c) => ({ ...c, durationMinutes: e.target.value }))} required />
                 <span style={{ fontSize: "12px", color: "#6B5A47" }}>min</span>
               </div>
             </div>
             <div>
-              <label className="svc-field-label">Setup buffer</label>
+              <label className="cs-svc-field-label">Setup buffer</label>
               <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <input className="svc-input" type="number" min={0} step={5}
+                <input className="cs-svc-input" type="number" min={0} step={5}
                   value={form.setupBufferMinutes}
                   onChange={(e) => setForm((c) => ({ ...c, setupBufferMinutes: e.target.value }))} />
                 <span style={{ fontSize: "12px", color: "#6B5A47" }}>min</span>
               </div>
             </div>
             <div>
-              <label className="svc-field-label">Cleanup buffer</label>
+              <label className="cs-svc-field-label">Cleanup buffer</label>
               <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <input className="svc-input" type="number" min={0} step={5}
+                <input className="cs-svc-input" type="number" min={0} step={5}
                   value={form.cleanupBufferMinutes}
                   onChange={(e) => setForm((c) => ({ ...c, cleanupBufferMinutes: e.target.value }))} />
                 <span style={{ fontSize: "12px", color: "#6B5A47" }}>min</span>
@@ -1035,10 +1035,10 @@ function ServiceDetailsTab({
         </div>
 
         {/* Client-facing description */}
-        <div className="svc-card">
-          <span className="svc-card__eyebrow" style={{ marginBottom: "12px", display: "block" }}>Client-facing description</span>
+        <div className="cs-svc-card">
+          <span className="cs-svc-card__eyebrow" style={{ marginBottom: "12px", display: "block" }}>Client-facing description</span>
           <textarea
-            className="svc-input svc-description-textarea"
+            className="cs-svc-input cs-svc-description-textarea"
             rows={4}
             value={form.description}
             onChange={(e) => setForm((c) => ({ ...c, description: e.target.value }))}
@@ -1047,31 +1047,31 @@ function ServiceDetailsTab({
         </div>
 
         {/* Slot footprint + featured controls */}
-        <div className="svc-card svc-card--footprint">
-          <div className="svc-footprint">
-            <span className="svc-field-label">Slot footprint</span>
-            <div className="svc-footprint__rail">
-              <div className="svc-footprint__bar">
+        <div className="cs-svc-card cs-svc-card--footprint">
+          <div className="cs-svc-footprint">
+            <span className="cs-svc-field-label">Slot footprint</span>
+            <div className="cs-svc-footprint__rail">
+              <div className="cs-svc-footprint__bar">
                 <span
-                  className="svc-footprint__fill"
+                  className="cs-svc-footprint__fill"
                   style={{ width: `${Math.min(100, (Number(form.durationMinutes || 0) / 120) * 100)}%` }}
                 >
                   Treatment {form.durationMinutes || 0} min
                 </span>
               </div>
-              <span className="svc-footprint__meta">
+              <span className="cs-svc-footprint__meta">
                 Books {Number(form.durationMinutes || 0) + Number(form.setupBufferMinutes || 0) + Number(form.cleanupBufferMinutes || 0)} min
               </span>
             </div>
           </div>
-          <div className="svc-featured">
-            <span className="svc-field-label">Featured label</span>
-            <div className="svc-featured__pills">
+          <div className="cs-svc-featured">
+            <span className="cs-svc-field-label">Featured label</span>
+            <div className="cs-svc-featured__pills">
               {["Signature", "Most popular", "New", "Limited", "None"].map((label) => (
                 <button
                   key={label}
                   type="button"
-                  className={`svc-featured__pill${label === "Signature" ? " is-active" : ""}`}
+                  className={`cs-svc-featured__pill${label === "Signature" ? " is-active" : ""}`}
                   onClick={() => {}}
                 >
                   {label}
@@ -1082,13 +1082,13 @@ function ServiceDetailsTab({
         </div>
 
         {/* Locations card */}
-        <div className="svc-card" style={{ marginBottom: 0 }}>
-          <span className="svc-card__eyebrow" style={{ marginBottom: "12px", display: "block" }}>Available at locations</span>
+        <div className="cs-svc-card" style={{ marginBottom: 0 }}>
+          <span className="cs-svc-card__eyebrow" style={{ marginBottom: "12px", display: "block" }}>Available at locations</span>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             {locations.map((loc) => {
               const checked = form.locationIds.includes(loc.id);
               return (
-                <label key={loc.id} className={`svc-chip${checked ? " svc-chip--on" : ""}`}>
+                <label key={loc.id} className={`cs-svc-chip${checked ? " cs-svc-chip--on" : ""}`}>
                   <input type="checkbox" checked={checked}
                     onChange={(e) => {
                       const next = e.target.checked;
@@ -1105,7 +1105,7 @@ function ServiceDetailsTab({
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "18px" }}>
         {canManage ? (
-          <button type="submit" className="svc-save-btn" disabled={saving}>
+          <button type="submit" className="cs-svc-save-btn" disabled={saving}>
             {saving ? "Saving…" : "Save changes"}
           </button>
         ) : null}
@@ -1152,9 +1152,9 @@ function ServiceStaffTab({
 }) {
   if (eligibleProviders.length === 0) {
     return (
-      <div className="svc-detail-form">
-        <div className="svc-card">
-          <p className="svc-helper">No active providers configured. Add staff in the Staff tab first.</p>
+      <div className="cs-svc-detail-form">
+        <div className="cs-svc-card">
+          <p className="cs-svc-helper">No active providers configured. Add staff in the Staff tab first.</p>
         </div>
       </div>
     );
@@ -1163,36 +1163,36 @@ function ServiceStaffTab({
   const enabledCount = eligibleProviders.filter((p) => assignedProviderIds.has(p.id)).length;
 
   return (
-    <div className="svc-detail-form">
+    <div className="cs-svc-detail-form">
       {/* Base service defaults (read-only reference). Per-provider overrides are below. */}
-      <div className="svc-provider-card svc-provider-card--defaults">
-        <div className="svc-provider-row">
-          <span className="svc-provider-row__label">Duration</span>
-          <span className="svc-provider-row__value svc-provider-row__value--muted">
+      <div className="cs-svc-provider-card cs-svc-provider-card--defaults">
+        <div className="cs-svc-provider-row">
+          <span className="cs-svc-provider-row__label">Duration</span>
+          <span className="cs-svc-provider-row__value cs-svc-provider-row__value--muted">
             {formatDurationMinutes(baseDurationMinutes)}
           </span>
         </div>
-        <div className="svc-provider-row">
-          <span className="svc-provider-row__label">Price</span>
-          <span className="svc-provider-row__value svc-provider-row__value--muted">
+        <div className="cs-svc-provider-row">
+          <span className="cs-svc-provider-row__label">Price</span>
+          <span className="cs-svc-provider-row__value cs-svc-provider-row__value--muted">
             {formatMoney(basePriceCents)}
           </span>
         </div>
       </div>
 
       {canManage ? (
-        <div className="svc-staff-bulk-actions">
-          <span className="svc-helper">
+        <div className="cs-svc-staff-bulk-actions">
+          <span className="cs-svc-helper">
             {enabledCount} of {eligibleProviders.length} enabled
           </span>
           <div style={{ display: "flex", gap: "14px", alignItems: "center" }}>
-            <button type="button" className="svc-text-btn"
+            <button type="button" className="cs-svc-text-btn"
               onClick={() => {
                 for (const p of eligibleProviders) {
                   if (!assignedProviderIds.has(p.id)) toggleProviderAssignment(p.id);
                 }
               }}>Enable all</button>
-            <button type="button" className="svc-text-btn"
+            <button type="button" className="cs-svc-text-btn"
               onClick={() => {
                 for (const p of eligibleProviders) {
                   if (assignedProviderIds.has(p.id)) toggleProviderAssignment(p.id);
@@ -1204,10 +1204,10 @@ function ServiceStaffTab({
 
       {/* Per-provider table: one row per provider, like the reference. */}
       {!variantsLoaded ? (
-        <div className="svc-card"><p className="svc-helper">Loading…</p></div>
+        <div className="cs-svc-card"><p className="cs-svc-helper">Loading…</p></div>
       ) : (
         <>
-          <div className="svc-staff-table-head">
+          <div className="cs-svc-staff-table-head">
             <span>Provider</span>
             <span>Price</span>
             <span>Duration</span>
@@ -1231,12 +1231,12 @@ function ServiceStaffTab({
             return (
               <div
                 key={provider.id}
-                className={`svc-staff-trow${isAssigned ? "" : " svc-staff-trow--off"}`}
+                className={`cs-svc-staff-trow${isAssigned ? "" : " cs-svc-staff-trow--off"}`}
               >
-                <div className="svc-staff-trow__provider">
+                <div className="cs-svc-staff-trow__provider">
                   <input
                     type="checkbox"
-                    className="svc-staff-checkbox"
+                    className="cs-svc-staff-checkbox"
                     aria-label={`Toggle ${provider.name}`}
                     checked={isAssigned}
                     disabled={!canManage}
@@ -1246,24 +1246,24 @@ function ServiceStaffTab({
                     <img
                       src={provider.imageUrl}
                       alt={provider.imageAltText ?? provider.name}
-                      className="svc-staff-avatar svc-staff-avatar--photo"
+                      className="cs-svc-staff-avatar cs-svc-staff-avatar--photo"
                     />
                   ) : (
-                    <span className="svc-staff-avatar" style={{ background: avatarColorFor(provider.id) }}>
+                    <span className="cs-svc-staff-avatar" style={{ background: avatarColorFor(provider.id) }}>
                       {initialsFor(provider.name)}
                     </span>
                   )}
                   <span>
-                    <span className="svc-provider-card__name">{provider.name}</span>
+                    <span className="cs-svc-provider-card__name">{provider.name}</span>
                     {provider.description ? (
-                      <span className="svc-staff-subtitle">{provider.description}</span>
+                      <span className="cs-svc-staff-subtitle">{provider.description}</span>
                     ) : null}
                   </span>
                 </div>
 
-                <div className="svc-staff-trow__cell">
+                <div className="cs-svc-staff-trow__cell">
                   <input
-                    className="svc-input svc-provider-row__input"
+                    className="cs-svc-input cs-svc-provider-row__input"
                     type="text" inputMode="decimal"
                     disabled={!canManage}
                     placeholder={`$${(basePriceCents / 100).toFixed(2)}`}
@@ -1275,9 +1275,9 @@ function ServiceStaffTab({
                   />
                 </div>
 
-                <div className="svc-staff-trow__cell">
+                <div className="cs-svc-staff-trow__cell">
                   <input
-                    className="svc-input svc-provider-row__input"
+                    className="cs-svc-input cs-svc-provider-row__input"
                     type="text" inputMode="numeric"
                     disabled={!canManage}
                     placeholder={`${baseDurationMinutes} min`}
@@ -1289,22 +1289,22 @@ function ServiceStaffTab({
                   />
                 </div>
 
-                <div className="svc-staff-trow__cell">
-                  <span className="svc-provider-row__value svc-provider-row__value--muted">
+                <div className="cs-svc-staff-trow__cell">
+                  <span className="cs-svc-provider-row__value cs-svc-provider-row__value--muted">
                     ${(baseDepositCents / 100).toFixed(2)}
                   </span>
                 </div>
 
-                <div className="svc-staff-trow__cell svc-staff-trow__commission">
-                  <div className="service-card__pill-toggle" role="group" aria-label="Commission type">
+                <div className="cs-svc-staff-trow__cell cs-svc-staff-trow__commission">
+                  <div className="cs-svc-commission-toggle" role="group" aria-label="Commission type">
                     <button type="button"
-                      className={`service-card__pill${commissionMode === "flat" ? " is-active" : ""}`}
+                      className={`cs-svc-commission-toggle__option${commissionMode === "flat" ? " is-active" : ""}`}
                       disabled={!canManage}
                       onClick={() => { ensureAssigned(); if (commissionMode === "flat") return; patchVariantText(provider.id, "percent", ""); updateVariant(provider.id, { commissionBasisPoints: null, commissionFlatCents: entry.commissionFlatCents ?? 0 }); }}>
                       $
                     </button>
                     <button type="button"
-                      className={`service-card__pill${commissionMode === "percent" ? " is-active" : ""}`}
+                      className={`cs-svc-commission-toggle__option${commissionMode === "percent" ? " is-active" : ""}`}
                       disabled={!canManage}
                       onClick={() => { ensureAssigned(); if (commissionMode === "percent") return; patchVariantText(provider.id, "flat", ""); updateVariant(provider.id, { commissionFlatCents: null, commissionBasisPoints: entry.commissionBasisPoints ?? 0 }); }}>
                       %
@@ -1312,7 +1312,7 @@ function ServiceStaffTab({
                   </div>
                   {commissionMode === "flat" ? (
                     <input
-                      className="svc-input svc-provider-row__input"
+                      className="cs-svc-input cs-svc-provider-row__input"
                       type="text" inputMode="decimal"
                       disabled={!canManage}
                       placeholder="0.00"
@@ -1324,7 +1324,7 @@ function ServiceStaffTab({
                     />
                   ) : (
                     <input
-                      className="svc-input svc-provider-row__input"
+                      className="cs-svc-input cs-svc-provider-row__input"
                       type="text" inputMode="decimal"
                       disabled={!canManage}
                       placeholder="0"
@@ -1343,49 +1343,49 @@ function ServiceStaffTab({
       )}
 
       {/* Client selection card */}
-      <div className="svc-card" style={{ marginBottom: 0 }}>
-        <span className="svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Client selection on booking</span>
+      <div className="cs-svc-card" style={{ marginBottom: 0 }}>
+        <span className="cs-svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Client selection on booking</span>
 
-        <label className={`svc-selection-opt${form.providerSelectionMode === "client_choice" ? " svc-selection-opt--active" : ""}`}>
+        <label className={`cs-svc-selection-opt${form.providerSelectionMode === "client_choice" ? " cs-svc-selection-opt--active" : ""}`}>
           <input type="radio" name="clientSelection" value="client_choice"
             checked={form.providerSelectionMode === "client_choice"}
             onChange={() => setForm((c) => ({ ...c, providerSelectionMode: "client_choice" }))}
             disabled={!canManage} style={{ display: "none" }} />
-          <div className={`svc-radio${form.providerSelectionMode === "client_choice" ? " svc-radio--on" : ""}`} />
+          <div className={`cs-svc-radio${form.providerSelectionMode === "client_choice" ? " cs-svc-radio--on" : ""}`} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: "13px", fontWeight: 500 }}>Let clients choose their artist</div>
-            <div className="svc-helper">Clients see all eligible staff and pick one when booking online.</div>
+            <div className="cs-svc-helper">Clients see all eligible staff and pick one when booking online.</div>
           </div>
         </label>
 
-        <label className={`svc-selection-opt${form.providerSelectionMode === "auto_assign" ? " svc-selection-opt--active" : ""}`}>
+        <label className={`cs-svc-selection-opt${form.providerSelectionMode === "auto_assign" ? " cs-svc-selection-opt--active" : ""}`}>
           <input type="radio" name="clientSelection" value="auto_assign"
             checked={form.providerSelectionMode === "auto_assign"}
             onChange={() => setForm((c) => ({ ...c, providerSelectionMode: "auto_assign" }))}
             disabled={!canManage} style={{ display: "none" }} />
-          <div className={`svc-radio${form.providerSelectionMode === "auto_assign" ? " svc-radio--on" : ""}`} />
+          <div className={`cs-svc-radio${form.providerSelectionMode === "auto_assign" ? " cs-svc-radio--on" : ""}`} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: "13px", fontWeight: 500 }}>Assign automatically</div>
-            <div className="svc-helper">Distribute bookings evenly across eligible staff. Best for fairness.</div>
+            <div className="cs-svc-helper">Distribute bookings evenly across eligible staff. Best for fairness.</div>
           </div>
         </label>
 
-        <label className={`svc-selection-opt${form.providerSelectionMode === "hide" ? " svc-selection-opt--active" : ""}`} style={{ marginBottom: 0 }}>
+        <label className={`cs-svc-selection-opt${form.providerSelectionMode === "hide" ? " cs-svc-selection-opt--active" : ""}`} style={{ marginBottom: 0 }}>
           <input type="radio" name="clientSelection" value="hide"
             checked={form.providerSelectionMode === "hide"}
             onChange={() => setForm((c) => ({ ...c, providerSelectionMode: "hide" }))}
             disabled={!canManage} style={{ display: "none" }} />
-          <div className={`svc-radio${form.providerSelectionMode === "hide" ? " svc-radio--on" : ""}`} />
+          <div className={`cs-svc-radio${form.providerSelectionMode === "hide" ? " cs-svc-radio--on" : ""}`} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: "13px", fontWeight: 500 }}>Hide artist selection</div>
-            <div className="svc-helper">Clients book the service without seeing who'll perform it. Useful for new staff or training periods.</div>
+            <div className="cs-svc-helper">Clients book the service without seeing who'll perform it. Useful for new staff or training periods.</div>
           </div>
         </label>
       </div>
 
       {canManage ? (
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "18px" }}>
-          <button type="button" className="svc-save-btn" disabled={saving || variantsSaving}
+          <button type="button" className="cs-svc-save-btn" disabled={saving || variantsSaving}
             onClick={handleSaveStaffTab}>
             {saving || variantsSaving ? "Saving…" : "Save"}
           </button>
@@ -1409,33 +1409,33 @@ function ServiceOnlineBookingTab({
   handleSave: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
   return (
-    <form className="svc-detail-form" onSubmit={handleSave}>
-      <div className="svc-card">
-        <span className="svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Online booking</span>
-        <div className="svc-card__row" style={{ marginBottom: "10px" }}>
+    <form className="cs-svc-detail-form" onSubmit={handleSave}>
+      <div className="cs-svc-card">
+        <span className="cs-svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Online booking</span>
+        <div className="cs-svc-card__row" style={{ marginBottom: "10px" }}>
           <div>
             <div style={{ fontSize: "13px", color: "#1F1612", fontWeight: 500 }}>Enable in online booking</div>
-            <div className="svc-helper" style={{ marginTop: "2px" }}>Clients can self-book this service.</div>
+            <div className="cs-svc-helper" style={{ marginTop: "2px" }}>Clients can self-book this service.</div>
           </div>
-          <label className={`svc-toggle${form.isActive ? "" : " svc-toggle--off"}`} aria-label="Online booking toggle">
+          <label className={`cs-switch${form.isActive ? "" : " cs-switch--off"}`} aria-label="Online booking toggle">
             <input type="checkbox" checked={form.isActive} disabled={!canManage}
               onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.checked }))}
               style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
           </label>
         </div>
 
-        <div className="svc-card__row" style={{ paddingTop: "10px", borderTop: "0.5px dashed #D9CBB1" }}>
+        <div className="cs-svc-card__row" style={{ paddingTop: "10px", borderTop: "0.5px dashed #D9CBB1" }}>
           <div style={{ fontSize: "12px", color: "#4A3D30" }}>Direct booking link</div>
-          <span className="svc-reset-link" onClick={handleCopyLink}>Copy link</span>
+          <span className="cs-svc-reset-link" onClick={handleCopyLink}>Copy link</span>
         </div>
-        {copyHint ? <div className="svc-helper" style={{ color: "#2d6a4f" }}>{copyHint}</div> : null}
+        {copyHint ? <div className="cs-svc-helper" style={{ color: "#2d6a4f" }}>{copyHint}</div> : null}
       </div>
 
-      <div className="svc-card">
-        <span className="svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Customer-facing description</span>
-        <label className="svc-field-label" style={{ marginBottom: "4px" }}>Online booking description</label>
+      <div className="cs-svc-card">
+        <span className="cs-svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Customer-facing description</span>
+        <label className="cs-svc-field-label" style={{ marginBottom: "4px" }}>Online booking description</label>
         <textarea
-          className="svc-input"
+          className="cs-svc-input"
           value={form.onlineBookingDescription}
           onChange={(e) => setForm((c) => ({ ...c, onlineBookingDescription: e.target.value }))}
           disabled={!canManage}
@@ -1444,20 +1444,20 @@ function ServiceOnlineBookingTab({
           placeholder="Describe this service for customers browsing online…"
           style={{ width: "100%", resize: "vertical" }}
         />
-        <div className="svc-helper" style={{ marginTop: "4px" }}>Shown to customers on the online booking page.</div>
+        <div className="cs-svc-helper" style={{ marginTop: "4px" }}>Shown to customers on the online booking page.</div>
       </div>
 
-      <div className="svc-card">
-        <span className="svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Payment requirements</span>
+      <div className="cs-svc-card">
+        <span className="cs-svc-card__eyebrow" style={{ marginBottom: "14px", display: "block" }}>Payment requirements</span>
 
-        <div className="svc-card__row" style={{ marginBottom: "10px" }}>
+        <div className="cs-svc-card__row" style={{ marginBottom: "10px" }}>
           <div>
             <div style={{ fontSize: "13px", color: "#1F1612", fontWeight: 500 }}>Require a credit card on file to book</div>
-            <div className="svc-helper" style={{ marginTop: "2px" }}>Clients must have a saved payment method before booking.</div>
+            <div className="cs-svc-helper" style={{ marginTop: "2px" }}>Clients must have a saved payment method before booking.</div>
           </div>
           <button
             type="button"
-            className={`svc-toggle${form.requireCardOnFile ? "" : " svc-toggle--off"}`}
+            className={`cs-switch${form.requireCardOnFile ? "" : " cs-switch--off"}`}
             aria-label="Require card on file toggle"
             disabled={!canManage}
             onClick={() => setForm((c) => ({ ...c, requireCardOnFile: !c.requireCardOnFile }))}
@@ -1467,27 +1467,27 @@ function ServiceOnlineBookingTab({
         <div style={{ paddingTop: "10px", borderTop: "0.5px dashed #D9CBB1" }}>
           <div style={{ fontSize: "13px", color: "#1F1612", fontWeight: 500, marginBottom: "8px" }}>Require payment at time of booking</div>
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <label className="svc-selection-opt" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+            <label className="cs-svc-selection-opt" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
               <input type="radio" name="bookingPaymentMode" value=""
                 checked={form.bookingPaymentMode === ""}
                 onChange={() => setForm((c) => ({ ...c, bookingPaymentMode: "" }))}
                 disabled={!canManage} />
               <span>No payment required at booking</span>
             </label>
-            <label className="svc-selection-opt" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+            <label className="cs-svc-selection-opt" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
               <input type="radio" name="bookingPaymentMode" value="full"
                 checked={form.bookingPaymentMode === "full"}
                 onChange={() => setForm((c) => ({ ...c, bookingPaymentMode: "full" }))}
                 disabled={!canManage} />
               <span>Full payment</span>
             </label>
-            <label className="svc-selection-opt" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+            <label className="cs-svc-selection-opt" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
               <input type="radio" name="bookingPaymentMode" value="partial_percent"
                 checked={form.bookingPaymentMode === "partial_percent"}
                 onChange={() => setForm((c) => ({ ...c, bookingPaymentMode: "partial_percent" }))}
                 disabled={!canManage} />
               <span>Partial payment —</span>
-              <input type="number" className="svc-input" min="0" max="100"
+              <input type="number" className="cs-svc-input" min="0" max="100"
                 value={form.bookingPaymentPercent}
                 onChange={(e) => setForm((c) => ({ ...c, bookingPaymentPercent: e.target.value, bookingPaymentMode: "partial_percent" }))}
                 disabled={!canManage || form.bookingPaymentMode !== "partial_percent"}
@@ -1496,13 +1496,13 @@ function ServiceOnlineBookingTab({
               />
               <span>%</span>
             </label>
-            <label className="svc-selection-opt" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+            <label className="cs-svc-selection-opt" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
               <input type="radio" name="bookingPaymentMode" value="partial_flat"
                 checked={form.bookingPaymentMode === "partial_flat"}
                 onChange={() => setForm((c) => ({ ...c, bookingPaymentMode: "partial_flat" }))}
                 disabled={!canManage} />
               <span>Partial payment — $</span>
-              <input type="text" className="svc-input"
+              <input type="text" className="cs-svc-input"
                 value={form.bookingPaymentValueAmount}
                 onChange={(e) => setForm((c) => ({ ...c, bookingPaymentValueAmount: e.target.value, bookingPaymentMode: "partial_flat" }))}
                 disabled={!canManage || form.bookingPaymentMode !== "partial_flat"}
@@ -1517,7 +1517,7 @@ function ServiceOnlineBookingTab({
 
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "18px" }}>
         {canManage ? (
-          <button type="submit" className="svc-save-btn" disabled={saving}>
+          <button type="submit" className="cs-svc-save-btn" disabled={saving}>
             {saving ? "Saving…" : "Save changes"}
           </button>
         ) : null}
@@ -1606,14 +1606,14 @@ function ServiceResourcesTab({
   };
 
   if (!loaded) {
-    return <div className="svc-detail-form"><p className="svc-helper">Loading…</p></div>;
+    return <div className="cs-svc-detail-form"><p className="cs-svc-helper">Loading…</p></div>;
   }
 
   if (allResources.length === 0) {
     return (
-      <div className="svc-detail-form">
-        <div className="svc-card">
-          <p className="svc-helper">No resources configured. Add rooms or equipment in Settings &amp; Management → Resources.</p>
+      <div className="cs-svc-detail-form">
+        <div className="cs-svc-card">
+          <p className="cs-svc-helper">No resources configured. Add rooms or equipment in Settings &amp; Management → Resources.</p>
         </div>
       </div>
     );
@@ -1622,12 +1622,12 @@ function ServiceResourcesTab({
   const attachedCount = attached.size;
 
   return (
-    <div className="svc-detail-form">
-      <div className="svc-card">
+    <div className="cs-svc-detail-form">
+      <div className="cs-svc-card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px" }}>
           <div>
-            <span className="svc-card__eyebrow">Required resources</span>
-            <div className="svc-summary-row" style={{ marginTop: "4px" }}>
+            <span className="cs-svc-card__eyebrow">Required resources</span>
+            <div className="cs-svc-summary-row" style={{ marginTop: "4px" }}>
               <span><strong style={{ fontWeight: 500 }}>{attachedCount}</strong> of {allResources.length} resources attached</span>
             </div>
           </div>
@@ -1638,14 +1638,14 @@ function ServiceResourcesTab({
             const isAttached = attached.has(res.id);
             const qty = attached.get(res.id) ?? 1;
             return (
-              <div key={res.id} className={`svc-staff-row${isAttached ? "" : " svc-staff-row--dim"}`}>
+              <div key={res.id} className={`cs-svc-staff-row${isAttached ? "" : " cs-svc-staff-row--dim"}`}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1 }}>
-                  <div className="svc-staff-avatar" style={{ background: isAttached ? "#6B5A47" : "#8B7960", fontSize: "11px" }}>
+                  <div className="cs-svc-staff-avatar" style={{ background: isAttached ? "#6B5A47" : "#8B7960", fontSize: "11px" }}>
                     {res.kind === "room" ? "🏠" : "🔧"}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <span className="svc-staff-name">{res.name}</span>
-                    <div className="svc-staff-meta">
+                    <span className="cs-svc-staff-name">{res.name}</span>
+                    <div className="cs-svc-staff-meta">
                       {res.kind === "room" ? "Room" : "Equipment"}
                       {res.locationId ? " · Location-specific" : ""}
                     </div>
@@ -1655,7 +1655,7 @@ function ServiceResourcesTab({
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     <span style={{ fontSize: "11px", color: "#8B7960" }}>Qty</span>
                     <input
-                      className="svc-input"
+                      className="cs-svc-input"
                       type="number"
                       min={1}
                       max={100}
@@ -1668,7 +1668,7 @@ function ServiceResourcesTab({
                 ) : null}
                 <button
                   type="button"
-                  className={`svc-toggle${isAttached ? "" : " svc-toggle--off"}`}
+                  className={`cs-switch${isAttached ? "" : " cs-switch--off"}`}
                   aria-label={`Toggle ${res.name}`}
                   disabled={!canManage}
                   onClick={() => toggleResource(res.id)}
@@ -1681,7 +1681,7 @@ function ServiceResourcesTab({
 
       {canManage ? (
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "18px" }}>
-          <button type="button" className="svc-save-btn" onClick={handleSave} disabled={saving}>
+          <button type="button" className="cs-svc-save-btn" onClick={handleSave} disabled={saving}>
             {saving ? "Saving…" : "Save resources"}
           </button>
         </div>
@@ -1735,17 +1735,17 @@ function CreateCategoryDialog({
   };
 
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Add category">
-      <div className="modal-panel">
-        <header className="modal-header">
+    <div className="cs-modal" role="dialog" aria-modal="true" aria-label="Add category">
+      <div className="cs-modal__panel">
+        <header className="cs-modal__header">
           <h4>Add category</h4>
-          <button type="button" className="ghost-action" onClick={onClose}>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>
             Close
           </button>
         </header>
-        <form className="modal-form" onSubmit={handleSubmit}>
+        <form className="cs-modal__form" onSubmit={handleSubmit}>
           {error ? (
-            <div className="message-banner message-banner--error">{error}</div>
+            <div className="cs-banner cs-banner--error">{error}</div>
           ) : null}
           <label>
             <span>Category name</span>
@@ -1756,11 +1756,11 @@ function CreateCategoryDialog({
               autoFocus
             />
           </label>
-          <div className="modal-actions">
-            <button type="button" className="ghost-action" onClick={onClose}>
+          <div className="cs-modal__actions">
+            <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="primary-action" disabled={saving}>
+            <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={saving}>
               {saving ? "Creating…" : "Create category"}
             </button>
           </div>
@@ -1817,17 +1817,17 @@ function RenameCategoryDialog({
   };
 
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Rename category">
-      <div className="modal-panel">
-        <header className="modal-header">
+    <div className="cs-modal" role="dialog" aria-modal="true" aria-label="Rename category">
+      <div className="cs-modal__panel">
+        <header className="cs-modal__header">
           <h4>Rename category</h4>
-          <button type="button" className="ghost-action" onClick={onClose}>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>
             Close
           </button>
         </header>
-        <form className="modal-form" onSubmit={handleSubmit}>
+        <form className="cs-modal__form" onSubmit={handleSubmit}>
           {error ? (
-            <div className="message-banner message-banner--error">{error}</div>
+            <div className="cs-banner cs-banner--error">{error}</div>
           ) : null}
           <label>
             <span>Category name</span>
@@ -1837,11 +1837,11 @@ function RenameCategoryDialog({
               autoFocus
             />
           </label>
-          <div className="modal-actions">
-            <button type="button" className="ghost-action" onClick={onClose}>
+          <div className="cs-modal__actions">
+            <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="primary-action" disabled={saving}>
+            <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={saving}>
               {saving ? "Saving…" : "Rename"}
             </button>
           </div>
@@ -1884,26 +1884,26 @@ function DeleteCategoryDialog({
   };
 
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Delete category">
-      <div className="modal-panel">
-        <header className="modal-header">
+    <div className="cs-modal" role="dialog" aria-modal="true" aria-label="Delete category">
+      <div className="cs-modal__panel">
+        <header className="cs-modal__header">
           <h4>Delete category</h4>
-          <button type="button" className="ghost-action" onClick={onClose}>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>
             Close
           </button>
         </header>
-        <div className="modal-form">
+        <div className="cs-modal__form">
           <p>
             Delete category <strong>{category.name}</strong>? Services in this
             category will become uncategorized.
           </p>
-          <div className="modal-actions">
-            <button type="button" className="ghost-action" onClick={onClose}>
+          <div className="cs-modal__actions">
+            <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>
               Cancel
             </button>
             <button
               type="button"
-              className="primary-action"
+              className="cs-btn cs-btn--danger cs-btn--sm"
               disabled={deleting}
               onClick={handleDelete}
             >
@@ -2124,13 +2124,13 @@ function CategoryDetailPanel({
   };
 
   return (
-    <form className="service-detail-panel category-detail-panel" onSubmit={handleSave}>
-      <header className="service-detail-header">
+    <form className="cs-category-detail-panel" onSubmit={handleSave}>
+      <header className="cs-service-detail-header">
         <div>
-          <p className="eyebrow">Category</p>
+          <p className="cs-eyebrow">Category</p>
           <h4>{category.name}</h4>
         </div>
-        <label className="toggle">
+        <label className="cs-cat-toggle">
           <input
             type="checkbox"
             checked={form.isActive}
@@ -2145,7 +2145,7 @@ function CategoryDetailPanel({
 
       <fieldset disabled={!canManage}>
         <legend>Basics</legend>
-        <label className="field">
+        <label className="cs-cat-field">
           <span>Category name</span>
           <input
             type="text"
@@ -2154,7 +2154,7 @@ function CategoryDetailPanel({
             required
           />
         </label>
-        <label className="field">
+        <label className="cs-cat-field">
           <span>URL slug</span>
           <input
             type="text"
@@ -2167,27 +2167,27 @@ function CategoryDetailPanel({
               }))
             }
           />
-          <small className="field-help">
+          <small className="cs-cat-field-help">
             Lowercase letters, numbers, and hyphens only. Leave blank to regenerate from the name.
           </small>
         </label>
         {landingHref ? (
-          <div className="inline-link">
+          <div className="cs-cat-inline-link">
             <span>
               Landing page:&nbsp;
               <a href={landingHref} target="_blank" rel="noreferrer">
                 {landingHref}
               </a>
             </span>
-            <button type="button" className="ghost-action" onClick={handleCopyLink}>
+            <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={handleCopyLink}>
               Copy
             </button>
-            {copyHint ? <span className="copy-hint">{copyHint}</span> : null}
+            {copyHint ? <span className="cs-cat-copy-hint">{copyHint}</span> : null}
           </div>
         ) : (
-          <p className="field-help">Save with a slug to publish a public landing page.</p>
+          <p className="cs-cat-field-help">Save with a slug to publish a public landing page.</p>
         )}
-        <label className="field">
+        <label className="cs-cat-field">
           <span>Featured label</span>
           <select
             value={form.featuredLabel}
@@ -2209,7 +2209,7 @@ function CategoryDetailPanel({
 
       <fieldset disabled={!canManage}>
         <legend>Hero</legend>
-        <label className="field">
+        <label className="cs-cat-field">
           <span>Outcome headline</span>
           <input
             type="text"
@@ -2220,7 +2220,7 @@ function CategoryDetailPanel({
             }
           />
         </label>
-        <label className="field">
+        <label className="cs-cat-field">
           <span>Subheadline</span>
           <textarea
             value={form.subheadline}
@@ -2231,7 +2231,7 @@ function CategoryDetailPanel({
             }
           />
         </label>
-        <label className="field">
+        <label className="cs-cat-field">
           <span>Hero image URL</span>
           <input
             type="url"
@@ -2242,7 +2242,7 @@ function CategoryDetailPanel({
             }
           />
         </label>
-        <label className="field">
+        <label className="cs-cat-field">
           <span>Hero image alt text</span>
           <input
             type="text"
@@ -2252,7 +2252,7 @@ function CategoryDetailPanel({
             }
           />
         </label>
-        <label className="field">
+        <label className="cs-cat-field">
           <span>Scarcity hint</span>
           <input
             type="text"
@@ -2283,7 +2283,7 @@ function CategoryDetailPanel({
 
       <fieldset disabled={!canManage}>
         <legend>Guarantee</legend>
-        <label className="field">
+        <label className="cs-cat-field">
           <span>Guarantee text</span>
           <textarea
             value={form.guaranteeText}
@@ -2298,7 +2298,7 @@ function CategoryDetailPanel({
 
       <fieldset disabled={!canManage}>
         <legend>Social proof</legend>
-        <label className="field">
+        <label className="cs-cat-field">
           <span>Quote</span>
           <textarea
             value={form.socialQuote}
@@ -2308,7 +2308,7 @@ function CategoryDetailPanel({
             }
           />
         </label>
-        <label className="field">
+        <label className="cs-cat-field">
           <span>Author</span>
           <input
             type="text"
@@ -2319,7 +2319,7 @@ function CategoryDetailPanel({
             }
           />
         </label>
-        <label className="field">
+        <label className="cs-cat-field">
           <span>Author photo URL</span>
           <input
             type="url"
@@ -2340,7 +2340,7 @@ function CategoryDetailPanel({
 
       <fieldset disabled={!canManage}>
         <legend>SEO</legend>
-        <label className="field">
+        <label className="cs-cat-field">
           <span>Meta description</span>
           <textarea
             value={form.metaDescription}
@@ -2354,13 +2354,13 @@ function CategoryDetailPanel({
       </fieldset>
 
       {canManage ? (
-        <div className="service-detail-actions">
-          <button type="submit" className="primary-action" disabled={saving}>
+        <div className="cs-service-detail-actions">
+          <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={saving}>
             {saving ? "Saving…" : "Save category"}
           </button>
         </div>
       ) : (
-        <p className="service-detail-locked">
+        <p className="cs-service-detail-locked">
           You don't have permission to edit categories.
         </p>
       )}
@@ -2384,8 +2384,8 @@ function ValueStackEditor({
   return (
     <fieldset disabled={disabled}>
       <legend>{legend}</legend>
-      <p className="field-help">{help}</p>
-      <ul className="stack-editor">
+      <p className="cs-cat-field-help">{help}</p>
+      <ul className="cs-cat-stack-editor">
         {items.map((item, idx) => (
           <li key={idx}>
             <input
@@ -2416,7 +2416,7 @@ function ValueStackEditor({
             />
             <button
               type="button"
-              className="ghost-action"
+              className="cs-btn cs-btn--ghost cs-btn--sm"
               onClick={() => onChange(items.filter((_, i) => i !== idx))}
             >
               Remove
@@ -2426,7 +2426,7 @@ function ValueStackEditor({
       </ul>
       <button
         type="button"
-        className="ghost-action"
+        className="cs-btn cs-btn--ghost cs-btn--sm"
         onClick={() => onChange([...items, { label: "", estValueCents: null }])}
       >
         + Add item
@@ -2447,10 +2447,10 @@ function FaqEditor({
   return (
     <fieldset disabled={disabled}>
       <legend>FAQ</legend>
-      <p className="field-help">
+      <p className="cs-cat-field-help">
         Address the friction points and objections customers raise before booking.
       </p>
-      <ul className="faq-editor">
+      <ul className="cs-cat-faq-editor">
         {items.map((item, idx) => (
           <li key={idx}>
             <input
@@ -2475,7 +2475,7 @@ function FaqEditor({
             />
             <button
               type="button"
-              className="ghost-action"
+              className="cs-btn cs-btn--ghost cs-btn--sm"
               onClick={() => onChange(items.filter((_, i) => i !== idx))}
             >
               Remove
@@ -2485,7 +2485,7 @@ function FaqEditor({
       </ul>
       <button
         type="button"
-        className="ghost-action"
+        className="cs-btn cs-btn--ghost cs-btn--sm"
         onClick={() => onChange([...items, { question: "", answer: "" }])}
       >
         + Add question

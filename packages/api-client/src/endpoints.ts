@@ -148,6 +148,8 @@ export const createPlatformApi = (client: ApiClient) => ({
       `tenants/${tenantSlug}/services/${serviceId}/duplicate`,
       {},
     ),
+  deleteService: (tenantSlug: string, serviceId: string) =>
+    client.delete<void>(`tenants/${tenantSlug}/services/${serviceId}`),
   reorderServices: (tenantSlug: string, body: ReorderRequest) =>
     client.put<ServiceListResponse, ReorderRequest>(
       `tenants/${tenantSlug}/services/reorder`,

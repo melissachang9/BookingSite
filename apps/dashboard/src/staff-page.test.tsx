@@ -1,9 +1,18 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@booking/shared-types";
 
 import { StaffPage } from "./staff-page";
 import { platformApi } from "./platform-api";
+
+function renderStaffPage(user: AuthenticatedUser) {
+  return render(
+    <MemoryRouter>
+      <StaffPage definition={definition} currentUser={user} tenant={null} />
+    </MemoryRouter>,
+  );
+}
 
 const ownerUser: AuthenticatedUser = {
   id: "user-1",
@@ -97,6 +106,9 @@ function mockListEndpoints(overrides: Partial<{ users: any[]; providers: any[] }
   vi.spyOn(platformApi, "listServices").mockResolvedValue({
     services: baseServices,
   } as any);
+  vi.spyOn(platformApi, "listServiceCategories").mockResolvedValue({
+    categories: [],
+  } as any);
   vi.spyOn(platformApi, "getServiceProviderVariants").mockResolvedValue({
     serviceId: "",
     variants: [],
@@ -110,7 +122,7 @@ afterEach(() => {
 describe("StaffPage", () => {
   it("renders the master list and shows the first user's details", async () => {
     mockListEndpoints();
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /Melissa Chang/i })).toBeInTheDocument(),
     );
@@ -120,31 +132,28 @@ describe("StaffPage", () => {
 
   it("blocks users without settings.manage permission", () => {
     const spy = vi.spyOn(platformApi, "listTenantUsers");
-    render(<StaffPage definition={definition} currentUser={readOnlyUser} />);
+    renderStaffPage(readOnlyUser);
     expect(screen.getByText(/do not have permission/i)).toBeInTheDocument();
     expect(spy).not.toHaveBeenCalled();
   });
 
   it("shows the direct booking link only when a provider is linked", async () => {
     mockListEndpoints();
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     // Melissa (owner) selected by default — no provider link.
-    expect(screen.queryByText(/Direct booking link/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Booking link/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
-    await waitFor(() => expect(screen.getByText(/Direct booking link/i)).toBeInTheDocument());
-    expect(screen.getByText(/\?providerId=p1/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Booking link/i)).toBeInTheDocument());
   });
 
-  it("enables Services tab only for providers", async () => {
+  it("auto-creates a provider record when opening Services for a non-provider", async () => {
     mockListEndpoints();
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    const createProviderSpy = vi.spyOn(platformApi, "createProvider").mockResolvedValue({} as any);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: /Melissa Chang/i }));
-    expect(screen.getByRole("tab", { name: "Services" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
-    await waitFor(() =>
-      expect(screen.getByRole("tab", { name: "Services" })).not.toBeDisabled(),
-    );
+    fireEvent.click(screen.getByRole("tab", { name: "Services" }));
+    await waitFor(() => expect(createProviderSpy).toHaveBeenCalled());
   });
 
   it("creates a staff member without provider via combo endpoint", async () => {
@@ -153,7 +162,7 @@ describe("StaffPage", () => {
       .spyOn(platformApi, "createTenantStaff")
       .mockResolvedValue({ user: baseUsers[0], provider: null } as any);
 
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: "Add staff" }));
     fireEvent.click(screen.getByRole("button", { name: "Add staff" }));
     const dialog = within(screen.getByRole("dialog"));
@@ -185,7 +194,7 @@ describe("StaffPage", () => {
       .spyOn(platformApi, "createTenantStaff")
       .mockResolvedValue({ user: baseUsers[0], provider: baseProviders[0] } as any);
 
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: "Add staff" }));
     fireEvent.click(screen.getByRole("button", { name: "Add staff" }));
     const dialog = within(screen.getByRole("dialog"));
@@ -218,13 +227,13 @@ describe("StaffPage", () => {
       .spyOn(platformApi, "updateTenantUser")
       .mockResolvedValue({} as any);
 
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: /Melissa Chang/i }));
 
-    fireEvent.change(screen.getByLabelText("Phone"), {
+    fireEvent.change(screen.getByPlaceholderText("+1 555-555-1212"), {
       target: { value: "+1 555-111-2222" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
     expect(updateSpy).toHaveBeenCalledWith("brow-beauty-lab", "u1", {
@@ -238,16 +247,15 @@ describe("StaffPage", () => {
       .spyOn(platformApi, "updateProvider")
       .mockResolvedValue({} as any);
 
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Services" }));
-    await waitFor(() => screen.getByText("Services performed"));
+    await waitFor(() => screen.getByText(/What they perform/));
 
     // Add Facial (svc2) to provider's services via checkbox
-    const facialLabel = screen.getByText("Facial").closest("label")!;
-    fireEvent.click(within(facialLabel).getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: "Save provider" }));
+    fireEvent.click(screen.getByLabelText("Toggle Facial"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
     expect(updateSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1", {
@@ -264,7 +272,7 @@ describe("StaffPage", () => {
       .spyOn(platformApi, "resetTenantUserPassword")
       .mockResolvedValue({} as any);
 
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: /Melissa Chang/i }));
     fireEvent.click(screen.getByRole("button", { name: "Reset password" }));
     const dialog = within(screen.getByRole("dialog"));
@@ -286,7 +294,7 @@ describe("StaffPage", () => {
       .spyOn(platformApi, "createProvider")
       .mockResolvedValue({} as any);
 
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: /Melissa Chang/i }));
     fireEvent.click(screen.getByRole("button", { name: "Make service provider" }));
     const dialog = within(screen.getByRole("dialog"));
@@ -312,7 +320,7 @@ describe("StaffPage", () => {
     vi.spyOn(platformApi, "listProvidersAdmin").mockResolvedValue({ providers: [] } as any);
     vi.spyOn(platformApi, "listLocationsAdmin").mockResolvedValue({ locations: [] } as any);
     vi.spyOn(platformApi, "listServices").mockResolvedValue({ services: [] } as any);
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/boom/));
   });
 
@@ -330,7 +338,7 @@ describe("StaffPage", () => {
         summary: { hoursPerWeek: 8, workingDays: 1, upcomingOverridesCount: 0 },
       } as any);
 
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
@@ -338,8 +346,8 @@ describe("StaffPage", () => {
     await waitFor(() =>
       expect(getWorkHoursSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1", null),
     );
-    // Monday shift renders as "09:00 – 17:00" text in the regular hours template (weekday 0 = Monday).
-    await waitFor(() => expect(screen.getByText(/09:00\s+–\s+17:00/)).toBeInTheDocument());
+    // Monday shift (weekday 0) renders as a time input with value 09:00.
+    await waitFor(() => expect(screen.getByLabelText("Monday start time")).toHaveValue("09:00"));
   });
 
   it("saves a new schedule entry via replaceProviderSchedule", async () => {
@@ -360,7 +368,7 @@ describe("StaffPage", () => {
         ],
       } as any);
 
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
@@ -430,29 +438,29 @@ describe("StaffPage", () => {
     vi.spyOn(platformApi, "replaceProviderSchedule")
       .mockResolvedValue({ providerId: "p1", entries: [] } as any);
 
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
-    await waitFor(() => screen.getByText("Regular hours"));
+    await waitFor(() => screen.getByText("Regular weekly pattern"));
 
     const getLocationSelect = () => screen.getByRole("combobox", { name: "Work hours location" });
 
-    // A: Downtown — 09:00–17:00 should render in the regular hours template
+    // A: Downtown — Tuesday (weekday 1) 09:00–17:00
     fireEvent.change(getLocationSelect(), { target: { value: "loc1" } });
     await waitFor(() => expect(getWorkHoursSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1", "loc1"));
-    await waitFor(() => expect(screen.getByText(/09:00\s+–\s+17:00/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Tuesday start time")).toHaveValue("09:00"));
 
-    // B: Uptown — 10:00–18:00 should render, Downtown hours should not
+    // B: Uptown — Wednesday (weekday 2) 10:00–18:00, Downtown hours should not
     fireEvent.change(getLocationSelect(), { target: { value: "loc2" } });
     await waitFor(() => expect(getWorkHoursSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1", "loc2"));
-    await waitFor(() => expect(screen.getByText(/10:00\s+–\s+18:00/)).toBeInTheDocument());
-    expect(screen.queryByText(/09:00\s+–\s+17:00/)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Wednesday start time")).toHaveValue("10:00"));
+    expect(screen.queryByLabelText("Tuesday start time")).not.toBeInTheDocument();
 
     // Back to A: Downtown should still render Downtown hours, isolated from Uptown
     fireEvent.change(getLocationSelect(), { target: { value: "loc1" } });
-    await waitFor(() => expect(screen.getByText(/09:00\s+–\s+17:00/)).toBeInTheDocument());
-    expect(screen.queryByText(/10:00\s+–\s+18:00/)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Tuesday start time")).toHaveValue("09:00"));
+    expect(screen.queryByLabelText("Wednesday start time")).not.toBeInTheDocument();
   });
 
   it("loads provider time off on the Work hours tab", async () => {
@@ -477,15 +485,16 @@ describe("StaffPage", () => {
       summary: { hoursPerWeek: 0, workingDays: 0, upcomingOverridesCount: 1 },
     } as any);
 
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
 
-    // Wait for the sub-tab to appear (loading finishes)
-    await waitFor(() => screen.getByRole("button", { name: /Overrides/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Overrides/ }));
-    await waitFor(() => expect(screen.getAllByText(/Vacation/).length).toBeGreaterThan(0));
+    // The exceptions-by-date calendar renders the time-off block.
+    await waitFor(() => expect(screen.getByText("Exceptions by date")).toBeInTheDocument());
+    // Navigate to the previous month so the August time-off block is visible.
+    fireEvent.click(screen.getByRole("button", { name: "Previous month" }));
+    await waitFor(() => expect(document.querySelector(".cs-wh-cal-day--timeoff")).not.toBeNull());
   });
 
   it("creates a new time off entry from the form", async () => {
@@ -511,18 +520,14 @@ describe("StaffPage", () => {
         endTime: null,
       } as any);
 
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Work hours" }));
 
-    // Wait for the sub-tab to appear, then switch to Overrides
-    await waitFor(() => screen.getByRole("button", { name: /Overrides/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Overrides/ }));
-    await waitFor(() => screen.getByText(/All overrides/));
-
-    // Open the time-off drawer via "+ Block time off" button
-    fireEvent.click(screen.getByRole("button", { name: /Block time off/ }));
+    // Open the time-off drawer via "+ Block a range" button
+    await waitFor(() => screen.getByRole("button", { name: /Block a range/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Block a range/ }));
     await waitFor(() => screen.getByRole("dialog", { name: "Block time off" }));
 
     fireEvent.change(screen.getByLabelText("Time off start date"), { target: { value: "2026-08-01" } });
@@ -558,14 +563,14 @@ describe("StaffPage", () => {
       effective: [{ key: "settings.manage", allowed: false }],
     } as any);
 
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Permissions" }));
 
     await waitFor(() => expect(catalogSpy).toHaveBeenCalled());
     await waitFor(() => expect(permsSpy).toHaveBeenCalledWith("brow-beauty-lab", "u2"));
-    await waitFor(() => expect(screen.getByText("Manage settings")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Change studio settings")).toBeInTheDocument());
     expect(screen.getByText("Settings")).toBeInTheDocument();
   });
 
@@ -597,15 +602,14 @@ describe("StaffPage", () => {
       effective: [{ key: "settings.manage", allowed: true }],
     } as any);
 
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Permissions" }));
-    await waitFor(() => expect(screen.getByText("Manage settings")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Change studio settings")).toBeInTheDocument());
 
     const group = screen.getByRole("radiogroup", { name: "Manage settings" });
-    fireEvent.click(within(group).getByLabelText("Allow"));
-    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    fireEvent.click(within(group).getByRole("button", { name: "Allow" }));
 
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
     const [slug, userId, payload] = saveSpy.mock.calls[0];
@@ -616,27 +620,37 @@ describe("StaffPage", () => {
 
   it("shows owner notice instead of permissions matrix for owners", async () => {
     mockListEndpoints();
-    const catalogSpy = vi.spyOn(platformApi, "getPermissionsCatalog");
+    const catalogSpy = vi.spyOn(platformApi, "getPermissionsCatalog").mockResolvedValue({
+      permissions: [
+        {
+          key: "settings.manage",
+          category: "Settings",
+          label: "Manage settings",
+          description: "Edit business settings.",
+        },
+      ],
+      roleDefaults: { staff: [], provider: [] },
+    } as any);
     const permsSpy = vi.spyOn(platformApi, "getUserPermissions");
 
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: /Melissa Chang/i }));
     fireEvent.click(screen.getByRole("button", { name: /Melissa Chang/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Permissions" }));
 
     await waitFor(() => expect(screen.getByText(/Owners have full access/i)).toBeInTheDocument());
-    expect(catalogSpy).not.toHaveBeenCalled();
+    expect(catalogSpy).toHaveBeenCalled();
     expect(permsSpy).not.toHaveBeenCalled();
   });
 
   it("filters services by search query in the Services tab", async () => {
     mockListEndpoints();
 
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Services" }));
-    await waitFor(() => screen.getByText("Services performed"));
+    await waitFor(() => screen.getByText(/What they perform/));
 
     expect(screen.getByText(/Brow Shaping/)).toBeInTheDocument();
     expect(screen.getByText(/Facial/)).toBeInTheDocument();
@@ -653,16 +667,15 @@ describe("StaffPage", () => {
     mockListEndpoints();
     const updateSpy = vi.spyOn(platformApi, "updateProvider").mockResolvedValue({} as any);
 
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Services" }));
-    await waitFor(() => screen.getByText("Services performed"));
+    await waitFor(() => screen.getByText(/What they perform/));
 
-    // Find the Select all button in the services card (second one)
-    const selectAllButtons = screen.getAllByRole("button", { name: /Select all/ });
-    fireEvent.click(selectAllButtons[1]);
-    fireEvent.click(screen.getByRole("button", { name: "Save provider" }));
+    // Enable all services in the (uncategorized) group.
+    fireEvent.click(screen.getByRole("button", { name: "Enable all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
     const payload = updateSpy.mock.calls[0][2];
@@ -681,7 +694,7 @@ describe("StaffPage", () => {
     vi.spyOn(platformApi, "listProvidersAdmin").mockResolvedValue({ providers } as any);
     const updateSpy = vi.spyOn(platformApi, "updateProvider").mockResolvedValue({} as any);
 
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Services" }));
@@ -693,7 +706,7 @@ describe("StaffPage", () => {
 
     const locFieldset = screen.getByText(/^Locations/).closest("fieldset")!;
     fireEvent.click(within(locFieldset).getByRole("button", { name: /Clear shown/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Save provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
     expect(updateSpy.mock.calls[0][2].locationIds).toEqual(["loc1"]);
@@ -702,18 +715,17 @@ describe("StaffPage", () => {
   it("disables Save provider until services or locations change", async () => {
     mockListEndpoints();
 
-    render(<StaffPage definition={definition} currentUser={ownerUser} />);
+    renderStaffPage(ownerUser);
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Services" }));
-    await waitFor(() => screen.getByText("Services performed"));
+    await waitFor(() => screen.getByText(/What they perform/));
 
-    const save = screen.getByRole("button", { name: "Save provider" });
+    const save = screen.getByRole("button", { name: "Save" });
     expect(save).toBeDisabled();
 
     // Check Facial service checkbox
-    const facialLabel2 = screen.getByText("Facial").closest("label")!;
-    fireEvent.click(within(facialLabel2).getByRole("checkbox"));
+    fireEvent.click(screen.getByLabelText("Toggle Facial"));
     expect(save).not.toBeDisabled();
   });
 });

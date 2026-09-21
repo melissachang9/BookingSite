@@ -102,7 +102,7 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
     status: "available",
   },
   {
-    id: "client-ownership",
+    id: "cs-client-ownership",
     title: "Client Ownership",
     eyebrow: "Advanced",
     description: "Restrict customer visibility to the assigned provider.",
@@ -197,18 +197,18 @@ export function SettingsPage({
   }, []);
 
   return (
-    <main className="ops-page-stack">
-      <div className="settings-layout cs-settings-layout">
-        <nav className="settings-anchor-nav cs-settings-nav" aria-label="Settings sections">
+    <main className="cs-page-stack">
+      <div className="cs-settings-layout">
+        <nav className="cs-settings-nav" aria-label="Settings sections">
           {groupedSections.map(([groupTitle, sections]) => (
-            <div key={groupTitle} className="settings-anchor-group">
-              <p className="settings-anchor-group__title">{groupTitle}</p>
+            <div key={groupTitle} className="cs-settings-group">
+              <p className="cs-settings-group__title">{groupTitle}</p>
               <ul>
                 {sections.map((section) => (
                   <li key={section.id}>
                     <a
                       href={`#${section.id}`}
-                      className={`settings-anchor-link${activeSection === section.id ? " settings-anchor-link--active" : ""}`}
+                      className={`settings-anchor-link${activeSection === section.id ? " cs-settings-link--active" : ""}`}
                       onClick={() => setActiveSection(section.id)}
                     >
                       {section.title}
@@ -220,7 +220,7 @@ export function SettingsPage({
           ))}
         </nav>
 
-        <div className="settings-content cs-settings-content">
+        <div className="cs-settings-content">
           {SECTION_DEFINITIONS.map((section) => (
             <SettingsSection key={section.id} section={section}>
               {section.id === "calendar" ? (
@@ -280,7 +280,7 @@ export function SettingsPage({
                 />
               ) : section.id === "payroll" ? (
                 <PayrollSection />
-              ) : section.id === "client-ownership" ? (
+              ) : section.id === "cs-client-ownership" ? (
                 <ClientOwnershipSection
                   canManageSettings={canManageSettings}
                   tenant={tenant}
@@ -326,25 +326,21 @@ function SettingsSection({
   section: SectionDefinition;
   children: ReactNode;
 }) {
-  const categoryClass = `settings-section--cat-${section.eyebrow
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "")}`;
   return (
-    <section id={section.id} className={`settings-section ${categoryClass}`}>
-      <header className="settings-section__header">
-        <p className="eyebrow">{section.eyebrow}</p>
+    <section id={section.id} className="cs-settings-section">
+      <header className="cs-settings-section__header">
+        <p className="cs-settings-eyebrow">{section.eyebrow}</p>
         <h4>{section.title}</h4>
-        <p className="settings-panel-help">{section.description}</p>
+        <p className="cs-settings-help">{section.description}</p>
       </header>
-      <div className="settings-section__body">{children}</div>
+      <div className="cs-settings-section__body">{children}</div>
     </section>
   );
 }
 
 function PlannedPlaceholder({ phase }: { phase: string }) {
   return (
-    <div className="settings-placeholder">
+    <div className="cs-settings-placeholder">
       <p>This section ships in {phase}.</p>
     </div>
   );
@@ -403,9 +399,9 @@ function CalendarDisplaySection({
   }
 
   return (
-    <form className="settings-form" onSubmit={handleSubmit}>
-      <div className="settings-form-row">
-        <label className="settings-field">
+    <form className="cs-form" onSubmit={handleSubmit}>
+      <div className="cs-form-row">
+        <label className="cs-field">
           <span>Start hour</span>
           <select
             value={startHour}
@@ -419,7 +415,7 @@ function CalendarDisplaySection({
             ))}
           </select>
         </label>
-        <label className="settings-field">
+        <label className="cs-field">
           <span>End hour</span>
           <select
             value={endHour}
@@ -435,7 +431,7 @@ function CalendarDisplaySection({
         </label>
       </div>
 
-      <label className="settings-field">
+      <label className="cs-field">
         <span>Week starts on</span>
         <select
           value={weekStartsOn}
@@ -452,20 +448,20 @@ function CalendarDisplaySection({
         </select>
       </label>
 
-      {validationMessage ? <p role="alert" className="settings-error">{validationMessage}</p> : null}
-      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
-      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+      {validationMessage ? <p role="alert" className="cs-error">{validationMessage}</p> : null}
+      {saveState.kind === "success" ? <p role="status" className="cs-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="cs-error">{saveState.message}</p> : null}
 
-      <div className="settings-actions">
+      <div className="cs-actions">
         <button
           type="submit"
-          className="primary-action"
+          className="cs-btn cs-btn--primary cs-btn--sm"
           disabled={!canManageSettings || validationMessage !== null || saveState.kind === "submitting"}
         >
           {saveState.kind === "submitting" ? "Saving…" : "Save calendar hours"}
         </button>
         {!canManageSettings ? (
-          <p className="settings-permission-note">You do not have permission to edit tenant settings.</p>
+          <p className="cs-permission-note">You do not have permission to edit tenant settings.</p>
         ) : null}
       </div>
     </form>
@@ -538,11 +534,11 @@ function BusinessPoliciesSection({
   }
 
   return (
-    <form className="settings-form" onSubmit={handleSubmit}>
-      <p className="rail-section-kicker">Cancellation & refunds</p>
+    <form className="cs-form" onSubmit={handleSubmit}>
+      <p className="cs-kicker">Cancellation & refunds</p>
 
-      <div className="settings-form-row">
-        <label className="settings-field">
+      <div className="cs-form-row">
+        <label className="cs-field">
           <span>Cancellation window (hours)</span>
           <input
             type="number"
@@ -554,9 +550,9 @@ function BusinessPoliciesSection({
           />
           <small>Hours before the appointment when the cancellation policy applies. 0 means no window.</small>
         </label>
-        <label className="settings-field settings-field--checkbox">
+        <label className="cs-field">
           <span>Refund inside window</span>
-          <label className="settings-checkbox-label">
+          <label className="cs-check-row">
             <input
               type="checkbox"
               checked={refundInsideWindow}
@@ -568,10 +564,10 @@ function BusinessPoliciesSection({
         </label>
       </div>
 
-      <p className="rail-section-kicker">Booking rules</p>
+      <p className="cs-kicker">Booking rules</p>
 
-      <div className="settings-form-row">
-        <label className="settings-field">
+      <div className="cs-form-row">
+        <label className="cs-field">
           <span>Minimum lead time (minutes)</span>
           <input
             type="number"
@@ -583,7 +579,7 @@ function BusinessPoliciesSection({
           />
           <small>How far in advance a customer must book. 0 means no minimum.</small>
         </label>
-        <label className="settings-field">
+        <label className="cs-field">
           <span>Maximum advance booking (days)</span>
           <input
             type="number"
@@ -597,10 +593,10 @@ function BusinessPoliciesSection({
         </label>
       </div>
 
-      <p className="rail-section-kicker">Deposits & fees</p>
+      <p className="cs-kicker">Deposits & fees</p>
 
-      <div className="settings-form-row">
-        <label className="settings-field">
+      <div className="cs-form-row">
+        <label className="cs-field">
           <span>Default deposit ($)</span>
           <input
             type="number"
@@ -613,7 +609,7 @@ function BusinessPoliciesSection({
           />
           <small>Default deposit amount for new services. 0 means no deposit required.</small>
         </label>
-        <label className="settings-field">
+        <label className="cs-field">
           <span>No-show fee ($)</span>
           <input
             type="number"
@@ -628,8 +624,8 @@ function BusinessPoliciesSection({
         </label>
       </div>
 
-      <div className="settings-form-row">
-        <label className="settings-field">
+      <div className="cs-form-row">
+        <label className="cs-field">
           <span>Tax rate (%)</span>
           <input
             type="number"
@@ -642,9 +638,9 @@ function BusinessPoliciesSection({
           />
           <small>Sales tax percentage applied to service subtotal.</small>
         </label>
-        <label className="settings-field settings-field--checkbox">
+        <label className="cs-field">
           <span>Auto-charge no-show fee</span>
-          <label className="settings-checkbox-label">
+          <label className="cs-check-row">
             <input
               type="checkbox"
               checked={autoChargeNoShowFee}
@@ -656,19 +652,19 @@ function BusinessPoliciesSection({
         </label>
       </div>
 
-      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
-      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+      {saveState.kind === "success" ? <p role="status" className="cs-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="cs-error">{saveState.message}</p> : null}
 
-      <div className="settings-actions">
+      <div className="cs-actions">
         <button
           type="submit"
-          className="primary-action"
+          className="cs-btn cs-btn--primary cs-btn--sm"
           disabled={!canManageSettings || saveState.kind === "submitting"}
         >
           {saveState.kind === "submitting" ? "Saving…" : "Save policies"}
         </button>
         {!canManageSettings ? (
-          <p className="settings-permission-note">You do not have permission to edit tenant settings.</p>
+          <p className="cs-permission-note">You do not have permission to edit tenant settings.</p>
         ) : null}
       </div>
     </form>
@@ -720,10 +716,10 @@ function AutomatedMessagesSection({
   }
 
   return (
-    <form className="settings-form" onSubmit={handleSubmit}>
-      <p className="rail-section-kicker">Form reminders</p>
+    <form className="cs-form" onSubmit={handleSubmit}>
+      <p className="cs-kicker">Form reminders</p>
 
-      <label className="settings-field">
+      <label className="cs-field">
         <span>Intake reminder (hours before appointment)</span>
         <select
           value={reminderHoursBefore}
@@ -742,19 +738,19 @@ function AutomatedMessagesSection({
         <small>How far in advance to send a reminder email when a customer chooses to complete intake forms later.</small>
       </label>
 
-      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
-      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+      {saveState.kind === "success" ? <p role="status" className="cs-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="cs-error">{saveState.message}</p> : null}
 
-      <div className="settings-actions">
+      <div className="cs-actions">
         <button
           type="submit"
-          className="primary-action"
+          className="cs-btn cs-btn--primary cs-btn--sm"
           disabled={!canManageSettings || saveState.kind === "submitting"}
         >
           {saveState.kind === "submitting" ? "Saving…" : "Save message settings"}
         </button>
         {!canManageSettings ? (
-          <p className="settings-permission-note">You do not have permission to edit tenant settings.</p>
+          <p className="cs-permission-note">You do not have permission to edit tenant settings.</p>
         ) : null}
       </div>
     </form>
@@ -821,13 +817,13 @@ function AppointmentRemindersSection({
   }
 
   return (
-    <form className="settings-form" onSubmit={handleSubmit}>
-      <p className="rail-section-kicker">Appointment reminders</p>
-      <p className="settings-form-help">
+    <form className="cs-form" onSubmit={handleSubmit}>
+      <p className="cs-kicker">Appointment reminders</p>
+      <p className="cs-field-help">
         Send automated reminders to customers before their confirmed appointments.
       </p>
 
-      <label className="settings-field">
+      <label className="cs-field">
         <span>Reminder timing (hours before)</span>
         <select
           value={reminderHours}
@@ -846,7 +842,7 @@ function AppointmentRemindersSection({
         <small>How far in advance to send appointment reminders.</small>
       </label>
 
-      <label className="settings-toggle-field">
+      <label className="cs-toggle-field">
         <input
           type="checkbox"
           checked={emailEnabled}
@@ -859,7 +855,7 @@ function AppointmentRemindersSection({
         </span>
       </label>
 
-      <label className="settings-toggle-field">
+      <label className="cs-toggle-field">
         <input
           type="checkbox"
           checked={smsEnabled}
@@ -872,19 +868,19 @@ function AppointmentRemindersSection({
         </span>
       </label>
 
-      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
-      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+      {saveState.kind === "success" ? <p role="status" className="cs-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="cs-error">{saveState.message}</p> : null}
 
-      <div className="settings-actions">
+      <div className="cs-actions">
         <button
           type="submit"
-          className="primary-action"
+          className="cs-btn cs-btn--primary cs-btn--sm"
           disabled={!canManageSettings || saveState.kind === "submitting"}
         >
           {saveState.kind === "submitting" ? "Saving…" : "Save reminder settings"}
         </button>
         {!canManageSettings ? (
-          <p className="settings-permission-note">You do not have permission to edit tenant settings.</p>
+          <p className="cs-permission-note">You do not have permission to edit tenant settings.</p>
         ) : null}
       </div>
     </form>
@@ -951,9 +947,9 @@ function BusinessDetailsSection({
   }
 
   return (
-    <form className="settings-form" onSubmit={handleSubmit}>
-      <div className="settings-form-row">
-        <label className="settings-field">
+    <form className="cs-form" onSubmit={handleSubmit}>
+      <div className="cs-form-row">
+        <label className="cs-field">
           <span>Business name</span>
           <input
             type="text"
@@ -964,7 +960,7 @@ function BusinessDetailsSection({
             maxLength={255}
           />
         </label>
-        <label className="settings-field">
+        <label className="cs-field">
           <span>Website</span>
           <input
             type="url"
@@ -977,8 +973,8 @@ function BusinessDetailsSection({
         </label>
       </div>
 
-      <div className="settings-form-row">
-        <label className="settings-field">
+      <div className="cs-form-row">
+        <label className="cs-field">
           <span>Country</span>
           <input
             type="text"
@@ -989,7 +985,7 @@ function BusinessDetailsSection({
             placeholder="US"
           />
         </label>
-        <label className="settings-field">
+        <label className="cs-field">
           <span>Currency</span>
           <select
             value={currency}
@@ -1003,7 +999,7 @@ function BusinessDetailsSection({
             ))}
           </select>
         </label>
-        <label className="settings-field">
+        <label className="cs-field">
           <span>Primary phone</span>
           <input
             type="tel"
@@ -1016,20 +1012,20 @@ function BusinessDetailsSection({
         </label>
       </div>
 
-      {validationMessage ? <p role="alert" className="settings-error">{validationMessage}</p> : null}
-      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
-      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+      {validationMessage ? <p role="alert" className="cs-error">{validationMessage}</p> : null}
+      {saveState.kind === "success" ? <p role="status" className="cs-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="cs-error">{saveState.message}</p> : null}
 
-      <div className="settings-actions">
+      <div className="cs-actions">
         <button
           type="submit"
-          className="primary-action"
+          className="cs-btn cs-btn--primary cs-btn--sm"
           disabled={!canManageSettings || validationMessage !== null || saveState.kind === "submitting"}
         >
           {saveState.kind === "submitting" ? "Saving…" : "Save business details"}
         </button>
         {!canManageSettings ? (
-          <p className="settings-permission-note">You do not have permission to edit business details.</p>
+          <p className="cs-permission-note">You do not have permission to edit business details.</p>
         ) : null}
       </div>
     </form>
@@ -1101,7 +1097,7 @@ function TimeField({
   }
   const { hour, minute, period } = to12h(value);
   return (
-    <span className="business-hours-time12">
+    <span className="cs-bh-time12">
       <select
         value={hour}
         onChange={(event) => onChange(from12h(Number(event.target.value), minute, period))}
@@ -1112,7 +1108,7 @@ function TimeField({
           <option key={h} value={h}>{h}</option>
         ))}
       </select>
-      <span className="business-hours-time12__colon" aria-hidden="true">:</span>
+      <span className="cs-bh-time12__colon" aria-hidden="true">:</span>
       <select
         value={minute}
         onChange={(event) => onChange(from12h(hour, Number(event.target.value), period))}
@@ -1217,8 +1213,8 @@ function BusinessHoursSection({
   const editorDisabled = !canManageSettings || saveState.kind === "submitting" || !enabled;
 
   return (
-    <form className="settings-form" onSubmit={handleSubmit}>
-      <label className="settings-toggle">
+    <form className="cs-form" onSubmit={handleSubmit}>
+      <label className="cs-check-row">
         <input
           type="checkbox"
           checked={enabled}
@@ -1228,11 +1224,11 @@ function BusinessHoursSection({
         <span>Set business hours</span>
       </label>
       {!enabled ? (
-        <p className="settings-panel-help">Availability follows each provider&rsquo;s schedule.</p>
+        <p className="cs-settings-help">Availability follows each provider&rsquo;s schedule.</p>
       ) : (
-        <div className="business-hours-grid">
-          <div className="business-hours-format">
-            <span className="business-hours-format__label">Time format</span>
+        <div className="cs-bh-grid">
+          <div className="cs-bh-format">
+            <span className="cs-bh-format__label">Time format</span>
             <div className="cs-seg" role="group" aria-label="Time format">
               <button
                 type="button"
@@ -1253,10 +1249,10 @@ function BusinessHoursSection({
           {BUSINESS_HOURS_WEEKDAY_KEYS.map((key) => {
             const day = week[key];
             return (
-              <div key={key} className="business-hours-row">
-                <span className="business-hours-row__label">{WEEKDAY_LABELS[key]}</span>
-                <label className="business-hours-row__field">
-                  <span className="visually-hidden">{WEEKDAY_LABELS[key]} open</span>
+              <div key={key} className="cs-bh-row">
+                <span className="cs-bh-row__label">{WEEKDAY_LABELS[key]}</span>
+                <label className="cs-bh-row__field">
+                  <span className="cs-visually-hidden">{WEEKDAY_LABELS[key]} open</span>
                   <TimeField
                     value={day.open}
                     onChange={(value) => updateDay(key, { open: value })}
@@ -1266,8 +1262,8 @@ function BusinessHoursSection({
                   />
                 </label>
                 <span aria-hidden="true">–</span>
-                <label className="business-hours-row__field">
-                  <span className="visually-hidden">{WEEKDAY_LABELS[key]} close</span>
+                <label className="cs-bh-row__field">
+                  <span className="cs-visually-hidden">{WEEKDAY_LABELS[key]} close</span>
                   <TimeField
                     value={day.close}
                     onChange={(value) => updateDay(key, { close: value })}
@@ -1276,7 +1272,7 @@ function BusinessHoursSection({
                     ariaLabel={`${WEEKDAY_LABELS[key]} close`}
                   />
                 </label>
-                <label className="business-hours-row__closed">
+                <label className="cs-bh-row__closed">
                   <input
                     type="checkbox"
                     checked={day.closed}
@@ -1292,7 +1288,7 @@ function BusinessHoursSection({
         </div>
       )}
 
-      <label className={`settings-toggle${!enabled ? " settings-toggle--disabled" : ""}`}>
+      <label className={`cs-settings-toggle${!enabled ? " cs-settings-toggle--disabled" : ""}`}>
         <input
           type="checkbox"
           checked={restrict}
@@ -1302,20 +1298,20 @@ function BusinessHoursSection({
         <span>Only allow providers to offer services within business hours</span>
       </label>
 
-      {validationMessage ? <p role="alert" className="settings-error">{validationMessage}</p> : null}
-      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
-      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+      {validationMessage ? <p role="alert" className="cs-error">{validationMessage}</p> : null}
+      {saveState.kind === "success" ? <p role="status" className="cs-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="cs-error">{saveState.message}</p> : null}
 
-      <div className="settings-actions">
+      <div className="cs-actions">
         <button
           type="submit"
-          className="primary-action"
+          className="cs-btn cs-btn--primary cs-btn--sm"
           disabled={!canManageSettings || validationMessage !== null || saveState.kind === "submitting"}
         >
           {saveState.kind === "submitting" ? "Saving…" : "Save business hours"}
         </button>
         {!canManageSettings ? (
-          <p className="settings-permission-note">You do not have permission to edit business hours.</p>
+          <p className="cs-permission-note">You do not have permission to edit business hours.</p>
         ) : null}
       </div>
     </form>
@@ -1496,16 +1492,16 @@ function LocationsSection({
     return <p>Loading locations…</p>;
   }
   if (state.kind === "error") {
-    return <p role="alert" className="settings-error">{state.message}</p>;
+    return <p role="alert" className="cs-error">{state.message}</p>;
   }
 
   return (
-    <div className="locations-section">
-      <ul className="locations-list">
+    <div className="cs-locations-section">
+      <ul className="cs-locations-list">
         {state.locations.map((location) => {
           const isEditing = editingId === location.id;
           return (
-            <li key={location.id} className="locations-list__item">
+            <li key={location.id} className="cs-locations-list__item">
               {isEditing ? (
                 <LocationForm
                   draft={draft}
@@ -1516,33 +1512,33 @@ function LocationsSection({
                   submitLabel="Save location"
                 />
               ) : (
-                <div className="locations-list__row">
+                <div className="cs-locations-list__row">
                   <div>
                     <strong>{location.name}</strong>
                     {location.id === defaultLocationId ? (
-                      <span className="locations-default-tag"> · Default</span>
+                      <span className="cs-locations-default-tag"> · Default</span>
                     ) : null}
-                    <p className="settings-panel-help">
+                    <p className="cs-settings-help">
                       {[location.addressLine1, location.city, location.state, location.postalCode]
                         .filter(Boolean)
                         .join(", ") || "No address on file"}
                     </p>
-                    <p className="settings-panel-help">
+                    <p className="cs-settings-help">
                       {location.phone ? `Phone: ${location.phone}` : "No phone"} · {location.timeZone}
                     </p>
                     {!location.isActive ? (
-                      <p className="settings-panel-help">Inactive</p>
+                      <p className="cs-settings-help">Inactive</p>
                     ) : null}
                   </div>
                   {canManageSettings ? (
-                    <div className="locations-list__actions">
-                      <button type="button" className="ghost-action" onClick={() => beginEdit(location)}>
+                    <div className="cs-locations-list__actions">
+                      <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => beginEdit(location)}>
                         Edit
                       </button>
                       {location.isActive ? (
                         <button
                           type="button"
-                          className="ghost-action"
+                          className="cs-btn cs-btn--ghost cs-btn--sm"
                           onClick={() => void deactivate(location)}
                           disabled={location.id === defaultLocationId}
                           title={
@@ -1556,7 +1552,7 @@ function LocationsSection({
                       ) : (
                         <button
                           type="button"
-                          className="ghost-action"
+                          className="cs-btn cs-btn--ghost cs-btn--sm"
                           onClick={() => void reactivate(location)}
                         >
                           Reactivate
@@ -1582,21 +1578,21 @@ function LocationsSection({
             submitLabel="Create location"
           />
         ) : (
-          <div className="settings-actions">
-            <button type="button" className="primary-action" onClick={beginCreate}>
+          <div className="cs-actions">
+            <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={beginCreate}>
               Add location
             </button>
           </div>
         )
       ) : (
-        <p className="settings-permission-note">You do not have permission to edit locations.</p>
+        <p className="cs-permission-note">You do not have permission to edit locations.</p>
       )}
 
       {!showCreate && editingId === null && saveState.kind === "success" ? (
-        <p role="status" className="settings-status">{saveState.message}</p>
+        <p role="status" className="cs-status">{saveState.message}</p>
       ) : null}
       {!showCreate && editingId === null && saveState.kind === "error" ? (
-        <p role="alert" className="settings-error">{saveState.message}</p>
+        <p role="alert" className="cs-error">{saveState.message}</p>
       ) : null}
     </div>
   );
@@ -1619,8 +1615,8 @@ function LocationForm({
 }) {
   const disabled = saveState.kind === "submitting";
   return (
-    <form className="settings-form" onSubmit={onSubmit}>
-      <label className="settings-field">
+    <form className="cs-form" onSubmit={onSubmit}>
+      <label className="cs-field">
         <span>Location name</span>
         <input
           type="text"
@@ -1630,7 +1626,7 @@ function LocationForm({
           required
         />
       </label>
-      <label className="settings-field">
+      <label className="cs-field">
         <span>Time zone</span>
         <select
           value={draft.timeZone}
@@ -1644,7 +1640,7 @@ function LocationForm({
           ))}
         </select>
       </label>
-      <label className="settings-field">
+      <label className="cs-field">
         <span>Address</span>
         <input
           type="text"
@@ -1653,7 +1649,7 @@ function LocationForm({
           disabled={disabled}
         />
       </label>
-      <label className="settings-field">
+      <label className="cs-field">
         <span>City</span>
         <input
           type="text"
@@ -1662,7 +1658,7 @@ function LocationForm({
           disabled={disabled}
         />
       </label>
-      <label className="settings-field">
+      <label className="cs-field">
         <span>State / region</span>
         <input
           type="text"
@@ -1671,7 +1667,7 @@ function LocationForm({
           disabled={disabled}
         />
       </label>
-      <label className="settings-field">
+      <label className="cs-field">
         <span>Postal code</span>
         <input
           type="text"
@@ -1680,7 +1676,7 @@ function LocationForm({
           disabled={disabled}
         />
       </label>
-      <label className="settings-field">
+      <label className="cs-field">
         <span>Phone</span>
         <input
           type="tel"
@@ -1689,12 +1685,12 @@ function LocationForm({
           disabled={disabled}
         />
       </label>
-      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
-      <div className="settings-actions">
-        <button type="submit" className="primary-action" disabled={disabled}>
+      {saveState.kind === "error" ? <p role="alert" className="cs-error">{saveState.message}</p> : null}
+      <div className="cs-actions">
+        <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={disabled}>
           {disabled ? "Saving…" : submitLabel}
         </button>
-        <button type="button" className="ghost-action" onClick={onCancel} disabled={disabled}>
+        <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onCancel} disabled={disabled}>
           Cancel
         </button>
       </div>
@@ -1871,9 +1867,9 @@ function BrandingSection({
           maskShape="rectangle"
         />
       ) : null}
-      <form className="settings-form branding-section" onSubmit={handleSubmit}>
-      <div className="settings-form-row">
-        <label className="settings-field">
+      <form className="cs-form cs-branding-section" onSubmit={handleSubmit}>
+      <div className="cs-form-row">
+        <label className="cs-field">
           <span>Logo URL</span>
           <input
             type="url"
@@ -1884,7 +1880,7 @@ function BrandingSection({
             placeholder="https://cdn.example.com/logo.png"
           />
         </label>
-        <label className="settings-field">
+        <label className="cs-field">
           <span>Favicon URL</span>
           <input
             type="url"
@@ -1897,10 +1893,10 @@ function BrandingSection({
         </label>
       </div>
 
-      <div className="settings-form-row">
-        <label className="settings-field branding-color-field">
+      <div className="cs-form-row">
+        <label className="cs-field cs-branding-color-field">
           <span>Primary color</span>
-          <div className="branding-color-input">
+          <div className="cs-branding-color-input">
             <input
               type="color"
               value={HEX_COLOR_RE.test(primaryColor.trim()) ? primaryColor.trim() : "#9f5323"}
@@ -1918,9 +1914,9 @@ function BrandingSection({
             />
           </div>
         </label>
-        <label className="settings-field branding-color-field">
+        <label className="cs-field cs-branding-color-field">
           <span>Accent color</span>
-          <div className="branding-color-input">
+          <div className="cs-branding-color-input">
             <input
               type="color"
               value={HEX_COLOR_RE.test(accentColor.trim()) ? accentColor.trim() : "#7a3c13"}
@@ -1940,7 +1936,7 @@ function BrandingSection({
         </label>
       </div>
 
-      <label className="settings-field">
+      <label className="cs-field">
         <span>Gallery photo URLs</span>
         <textarea
           value={photosText}
@@ -1949,10 +1945,10 @@ function BrandingSection({
           rows={4}
           placeholder={"https://cdn.example.com/photo1.jpg\nhttps://cdn.example.com/photo2.jpg"}
         />
-        <span className="settings-field-help">One URL per line.</span>
+        <span className="cs-field-help">One URL per line.</span>
       </label>
 
-      <label className="settings-toggle-field">
+      <label className="cs-toggle-field">
         <input
           type="checkbox"
           checked={bookingAdEnabled}
@@ -1965,11 +1961,11 @@ function BrandingSection({
         </span>
       </label>
 
-      <fieldset className="settings-fieldset">
+      <fieldset className="cs-fieldset">
         <legend>Marketing panel</legend>
-        <p className="settings-fieldset-help">Customize the marketing panel shown on the Begin booking screen.</p>
-        <div className="settings-form-row">
-          <label className="settings-field">
+        <p className="cs-fieldset-help">Customize the marketing panel shown on the Begin booking screen.</p>
+        <div className="cs-form-row">
+          <label className="cs-field">
             <span>Marketing headline</span>
             <input
               type="text"
@@ -1980,15 +1976,15 @@ function BrandingSection({
               placeholder="Quiet booking, clear next steps."
             />
           </label>
-          <label className="settings-field">
+          <label className="cs-field">
             <span>Marketing image</span>
-            <div className="marketing-image-upload">
+            <div className="cs-marketing-upload">
               {bookingAdImageUrl ? (
-                <div className="marketing-image-upload__preview">
+                <div className="cs-marketing-upload__preview">
                   <img src={bookingAdImageUrl} alt="Marketing preview" />
                 </div>
               ) : null}
-              <div className="marketing-image-upload__controls">
+              <div className="cs-marketing-upload__controls">
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
@@ -2004,24 +2000,24 @@ function BrandingSection({
                 {bookingAdImageUrl ? (
                   <button
                     type="button"
-                    className="ghost-action"
+                    className="cs-btn cs-btn--ghost cs-btn--sm"
                     onClick={() => setBookingAdImageUrl("")}
                     disabled={disabled || marketingImageUploading}
                   >
                     Remove
                   </button>
                 ) : null}
-                {marketingImageUploading ? <small className="settings-form-help">Uploading…</small> : null}
+                {marketingImageUploading ? <small className="cs-field-help">Uploading…</small> : null}
                 {marketingImageError ? (
-                  <small role="alert" className="settings-error">{marketingImageError}</small>
+                  <small role="alert" className="cs-error">{marketingImageError}</small>
                 ) : null}
               </div>
             </div>
-            <span className="settings-field-help">Upload a photo or paste a URL below.</span>
+            <span className="cs-field-help">Upload a photo or paste a URL below.</span>
           </label>
         </div>
-        <div className="settings-form-row">
-          <label className="settings-field">
+        <div className="cs-form-row">
+          <label className="cs-field">
             <span>Marketing image URL</span>
             <input
               type="url"
@@ -2033,8 +2029,8 @@ function BrandingSection({
             />
           </label>
         </div>
-        <div className="settings-form-row">
-          <label className="settings-field">
+        <div className="cs-form-row">
+          <label className="cs-field">
             <span>Marketing body</span>
             <textarea
               value={bookingAdBody}
@@ -2045,7 +2041,7 @@ function BrandingSection({
               placeholder="Choose the visit type, location, provider preference, and time without losing context."
             />
           </label>
-          <label className="settings-field">
+          <label className="cs-field">
             <span>Marketing image alt text</span>
             <input
               type="text"
@@ -2059,11 +2055,11 @@ function BrandingSection({
         </div>
       </fieldset>
 
-      <fieldset className="settings-fieldset">
+      <fieldset className="cs-fieldset">
         <legend>Select service screen</legend>
-        <p className="settings-fieldset-help">Customize the marketing panel text shown on the &ldquo;Select a service&rdquo; step.</p>
-        <div className="settings-form-row">
-          <label className="settings-field">
+        <p className="cs-fieldset-help">Customize the marketing panel text shown on the &ldquo;Select a service&rdquo; step.</p>
+        <div className="cs-form-row">
+          <label className="cs-field">
             <span>Service screen headline</span>
             <input
               type="text"
@@ -2075,8 +2071,8 @@ function BrandingSection({
             />
           </label>
         </div>
-        <div className="settings-form-row">
-          <label className="settings-field">
+        <div className="cs-form-row">
+          <label className="cs-field">
             <span>Service screen body</span>
             <textarea
               value={bookingAdServiceBody}
@@ -2090,11 +2086,11 @@ function BrandingSection({
         </div>
       </fieldset>
 
-      <fieldset className="settings-fieldset">
+      <fieldset className="cs-fieldset">
         <legend>Choose location screen</legend>
-        <p className="settings-fieldset-help">Customize the marketing panel text shown on the &ldquo;Choose a location&rdquo; step.</p>
-        <div className="settings-form-row">
-          <label className="settings-field">
+        <p className="cs-fieldset-help">Customize the marketing panel text shown on the &ldquo;Choose a location&rdquo; step.</p>
+        <div className="cs-form-row">
+          <label className="cs-field">
             <span>Location screen headline</span>
             <input
               type="text"
@@ -2106,8 +2102,8 @@ function BrandingSection({
             />
           </label>
         </div>
-        <div className="settings-form-row">
-          <label className="settings-field">
+        <div className="cs-form-row">
+          <label className="cs-field">
             <span>Location screen body</span>
             <textarea
               value={bookingAdLocationBody}
@@ -2121,11 +2117,11 @@ function BrandingSection({
         </div>
       </fieldset>
 
-      <fieldset className="settings-fieldset">
+      <fieldset className="cs-fieldset">
         <legend>Booking review screen</legend>
-        <p className="settings-fieldset-help">Customize the marketing panel text shown on the booking review step.</p>
-        <div className="settings-form-row">
-          <label className="settings-field">
+        <p className="cs-fieldset-help">Customize the marketing panel text shown on the booking review step.</p>
+        <div className="cs-form-row">
+          <label className="cs-field">
             <span>Review screen headline</span>
             <input
               type="text"
@@ -2137,8 +2133,8 @@ function BrandingSection({
             />
           </label>
         </div>
-        <div className="settings-form-row">
-          <label className="settings-field">
+        <div className="cs-form-row">
+          <label className="cs-field">
             <span>Review screen body</span>
             <textarea
               value={bookingAdReviewBody}
@@ -2152,20 +2148,20 @@ function BrandingSection({
         </div>
       </fieldset>
 
-      {validationMessage ? <p role="alert" className="settings-error">{validationMessage}</p> : null}
-      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
-      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+      {validationMessage ? <p role="alert" className="cs-error">{validationMessage}</p> : null}
+      {saveState.kind === "success" ? <p role="status" className="cs-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="cs-error">{saveState.message}</p> : null}
 
-      <div className="settings-actions">
+      <div className="cs-actions">
         <button
           type="submit"
-          className="primary-action"
+          className="cs-btn cs-btn--primary cs-btn--sm"
           disabled={disabled || validationMessage !== null}
         >
           {saveState.kind === "submitting" ? "Saving…" : "Save branding"}
         </button>
         {!canManageSettings ? (
-          <p className="settings-permission-note">You do not have permission to edit branding.</p>
+          <p className="cs-permission-note">You do not have permission to edit branding.</p>
         ) : null}
       </div>
     </form>
@@ -2175,20 +2171,20 @@ function BrandingSection({
 
 function PayrollSection() {
   return (
-    <div className="payroll-section">
-      <p className="payroll-section__lead">
+    <div className="cs-payroll-section">
+      <p className="cs-payroll-section__lead">
         Connect a bank account to run provider payroll directly from your booking platform.
       </p>
-      <ul className="payroll-section__bullets">
+      <ul className="cs-payroll-section__bullets">
         <li>Calculate commissions per booking, service, or provider.</li>
         <li>Schedule weekly or biweekly payouts to provider bank accounts.</li>
         <li>Track tips, deductions, and 1099/contractor totals automatically.</li>
       </ul>
-      <div className="payroll-section__cta">
-        <button type="button" className="primary-action" disabled>
+      <div className="cs-payroll-section__cta">
+        <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" disabled>
           Connect bank account
         </button>
-        <p className="settings-permission-note">
+        <p className="cs-permission-note">
           Bank-account onboarding ships in a later release. We'll email you when it's ready.
         </p>
       </div>
@@ -2244,12 +2240,12 @@ function ClientOwnershipSection({
   const disabled = !canManageSettings || saveState.kind === "submitting";
 
   return (
-    <form className="settings-form client-ownership-section" onSubmit={handleSubmit}>
-      <p className="settings-form-help">
+    <form className="cs-form" onSubmit={handleSubmit}>
+      <p className="cs-field-help">
         When client ownership is on, providers can only see customers assigned to them. Owners and
         managers always see all customers.
       </p>
-      <label className="settings-toggle-field">
+      <label className="cs-toggle-field">
         <input
           type="checkbox"
           checked={clientOwnershipEnabled}
@@ -2264,7 +2260,7 @@ function ClientOwnershipSection({
           <small>Scope the customer list for non-manager roles to clients they own.</small>
         </span>
       </label>
-      <label className={`settings-toggle-field${!clientOwnershipEnabled ? " settings-toggle-field--disabled" : ""}`}>
+      <label className={`cs-toggle-field${!clientOwnershipEnabled ? " cs-toggle-field--disabled" : ""}`}>
         <input
           type="checkbox"
           checked={onlineAssignEnabled}
@@ -2281,15 +2277,15 @@ function ClientOwnershipSection({
         </span>
       </label>
 
-      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
-      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+      {saveState.kind === "success" ? <p role="status" className="cs-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="cs-error">{saveState.message}</p> : null}
 
-      <div className="settings-actions">
-        <button type="submit" className="primary-action" disabled={disabled}>
+      <div className="cs-actions">
+        <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={disabled}>
           {saveState.kind === "submitting" ? "Saving…" : "Save client ownership"}
         </button>
         {!canManageSettings ? (
-          <p className="settings-permission-note">You do not have permission to edit client ownership.</p>
+          <p className="cs-permission-note">You do not have permission to edit client ownership.</p>
         ) : null}
       </div>
     </form>
@@ -2374,12 +2370,12 @@ function CustomEmailSection({
   const verified = Boolean(tenant.settings.customEmail?.verified);
 
   return (
-    <form className="settings-form custom-email-section" onSubmit={handleSubmit}>
-      <p className="settings-form-help">
+    <form className="cs-form" onSubmit={handleSubmit}>
+      <p className="cs-field-help">
         Use your own domain for outgoing emails. After saving, add the DNS records below at your
         domain registrar.
       </p>
-      <label className="settings-field">
+      <label className="cs-field">
         <span>From address</span>
         <input
           type="text"
@@ -2389,7 +2385,7 @@ function CustomEmailSection({
           disabled={disabled}
         />
       </label>
-      <label className="settings-field">
+      <label className="cs-field">
         <span>Sending domain</span>
         <input
           type="text"
@@ -2400,25 +2396,25 @@ function CustomEmailSection({
         />
       </label>
 
-      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
-      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+      {saveState.kind === "success" ? <p role="status" className="cs-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="cs-error">{saveState.message}</p> : null}
 
-      <div className="settings-actions">
-        <button type="submit" className="primary-action" disabled={disabled}>
+      <div className="cs-actions">
+        <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={disabled}>
           {saveState.kind === "submitting" ? "Saving…" : "Save custom email"}
         </button>
         {!canManageSettings ? (
-          <p className="settings-permission-note">You do not have permission to edit custom email.</p>
+          <p className="cs-permission-note">You do not have permission to edit custom email.</p>
         ) : null}
       </div>
 
-      <div className="settings-subsection">
+      <div className="cs-settings-section">
         <h5>DNS records</h5>
-        {dnsError ? <p role="alert" className="settings-error">{dnsError}</p> : null}
+        {dnsError ? <p role="alert" className="cs-error">{dnsError}</p> : null}
         {dnsDomain === null || records.length === 0 ? (
-          <p className="settings-form-help">Save a sending domain to see the records you need to add.</p>
+          <p className="cs-field-help">Save a sending domain to see the records you need to add.</p>
         ) : (
-          <table className="settings-table">
+          <table className="cs-table">
             <thead>
               <tr>
                 <th>Type</th>
@@ -2437,11 +2433,11 @@ function CustomEmailSection({
             </tbody>
           </table>
         )}
-        <div className="settings-actions">
-          <button type="button" className="primary-action" disabled aria-disabled="true">
+        <div className="cs-actions">
+          <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" disabled aria-disabled="true">
             {verified ? "Verified" : "Verify"}
           </button>
-          <p className="settings-permission-note">Verification ships in a later release.</p>
+          <p className="cs-permission-note">Verification ships in a later release.</p>
         </div>
       </div>
     </form>
@@ -2516,12 +2512,12 @@ function WalletMembershipSection({
   const disabled = !canManageSettings || saveState.kind === "submitting";
 
   return (
-    <form className="settings-form wallet-membership-section" onSubmit={handleSubmit}>
-      <p className="settings-form-help">
+    <form className="cs-form" onSubmit={handleSubmit}>
+      <p className="cs-field-help">
         Toggle wallet credit and membership programs. Balances and tiers are not yet implemented;
         these flags reserve the capability for future releases.
       </p>
-      <label className="settings-toggle-field">
+      <label className="cs-toggle-field">
         <input
           type="checkbox"
           checked={walletEnabled}
@@ -2533,7 +2529,7 @@ function WalletMembershipSection({
           <small>Allow customer balances to be applied at checkout in a later release.</small>
         </span>
       </label>
-      <label className="settings-field">
+      <label className="cs-field">
         <span>Wallet credit expiration (months)</span>
         <input
           type="number"
@@ -2546,7 +2542,7 @@ function WalletMembershipSection({
           disabled={disabled || !walletEnabled}
         />
       </label>
-      <label className="settings-toggle-field">
+      <label className="cs-toggle-field">
         <input
           type="checkbox"
           checked={membershipEnabled}
@@ -2559,15 +2555,15 @@ function WalletMembershipSection({
         </span>
       </label>
 
-      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
-      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+      {saveState.kind === "success" ? <p role="status" className="cs-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="cs-error">{saveState.message}</p> : null}
 
-      <div className="settings-actions">
-        <button type="submit" className="primary-action" disabled={disabled}>
+      <div className="cs-actions">
+        <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={disabled}>
           {saveState.kind === "submitting" ? "Saving…" : "Save wallet & membership"}
         </button>
         {!canManageSettings ? (
-          <p className="settings-permission-note">You do not have permission to edit wallet & membership.</p>
+          <p className="cs-permission-note">You do not have permission to edit wallet & membership.</p>
         ) : null}
       </div>
     </form>
@@ -2632,22 +2628,22 @@ function PaymentMethodsSection({
   const disabled = !canManageSettings || saveState.kind === "submitting";
 
   return (
-    <form className="settings-form payment-methods-section" onSubmit={handleSave}>
-      <p className="settings-form-help">
+    <form className="cs-form" onSubmit={handleSave}>
+      <p className="cs-field-help">
         Define custom payment methods that appear in the checkout modal alongside built-in
         options (Cash, External POS, Manual/Card). These are saved per business and reusable.
       </p>
-      <div className="payment-methods-list">
+      <div className="cs-payment-methods-list">
         {methods.length === 0 ? (
-          <p className="staff-list-empty">No custom payment methods defined.</p>
+          <p className="cs-empty">No custom payment methods defined.</p>
         ) : (
           <ul>
             {methods.map((m) => (
-              <li key={m.id} className="payment-method-row">
+              <li key={m.id} className="cs-payment-method-row">
                 <span>{m.label}</span>
                 <button
                   type="button"
-                  className="text-action text-action--danger"
+                  className="cs-btn cs-btn--danger cs-btn--sm"
                   onClick={() => handleRemove(m.id)}
                   disabled={disabled}
                 >
@@ -2658,7 +2654,7 @@ function PaymentMethodsSection({
           </ul>
         )}
       </div>
-      <div className="payment-methods-add">
+      <div className="cs-payment-methods-add">
         <input
           type="text"
           placeholder="Method label (e.g. Venmo, Zelle)"
@@ -2668,7 +2664,7 @@ function PaymentMethodsSection({
         />
         <button
           type="button"
-          className="secondary-action"
+          className="cs-btn cs-btn--sm"
           onClick={handleAdd}
           disabled={disabled || !newLabel.trim()}
         >
@@ -2676,15 +2672,15 @@ function PaymentMethodsSection({
         </button>
       </div>
 
-      {saveState.kind === "success" ? <p role="status" className="settings-status">{saveState.message}</p> : null}
-      {saveState.kind === "error" ? <p role="alert" className="settings-error">{saveState.message}</p> : null}
+      {saveState.kind === "success" ? <p role="status" className="cs-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="cs-error">{saveState.message}</p> : null}
 
-      <div className="settings-actions">
-        <button type="submit" className="primary-action" disabled={disabled}>
+      <div className="cs-actions">
+        <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={disabled}>
           {saveState.kind === "submitting" ? "Saving…" : "Save payment methods"}
         </button>
         {!canManageSettings ? (
-          <p className="settings-permission-note">You do not have permission to edit payment methods.</p>
+          <p className="cs-permission-note">You do not have permission to edit payment methods.</p>
         ) : null}
       </div>
     </form>

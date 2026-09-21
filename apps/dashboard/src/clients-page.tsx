@@ -278,16 +278,16 @@ export function CustomersPage({
 
   if (!currentUser) {
     return (
-      <main className="ops-page-stack">
-        <p className="staff-list-empty">Sign in required</p>
+      <main className="cs-page-stack">
+        <p className="cs-empty">Sign in required</p>
       </main>
     );
   }
 
   if (!canView) {
     return (
-      <main className="ops-page-stack">
-        <p className="staff-list-empty">
+      <main className="cs-page-stack">
+        <p className="cs-empty">
           You do not have permission to view customers.
         </p>
       </main>
@@ -296,8 +296,8 @@ export function CustomersPage({
 
   if (loadState.kind === "error") {
     return (
-      <main className="ops-page-stack">
-        <div className="message-banner message-banner--error" role="alert">
+      <main className="cs-page-stack">
+        <div className="cs-banner cs-banner--error" role="alert">
           {loadState.message}
         </div>
       </main>
@@ -306,17 +306,17 @@ export function CustomersPage({
 
   if (selectedCustomer) {
     return (
-      <main className="ops-page-stack client-detail-page">
-        <nav className="client-detail-page__breadcrumb" aria-label="Breadcrumb">
+      <main className="cs-page-stack cs-client-detail-page">
+        <nav className="cs-client-detail-page__breadcrumb" aria-label="Breadcrumb">
           <button
             type="button"
-            className="client-detail-page__breadcrumb-link"
+            className="cs-client-detail-page__breadcrumb-link"
             onClick={() => setSelectedCustomerId(null)}
           >
             Clients
           </button>
-          <span className="client-detail-page__breadcrumb-sep">/</span>
-          <span className="client-detail-page__breadcrumb-current">
+          <span className="cs-client-detail-page__breadcrumb-sep">/</span>
+          <span className="cs-client-detail-page__breadcrumb-current">
             {selectedCustomer.name}
           </span>
         </nav>
@@ -329,7 +329,7 @@ export function CustomersPage({
 
         <ClientStatCards customer={selectedCustomer} profileState={profileState} />
 
-        <div className="client-detail-page__tabs" role="tablist">
+        <div className="cs-client-detail-page__tabs" role="tablist">
           {(
             [
               ["history", "History"],
@@ -344,7 +344,7 @@ export function CustomersPage({
               type="button"
               role="tab"
               aria-selected={activeTab === tab}
-              className={`client-detail-page__tab${
+              className={`cs-client-detail-page__tab${
                 activeTab === tab ? " is-active" : ""
               }`}
               onClick={() => setActiveTab(tab)}
@@ -354,7 +354,7 @@ export function CustomersPage({
           ))}
         </div>
 
-        <section className="client-detail-page__tab-panel">
+        <section className="cs-client-detail-page__tab-panel">
           {activeTab === "history" ? (
             <ClientHistoryTab profileState={profileState} />
           ) : activeTab === "forms" ? (
@@ -381,26 +381,26 @@ export function CustomersPage({
         {showEditInfo ? (
           <>
             <div
-              className="appointment-drawer-backdrop"
+              className="cs-drawer-backdrop cs-scrim"
               onClick={() => setShowEditInfo(false)}
             />
             <aside
-              className="appointment-details-drawer client-edit-drawer"
+              className="cs-drawer-legacy cs-drawer cs-drawer-shim cs-client-edit-drawer"
               role="dialog"
               aria-label="Edit client info"
             >
-              <header className="appointment-details-drawer__header">
-                <h3 className="client-edit-drawer__title">Edit client info</h3>
+              <header className="cs-drawer-legacy__header cs-drawer__head">
+                <h3 className="cs-client-edit-drawer__title">Edit client info</h3>
                 <button
                   type="button"
-                  className="appointment-drawer-close"
+                  className="cs-drawer-close-btn cs-drawer__close"
                   onClick={() => setShowEditInfo(false)}
                   aria-label="Close"
                 >
                   ×
                 </button>
               </header>
-              <div className="appointment-drawer-body">
+              <div className="cs-drawer-body cs-drawer__inner">
                 <ClientEditForm
                   customer={selectedCustomer}
                   tenantSlug={tenantSlug}
@@ -419,17 +419,17 @@ export function CustomersPage({
   }
 
   return (
-    <main className="ops-page-stack clients-page">
-      <header className="clients-page__header">
+    <main className="cs-page-stack cs-clients-page">
+      <header className="cs-clients-page__header">
         <div>
-          <h2 className="clients-page__title">{definition.title}</h2>
-          <p className="clients-page__subtitle">
+          <h2 className="cs-clients-page__title">{definition.title}</h2>
+          <p className="cs-clients-page__subtitle">
             {customers.length} client{customers.length === 1 ? "" : "s"}
           </p>
         </div>
         <input
           type="search"
-          className="clients-page__search"
+          className="cs-clients-page__search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search name, email, or phone"
@@ -438,27 +438,27 @@ export function CustomersPage({
       </header>
 
       {filteredCustomers.length === 0 ? (
-        <p className="staff-list-empty">No customers found.</p>
+        <p className="cs-empty">No customers found.</p>
       ) : (
-        <ul className="clients-page__grid">
+        <ul className="cs-clients-page__grid">
           {filteredCustomers.map((customer) => (
             <li key={customer.id}>
               <button
                 type="button"
-                className="clients-page__card"
+                className="cs-clients-page__card"
                 onClick={() => {
                   setActiveTab("history");
                   setSelectedCustomerId(customer.id);
                 }}
               >
-                <span className="clients-page__card-avatar" aria-hidden="true">
+                <span className="cs-clients-page__card-avatar" aria-hidden="true">
                   {initialsOf(customer.name)}
                 </span>
-                <span className="clients-page__card-info">
+                <span className="cs-clients-page__card-info">
                   <strong>{customer.name}</strong>
                   {customer.email ? <span>{customer.email}</span> : null}
                 </span>
-                <span className="clients-page__card-date">
+                <span className="cs-clients-page__card-date">
                   Since {formatDate(customer.createdAt)}
                 </span>
               </button>
@@ -489,13 +489,13 @@ function ClientProfileHeader({
     .join(", ");
 
   return (
-    <header className="client-profile-header">
-      <span className="client-profile-header__avatar" aria-hidden="true">
+    <header className="cs-client-profile-header">
+      <span className="cs-client-profile-header__avatar" aria-hidden="true">
         {initialsOf(customer.name)}
       </span>
-      <div className="client-profile-header__info">
-        <h2 className="client-profile-header__name">{customer.name}</h2>
-        <p className="client-profile-header__contact">
+      <div className="cs-client-profile-header__info">
+        <h2 className="cs-client-profile-header__name">{customer.name}</h2>
+        <p className="cs-client-profile-header__contact">
           {[
             customer.email,
             customer.phone,
@@ -505,19 +505,19 @@ function ClientProfileHeader({
             .join("  ·  ")}
         </p>
         {addressLine ? (
-          <p className="client-profile-header__address">{addressLine}</p>
+          <p className="cs-client-profile-header__address">{addressLine}</p>
         ) : null}
-        <div className="client-profile-header__tags">
+        <div className="cs-client-profile-header__tags">
           {customer.stripeCustomerId ? (
             <span
-              className="client-tag client-tag--mint"
+              className="cs-client-tag cs-client-tag--mint"
               title="Card details are stored by the payment processor. Showing card brand/last4/expiry is a future phase."
             >
               Card on file · details coming soon
             </span>
           ) : (
             <span
-              className="client-tag client-tag--muted"
+              className="cs-client-tag cs-client-tag--muted"
               title="Storing client card details is a future phase."
             >
               No card on file
@@ -525,25 +525,25 @@ function ClientProfileHeader({
           )}
           {profileState.kind === "ready" &&
           profileState.profile.outstandingBalanceCents > 0 ? (
-            <span className="client-tag client-tag--peach">
+            <span className="cs-client-tag cs-client-tag--peach">
               Balance due ·{" "}
               {formatMoneyFull(profileState.profile.outstandingBalanceCents)}
             </span>
           ) : null}
           {customer.blockedFromOnlineBooking ? (
-            <span className="client-tag client-tag--risk">
+            <span className="cs-client-tag cs-client-tag--risk">
               Blocked from online booking
             </span>
           ) : null}
         </div>
       </div>
-      <div className="client-profile-header__actions">
-        <a className="client-profile-header__cta" href="/calendar">
+      <div className="cs-client-profile-header__actions">
+        <a className="cs-client-profile-header__cta" href="/calendar">
           Book from calendar
         </a>
         <button
           type="button"
-          className="client-profile-header__edit"
+          className="cs-client-profile-header__edit"
           onClick={onEdit}
         >
           Edit client info
@@ -565,22 +565,22 @@ function ClientStatCards({
   const visits = ready ? ready.bookings.length : 0;
   const wallet = customer.walletBalanceCents ?? 0;
   return (
-    <div className="client-stat-cards">
-      <div className="client-stat-card client-stat-card--mint">
-        <span className="client-stat-card__label">Visits</span>
-        <span className="client-stat-card__value">
+    <div className="cs-client-stat-cards">
+      <div className="cs-client-stat-card cs-client-stat-card--mint">
+        <span className="cs-client-stat-card__label">Visits</span>
+        <span className="cs-client-stat-card__value">
           {profileState.kind === "ready" ? visits : "–"}
         </span>
       </div>
-      <div className="client-stat-card client-stat-card--blue">
-        <span className="client-stat-card__label">Wallet</span>
-        <span className="client-stat-card__value">
+      <div className="cs-client-stat-card cs-client-stat-card--blue">
+        <span className="cs-client-stat-card__label">Wallet</span>
+        <span className="cs-client-stat-card__value">
           {formatMoney(wallet)}
         </span>
       </div>
-      <div className="client-stat-card client-stat-card--lilac">
-        <span className="client-stat-card__label">Lifetime</span>
-        <span className="client-stat-card__value">
+      <div className="cs-client-stat-card cs-client-stat-card--lilac">
+        <span className="cs-client-stat-card__label">Lifetime</span>
+        <span className="cs-client-stat-card__value">
           {profileState.kind === "ready" ? formatMoney(lifetime) : "–"}
         </span>
       </div>
@@ -590,26 +590,26 @@ function ClientStatCards({
 
 function ClientHistoryTab({ profileState }: { profileState: ProfileState }) {
   if (profileState.kind === "loading") {
-    return <p className="staff-list-empty">Loading bookings…</p>;
+    return <p className="cs-empty">Loading bookings…</p>;
   }
   if (profileState.kind === "error") {
     return (
-      <div className="message-banner message-banner--error" role="alert">
+      <div className="cs-banner cs-banner--error" role="alert">
         {profileState.message}
       </div>
     );
   }
   if (profileState.kind !== "ready") {
-    return <p className="staff-list-empty">No booking history.</p>;
+    return <p className="cs-empty">No booking history.</p>;
   }
   const bookings = [...profileState.profile.bookings].sort(
     (a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime(),
   );
   if (bookings.length === 0) {
-    return <p className="staff-list-empty">No bookings yet.</p>;
+    return <p className="cs-empty">No bookings yet.</p>;
   }
   return (
-    <ul className="client-history-list">
+    <ul className="cs-client-history-list">
       {bookings.map((booking) => (
         <ClientHistoryRow key={booking.id} booking={booking} />
       ))}
@@ -621,35 +621,35 @@ function ClientHistoryRow({ booking }: { booking: CustomerBookingEntry }) {
   const badge = historyBadge(booking);
   return (
     <li
-      className={`client-history-row${
+      className={`cs-client-history-row${
         booking.status === "canceled" ? " is-muted" : ""
       }`}
     >
-      <span className="client-history-row__date">
-        <strong className="client-history-row__day">
+      <span className="cs-client-history-row__date">
+        <strong className="cs-client-history-row__day">
           {dayNumber(booking.startsAt)}
         </strong>
-        <span className="client-history-row__month">
+        <span className="cs-client-history-row__month">
           {monthLabel(booking.startsAt)}
         </span>
       </span>
       <a
-        className="client-history-row__body"
+        className="cs-client-history-row__body"
         href={`/calendar?bookingId=${booking.id}`}
       >
-        <strong className="client-history-row__title">
+        <strong className="cs-client-history-row__title">
           {booking.serviceName}
         </strong>
-        <span className="client-history-row__meta">
+        <span className="cs-client-history-row__meta">
           {booking.providerName} · {formatDateTime(booking.startsAt)}
         </span>
       </a>
       {badge !== null ? (
-        <span className={`client-history-row__badge client-history-row__badge--${badge.tone}`}>
+        <span className={`cs-client-history-row__badge cs-client-history-row__badge--${badge.tone}`}>
           {badge.label}
         </span>
       ) : (
-        <span className="client-history-row__amount">
+        <span className="cs-client-history-row__amount">
           {formatMoneyFull(booking.priceCents)}
         </span>
       )}
@@ -696,51 +696,51 @@ function ClientFormsTab({
   };
 
   if (formResponsesState.kind === "loading") {
-    return <p className="staff-list-empty">Loading form responses…</p>;
+    return <p className="cs-empty">Loading form responses…</p>;
   }
   if (formResponsesState.kind === "error") {
     return (
-      <div className="message-banner message-banner--error" role="alert">
+      <div className="cs-banner cs-banner--error" role="alert">
         {formResponsesState.message}
       </div>
     );
   }
   if (formResponsesState.kind !== "ready") {
-    return <p className="staff-list-empty">No form responses.</p>;
+    return <p className="cs-empty">No form responses.</p>;
   }
   if (formResponsesState.items.length === 0) {
-    return <p className="staff-list-empty">No form responses yet.</p>;
+    return <p className="cs-empty">No form responses yet.</p>;
   }
   return (
-    <ul className="client-history-list">
+    <ul className="cs-client-history-list">
       {formResponsesState.items.map((response) => (
-        <li key={response.id} className="client-history-row">
-          <span className="client-history-row__date">
-            <strong className="client-history-row__day">
+        <li key={response.id} className="cs-client-history-row">
+          <span className="cs-client-history-row__date">
+            <strong className="cs-client-history-row__day">
               {dayNumber(response.submittedAt)}
             </strong>
-            <span className="client-history-row__month">
+            <span className="cs-client-history-row__month">
               {monthLabel(response.submittedAt)}
             </span>
           </span>
-          <div className="client-history-row__body">
-            <strong className="client-history-row__title">
+          <div className="cs-client-history-row__body">
+            <strong className="cs-client-history-row__title">
               {response.formName}
             </strong>
-            <span className="client-history-row__meta">
+            <span className="cs-client-history-row__meta">
               {formatDateTime(response.submittedAt)} · v
               {response.formVersionNumber}
             </span>
             <button
               type="button"
-              className="customer-form-response-row__toggle"
+              className="cs-customer-form-response-row__toggle"
               aria-expanded={expandedFormIds.has(response.id)}
               onClick={() => toggle(response.id)}
             >
               {expandedFormIds.has(response.id) ? "Hide answers" : "View answers"}
             </button>
             {expandedFormIds.has(response.id) ? (
-              <div className="customer-form-response-row__viewer">
+              <div className="cs-customer-form-response-row__viewer">
                 <FormResponseViewer response={response} />
               </div>
             ) : null}
@@ -783,9 +783,9 @@ function ClientNotesTab({
   };
 
   return (
-    <div className="client-notes-tab">
+    <div className="cs-client-notes-tab">
       {isEditing ? (
-        <div className="customer-notes-editor">
+        <div className="cs-customer-notes-editor">
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -793,10 +793,10 @@ function ClientNotesTab({
             placeholder="Add notes about this client..."
             disabled={saveState === "submitting"}
           />
-          <div className="customer-notes-editor__actions">
+          <div className="cs-customer-notes-editor__actions">
             <button
               type="button"
-              className="text-action"
+              className="cs-btn cs-btn--ghost cs-btn--sm"
               onClick={() => {
                 setIsEditing(false);
                 setDraft(customer.notes ?? "");
@@ -808,7 +808,7 @@ function ClientNotesTab({
             </button>
             <button
               type="button"
-              className="primary-action"
+              className="cs-btn cs-btn--primary cs-btn--sm"
               onClick={handleSave}
               disabled={saveState === "submitting"}
             >
@@ -816,21 +816,21 @@ function ClientNotesTab({
             </button>
           </div>
           {saveState === "error" ? (
-            <p role="alert" className="settings-error">
+            <p role="alert" className="cs-settings-error">
               {error}
             </p>
           ) : null}
         </div>
       ) : (
-        <div className="client-notes-tab__empty">
+        <div className="cs-client-notes-tab__empty">
           {customer.notes ? (
-            <p className="customer-profile-notes">{customer.notes}</p>
+            <p className="cs-customer-profile-notes">{customer.notes}</p>
           ) : (
-            <p className="staff-list-empty">No notes yet.</p>
+            <p className="cs-empty">No notes yet.</p>
           )}
           <button
             type="button"
-            className="primary-action"
+            className="cs-btn cs-btn--primary cs-btn--sm"
             onClick={() => {
               setDraft(customer.notes ?? "");
               setIsEditing(true);
@@ -897,8 +897,8 @@ function ClientEditForm({
   };
 
   return (
-    <div className="customer-notes-editor client-edit-form">
-      <label className="client-edit-form__field">
+    <div className="cs-customer-notes-editor cs-client-edit-form">
+      <label className="cs-client-edit-form__field">
         <span>Name</span>
         <input
           type="text"
@@ -908,7 +908,7 @@ function ClientEditForm({
           autoComplete="name"
         />
       </label>
-      <label className="client-edit-form__field">
+      <label className="cs-client-edit-form__field">
         <span>Email</span>
         <input
           type="email"
@@ -918,7 +918,7 @@ function ClientEditForm({
           autoComplete="email"
         />
       </label>
-      <label className="client-edit-form__field">
+      <label className="cs-client-edit-form__field">
         <span>Phone</span>
         <input
           type="tel"
@@ -928,7 +928,7 @@ function ClientEditForm({
           autoComplete="tel"
         />
       </label>
-      <label className="client-edit-form__field">
+      <label className="cs-client-edit-form__field">
         <span>Street address</span>
         <input
           type="text"
@@ -940,8 +940,8 @@ function ClientEditForm({
           autoComplete="street-address"
         />
       </label>
-      <div className="client-edit-form__row">
-        <label className="client-edit-form__field">
+      <div className="cs-client-edit-form__row">
+        <label className="cs-client-edit-form__field">
           <span>City</span>
           <input
             type="text"
@@ -952,7 +952,7 @@ function ClientEditForm({
             disabled={saveState === "submitting"}
           />
         </label>
-        <label className="client-edit-form__field">
+        <label className="cs-client-edit-form__field">
           <span>State</span>
           <input
             type="text"
@@ -963,7 +963,7 @@ function ClientEditForm({
             disabled={saveState === "submitting"}
           />
         </label>
-        <label className="client-edit-form__field">
+        <label className="cs-client-edit-form__field">
           <span>ZIP</span>
           <input
             type="text"
@@ -975,10 +975,10 @@ function ClientEditForm({
           />
         </label>
       </div>
-      <div className="customer-notes-editor__actions">
+      <div className="cs-customer-notes-editor__actions">
         <button
           type="button"
-          className="text-action"
+          className="cs-btn cs-btn--ghost cs-btn--sm"
           onClick={onCancel}
           disabled={saveState === "submitting"}
         >
@@ -986,7 +986,7 @@ function ClientEditForm({
         </button>
         <button
           type="button"
-          className="primary-action"
+          className="cs-btn cs-btn--primary cs-btn--sm"
           onClick={handleSave}
           disabled={saveState === "submitting"}
         >
@@ -994,7 +994,7 @@ function ClientEditForm({
         </button>
       </div>
       {saveState === "error" ? (
-        <p role="alert" className="settings-error">
+        <p role="alert" className="cs-settings-error">
           {error}
         </p>
       ) : null}
@@ -1010,9 +1010,9 @@ function ClientPlaceholderTab({
   message: string;
 }) {
   return (
-    <div className="client-placeholder-tab">
-      <h4 className="client-placeholder-tab__title">{title}</h4>
-      <p className="client-placeholder-tab__message">{message}</p>
+    <div className="cs-client-placeholder-tab">
+      <h4 className="cs-client-placeholder-tab__title">{title}</h4>
+      <p className="cs-client-placeholder-tab__message">{message}</p>
     </div>
   );
 }

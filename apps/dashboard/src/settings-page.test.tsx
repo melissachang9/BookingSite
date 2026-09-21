@@ -245,7 +245,7 @@ describe("SettingsPage", () => {
     );
 
     fireEvent.click(screen.getByLabelText(/^set business hours$/i));
-    expect(screen.getByLabelText(/monday open/i)).toBeEnabled();
+    expect(screen.getByLabelText(/monday open hour/i)).toBeEnabled();
     fireEvent.click(screen.getByLabelText(/only allow providers to offer services/i));
     fireEvent.click(screen.getByRole("button", { name: /save business hours/i }));
 
@@ -411,8 +411,8 @@ describe("SettingsPage", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /enable client ownership/i }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /assign owner on online bookings/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /^enable client ownership/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /^assign owner on online bookings/i }));
     fireEvent.click(screen.getByRole("button", { name: /save client ownership/i }));
 
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));

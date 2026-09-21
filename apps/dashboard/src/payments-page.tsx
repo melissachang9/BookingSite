@@ -319,63 +319,63 @@ export function PaymentsPage({
   };
 
   return (
-    <main className="ops-page-stack">
-      <section className="ops-hero ops-hero--compact">
-        <div className="ops-hero-copy">
-          <p className="eyebrow">{definition.eyebrow}</p>
+    <main className="cs-page-stack">
+      <section className="cs-hero cs-hero--compact">
+        <div className="cs-hero__copy">
+          <p className="cs-eyebrow">{definition.eyebrow}</p>
           <h3>Keep unpaid deposits from going cold.</h3>
           <p>{definition.description}</p>
         </div>
-        <div className="ops-hero-panel">
-          <p className="eyebrow">Deposit queue</p>
+        <div className="cs-hero__panel">
+          <p className="cs-eyebrow">Deposit queue</p>
           <strong>{followUpState.kind === "ready" ? `${followUpState.items.length} awaiting payment` : definition.metric}</strong>
           <span>Operators can send or prepare deposit reminders without losing tenant context.</span>
         </div>
       </section>
 
-      <section className="catalog-layout">
-        <article className="ops-panel">
-          <div className="panel-title-row">
+      <section className="cs-catalog-layout">
+        <article className="cs-panel-card">
+          <div className="cs-panel-title-row">
             <div>
-              <p className="eyebrow">Deposit follow-up</p>
+              <p className="cs-eyebrow">Deposit follow-up</p>
               <h4>Outstanding payment links</h4>
             </div>
             {followUpState.kind === "ready" ? (
-              <span className="status-chip status-chip--progress">{followUpState.items.length} drafts</span>
+              <span className="cs-status-chip cs-status-chip--progress">{followUpState.items.length} drafts</span>
             ) : null}
           </div>
 
           {actionState.kind !== "idle" ? (
-            <div className={actionState.kind === "error" ? "message-banner message-banner--error" : "message-banner"}>
+            <div className={actionState.kind === "error" ? "cs-banner cs-banner--error" : "cs-banner"}>
               {actionState.kind === "submitting" ? "Preparing outreach..." : actionState.message}
             </div>
           ) : null}
 
           {!canManagePayments && canViewPayments ? (
-            <div className="message-banner message-banner--muted">Your role can review payment follow-up work, but it cannot send reminders, reopen links, or draft outreach.</div>
+            <div className="cs-banner cs-banner--muted">Your role can review payment follow-up work, but it cannot send reminders, reopen links, or draft outreach.</div>
           ) : null}
 
           {followUpState.kind === "loading" ? (
-            <div className="calendar-state">Loading payment follow-up queue...</div>
+            <div className="cs-empty">Loading payment follow-up queue...</div>
           ) : followUpState.kind === "error" ? (
-            <div className="calendar-state calendar-state--muted">{followUpState.message}</div>
+            <div className="cs-empty cs-empty--muted">{followUpState.message}</div>
           ) : followUpState.items.length === 0 ? (
-            <div className="calendar-state calendar-state--muted">No deposit follow-up work is waiting right now.</div>
+            <div className="cs-empty cs-empty--muted">No deposit follow-up work is waiting right now.</div>
           ) : (
-            <div className="service-catalog-list">
+            <div className="cs-service-catalog-list">
               {followUpState.items.map((item) => (
-                <article key={item.bookingDraft.id} className="service-catalog-card">
-                  <div className="panel-title-row">
+                <article key={item.bookingDraft.id} className="cs-service-catalog-card">
+                  <div className="cs-panel-title-row">
                     <div>
-                      <p className="eyebrow">Deposit follow-up</p>
+                      <p className="cs-eyebrow">Deposit follow-up</p>
                       <h5>{item.bookingDraft.customer?.name ?? item.bookingDraft.customer?.email ?? item.bookingDraft.service.name}</h5>
                     </div>
-                    <span className={`status-chip status-chip--${getPaymentLinkTone(item)}`}>{getPaymentLinkLabel(item)}</span>
+                    <span className={`cs-status-chip cs-status-chip--${getPaymentLinkTone(item)}`}>{getPaymentLinkLabel(item)}</span>
                   </div>
                   <p>
                     {item.bookingDraft.service.name} with {item.bookingDraft.provider.name} on {formatDateTime(item.bookingDraft.startsAt)}.
                   </p>
-                  <dl className="service-stats">
+                  <dl className="cs-service-stats">
                     <div>
                       <dt>Deposit due</dt>
                       <dd>{formatMoney(item.bookingDraft.depositCents)}</dd>
@@ -389,14 +389,14 @@ export function PaymentsPage({
                       <dd>{item.bookingDraft.customer?.email ?? "Missing email"}</dd>
                     </div>
                   </dl>
-                  <div className="catalog-location-list">
-                    <span className="status-chip status-chip--planned">{item.bookingDraft.provider.name}</span>
-                    <span className="status-chip status-chip--planned">{item.paymentStatus ?? "pending"}</span>
+                  <div className="cs-catalog-location-list">
+                    <span className="cs-status-chip cs-status-chip--planned">{item.bookingDraft.provider.name}</span>
+                    <span className="cs-status-chip cs-status-chip--planned">{item.paymentStatus ?? "pending"}</span>
                   </div>
-                  <div className="action-row">
+                  <div className="cs-action-row">
                     <button
                       type="button"
-                      className="primary-action"
+                      className="cs-btn cs-btn--primary cs-btn--sm"
                       disabled={
                         !canManagePayments ||
                         !item.bookingDraft.customer?.email ||
@@ -412,7 +412,7 @@ export function PaymentsPage({
                     </button>
                     <button
                       type="button"
-                      className="secondary-action"
+                      className="cs-btn cs-btn--sm"
                       disabled={!canManagePayments || (actionState.kind === "submitting" && actionState.bookingDraftId === item.bookingDraft.id)}
                       onClick={() => {
                         void handleOpenCheckoutLink(item);
@@ -422,7 +422,7 @@ export function PaymentsPage({
                     </button>
                     <button
                       type="button"
-                      className="secondary-action"
+                      className="cs-btn cs-btn--sm"
                       disabled={
                         !canManagePayments ||
                         !item.bookingDraft.customer?.email ||
@@ -436,7 +436,7 @@ export function PaymentsPage({
                     </button>
                     <button
                       type="button"
-                      className="secondary-action"
+                      className="cs-btn cs-btn--sm"
                       disabled={!canManagePayments || (actionState.kind === "submitting" && actionState.bookingDraftId === item.bookingDraft.id)}
                       onClick={() => {
                         void handleCopyCheckoutLink(item);
@@ -448,7 +448,7 @@ export function PaymentsPage({
                       href={`${storefrontBaseUrl}/${tenantSlug}/book/${item.bookingDraft.id}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="secondary-action"
+                      className="cs-btn cs-btn--sm"
                     >
                       Open booking review
                     </a>
@@ -459,10 +459,10 @@ export function PaymentsPage({
           )}
         </article>
 
-        <aside className="ops-panel">
-          <p className="eyebrow">Operator steps</p>
+        <aside className="cs-panel-card">
+          <p className="cs-eyebrow">Operator steps</p>
           <h4>Handle unpaid deposits</h4>
-          <ul className="check-list">
+          <ul className="cs-check-list">
             <li>Review drafts that are still waiting on deposit payment.</li>
             <li>Send a real reminder email from the backend, or open, copy, and draft outreach with a current hosted checkout link when needed.</li>
             <li>Jump into the storefront booking review when the operator needs the exact public context.</li>

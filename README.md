@@ -27,7 +27,7 @@ The root Compose file is the main entry point for running the new stack.
 │   └── storefront/             # Next.js public booking app
 ├── packages/
 │   ├── shared-types/           # Shared frontend contracts
-│   └── ui-components/          # Shared UI primitives
+│   └── api-client/            # Shared API client
 ├── docker-compose.yml          # New stack orchestration
 └── AGENTS.md
 ```

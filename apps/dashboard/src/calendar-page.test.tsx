@@ -1,10 +1,11 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   BookingDraftSummary,
   BookingFormResponseEntry,
   BookingSummary,
   CustomerLookupResponse,
+  CustomerProfileResponse,
   ProviderListResponse,
   ServiceListResponse,
   SlotAvailability,
@@ -28,6 +29,7 @@ const baseBooking = {
   endsAt: "2026-05-27T18:00:00.000Z",
   notes: null,
   amountPaidCents: 2500,
+  taxCents: 0,
   balanceDueCents: 7500,
   customerManageToken: "manage-token-1",
   service: {
@@ -42,6 +44,7 @@ const baseBooking = {
     cleanupBufferMinutes: 0,
     priceCents: 10000,
     depositCents: 2500,
+    requireCardOnFile: false,
     isActive: true,
     imageUrl: null,
     imageAltText: null,
@@ -80,6 +83,14 @@ const baseBooking = {
 
 const serviceResponse: ServiceListResponse = {
   services: [baseBooking.service],
+};
+
+const customerProfileResponse: CustomerProfileResponse = {
+  customer: baseBooking.customer,
+  bookings: [],
+  payments: [],
+  lifetimeSpendCents: 32500,
+  outstandingBalanceCents: 0,
 };
 
 const baseDraftSummary: BookingDraftSummary = {
@@ -151,9 +162,13 @@ function createApi(
     listServices: vi.fn().mockResolvedValue({
       services,
     }),
+    getBooking: vi.fn().mockResolvedValue(baseBooking),
+    getCustomerProfile: vi.fn().mockResolvedValue(customerProfileResponse),
+    listServiceCategories: vi.fn().mockResolvedValue({ categories: [] }),
     listServiceProviders: vi.fn(async (_tenantSlug, serviceId) => ({
       providers: options.providersByServiceId?.[serviceId] ?? [baseBooking.provider],
     })),
+    listProviderTimeOff: vi.fn().mockResolvedValue({ items: [] }),
     getAvailability: vi.fn(async (request) => ({
       days: [
         {
@@ -194,9 +209,18 @@ function createApi(
       checkoutUrl: "http://127.0.0.1:3001/cancel/manage-token-1/payment/session-1",
       sessionId: "session-1",
     }),
+    updateTenantSettings: vi.fn().mockResolvedValue({}),
     updateCustomer: vi.fn().mockResolvedValue(baseBooking.customer),
   };
 }
+
+afterEach(() => {
+  cleanup();
+  window.localStorage.removeItem("calendar.viewMode");
+  vi.clearAllTimers();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 describe("CalendarPage", () => {
   it("shows appointment details when selecting a booked visit", async () => {
@@ -206,7 +230,7 @@ describe("CalendarPage", () => {
     try {
       const api = createApi([baseBooking]);
 
-      render(
+      const { container } = render(
         <CalendarPage
           definition={{
             eyebrow: "Calendar-first booking",
@@ -217,18 +241,17 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
+      expect(await screen.findByText("24 – 30 May")).toBeInTheDocument();
       expect(screen.queryByRole("dialog", { name: "Appointment details" })).not.toBeInTheDocument();
-      expect(screen.getAllByText("Intake not checked").length).toBeGreaterThan(0);
 
       fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
 
       expect(await screen.findByRole("dialog", { name: "Appointment details" })).toBeInTheDocument();
       const dialog = screen.getByRole("dialog", { name: "Appointment details" });
-      // Customer section
       expect(within(dialog).getAllByText("Taylor Guest").length).toBeGreaterThan(0);
-      // Status chip
-      expect(within(dialog).getByText("Confirmed")).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: "Profile" })).toBeInTheDocument();
+      expect(within(dialog).getByRole("tab", { name: "History" })).toBeInTheDocument();
+      expect(within(dialog).getByText("$325.00")).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: "Close" }));
       expect(screen.queryByRole("dialog", { name: "Appointment details" })).not.toBeInTheDocument();
@@ -243,15 +266,20 @@ describe("CalendarPage", () => {
 
     try {
       const opening = {
-        startAt: "2026-05-27T19:00:00.000Z",
-        endAt: "2026-05-27T20:00:00.000Z",
+        startAt: "2026-05-27T17:00:00.000Z",
+        endAt: "2026-05-27T18:00:00.000Z",
         providerId: "provider-1",
         providerName: "Jordan Rivera",
         locationId: "location-1",
       } satisfies SlotAvailability;
+      const afternoonOpening = {
+        ...opening,
+        startAt: "2026-05-27T19:00:00.000Z",
+        endAt: "2026-05-27T20:00:00.000Z",
+      } satisfies SlotAvailability;
       const api = createApi([], {
         openingsByDate: {
-          "2026-05-27": [opening],
+          "2026-05-27": [opening, afternoonOpening],
         },
       });
 
@@ -266,16 +294,15 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
+      expect(await screen.findByText("24 – 30 May")).toBeInTheDocument();
 
-      // Wait for availability load to finish painting unavailable bands.
-      expect(await screen.findByLabelText("Availability for")).toHaveValue("");
+      expect(await screen.findByLabelText("Availability for")).toHaveAttribute("aria-expanded", "false");
 
       expect(screen.queryByRole("button", { name: /Start booking/i })).not.toBeInTheDocument();
       expect(screen.queryByText(/Create draft from selected opening/i)).not.toBeInTheDocument();
 
       await vi.waitFor(() => {
-        expect(container.querySelectorAll(".schedule-unavailable").length).toBeGreaterThan(0);
+        expect(container.querySelectorAll(".cs-hatch").length).toBeGreaterThan(0);
       });
     } finally {
       vi.useRealTimers();
@@ -323,8 +350,8 @@ describe("CalendarPage", () => {
       fireEvent.click(await screen.findByRole("gridcell", { name: "Wed, May 27" }));
       fireEvent.click(await screen.findByRole("button", { name: "Day" }));
 
-      expect(await screen.findByLabelText("Jordan Rivera column")).toBeInTheDocument();
-      expect(screen.getByLabelText("Taylor Stone column")).toBeInTheDocument();
+      expect(await screen.findByText("Jordan Rivera")).toBeInTheDocument();
+      expect(screen.getByText("Taylor Stone")).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
@@ -368,17 +395,19 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
+      expect(await screen.findByText("24 – 30 May")).toBeInTheDocument();
       expect(await screen.findByRole("button", { name: /Taylor Guest booked/i })).toBeInTheDocument();
       expect(await screen.findByRole("button", { name: /Morgan Ellis booked/i })).toBeInTheDocument();
 
-      fireEvent.change(screen.getByLabelText("Show provider"), { target: { value: "provider-2" } });
+      fireEvent.click(screen.getByRole("button", { name: "Staff filter" }));
+      fireEvent.click(screen.getByRole("menuitemradio", { name: /Taylor Stone/ }));
 
       expect(screen.queryByRole("button", { name: /Taylor Guest booked/i })).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Morgan Ellis booked/i })).toBeInTheDocument();
-      expect(container.querySelector(".schedule-day-track__empty")).toBeNull();
+      expect(container.querySelector(".cs-col")).not.toBeNull();
 
-      fireEvent.change(screen.getByLabelText("Show provider"), { target: { value: "" } });
+      fireEvent.click(screen.getByRole("button", { name: "Staff filter" }));
+      fireEvent.click(screen.getByRole("menuitemradio", { name: /All staff/ }));
 
       expect(screen.getByRole("button", { name: /Taylor Guest booked/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Morgan Ellis booked/i })).toBeInTheDocument();
@@ -405,11 +434,12 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
-      const providerSelect = await screen.findByLabelText("Show provider");
-      expect(providerSelect).toHaveValue("");
-      expect(screen.getByRole("option", { name: "All providers" })).toBeInTheDocument();
-      expect(screen.getByRole("option", { name: "Jordan Rivera" })).toBeInTheDocument();
+      expect(await screen.findByText("24 – 30 May")).toBeInTheDocument();
+      const providerFilter = await screen.findByRole("button", { name: "Staff filter" });
+      expect(providerFilter).toHaveAttribute("aria-expanded", "false");
+      fireEvent.click(providerFilter);
+      expect(screen.getByRole("menuitemradio", { name: /All staff/ })).toHaveAttribute("aria-checked", "true");
+      expect(screen.getByRole("menuitemradio", { name: /Jordan Rivera/ })).toBeInTheDocument();
 
       await vi.waitFor(() => {
         expect(api.listServiceProviders).toHaveBeenCalledWith("brow-beauty-lab", "service-1");
@@ -448,27 +478,23 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
-
-      await vi.waitFor(() => {
-        expect(container.querySelectorAll(".schedule-unavailable").length).toBeGreaterThan(0);
-      });
-
-      fireEvent.click(screen.getByLabelText("Wed schedule track"));
+      expect(await screen.findByText("24 – 30 May")).toBeInTheDocument();
+      fireEvent.click(await screen.findByLabelText("Wed schedule track"));
 
       expect(await screen.findByRole("dialog", { name: "Calendar slot actions" })).toBeInTheDocument();
-      expect(screen.getByLabelText("Provider")).toHaveValue("Jordan Rivera");
-      expect(screen.getByLabelText("Appointment duration")).toHaveValue("1 hr");
+      const dialog = screen.getByRole("dialog", { name: "Calendar slot actions" });
+      expect(within(dialog).getByText(/Jordan Rivera.*12:00 PM - 1:00 PM/)).toBeInTheDocument();
+      expect(within(dialog).getByText("1 hr")).toBeInTheDocument();
 
-      fireEvent.change(screen.getByLabelText("Client name"), { target: { value: "Tay" } });
+      fireEvent.change(within(dialog).getByPlaceholderText("Search clients — type a name"), { target: { value: "Tay" } });
 
       await vi.waitFor(() => {
-        expect(screen.getByLabelText("Client name")).toHaveValue("Taylor Guest");
-        expect(screen.getByLabelText("Email")).toHaveValue("guest@example.com");
-        expect(screen.getByLabelText("Phone number")).toHaveValue("555-0100");
+        expect(within(dialog).getByRole("button", { name: /Taylor Guest/ })).toBeInTheDocument();
       });
+      fireEvent.click(within(dialog).getByRole("button", { name: /Taylor Guest/ }));
+      expect(within(dialog).getByText("guest@example.com · 555-0100")).toBeInTheDocument();
 
-      fireEvent.click(screen.getByRole("button", { name: "Book appointment" }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "Book & send confirmation" }));
 
       await vi.waitFor(() => {
         expect(api.createBookingDraft).toHaveBeenCalledWith({
@@ -493,6 +519,7 @@ describe("CalendarPage", () => {
   it("updates appointment duration from appointment type and books the edited start time", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
 
     try {
       const waxingService = {
@@ -526,26 +553,40 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
+      expect(await screen.findByText("24 – 30 May")).toBeInTheDocument();
       fireEvent.click(screen.getByRole("gridcell", { name: "Wed, May 27" }));
       fireEvent.click(screen.getByRole("button", { name: "Day" }));
 
+      const providerTrack = await screen.findByLabelText("Jordan Rivera schedule track");
       await vi.waitFor(() => {
-        expect(container.querySelectorAll(".schedule-unavailable").length).toBeGreaterThan(0);
+        expect(providerTrack).toHaveAttribute("role", "button");
       });
+      fireEvent.click(providerTrack);
 
-      fireEvent.click(await screen.findByLabelText("Jordan Rivera schedule track"));
+      const dialog = await screen.findByRole("dialog", { name: "Calendar slot actions" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Change time" }));
+      fireEvent.change(within(dialog).getByDisplayValue("12:00"), { target: { value: "13:15" } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Treatment" }));
+      fireEvent.click(within(dialog).getByRole("option", { name: "Waxing" }));
 
-      expect(await screen.findByRole("dialog", { name: "Calendar slot actions" })).toBeInTheDocument();
-      fireEvent.change(screen.getByLabelText("Start time"), { target: { value: "13:15" } });
-      fireEvent.change(screen.getByLabelText("Appointment type"), { target: { value: "service-2" } });
+      expect(within(dialog).getByText("30 min")).toBeInTheDocument();
 
-      expect(screen.getByLabelText("Appointment duration")).toHaveValue("30 min");
+      fireEvent.change(within(dialog).getByPlaceholderText("Search clients — type a name"), { target: { value: "New Client" } });
+      fireEvent.click(await within(dialog).findByRole("button", { name: /^Add new client/ }));
+      fireEvent.change(within(dialog).getByPlaceholderText("First name"), { target: { value: "New" } });
+      fireEvent.change(within(dialog).getByPlaceholderText("Last name"), { target: { value: "Client" } });
+      fireEvent.change(within(dialog).getByPlaceholderText("Email"), { target: { value: "new-client@example.com" } });
+      fireEvent.change(within(dialog).getByPlaceholderText("Phone"), { target: { value: "555-0144" } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Create client" }));
 
-      fireEvent.change(screen.getByLabelText("Client name"), { target: { value: "New Client" } });
-      fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new-client@example.com" } });
-      fireEvent.change(screen.getByLabelText("Phone number"), { target: { value: "555-0144" } });
-      fireEvent.click(screen.getByRole("button", { name: "Book appointment" }));
+      await vi.waitFor(() => {
+        expect(api.createOrUpdateCustomer).toHaveBeenCalled();
+      });
+      const bookButton = within(dialog).getByRole("button", { name: "Book & send confirmation" });
+      await vi.waitFor(() => {
+        expect(bookButton).toBeEnabled();
+      });
+      fireEvent.click(bookButton);
 
       await vi.waitFor(() => {
         expect(api.createBookingDraft).toHaveBeenCalledWith({
@@ -560,9 +601,11 @@ describe("CalendarPage", () => {
             phone: "555-0144",
           },
           bookingMethod: "staff_entered",
+          overrideAvailability: true,
         });
       });
     } finally {
+      confirmSpy.mockRestore();
       vi.useRealTimers();
     }
   });
@@ -585,13 +628,13 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
+      expect(await screen.findByText("24 – 30 May")).toBeInTheDocument();
       expect(screen.getByText("May 2026")).toBeInTheDocument();
 
       const juneFourth = screen.getByRole("gridcell", { name: "Thu, Jun 4" });
       fireEvent.click(juneFourth);
 
-      expect(await screen.findByText("Sun, May 31 - Sat, Jun 6")).toBeInTheDocument();
+      expect(await screen.findByText("31 May – 6 June")).toBeInTheDocument();
       expect(juneFourth).toHaveAttribute("aria-pressed", "true");
     } finally {
       vi.useRealTimers();
@@ -620,12 +663,12 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
+      expect(await screen.findByText("24 – 30 May")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /Taylor Guest booked Thu, Jun 4/i })).not.toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("gridcell", { name: "Thu, Jun 4" }));
 
-      expect(await screen.findByText("Sun, May 31 - Sat, Jun 6")).toBeInTheDocument();
+      expect(await screen.findByText("31 May – 6 June")).toBeInTheDocument();
       expect(await screen.findByRole("button", { name: /Taylor Guest booked Thu, Jun 4/i })).toBeInTheDocument();
       expect(api.listBookings).toHaveBeenCalledWith(
         "brow-beauty-lab",
@@ -658,7 +701,7 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
+      expect(await screen.findByText("24 – 30 May")).toBeInTheDocument();
       expect(await screen.findByRole("button", { name: /Taylor Guest booked/i })).toBeInTheDocument();
       expect(screen.queryByText("Unable to load booked appointments.")).not.toBeInTheDocument();
     } finally {
@@ -700,23 +743,20 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
+      expect(await screen.findByText("24 – 30 May")).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: "Day" }));
-
+      const providerTrack = await screen.findByLabelText("Jordan Rivera schedule track");
       await vi.waitFor(() => {
-        expect(container.querySelectorAll(".schedule-unavailable").length).toBeGreaterThan(0);
+        expect(providerTrack).toHaveAttribute("role", "button");
       });
+      fireEvent.click(providerTrack);
 
-      fireEvent.click(await screen.findByLabelText("Jordan Rivera schedule track"));
-
-      expect(await screen.findByRole("dialog", { name: "Calendar slot actions" })).toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Create time block" }));
-      expect(screen.getByLabelText("Provider")).toHaveValue("Jordan Rivera");
-      expect(screen.getByLabelText("Signature Facial")).toBeChecked();
-      fireEvent.change(screen.getByLabelText("End time"), { target: { value: "12:45" } });
-      fireEvent.change(screen.getByLabelText("Notes"), { target: { value: "Hold for staff meeting." } });
-      fireEvent.click(screen.getByRole("button", { name: "Add time block" }));
+      const slotDialog = await screen.findByRole("dialog", { name: "Calendar slot actions" });
+      fireEvent.click(within(slotDialog).getByRole("button", { name: "Time block" }));
+      fireEvent.change(within(slotDialog).getByLabelText("End time"), { target: { value: "12:45" } });
+      fireEvent.change(within(slotDialog).getByPlaceholderText("Add staff-facing context for this block."), { target: { value: "Hold for staff meeting." } });
+      fireEvent.click(within(slotDialog).getByRole("button", { name: "Add time block" }));
 
       const drawer = await screen.findByRole("dialog", { name: "Time block details" });
       expect(
@@ -780,14 +820,19 @@ describe("CalendarPage", () => {
         />,
       );
 
-      expect(await screen.findByText("Sun, May 24 - Sat, May 30")).toBeInTheDocument();
+      expect(await screen.findByText("24 – 30 May")).toBeInTheDocument();
 
+      fireEvent.click(screen.getByRole("gridcell", { name: "Wed, May 27" }));
       fireEvent.click(screen.getByRole("button", { name: "Day" }));
-      fireEvent.click(await screen.findByLabelText("Jordan Rivera schedule track"));
+      const providerTrack = await screen.findByLabelText("Jordan Rivera schedule track");
+      await vi.waitFor(() => {
+        expect(providerTrack).toHaveAttribute("role", "button");
+      });
+      fireEvent.click(providerTrack);
 
-      expect(await screen.findByRole("dialog", { name: "Calendar slot actions" })).toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Create time block" }));
-      fireEvent.click(screen.getByRole("button", { name: "Add time block" }));
+      const slotDialog = await screen.findByRole("dialog", { name: "Calendar slot actions" });
+      fireEvent.click(within(slotDialog).getByRole("button", { name: "Time block" }));
+      fireEvent.click(within(slotDialog).getByRole("button", { name: "Add time block" }));
 
       expect(await screen.findByRole("dialog", { name: "Time block details" })).toBeInTheDocument();
       expect(await screen.findByRole("button", { name: /Time block .* with Jordan Rivera/i })).toBeInTheDocument();
@@ -841,22 +886,18 @@ describe("CalendarPage", () => {
         />,
       );
 
-      await screen.findByText("Sun, May 24 - Sat, May 30");
+      await screen.findByText("24 – 30 May");
 
       expect(screen.queryByRole("dialog", { name: "Appointment details" })).not.toBeInTheDocument();
 
-      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake not checked/i }));
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
 
       expect(await screen.findByRole("dialog", { name: "Appointment details" })).toBeInTheDocument();
       await vi.waitFor(() => {
         expect(api.listBookingFormResponses).toHaveBeenCalledWith("brow-beauty-lab", "booking-1");
       });
 
-      expect(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake complete/i })).toBeInTheDocument();
-      expect(await screen.findByText("Brow Prep Check-In")).toBeInTheDocument();
-      expect(screen.getAllByText("Intake complete").length).toBeGreaterThan(0);
-      // Compact row shows form name + a "View form" button; answers are not shown until expanded
-      expect(screen.getByRole("button", { name: "View" })).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: /Brow Prep Check-In/ })).toBeInTheDocument();
       expect(screen.queryByText("Recent retinoid use")).not.toBeInTheDocument();
       expect(screen.queryByRole("dialog", { name: "Time block details" })).not.toBeInTheDocument();
     } finally {
@@ -904,15 +945,15 @@ describe("CalendarPage", () => {
         />,
       );
 
-      await screen.findByText("Sun, May 24 - Sat, May 30");
-      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake not checked/i }));
+      await screen.findByText("24 – 30 May");
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
 
       await screen.findByRole("dialog", { name: "Appointment details" });
-      const viewButton = await screen.findByRole("button", { name: "View" });
+      const formRow = await screen.findByRole("button", { name: /Brow Prep Check-In/ });
 
       expect(screen.queryByRole("dialog", { name: "Form response" })).not.toBeInTheDocument();
 
-      fireEvent.click(viewButton);
+      fireEvent.click(formRow);
 
       const responseDialog = await screen.findByRole("dialog", { name: "Form response" });
       expect(within(responseDialog).getByText("Brow Prep Check-In")).toBeInTheDocument();
@@ -948,15 +989,13 @@ describe("CalendarPage", () => {
         />,
       );
 
-      await screen.findByText("Sun, May 24 - Sat, May 30");
+      await screen.findByText("24 – 30 May");
 
-      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake not checked/i }));
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
+      const dialog = await screen.findByRole("dialog", { name: "Appointment details" });
+      fireEvent.click(within(dialog).getByRole("tab", { name: "Forms" }));
 
-      expect(await screen.findByRole("button", { name: /Taylor Guest booked.*Intake pending/i })).toBeInTheDocument();
-      expect(
-        await screen.findByText("No intake forms are attached to this booking."),
-      ).toBeInTheDocument();
-      expect(screen.getAllByText("Intake pending").length).toBeGreaterThan(0);
+      expect(await within(dialog).findByText("No forms attached to this appointment.")).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

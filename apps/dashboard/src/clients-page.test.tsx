@@ -102,6 +102,7 @@ describe("CustomersPage form responses", () => {
       expect(screen.getByText("Taylor Guest")).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole("button", { name: /Taylor Guest/ }));
+    fireEvent.click(screen.getByRole("tab", { name: "Forms" }));
 
     // Form responses load - compact row shows the form name + meta + toggle
     expect(await screen.findByText("Brow Prep Check-In")).toBeInTheDocument();
@@ -142,6 +143,7 @@ describe("CustomersPage form responses", () => {
       expect(screen.getByText("Taylor Guest")).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole("button", { name: /Taylor Guest/ }));
+    fireEvent.click(screen.getByRole("tab", { name: "Forms" }));
 
     expect(await screen.findByText("No form responses yet.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "View answers" })).not.toBeInTheDocument();

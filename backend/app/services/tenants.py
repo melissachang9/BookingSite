@@ -4,7 +4,7 @@ import re
 from copy import deepcopy
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -12,6 +12,7 @@ from app.core.http import api_exception
 from app.core.security import hash_password
 from app.db.models import (
     Booking,
+    BookingDraft,
     Location,
     Provider,
     ProviderLocation,
@@ -21,6 +22,7 @@ from app.db.models import (
     Resource,
     Service,
     ServiceCategory,
+    ServiceFormAttachment,
     ServiceLocation,
     ServiceResource,
     Tenant,
@@ -2361,6 +2363,45 @@ async def duplicate_tenant_service(session: AsyncSession, tenant_slug: str, serv
     await session.commit()
     duplicate = await _load_service_for_tenant(session, tenant.id, duplicate.id)
     return service_to_summary(duplicate, tenant)
+
+
+async def delete_tenant_service(
+    session: AsyncSession, tenant_slug: str, service_id: str
+) -> None:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    service = await _load_service_for_tenant(session, tenant.id, service_id)
+
+    # A service that is referenced by bookings or drafts cannot be deleted
+    # without destroying historical truth. Block deletion and instruct the
+    # operator to deactivate instead.
+    booking_count = await session.scalar(
+        select(func.count(Booking.id)).where(Booking.service_id == service.id)
+    )
+    draft_count = await session.scalar(
+        select(func.count(BookingDraft.id)).where(BookingDraft.service_id == service.id)
+    )
+    if (booking_count or 0) > 0 or (draft_count or 0) > 0:
+        raise api_exception(
+            status_code=409,
+            code="service_in_use",
+            message="This service is used by existing bookings or drafts and cannot be deleted. Deactivate it instead.",
+        )
+
+    # Detach dependent links before deleting the service.
+    await session.execute(
+        delete(ServiceLocation).where(ServiceLocation.service_id == service.id)
+    )
+    await session.execute(
+        delete(ProviderService).where(ProviderService.service_id == service.id)
+    )
+    await session.execute(
+        delete(ServiceResource).where(ServiceResource.service_id == service.id)
+    )
+    await session.execute(
+        delete(ServiceFormAttachment).where(ServiceFormAttachment.service_id == service.id)
+    )
+    await session.delete(service)
+    await session.commit()
 
 
 async def list_tenant_service_provider_variants(

@@ -84,23 +84,23 @@ export function ResourcesPage({
     resources.find((r) => r.id === selectedResourceId) ?? null;
 
   if (!currentUser) {
-    return <main className="ops-page-stack"><p className="staff-list-empty">Sign in required</p></main>;
+    return <main className="cs-page-stack"><p className="cs-empty">Sign in required</p></main>;
   }
 
   if (!canView) {
-    return <main className="ops-page-stack"><p className="staff-list-empty">You do not have permission to view resources.</p></main>;
+    return <main className="cs-page-stack"><p className="cs-empty">You do not have permission to view resources.</p></main>;
   }
 
   if (loadState.kind === "error") {
-    return <main className="ops-page-stack"><div className="message-banner message-banner--error" role="alert">{loadState.message}</div></main>;
+    return <main className="cs-page-stack"><div className="cs-banner cs-banner--error" role="alert">{loadState.message}</div></main>;
   }
 
   return (
-    <main className="ops-page-stack">
+    <main className="cs-page-stack">
       {status ? (
-        <div className="message-banner" role="status">
+        <div className="cs-banner" role="status">
           {status}
-          <button type="button" className="ghost-action" onClick={() => setStatus(null)}>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setStatus(null)}>
             Dismiss
           </button>
         </div>
@@ -108,15 +108,15 @@ export function ResourcesPage({
 
       <h3>{definition.title}</h3>
 
-      <section className="staff-master-detail">
-        <div className="staff-grid">
-          <aside className="staff-list-rail" aria-label="Resource list">
-            <div className="staff-list-rail-header">
+      <section className="cs-md-shell">
+        <div className="cs-md-grid">
+          <aside className="cs-md-rail" aria-label="Resource list">
+            <div className="cs-md-rail__header">
               <h4>Resources</h4>
               {canManage ? (
                 <button
                   type="button"
-                  className="ghost-action"
+                  className="cs-btn cs-btn--ghost cs-btn--sm"
                   onClick={() => setModal({ kind: "add" })}
                 >
                   + Add resource
@@ -124,14 +124,14 @@ export function ResourcesPage({
               ) : null}
             </div>
             {resources.length === 0 ? (
-              <p className="staff-list-empty">No resources yet.</p>
+              <p className="cs-empty">No resources yet.</p>
             ) : (
-              <ul className="staff-list">
+              <ul className="cs-md-list">
                 {resources.map((resource) => (
                   <li key={resource.id}>
                     <button
                       type="button"
-                      className={`staff-list-item${
+                      className={`cs-md-list__item${
                         selectedResourceId === resource.id ? " is-active" : ""
                       }`}
                       onClick={() => setSelectedResourceId(resource.id)}
@@ -151,23 +151,23 @@ export function ResourcesPage({
             )}
           </aside>
 
-          <section className="staff-detail-panel" aria-label="Resource details">
+          <section className="cs-md-detail-panel" aria-label="Resource details">
             {selectedResource ? (
-              <div className="customer-profile">
-                <header className="customer-profile-header">
+              <div className="cs-md-detail-panel__body">
+                <header className="cs-md-detail-panel__header">
                   <div>
                     <h4>{selectedResource.name}</h4>
-                    <p className="customer-profile-since">
+                    <p className="cs-md-detail-panel__meta">
                       {KIND_LABELS[selectedResource.kind] ?? selectedResource.kind}
                       {" · "}
                       {selectedResource.isActive ? "Active" : "Inactive"}
                     </p>
                   </div>
                   {canManage ? (
-                    <div className="staff-detail-actions">
+                    <div className="cs-md-detail__actions">
                       <button
                         type="button"
-                        className="ghost-action"
+                        className="cs-btn cs-btn--ghost cs-btn--sm"
                         onClick={() =>
                           setModal({ kind: "edit", resource: selectedResource })
                         }
@@ -176,7 +176,7 @@ export function ResourcesPage({
                       </button>
                       <button
                         type="button"
-                        className="ghost-action"
+                        className="cs-btn cs-btn--ghost cs-btn--sm"
                         onClick={() =>
                           handleToggleActive(selectedResource)
                         }
@@ -188,16 +188,16 @@ export function ResourcesPage({
                 </header>
 
                 {selectedResource.notes ? (
-                  <section className="customer-profile-section">
-                    <p className="rail-section-kicker">Notes</p>
-                    <p className="customer-profile-notes">
+                  <section className="cs-md-detail-panel__section">
+                    <p className="cs-kicker">Notes</p>
+                    <p className="cs-md-detail-panel__notes">
                       {selectedResource.notes}
                     </p>
                   </section>
                 ) : null}
               </div>
             ) : (
-              <div className="staff-detail-empty">
+              <div className="cs-md-detail-panel__empty">
                 <p>Select a resource to view details.</p>
               </div>
             )}
@@ -293,21 +293,21 @@ function ResourceModal({
 
   return (
     <div
-      className="modal-overlay"
+      className="cs-modal"
       role="dialog"
       aria-modal="true"
       aria-label={isEdit ? "Edit resource" : "Add resource"}
     >
-      <div className="modal-panel">
-        <header className="modal-header">
+      <div className="cs-modal__panel">
+        <header className="cs-modal__header">
           <h4>{isEdit ? "Edit resource" : "Add resource"}</h4>
-          <button type="button" className="ghost-action" onClick={onClose}>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>
             Close
           </button>
         </header>
-        <form className="modal-form" onSubmit={handleSubmit}>
+        <form className="cs-modal__form" onSubmit={handleSubmit}>
           {error ? (
-            <div className="message-banner message-banner--error">{error}</div>
+            <div className="cs-banner cs-banner--error">{error}</div>
           ) : null}
           <label>
             <span>Name</span>
@@ -339,11 +339,11 @@ function ResourceModal({
               placeholder="Optional notes about this resource"
             />
           </label>
-          <div className="modal-actions">
-            <button type="button" className="ghost-action" onClick={onClose}>
+          <div className="cs-modal__actions">
+            <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="primary-action" disabled={saving}>
+            <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={saving}>
               {saving ? "Saving…" : isEdit ? "Save changes" : "Create resource"}
             </button>
           </div>

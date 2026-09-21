@@ -290,14 +290,14 @@ export function CropModal({
 
   if (!dataUrl) {
     return (
-      <div className="modal-backdrop" role="dialog" aria-label="Crop photo">
-        <div className="modal-panel crop-modal">
-          <div className="modal-header">
+      <div className="cs-modal" role="dialog" aria-label="Crop photo">
+        <div className="cs-modal__panel cs-modal__panel--crop">
+          <div className="cs-modal__header">
             <h4>Crop photo</h4>
-            <button type="button" className="ghost-action" onClick={onCancel}>Cancel</button>
+            <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onCancel}>Cancel</button>
           </div>
-          <div className="modal-form" style={{ alignItems: "center", padding: "2rem" }}>
-            <p className="settings-form-help">Loading image…</p>
+          <div className="cs-modal__form" style={{ alignItems: "center", padding: "2rem" }}>
+            <p className="cs-settings-form-help">Loading image…</p>
           </div>
         </div>
       </div>
@@ -305,15 +305,15 @@ export function CropModal({
   }
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-label="Crop photo">
-      <div className="modal-panel crop-modal">
-        <div className="modal-header">
+    <div className="cs-modal" role="dialog" aria-label="Crop photo">
+      <div className="cs-modal__panel cs-modal__panel--crop">
+        <div className="cs-modal__header">
           <h4>Crop photo</h4>
-          <button type="button" className="ghost-action" onClick={onCancel}>Cancel</button>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onCancel}>Cancel</button>
         </div>
-        <div className="crop-modal__body">
+        <div className="cs-crop__body">
           <div
-            className={`crop-modal__mask${maskShape === "rectangle" ? " crop-modal__mask--rect" : ""}`}
+            className={`cs-crop__mask${maskShape === "rectangle" ? " cs-crop__mask--rect" : ""}`}
             onMouseDown={(e) => { e.preventDefault(); startDrag(e.clientX, e.clientY); }}
             onTouchStart={(e) => {
               e.preventDefault();
@@ -343,8 +343,8 @@ export function CropModal({
               }}
             />
           </div>
-          <div className="crop-modal__controls">
-            <label className="crop-modal__zoom-label">
+          <div className="cs-crop__controls">
+            <label className="cs-crop__zoom-label">
               <span>Zoom</span>
               <input
                 type="range"
@@ -357,9 +357,9 @@ export function CropModal({
             </label>
           </div>
         </div>
-        <div className="modal-actions" style={{ padding: "0 1.25rem 1.25rem" }}>
-          <button type="button" className="ghost-action" onClick={onCancel}>Cancel</button>
-          <button type="button" className="primary-action" onClick={handleSave}>Save</button>
+        <div className="cs-modal__actions" style={{ padding: "0 1.25rem 1.25rem" }}>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onCancel}>Cancel</button>
+          <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={handleSave}>Save</button>
         </div>
       </div>
     </div>
@@ -414,15 +414,15 @@ function AvatarUploader({
       {cropFile ? (
         <CropModal file={cropFile} onSave={handleCropSave} onCancel={handleCropCancel} />
       ) : null}
-      <div className={pill ? "dt-photo-uploader" : "staff-avatar-uploader"}>
-        <div className="staff-avatar-uploader__preview dt-photo-uploader__preview" aria-hidden="true">
+      <div className={pill ? "cs-dt-photo-uploader" : "cs-staff-avatar-uploader"}>
+        <div className="cs-staff-avatar-uploader__preview cs-dt-photo-uploader__preview" aria-hidden="true">
           {value ? <img src={value} alt="" /> : <span>{initialsOf(name) || "?"}</span>}
         </div>
-        <div className="staff-avatar-uploader__controls">
+        <div className="cs-staff-avatar-uploader__controls">
           <input
             id={inputId}
             type="file"
-            className={pill ? "dt-photo-uploader__input" : undefined}
+            className={pill ? "cs-dt-photo-uploader__input" : undefined}
             accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
             onChange={(event) => {
               const file = event.target.files?.[0] ?? null;
@@ -432,23 +432,23 @@ function AvatarUploader({
             disabled={uploading}
           />
           {pill ? (
-            <label htmlFor={inputId} className="dt-upload-pill">
+            <label htmlFor={inputId} className="cs-dt-upload-pill">
               Upload &amp; crop
             </label>
           ) : null}
           {value ? (
             <button
               type="button"
-              className="ghost-action"
+              className="cs-btn cs-btn--ghost cs-btn--sm"
               onClick={() => onChange("")}
               disabled={uploading}
             >
               Remove
             </button>
           ) : null}
-          {uploading ? <small className="settings-form-help">Uploading…</small> : null}
+          {uploading ? <small className="cs-settings-form-help">Uploading…</small> : null}
           {error ? (
-            <small role="alert" className="settings-error">
+            <small role="alert" className="cs-settings-error">
               {error}
             </small>
           ) : null}
@@ -536,35 +536,35 @@ export function StaffPage({
   );
 
   if (!canManage) {
-    return <main className="ops-page-stack"><p className="staff-list-empty">You do not have permission to view the team roster.</p></main>;
+    return <main className="cs-page-stack"><p className="cs-empty">You do not have permission to view the team roster.</p></main>;
   }
 
   return (
-    <main className="ops-page-stack">
-      <section className="ops-panel staff-master-detail">
+    <main className="cs-page-stack">
+      <section className="cs-md-shell">
         {state.kind === "loading" ? <p>Loading roster…</p> : null}
         {state.kind === "error" ? (
-          <p role="alert" className="settings-error">
+          <p role="alert" className="cs-settings-error">
             {state.message}
           </p>
         ) : null}
         {state.kind === "ready" ? (
-          <div className="staff-grid">
-            <aside className="staff-list-rail">
-              <header className="staff-list-rail-header">
+          <div className="cs-md-grid">
+            <aside className="cs-md-rail">
+              <header className="cs-md-rail__header">
                 <h4>Team</h4>
                 <button
                   type="button"
-                  className="primary-action"
+                  className="cs-btn cs-btn--primary cs-btn--sm"
                   onClick={() => setModal({ kind: "add" })}
                 >
                   Add staff
                 </button>
               </header>
               {users.length === 0 ? (
-                <p className="settings-form-help">No users configured yet.</p>
+                <p className="cs-settings-form-help">No users configured yet.</p>
               ) : (
-                <ul className="staff-list">
+                <ul className="cs-md-list">
                   {users.map((user) => {
                     const provider = providers.find((p) => p.userId === user.id);
                     const isActive = user.id === selectedUserId;
@@ -572,7 +572,7 @@ export function StaffPage({
                       <li key={user.id}>
                         <button
                           type="button"
-                          className={`staff-list-item${isActive ? " is-active" : ""}`}
+                          className={`cs-md-list__item${isActive ? " is-active" : ""}`}
                           onClick={() => {
                             setSelectedUserId(user.id);
                             setActiveTab("details");
@@ -580,23 +580,23 @@ export function StaffPage({
                         >
                           {user.avatarUrl ? (
                             <img
-                              className="staff-avatar"
+                              className="cs-staff-avatar"
                               src={user.avatarUrl}
                               alt=""
                               loading="lazy"
                             />
                           ) : (
                             <span
-                              className="staff-avatar staff-avatar--initials"
+                              className="cs-staff-avatar cs-staff-avatar--initials"
                               style={{ background: avatarColorFor(user.id) }}
                               aria-hidden
                             >
                               {initialsOf(user.name)}
                             </span>
                           )}
-                          <span className="staff-list-meta">
-                            <span className="staff-list-name">{user.name}</span>
-                            <span className="staff-list-role">
+                          <span className="cs-md-list__meta">
+                            <span className="cs-md-list__name">{user.name}</span>
+                            <span className="cs-md-list__role">
                               {ROLE_LABELS[user.role] ?? user.role}
                               {provider ? " · Provider" : ""}
                               {!user.isActive ? " · Inactive" : ""}
@@ -610,9 +610,9 @@ export function StaffPage({
               )}
             </aside>
 
-            <div className="staff-detail">
+            <div className="cs-md-detail">
               {selectedUser === null ? (
-                <p className="settings-form-help">Select a team member to view details.</p>
+                <p className="cs-settings-form-help">Select a team member to view details.</p>
               ) : (
                 <StaffDetail
                   tenantSlug={currentUser.tenantSlug}
@@ -675,19 +675,19 @@ function ProviderRequiredEmptyState({
   onLinkProvider: () => void;
 }) {
   return (
-    <div className="staff-empty-state">
-      <p className="staff-empty-state__title">
+    <div className="cs-staff-empty-state">
+      <p className="cs-staff-empty-state__title">
         {creating
           ? `Setting up ${userName.split(" ")[0] || userName} as a provider…`
           : `Set up ${userName.split(" ")[0] || userName}'s schedule & pay`}
       </p>
-      <p className="staff-empty-state__body">
+      <p className="cs-staff-empty-state__body">
         {creating
           ? "Creating a provider record so you can configure booking settings, work hours, and compensation."
           : "Work hours, compensation, and services are stored on a provider record. Create one (it won't be bookable online until you turn that on) to manage these here."}
       </p>
       {!creating ? (
-        <button type="button" className="primary-action" onClick={onLinkProvider}>
+        <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={onLinkProvider}>
           Set up provider record
         </button>
       ) : null}
@@ -770,17 +770,17 @@ function StaffDetail({
   }, [providerTabActive, provider, user.id, tenantSlug]);
 
   return (
-    <div className="staff-detail-inner">
+    <div className="cs-md-detail__inner">
       {providerCreateError ? (
-        <div className="message-banner" role="alert">
+        <div className="cs-banner" role="alert">
           {providerCreateError}
-          <button type="button" className="ghost-action" onClick={() => setProviderCreateError(null)}>Dismiss</button>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setProviderCreateError(null)}>Dismiss</button>
         </div>
       ) : null}
-      <header className="staff-detail-header">
-        <div className="dt-header">
+      <header className="cs-md-detail__header">
+        <div className="cs-dt-header">
           <span
-            className="dt-header__avatar"
+            className="cs-dt-header__avatar"
             aria-hidden="true"
             style={{ background: user.avatarUrl ? undefined : avatarColorFor(user.id) }}
           >
@@ -790,32 +790,32 @@ function StaffDetail({
               initialsOf(user.name)
             )}
           </span>
-          <div className="dt-header__text">
-            <h4 className="dt-header__name">{user.name}</h4>
-            <div className="dt-header__pills">
-              <span className="dt-pill dt-pill--dark">{ROLE_LABELS[user.role] ?? user.role}</span>
+          <div className="cs-dt-header__text">
+            <h4 className="cs-dt-header__name">{user.name}</h4>
+            <div className="cs-dt-header__pills">
+              <span className="cs-dt-pill cs-dt-pill--dark">{ROLE_LABELS[user.role] ?? user.role}</span>
               {provider ? (
-                <span className="dt-pill dt-pill--light">Takes bookings</span>
+                <span className="cs-dt-pill cs-dt-pill--light">Takes bookings</span>
               ) : null}
               {!user.isActive ? (
-                <span className="dt-pill dt-pill--warn">Inactive</span>
+                <span className="cs-dt-pill cs-dt-pill--warn">Inactive</span>
               ) : null}
             </div>
           </div>
         </div>
-        <div className="staff-detail-actions">
-          <button type="button" className="ghost-action" onClick={onResetPassword}>
+        <div className="cs-md-detail__actions">
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onResetPassword}>
             Reset password
           </button>
           {provider === null ? (
-            <button type="button" className="ghost-action" onClick={onLinkProvider}>
+            <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onLinkProvider}>
               Make service provider
             </button>
           ) : null}
         </div>
       </header>
 
-      <nav className="staff-detail-tabs" role="tablist" aria-label="Staff sections">
+      <nav className="cs-md-tabs" role="tablist" aria-label="Staff sections">
         {tabs.map((tab) => (
           <button
             key={tab.key}
@@ -823,7 +823,7 @@ function StaffDetail({
             role="tab"
             aria-selected={activeTab === tab.key}
             disabled={tab.disabled}
-            className={`staff-detail-tab${activeTab === tab.key ? " is-active" : ""}`}
+            className={`cs-md-tab${activeTab === tab.key ? " is-active" : ""}`}
             onClick={() => onTabChange(tab.key)}
           >
             {tab.label}
@@ -985,13 +985,13 @@ function DetailsTab({
   };
 
   return (
-    <form className="staff-detail-form dt-form" onSubmit={submit}>
-      <div className="dt-grid">
-        <div className="dt-grid-col">
-          <div className="dt-field">
-            <span className="dt-label">Name</span>
+    <form className="cs-md-form cs-dt-form" onSubmit={submit}>
+      <div className="cs-dt-grid">
+        <div className="cs-dt-grid-col">
+          <div className="cs-dt-field">
+            <span className="cs-dt-label">Name</span>
             <input
-              className="dt-input"
+              className="cs-dt-input"
               type="text"
               value={form.name}
               onChange={(event) => setForm({ ...form, name: event.target.value })}
@@ -999,14 +999,14 @@ function DetailsTab({
             />
           </div>
 
-          <div className="dt-field">
-            <span className="dt-label">Email</span>
-            <input className="dt-input" type="email" value={user.email} disabled readOnly />
+          <div className="cs-dt-field">
+            <span className="cs-dt-label">Email</span>
+            <input className="cs-dt-input" type="email" value={user.email} disabled readOnly />
           </div>
 
-          <div className="dt-field">
-            <span className="dt-label">Profile photo</span>
-            <div className="dt-photo">
+          <div className="cs-dt-field">
+            <span className="cs-dt-label">Profile photo</span>
+            <div className="cs-dt-photo">
               <AvatarUploader
                 tenantSlug={tenantSlug}
                 value={form.avatarUrl}
@@ -1015,23 +1015,23 @@ function DetailsTab({
                 pill={true}
                 onChange={(next) => setForm({ ...form, avatarUrl: next })}
               />
-              <small className="dt-photo__help">
+              <small className="cs-dt-photo__help">
                 JPG, PNG, GIF, WEBP, or HEIC up to 10&nbsp;MB.
               </small>
             </div>
           </div>
 
           {provider ? (
-            <div className="dt-field">
-              <span className="dt-label">Works at</span>
-              <div className="dt-pill-row">
+            <div className="cs-dt-field">
+              <span className="cs-dt-label">Works at</span>
+              <div className="cs-dt-pill-row">
                 {locations.map((loc) => {
                   const assigned = provider.locationIds.includes(loc.id);
                   return (
                     <button
                       key={loc.id}
                       type="button"
-                      className={`dt-pill dt-pill--location${assigned ? " is-assigned" : ""}`}
+                      className={`cs-dt-pill cs-dt-pill--location${assigned ? " is-assigned" : ""}`}
                       onClick={() => {
                         const next = assigned
                           ? provider.locationIds.filter((id) => id !== loc.id)
@@ -1051,9 +1051,9 @@ function DetailsTab({
             </div>
           ) : null}
 
-          <div className="dt-field">
-            <span className="dt-label">Can sign in</span>
-            <label className="settings-toggle dt-toggle-row">
+          <div className="cs-dt-field">
+            <span className="cs-dt-label">Can sign in</span>
+            <label className="cs-settings-toggle cs-dt-toggle-row">
               <input
                 type="checkbox"
                 checked={form.isActive}
@@ -1064,9 +1064,9 @@ function DetailsTab({
           </div>
 
           {provider ? (
-            <div className="dt-field">
-              <span className="dt-label">Bookable online</span>
-              <label className="settings-toggle dt-toggle-row">
+            <div className="cs-dt-field">
+              <span className="cs-dt-label">Bookable online</span>
+              <label className="cs-settings-toggle cs-dt-toggle-row">
                 <input
                   type="checkbox"
                   checked={provider.isBookableOnline}
@@ -1077,22 +1077,22 @@ function DetailsTab({
                       .catch((e: unknown) => setError(readErrorMessage(e, "Unable to update bookability.")));
                   }}
                 />
-                <span className="dt-helper">Clients can request {user.name.split(" ")[0] || user.name} by name</span>
+                <span className="cs-dt-helper">Clients can request {user.name.split(" ")[0] || user.name} by name</span>
               </label>
             </div>
           ) : null}
         </div>
 
-        <div className="dt-grid-col">
-          <div className="dt-field">
-            <span className="dt-label">Role</span>
-            <div className="dt-role-pills" role="group" aria-label="Role">
+        <div className="cs-dt-grid-col">
+          <div className="cs-dt-field">
+            <span className="cs-dt-label">Role</span>
+            <div className="cs-dt-role-pills" role="group" aria-label="Role">
               {ROLE_OPTIONS.map((option) => (
                 <button
                   key={option.value}
                   type="button"
                   disabled={isProvider}
-                  className={`dt-pill dt-pill--role${form.role === option.value ? " is-selected" : ""}`}
+                  className={`cs-dt-pill cs-dt-pill--role${form.role === option.value ? " is-selected" : ""}`}
                   onClick={() => setForm({ ...form, role: option.value })}
                   aria-pressed={form.role === option.value}
                 >
@@ -1101,14 +1101,14 @@ function DetailsTab({
               ))}
             </div>
             {isProvider ? (
-              <span className="dt-helper">Role is locked while this person takes bookings.</span>
+              <span className="cs-dt-helper">Role is locked while this person takes bookings.</span>
             ) : null}
           </div>
 
-          <div className="dt-field">
-            <span className="dt-label">Phone</span>
+          <div className="cs-dt-field">
+            <span className="cs-dt-label">Phone</span>
             <input
-              className="dt-input"
+              className="cs-dt-input"
               type="text"
               value={form.phone}
               onChange={(event) => setForm({ ...form, phone: event.target.value })}
@@ -1117,29 +1117,29 @@ function DetailsTab({
           </div>
 
           {provider ? (
-            <div className="dt-field">
-              <span className="dt-label">Title shown to clients</span>
+            <div className="cs-dt-field">
+              <span className="cs-dt-label">Title shown to clients</span>
               <input
-                className="dt-input"
+                className="cs-dt-input"
                 type="text"
                 value={providerForm.title}
                 onChange={(event) => setProviderForm({ ...providerForm, title: event.target.value })}
                 placeholder="Lead therapist"
               />
-              <span className="dt-label" style={{ marginTop: 12 }}>Bio</span>
+              <span className="cs-dt-label" style={{ marginTop: 12 }}>Bio</span>
               <textarea
-                className="dt-input dt-textarea"
+                className="cs-dt-input cs-dt-textarea"
                 value={providerForm.bio}
                 onChange={(event) => setProviderForm({ ...providerForm, bio: event.target.value })}
-                placeholder="A short client-facing bio…"
+                placeholder="A short cs-client-facing bio…"
                 rows={3}
               />
             </div>
           ) : (
-            <div className="dt-field">
-              <span className="dt-label">Joined</span>
+            <div className="cs-dt-field">
+              <span className="cs-dt-label">Joined</span>
               <input
-                className="dt-input"
+                className="cs-dt-input"
                 type="text"
                 value={DATE_FORMAT.format(new Date(user.createdAt))}
                 disabled
@@ -1151,12 +1151,12 @@ function DetailsTab({
       </div>
 
       {provider ? (
-        <div className="dt-booking-link">
-          <p className="dt-label">Booking link</p>
-          <div className="dt-booking-link__row">
-            <span className="dt-booking-link__prefix">{bookingLinkBase}</span>
+        <div className="cs-dt-booking-link">
+          <p className="cs-dt-label">Booking link</p>
+          <div className="cs-dt-booking-link__row">
+            <span className="cs-dt-booking-link__prefix">{bookingLinkBase}</span>
             <input
-              className="dt-input dt-booking-link__input"
+              className="cs-dt-input cs-dt-booking-link__input"
               type="text"
               value={bookingSlug}
               onChange={(event) => {
@@ -1170,10 +1170,10 @@ function DetailsTab({
               autoCapitalize="off"
             />
             {provider.bookingUrl ? (
-              <div className="dt-booking-link__actions">
+              <div className="cs-dt-booking-link__actions">
                 <button
                   type="button"
-                  className="ghost-action"
+                  className="cs-btn cs-btn--ghost cs-btn--sm"
                   onClick={async () => {
                     try {
                       await navigator.clipboard.writeText(provider.bookingUrl!);
@@ -1187,7 +1187,7 @@ function DetailsTab({
                   {slugCopied ? "Copied!" : "Copy"}
                 </button>
                 <a
-                  className="ghost-action"
+                  className="cs-btn cs-btn--ghost cs-btn--sm"
                   href={provider.bookingUrl}
                   target="_blank"
                   rel="noreferrer"
@@ -1197,9 +1197,9 @@ function DetailsTab({
               </div>
             ) : null}
           </div>
-          <p className="dt-helper">
+          <p className="cs-dt-helper">
             {slugError ? (
-              <span role="alert" className="settings-error">{slugError}</span>
+              <span role="alert" className="cs-settings-error">{slugError}</span>
             ) : (
               "Available. Lowercase letters, numbers and hyphens — changing it breaks any link already shared. Leave it blank and this person is bookable only from the studio's main page."
             )}
@@ -1207,7 +1207,7 @@ function DetailsTab({
           {bookingSlug.trim() !== (provider.bookingSlug ?? "") ? (
             <button
               type="button"
-              className="dt-link-save"
+              className="cs-dt-link-save"
               disabled={slugSubmitting}
               onClick={async () => {
                 const trimmed = bookingSlug.trim();
@@ -1236,13 +1236,13 @@ function DetailsTab({
       ) : null}
 
       {error ? (
-        <p role="alert" className="settings-error">
+        <p role="alert" className="cs-settings-error">
           {error}
         </p>
       ) : null}
 
-      <div className="modal-actions">
-        <button type="submit" className="primary-action" disabled={submitting}>
+      <div className="cs-modal__actions">
+        <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={submitting}>
           {submitting ? "Saving…" : "Save"}
         </button>
       </div>
@@ -1432,19 +1432,19 @@ function ServicesTab({
   };
 
   return (
-    <form className="staff-detail-form" onSubmit={submit}>
-      <fieldset className="staff-fieldset">
+    <form className="cs-md-form" onSubmit={submit}>
+      <fieldset className="cs-staff-fieldset">
         <legend>
-          Locations <span className="staff-fieldset-count">{locationIds.length} of {locations.length}</span>
+          Locations <span className="cs-staff-fieldset-count">{locationIds.length} of {locations.length}</span>
         </legend>
         {locations.length === 0 ? (
-          <p className="settings-form-help">No locations configured.</p>
+          <p className="cs-settings-form-help">No locations configured.</p>
         ) : (
           <>
-            <div className="staff-list-toolbar">
+            <div className="cs-staff-list-toolbar">
               <input
                 type="search"
-                className="staff-list-search"
+                className="cs-staff-list-search"
                 placeholder="Search locations…"
                 value={locationQuery}
                 onChange={(event) => setLocationQuery(event.target.value)}
@@ -1452,7 +1452,7 @@ function ServicesTab({
               />
               <button
                 type="button"
-                className="ghost-action"
+                className="cs-btn cs-btn--ghost cs-btn--sm"
                 onClick={() => selectAll(locationIds, setLocationIds, filteredLocations)}
                 disabled={filteredLocations.length === 0}
               >
@@ -1460,7 +1460,7 @@ function ServicesTab({
               </button>
               <button
                 type="button"
-                className="ghost-action"
+                className="cs-btn cs-btn--ghost cs-btn--sm"
                 onClick={() => clearFiltered(locationIds, setLocationIds, filteredLocations)}
                 disabled={filteredLocations.length === 0}
               >
@@ -1468,13 +1468,13 @@ function ServicesTab({
               </button>
             </div>
             {filteredLocations.length === 0 ? (
-              <p className="settings-form-help">No locations match that search.</p>
+              <p className="cs-settings-form-help">No locations match that search.</p>
             ) : (
-              <div className="staff-checkbox-grid">
+              <div className="cs-staff-checkbox-grid">
                 {filteredLocations.map((loc) => (
                   <label
                     key={loc.id}
-                    className={`settings-toggle staff-pickable${loc.isActive ? "" : " is-inactive"}`}
+                    className={`cs-settings-toggle cs-staff-pickable${loc.isActive ? "" : " is-inactive"}`}
                   >
                     <input
                       type="checkbox"
@@ -1483,7 +1483,7 @@ function ServicesTab({
                     />
                     <span>
                       <strong>{loc.name}</strong>
-                      <span className="staff-pickable-meta">
+                      <span className="cs-staff-pickable-meta">
                         {loc.timeZone}
                         {loc.isActive ? "" : " · Inactive"}
                       </span>
@@ -1496,25 +1496,25 @@ function ServicesTab({
         )}
       </fieldset>
 
-      <fieldset className="staff-fieldset staff-services-fieldset">
+      <fieldset className="cs-staff-fieldset cs-staff-services-fieldset">
         <legend>
-          Services <span className="staff-fieldset-count">{serviceIds.length} of {services.length}</span>
+          Services <span className="cs-staff-fieldset-count">{serviceIds.length} of {services.length}</span>
         </legend>
         {services.length === 0 ? (
-          <p className="settings-form-help">No services configured.</p>
+          <p className="cs-settings-form-help">No services configured.</p>
         ) : (
           <>
-            <p className="svc-lead">
+            <p className="cs-md-form__lead">
               What they perform. Services come from the Treatments page, filtered to this person. Leave a
               field blank to inherit that treatment's price and duration; enter a value to override
               it just for them. Commission follows the model set on the Compensation tab for every
               service they perform — override a specific treatment's commission below only when it
               needs to differ from that baseline.
             </p>
-            <div className="staff-list-toolbar">
+            <div className="cs-staff-list-toolbar">
               <input
                 type="search"
-                className="staff-list-search"
+                className="cs-staff-list-search"
                 placeholder="Find a treatment…"
                 value={serviceQuery}
                 onChange={(event) => setServiceQuery(event.target.value)}
@@ -1522,9 +1522,9 @@ function ServicesTab({
               />
             </div>
             {filteredServices.length === 0 ? (
-              <p className="settings-form-help">No services match that search.</p>
+              <p className="cs-settings-form-help">No services match that search.</p>
             ) : !overridesLoaded ? (
-              <p className="settings-form-help">Loading…</p>
+              <p className="cs-settings-form-help">Loading…</p>
             ) : (
               (() => {
                 // Group filtered services by categoryId. Categories with services this
@@ -1548,8 +1548,8 @@ function ServicesTab({
                 }
                 const providerBookingSlug = provider.bookingSlug ?? provider.id;
                 return (
-                  <div className="staff-services-groups">
-                    <div className="svc-staff-theader" aria-hidden="true">
+                  <div className="cs-staff-services-groups">
+                    <div className="cs-svc-staff-theader" aria-hidden="true">
                       <span />
                       <span>Duration</span>
                       <span>Price</span>
@@ -1562,12 +1562,12 @@ function ServicesTab({
                       const performed = group.services.filter((s) => serviceIds.includes(s.id));
                       const notOffered = group.services.filter((s) => !serviceIds.includes(s.id));
                       return (
-                        <section key={group.id ?? "uncategorized"} className="staff-services-group">
-                          <header className="staff-services-group__header">
-                            <h4 className="staff-services-group__title">{group.name}</h4>
+                        <section key={group.id ?? "uncategorized"} className="cs-staff-services-group">
+                          <header className="cs-staff-services-group__header">
+                            <h4 className="cs-staff-services-group__title">{group.name}</h4>
                             <button
                               type="button"
-                              className="svc-text-btn"
+                              className="cs-svc-text-btn"
                               onClick={() => {
                                 if (allEnabled) {
                                   setServiceIds(serviceIds.filter((id) => !groupIds.includes(id)));
@@ -1603,30 +1603,30 @@ function ServicesTab({
                             return (
                               <React.Fragment key={svc.id}>
                                 {showNotOfferedHeader ? (
-                                  <p className="svc-staff-notoffered__label">Not offered</p>
+                                  <p className="cs-svc-staff-notoffered__label">Not offered</p>
                                 ) : null}
                               <div
-                                className={`svc-staff-trow staff-service-trow${isAssigned ? "" : " svc-staff-trow--off"}`}
+                                className={`cs-svc-staff-trow${isAssigned ? "" : " cs-svc-staff-trow--off"}`}
                               >
-                                <div className="svc-staff-trow__provider">
+                                <div className="cs-svc-staff-trow__provider">
                                   <input
                                     type="checkbox"
-                                    className="svc-staff-checkbox"
+                                    className="cs-svc-staff-checkbox"
                                     aria-label={`Toggle ${svc.name}`}
                                     checked={isAssigned}
                                     onChange={() => setServiceIds(toggle(serviceIds, svc.id))}
                                   />
                                   <span>
-                                    <span className="svc-provider-card__name">{svc.name}</span>
+                                    <span className="cs-svc-provider-card__name">{svc.name}</span>
                                     {svc.description ? (
-                                      <span className="svc-staff-subtitle">{svc.description}</span>
+                                      <span className="cs-svc-staff-subtitle">{svc.description}</span>
                                     ) : null}
                                   </span>
                                 </div>
                               
-                                <div className="svc-staff-trow__cell">
+                                <div className="cs-svc-staff-trow__cell">
                                   <input
-                                    className="svc-input svc-provider-row__input"
+                                    className="cs-svc-input cs-svc-provider-row__input"
                                     type="text" inputMode="numeric"
                                     placeholder={`${svc.durationMinutes} min`}
                                     value={ov.durationMinutes}
@@ -1637,9 +1637,9 @@ function ServicesTab({
                                   />
                                 </div>
                               
-                                <div className="svc-staff-trow__cell">
+                                <div className="cs-svc-staff-trow__cell">
                                   <input
-                                    className="svc-input svc-provider-row__input"
+                                    className="cs-svc-input cs-svc-provider-row__input"
                                     type="text" inputMode="decimal"
                                     placeholder={`$${(svc.priceCents / 100).toFixed(2)}`}
                                     value={ov.priceCents}
@@ -1650,10 +1650,10 @@ function ServicesTab({
                                   />
                                 </div>
                               
-                                <div className="svc-staff-trow__cell svc-staff-trow__commission">
-                                  <div className="service-card__pill-toggle" role="group" aria-label="Commission type">
+                                <div className="cs-svc-staff-trow__cell cs-svc-staff-trow__commission">
+                                  <div className="cs-svc-commission-toggle" role="group" aria-label="Commission type">
                                     <button type="button"
-                                      className={`service-card__pill${commissionMode === "flat" ? " is-active" : ""}`}
+                                      className={`cs-svc-commission-toggle__option${commissionMode === "flat" ? " is-active" : ""}`}
                                       onClick={() => {
                                         ensureAssigned();
                                         setCommissionModeOverride((prev) => ({ ...prev, [svc.id]: "flat" }));
@@ -1663,7 +1663,7 @@ function ServicesTab({
                                       $
                                     </button>
                                     <button type="button"
-                                      className={`service-card__pill${commissionMode === "percent" ? " is-active" : ""}`}
+                                      className={`cs-svc-commission-toggle__option${commissionMode === "percent" ? " is-active" : ""}`}
                                       onClick={() => {
                                         ensureAssigned();
                                         setCommissionModeOverride((prev) => ({ ...prev, [svc.id]: "percent" }));
@@ -1675,7 +1675,7 @@ function ServicesTab({
                                   </div>
                                   {commissionMode === "flat" ? (
                                     <input
-                                      className="svc-input svc-provider-row__input"
+                                      className="cs-svc-input cs-svc-provider-row__input"
                                       type="text" inputMode="decimal"
                                       placeholder="0.00"
                                       value={ov.flatCents}
@@ -1686,7 +1686,7 @@ function ServicesTab({
                                     />
                                   ) : (
                                     <input
-                                      className="svc-input svc-provider-row__input"
+                                      className="cs-svc-input cs-svc-provider-row__input"
                                       type="text" inputMode="decimal"
                                       placeholder="0"
                                       value={ov.basisPoints}
@@ -1712,9 +1712,9 @@ function ServicesTab({
         )}
       </fieldset>
 
-      <fieldset className="staff-fieldset">
+      <fieldset className="cs-staff-fieldset">
         <legend>Visibility</legend>
-        <label className="settings-toggle">
+        <label className="cs-settings-toggle">
           <input
             type="checkbox"
             checked={isBookableOnline}
@@ -1722,7 +1722,7 @@ function ServicesTab({
           />
           <span>Bookable online (shows on storefront)</span>
         </label>
-        <label className="settings-toggle">
+        <label className="cs-settings-toggle">
           <input
             type="checkbox"
             checked={isActive}
@@ -1733,14 +1733,14 @@ function ServicesTab({
       </fieldset>
 
       {error ? (
-        <p role="alert" className="settings-error">
+        <p role="alert" className="cs-settings-error">
           {error}
         </p>
       ) : null}
 
-      <div className="modal-actions">
-        {isDirty ? <span className="settings-form-help">Unsaved changes</span> : null}
-        <button type="submit" className="primary-action" disabled={submitting || !isDirty}>
+      <div className="cs-modal__actions">
+        {isDirty ? <span className="cs-settings-form-help">Unsaved changes</span> : null}
+        <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={submitting || !isDirty}>
           {submitting ? "Saving…" : "Save"}
         </button>
       </div>
@@ -2387,11 +2387,11 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
   };
 
   if (loading) {
-    return <div className="staff-detail-form"><p className="settings-form-help">Loading work hours...</p></div>;
+    return <div className="cs-md-form"><p className="cs-settings-form-help">Loading work hours...</p></div>;
   }
 
   if (providerLocations.length === 0) {
-    return <div className="staff-detail-form"><p className="settings-form-help">Assign this provider to at least one location first.</p></div>;
+    return <div className="cs-md-form"><p className="cs-settings-form-help">Assign this provider to at least one location first.</p></div>;
   }
 
   const selectedLocationName = selectedLocationId
@@ -2402,15 +2402,15 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
   );
 
   return (
-    <div className="staff-detail-form wh-tab">
-      <div className="wh-layout">
-        <div className="wh-main">
-          <div className="svc-card wh-card">
-            <div className="wh-editing-for">
-              <span className="wh-editing-for__label">Editing hours for</span>
+    <div className="cs-md-form cs-wh-tab">
+      <div className="cs-wh-layout">
+        <div className="cs-wh-main">
+          <div className="cs-svc-card cs-wh-card">
+            <div className="cs-wh-editing-for">
+              <span className="cs-wh-editing-for__label">Editing hours for</span>
               {providerLocations.length > 1 ? (
                 <select
-                  className="wh-editing-for__select"
+                  className="cs-wh-editing-for__select"
                   aria-label="Work hours location"
                   value={selectedLocationId || ""}
                   onChange={(e) => setSelectedLocationId(e.target.value || null)}>
@@ -2420,29 +2420,29 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
                   ))}
                 </select>
               ) : (
-                <strong className="wh-editing-for__name">{providerLocations[0]?.name}</strong>
+                <strong className="cs-wh-editing-for__name">{providerLocations[0]?.name}</strong>
               )}
             </div>
             {providerLocations.length > 1 ? (
-              <p className="wh-helper-text">
+              <p className="cs-wh-helper-text">
                 Hours are per location.{selectedLocationName ? ` ${selectedLocationName} keeps its own pattern.` : " Each location keeps its own pattern."}
               </p>
             ) : null}
 
-            <h4 className="wh-section-title">Regular weekly pattern</h4>
-            <p className="wh-helper-text">
+            <h4 className="cs-wh-section-title">Regular weekly pattern</h4>
+            <p className="cs-wh-helper-text">
               This repeats every week. Click a date on the calendar to set a one-off exception instead.
             </p>
 
             {shifts.size === 0 ? (
-              <div className="wh-empty-state">
+              <div className="cs-wh-empty-state">
                 <div>
-                  <div className="wh-empty-state__title">No regular hours set yet</div>
-                  <div className="wh-empty-state__body">
+                  <div className="cs-wh-empty-state__title">No regular hours set yet</div>
+                  <div className="cs-wh-empty-state__body">
                     Set the recurring weekly hours in one step, then adjust individual days as needed.
                   </div>
                 </div>
-                <button type="button" className="svc-save-btn" onClick={() => setRegularHoursOpen(true)}>
+                <button type="button" className="cs-svc-save-btn" onClick={() => setRegularHoursOpen(true)}>
                   Set regular hours
                 </button>
               </div>
@@ -2457,7 +2457,7 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
                   weekStart.setDate(today.getDate() - daysSinceMonday);
 
                   return (
-                    <div className="wh-day-list">
+                    <div className="cs-wh-day-list">
                       {WEEKDAY_LABELS.map((label, wd) => {
                         const rawShifts = shifts.get(wd) || [];
                         const isOn = rawShifts.length > 0 && rawShifts[0].isActive;
@@ -2467,42 +2467,42 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
                         d.setDate(weekStart.getDate() + wd);
                         const dateStr = d.toISOString().split("T")[0];
                         return (
-                          <div key={wd} className={`wh-day-row${dayWarning ? " wh-day-row--warn" : ""}`}>
+                          <div key={wd} className={`cs-wh-day-row${dayWarning ? " cs-wh-day-row--warn" : ""}`}>
                             <button type="button"
-                              className={`wh-toggle${isOn ? " is-on" : ""}`}
+                              className={`cs-wh-toggle${isOn ? " is-on" : ""}`}
                               role="switch" aria-checked={isOn}
                               aria-label={`${isOn ? "Turn off" : "Turn on"} ${label}`}
                               onClick={() => toggleDay(wd)}>
-                              <span className="wh-toggle__knob" />
+                              <span className="cs-wh-toggle__knob" />
                             </button>
-                            <button type="button" className="wh-day-row__label"
+                            <button type="button" className="cs-wh-day-row__label"
                               onClick={() => setDayEditor({ dateStr, weekday: wd })}>
                               {label}
                             </button>
                             {!isOn ? (
-                              <span className="wh-day-row__status">Not working</span>
+                              <span className="cs-wh-day-row__status">Not working</span>
                             ) : (
-                              <div className="wh-day-row__shifts">
+                              <div className="cs-wh-day-row__shifts">
                                 {rawShifts.map((s, i) => (
-                                  <div className="wh-time-range" key={i}>
-                                    <input type="time" className="wh-time-input" value={s.startTime}
+                                  <div className="cs-wh-time-range" key={i}>
+                                    <input type="time" className="cs-wh-time-input" value={s.startTime}
                                       aria-label={`${label} start time`}
                                       onChange={(e) => updateShift(wd, i, { startTime: e.target.value })} />
-                                    <span className="wh-time-sep">to</span>
-                                    <input type="time" className="wh-time-input" value={s.endTime}
+                                    <span className="cs-wh-time-sep">to</span>
+                                    <input type="time" className="cs-wh-time-input" value={s.endTime}
                                       aria-label={`${label} end time`}
                                       onChange={(e) => updateShift(wd, i, { endTime: e.target.value })} />
                                     {rawShifts.length > 1 ? (
-                                      <button type="button" className="wh-time-remove"
+                                      <button type="button" className="cs-wh-time-remove"
                                         onClick={() => removeShift(wd, i)} aria-label="Remove shift">×</button>
                                     ) : null}
                                   </div>
                                 ))}
                               </div>
                             )}
-                            {badgeLabel ? <span className="wh-late-badge">{badgeLabel}</span> : null}
+                            {badgeLabel ? <span className="cs-wh-late-badge">{badgeLabel}</span> : null}
                             {isOn ? (
-                              <button type="button" className="wh-split-link" onClick={() => addShift(wd)}>
+                              <button type="button" className="cs-wh-split-link" onClick={() => addShift(wd)}>
                                 + Split shift
                               </button>
                             ) : null}
@@ -2512,12 +2512,12 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
                     </div>
                   );
                 })()}
-                <div className="wh-week-summary">
-                  <span className="wh-week-summary__text">
+                <div className="cs-wh-week-summary">
+                  <span className="cs-wh-week-summary__text">
                     {summary.hoursPerWeek} hours a week · {warnings.length === 0 ? "within studio hours" : "needs review"}
                   </span>
                   {providerLocations.length === 2 && selectedLocationId ? (
-                    <button type="button" className="svc-text-btn" disabled={submitting}
+                    <button type="button" className="cs-svc-text-btn" disabled={submitting}
                       onClick={() => {
                         const other = providerLocations.find((l) => l.id !== selectedLocationId);
                         if (other) void handleCopyToLocation(other.id);
@@ -2526,7 +2526,7 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
                     </button>
                   ) : null}
                 </div>
-                <button type="button" className="svc-duplicate-btn"
+                <button type="button" className="cs-svc-duplicate-btn"
                   onClick={() => setRegularHoursOpen(true)} disabled={submitting}
                   style={{ alignSelf: "flex-start" }}>
                   Edit regular hours
@@ -2536,11 +2536,11 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
           </div>
         </div>
 
-        <aside className="wh-side">
-          <div className="wh-side-card wh-exceptions-card">
-            <div className="wh-exceptions-header">
-              <div className="wh-side-card__title">Exceptions by date</div>
-              <button type="button" className="svc-text-btn" onClick={() => setTimeOffOpen(true)} disabled={submitting}>
+        <aside className="cs-wh-side">
+          <div className="cs-wh-side-card cs-wh-exceptions-card">
+            <div className="cs-wh-exceptions-header">
+              <div className="cs-wh-side-card__title">Exceptions by date</div>
+              <button type="button" className="cs-svc-text-btn" onClick={() => setTimeOffOpen(true)} disabled={submitting}>
                 + Block a range
               </button>
             </div>
@@ -2560,23 +2560,23 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
               }
               return (
                 <>
-                  <div className="wh-cal-nav">
-                    <button type="button" className="wh-cal-nav__btn" aria-label="Previous month"
+                  <div className="cs-wh-cal-nav">
+                    <button type="button" className="cs-wh-cal-nav__btn" aria-label="Previous month"
                       onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}>
                       ‹
                     </button>
-                    <span className="wh-cal-nav__label">{monthLabel}</span>
-                    <button type="button" className="wh-cal-nav__btn" aria-label="Next month"
+                    <span className="cs-wh-cal-nav__label">{monthLabel}</span>
+                    <button type="button" className="cs-wh-cal-nav__btn" aria-label="Next month"
                       onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}>
                       ›
                     </button>
                   </div>
-                  <div className="wh-cal-grid">
+                  <div className="cs-wh-cal-grid">
                     {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-                      <span key={i} className="wh-cal-dow">{d}</span>
+                      <span key={i} className="cs-wh-cal-dow">{d}</span>
                     ))}
                     {cells.map((cell, i) => {
-                      if (!cell) return <span key={`blank-${i}`} className="wh-cal-day wh-cal-day--blank" />;
+                      if (!cell) return <span key={`blank-${i}`} className="cs-wh-cal-day cs-wh-cal-day--blank" />;
                       const ov = findOverrideForDate(cell.dateStr);
                       const isTimeOff = ov?.overrideType === "closed";
                       const isCustom = ov?.overrideType === "custom_hours";
@@ -2584,7 +2584,7 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
                       const isSelected = cell.dateStr === selectedExceptionDate;
                       return (
                         <button type="button" key={cell.dateStr}
-                          className={`wh-cal-day${isTimeOff ? " wh-cal-day--timeoff" : ""}${isCustom ? " wh-cal-day--custom" : ""}${isToday ? " wh-cal-day--today" : ""}${isSelected ? " wh-cal-day--selected" : ""}`}
+                          className={`cs-wh-cal-day${isTimeOff ? " cs-wh-cal-day--timeoff" : ""}${isCustom ? " cs-wh-cal-day--custom" : ""}${isToday ? " cs-wh-cal-day--today" : ""}${isSelected ? " cs-wh-cal-day--selected" : ""}`}
                           onClick={() => setSelectedExceptionDate(cell.dateStr)}
                           aria-label={`Edit hours for ${cell.dateStr}`}>
                           {cell.day}
@@ -2592,9 +2592,9 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
                       );
                     })}
                   </div>
-                  <div className="wh-cal-legend">
-                    <span className="wh-cal-legend__item"><i className="wh-cal-legend__swatch wh-cal-legend__swatch--timeoff" />Time off</span>
-                    <span className="wh-cal-legend__item"><i className="wh-cal-legend__swatch wh-cal-legend__swatch--custom" />Custom hours</span>
+                  <div className="cs-wh-cal-legend">
+                    <span className="cs-wh-cal-legend__item"><i className="cs-wh-cal-legend__swatch cs-wh-cal-legend__swatch--timeoff" />Time off</span>
+                    <span className="cs-wh-cal-legend__item"><i className="cs-wh-cal-legend__swatch cs-wh-cal-legend__swatch--custom" />Custom hours</span>
                   </div>
                 </>
               );
@@ -2611,60 +2611,60 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
               const existing = findOverrideForDate(selectedExceptionDate);
               const dateLabel = dateObj.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
               return (
-                <div className="wh-exception-panel">
-                  <div className="wh-exception-panel__header">
-                    <div className="wh-exception-panel__title">{dateLabel}</div>
-                    <button type="button" className="wh-exception-panel__close"
+                <div className="cs-wh-exception-panel">
+                  <div className="cs-wh-exception-panel__header">
+                    <div className="cs-wh-exception-panel__title">{dateLabel}</div>
+                    <button type="button" className="cs-wh-exception-panel__close"
                       onClick={() => setSelectedExceptionDate(null)} aria-label="Close">×</button>
                   </div>
-                  <p className="wh-exception-panel__pattern">Regular pattern: {regularPatternLabel}</p>
+                  <p className="cs-wh-exception-panel__pattern">Regular pattern: {regularPatternLabel}</p>
 
-                  <div className="wh-seg-toggle" role="group" aria-label="Exception type">
+                  <div className="cs-wh-seg-toggle" role="group" aria-label="Exception type">
                     <button type="button"
-                      className={`wh-seg-toggle__btn${panelMode === "custom_hours" ? " is-active" : ""}`}
+                      className={`cs-wh-seg-toggle__btn${panelMode === "custom_hours" ? " is-active" : ""}`}
                       onClick={() => setPanelMode("custom_hours")}>
                       Custom hours
                     </button>
                     <button type="button"
-                      className={`wh-seg-toggle__btn${panelMode === "closed" ? " is-active" : ""}`}
+                      className={`cs-wh-seg-toggle__btn${panelMode === "closed" ? " is-active" : ""}`}
                       onClick={() => setPanelMode("closed")}>
                       Not working
                     </button>
                   </div>
 
                   {panelMode === "custom_hours" ? (
-                    <div className="wh-time-range wh-exception-panel__times">
-                      <input type="time" className="wh-time-input" value={panelStart}
+                    <div className="cs-wh-time-range cs-wh-exception-panel__times">
+                      <input type="time" className="cs-wh-time-input" value={panelStart}
                         aria-label="Exception start time"
                         onChange={(e) => setPanelStart(e.target.value)} />
-                      <span className="wh-time-sep">to</span>
-                      <input type="time" className="wh-time-input" value={panelEnd}
+                      <span className="cs-wh-time-sep">to</span>
+                      <input type="time" className="cs-wh-time-input" value={panelEnd}
                         aria-label="Exception end time"
                         onChange={(e) => setPanelEnd(e.target.value)} />
                     </div>
                   ) : null}
 
-                  <label className="wh-exception-panel__reason-label" htmlFor="wh-exception-reason">
+                  <label className="cs-wh-exception-panel__reason-label" htmlFor="wh-exception-reason">
                     Reason — shown to staff, optional
                   </label>
-                  <input id="wh-exception-reason" type="text" className="svc-input"
+                  <input id="wh-exception-reason" type="text" className="cs-svc-input"
                     value={panelReason} onChange={(e) => setPanelReason(e.target.value)}
                     placeholder="e.g. Training session" />
 
-                  <p className="wh-exception-panel__note">
+                  <p className="cs-wh-exception-panel__note">
                     This date only. {regularIsOn
                       ? `Every other ${WEEKDAY_LABELS[weekdayIdx]} keeps the regular ${regularPatternLabel} pattern.`
                       : `${WEEKDAY_LABELS[weekdayIdx]}s are normally not working.`}
                   </p>
 
-                  <div className="wh-exception-panel__actions">
+                  <div className="cs-wh-exception-panel__actions">
                     {existing ? (
-                      <button type="button" className="ghost-action" disabled={submitting}
+                      <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" disabled={submitting}
                         onClick={() => handleDeleteOverride(existing.id)}>
                         Remove exception
                       </button>
                     ) : null}
-                    <button type="button" className="svc-save-btn" disabled={submitting}
+                    <button type="button" className="cs-svc-save-btn" disabled={submitting}
                       onClick={() => handleSaveDateOverride(selectedExceptionDate, {
                         closedAllDay: panelMode === "closed",
                         startTime: panelStart,
@@ -2681,40 +2681,40 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
             })() : null}
           </div>
 
-          <div className="wh-side-card">
-            <div className="wh-side-card__title">Studio hours, for reference</div>
+          <div className="cs-wh-side-card">
+            <div className="cs-wh-side-card__title">Studio hours, for reference</div>
             {studioHours.length > 0 ? (
-              <div className="wh-side-hours">
+              <div className="cs-wh-side-hours">
                 {studioHours.map((g) => (
-                  <div key={g.label} className="wh-side-hours-row">
-                    <span className="wh-side-hours-row__label">{g.label}</span>
-                    <span className="wh-side-hours-row__value">{g.text}</span>
+                  <div key={g.label} className="cs-wh-side-hours-row">
+                    <span className="cs-wh-side-hours-row__label">{g.label}</span>
+                    <span className="cs-wh-side-hours-row__value">{g.text}</span>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="wh-side-empty">No business hours set for this tenant yet.</p>
+              <p className="cs-wh-side-empty">No business hours set for this tenant yet.</p>
             )}
           </div>
 
-          <div className="wh-side-card">
-            <div className="wh-side-card__title">This week at a glance</div>
-            <div className="wh-stat-rows">
-              <div className="wh-stat-row">
-                <span className="wh-stat-row__label">Scheduled hours</span>
-                <span className="wh-stat-row__value">{summary.hoursPerWeek}</span>
+          <div className="cs-wh-side-card">
+            <div className="cs-wh-side-card__title">This week at a glance</div>
+            <div className="cs-wh-stat-rows">
+              <div className="cs-wh-stat-row">
+                <span className="cs-wh-stat-row__label">Scheduled hours</span>
+                <span className="cs-wh-stat-row__value">{summary.hoursPerWeek}</span>
               </div>
-              <div className="wh-stat-row">
-                <span className="wh-stat-row__label">Days working</span>
-                <span className="wh-stat-row__value">{summary.workingDays}</span>
+              <div className="cs-wh-stat-row">
+                <span className="cs-wh-stat-row__label">Days working</span>
+                <span className="cs-wh-stat-row__value">{summary.workingDays}</span>
               </div>
             </div>
           </div>
 
           {warnings.length > 0 ? (
-            <div className="wh-warning-callout">
+            <div className="cs-wh-warning-callout">
               {warnings.map((w, i) => (
-                <p key={i} className="wh-warning-callout__text">{w.message}</p>
+                <p key={i} className="cs-wh-warning-callout__text">{w.message}</p>
               ))}
             </div>
           ) : null}
@@ -2900,7 +2900,7 @@ function DayEditorDrawer({
   };
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-label={`Edit ${dateLabel}`} onClick={onClose}>
+    <div className="cs-modal" role="dialog" aria-label={`Edit ${dateLabel}`} onClick={onClose}>
       <div style={{
         position: "fixed", top: 0, right: 0, height: "100vh",
         width: "min(440px, 100vw)",
@@ -2916,7 +2916,7 @@ function DayEditorDrawer({
             <div style={{ fontSize: "11px", color: "#8B7960", textTransform: "uppercase", letterSpacing: "0.5px" }}>Edit day</div>
             <div style={{ fontSize: "16px", fontWeight: 600, color: "#1F1612", marginTop: "2px" }}>{dateLabel}</div>
           </div>
-          <button type="button" className="ghost-action" onClick={onClose} aria-label="Close">×</button>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose} aria-label="Close">×</button>
         </header>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "18px" }}>
@@ -2924,7 +2924,7 @@ function DayEditorDrawer({
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
               <div style={{ fontSize: "12px", fontWeight: 600, color: "#1F1612", textTransform: "uppercase", letterSpacing: "0.5px" }}>Shifts</div>
               {localShifts.length > 0 ? (
-                <button type="button" className="svc-text-btn"
+                <button type="button" className="cs-svc-text-btn"
                   style={{ fontSize: "11px", color: "#8A2E1E" }}
                   onClick={() => setLocalShifts([])}>Clear all (closed)</button>
               ) : null}
@@ -2941,18 +2941,18 @@ function DayEditorDrawer({
               ) : (
                 localShifts.map((s, i) => (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <input type="text" className="svc-input"
+                    <input type="text" className="cs-svc-input"
                       style={{ width: "88px", textAlign: "center" }}
                       value={s.startTime} placeholder="09:00"
                       aria-label={`Shift ${i + 1} start`}
                       onChange={(e) => updateLocalShift(i, { startTime: e.target.value })} />
                     <span style={{ color: "#8B7960", fontSize: "12px" }}>→</span>
-                    <input type="text" className="svc-input"
+                    <input type="text" className="cs-svc-input"
                       style={{ width: "88px", textAlign: "center" }}
                       value={s.endTime} placeholder="17:00"
                       aria-label={`Shift ${i + 1} end`}
                       onChange={(e) => updateLocalShift(i, { endTime: e.target.value })} />
-                    <button type="button" className="svc-text-btn"
+                    <button type="button" className="cs-svc-text-btn"
                       onClick={() => removeLocalShift(i)}
                       aria-label={`Remove shift ${i + 1}`}>×</button>
                   </div>
@@ -3000,12 +3000,12 @@ function DayEditorDrawer({
                   Block dates as time off
                 </div>
                 <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px", flexWrap: "wrap" }}>
-                  <input type="date" className="svc-input" style={{ width: "140px" }}
+                  <input type="date" className="cs-svc-input" style={{ width: "140px" }}
                     value={blockStartDate}
                     aria-label="Block start date"
                     onChange={(e) => setBlockStartDate(e.target.value)} />
                   <span style={{ color: "#8B7960", fontSize: "12px" }}>to</span>
-                  <input type="date" className="svc-input" style={{ width: "140px" }}
+                  <input type="date" className="cs-svc-input" style={{ width: "140px" }}
                     value={blockEndDate}
                     aria-label="Block end date"
                     onChange={(e) => setBlockEndDate(e.target.value)} />
@@ -3018,13 +3018,13 @@ function DayEditorDrawer({
                   </label>
                   {!blockAllDay ? (
                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                      <input type="text" className="svc-input"
+                      <input type="text" className="cs-svc-input"
                         style={{ width: "80px", textAlign: "center" }}
                         value={blockTimeStart} placeholder="09:00"
                         aria-label="Block time start"
                         onChange={(e) => setBlockTimeStart(e.target.value)} />
                       <span style={{ color: "#8B7960", fontSize: "12px" }}>to</span>
-                      <input type="text" className="svc-input"
+                      <input type="text" className="cs-svc-input"
                         style={{ width: "80px", textAlign: "center" }}
                         value={blockTimeEnd} placeholder="17:00"
                         aria-label="Block time end"
@@ -3032,12 +3032,12 @@ function DayEditorDrawer({
                     </div>
                   ) : null}
                 </div>
-                <input type="text" className="svc-input"
+                <input type="text" className="cs-svc-input"
                   style={{ width: "100%", marginBottom: "8px" }}
                   value={blockReason} placeholder="Reason (optional, e.g. Vacation)"
                   onChange={(e) => setBlockReason(e.target.value)} />
                 <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <button type="button" className="svc-save-btn"
+                  <button type="button" className="cs-svc-save-btn"
                     onClick={async () => {
                       setSaveError(null);
                       try {
@@ -3060,7 +3060,7 @@ function DayEditorDrawer({
                     style={{ fontSize: "11px", padding: "4px 10px" }}>
                     {submitting ? "Saving..." : "Confirm block"}
                   </button>
-                  <button type="button" className="svc-text-btn"
+                  <button type="button" className="cs-svc-text-btn"
                     onClick={() => setShowBlockForm(false)}>Cancel</button>
                 </div>
               </div>
@@ -3128,14 +3128,14 @@ function DayEditorDrawer({
           </div>
           <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
             {dateOverride && scope === "date" ? (
-              <button type="button" className="svc-text-btn"
+              <button type="button" className="cs-svc-text-btn"
                 onClick={() => { void onClearOverride(dateOverride.id); }}
                 style={{ marginRight: "auto", color: "#8A2E1E" }}
                 disabled={submitting}>Clear override</button>
             ) : null}
-            <button type="button" className="ghost-action" onClick={onClose}>Cancel</button>
+            <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>Cancel</button>
             {!showBlockForm ? (
-              <button type="button" className="svc-save-btn"
+              <button type="button" className="cs-svc-save-btn"
                 onClick={handleSave} disabled={submitting}>
                 {submitting ? "Saving..." : "Save"}
               </button>
@@ -3188,7 +3188,7 @@ function TimeOffDrawer({
   };
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-label="Block time off" onClick={onClose}>
+    <div className="cs-modal" role="dialog" aria-label="Block time off" onClick={onClose}>
       <div style={{
         position: "fixed", top: 0, right: 0, height: "100vh",
         width: "min(440px, 100vw)",
@@ -3204,14 +3204,14 @@ function TimeOffDrawer({
             <div style={{ fontSize: "11px", color: "#8B7960", textTransform: "uppercase", letterSpacing: "0.5px" }}>New time off</div>
             <div style={{ fontSize: "16px", fontWeight: 600, color: "#1F1612", marginTop: "2px" }}>Block dates</div>
           </div>
-          <button type="button" className="ghost-action" onClick={onClose} aria-label="Close">×</button>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose} aria-label="Close">×</button>
         </header>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "18px" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
             <label style={{ fontSize: "12px", color: "#4A3D30" }}>
               Start date
-              <input type="date" className="svc-input"
+              <input type="date" className="cs-svc-input"
                 style={{ width: "100%", marginTop: "4px" }}
                 value={startDate}
                 aria-label="Time off start date"
@@ -3219,7 +3219,7 @@ function TimeOffDrawer({
             </label>
             <label style={{ fontSize: "12px", color: "#4A3D30" }}>
               End date
-              <input type="date" className="svc-input"
+              <input type="date" className="cs-svc-input"
                 style={{ width: "100%", marginTop: "4px" }}
                 value={endDate}
                 aria-label="Time off end date"
@@ -3227,7 +3227,7 @@ function TimeOffDrawer({
             </label>
             <label style={{ fontSize: "12px", color: "#4A3D30" }}>
               Reason (optional)
-              <input type="text" className="svc-input"
+              <input type="text" className="cs-svc-input"
                 style={{ width: "100%", marginTop: "4px" }}
                 value={reason} placeholder="e.g. Vacation"
                 onChange={(e) => setReason(e.target.value)} />
@@ -3277,8 +3277,8 @@ function TimeOffDrawer({
           padding: "14px 18px", borderTop: "1px solid #E5D7BB", background: "#FDF8F0",
           display: "flex", gap: "8px", justifyContent: "flex-end",
         }}>
-          <button type="button" className="ghost-action" onClick={onClose}>Cancel</button>
-          <button type="button" className="svc-save-btn"
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>Cancel</button>
+          <button type="button" className="cs-svc-save-btn"
             onClick={handleSave} disabled={submitting}>
             {submitting ? "Saving..." : "Block dates"}
           </button>
@@ -3459,7 +3459,7 @@ function RegularHoursDrawer({
   };
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-label="Set regular hours" onClick={onClose}>
+    <div className="cs-modal" role="dialog" aria-label="Set regular hours" onClick={onClose}>
       <div style={{
         position: "fixed", top: 0, right: 0, height: "100vh",
         width: "min(560px, 100vw)",
@@ -3478,7 +3478,7 @@ function RegularHoursDrawer({
               {activeCount} of 7 days · {totalHours.toFixed(1)} hrs / week
             </div>
           </div>
-          <button type="button" className="ghost-action" onClick={onClose} aria-label="Close">×</button>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose} aria-label="Close">×</button>
         </header>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "18px" }}>
@@ -3527,23 +3527,23 @@ function RegularHoursDrawer({
                         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                           {row.shifts.map((s, i) => (
                             <div key={i} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                              <input type="text" className="svc-input"
+                              <input type="text" className="cs-svc-input"
                                 style={{ width: "78px", textAlign: "center", padding: "5px 8px" }}
                                 value={s.startTime} placeholder="09:00"
                                 aria-label={`${label} shift ${i + 1} start`}
                                 onChange={(e) => setShiftTime(row.weekday, i, { startTime: e.target.value })} />
                               <span style={{ color: "#8B7960", fontSize: "12px" }}>→</span>
-                              <input type="text" className="svc-input"
+                              <input type="text" className="cs-svc-input"
                                 style={{ width: "78px", textAlign: "center", padding: "5px 8px" }}
                                 value={s.endTime} placeholder="17:00"
                                 aria-label={`${label} shift ${i + 1} end`}
                                 onChange={(e) => setShiftTime(row.weekday, i, { endTime: e.target.value })} />
-                              <button type="button" className="svc-text-btn"
+                              <button type="button" className="cs-svc-text-btn"
                                 onClick={() => removeShift(row.weekday, i)}
                                 aria-label={`Remove ${label} shift ${i + 1}`}
                                 style={{ fontSize: "14px", padding: "0 6px" }}>×</button>
                               {i === row.shifts.length - 1 ? (
-                                <button type="button" className="svc-text-btn"
+                                <button type="button" className="cs-svc-text-btn"
                                   onClick={() => addShift(row.weekday)}
                                   style={{ fontSize: "11px", textDecoration: "underline", marginLeft: "4px" }}>+ Add</button>
                               ) : null}
@@ -3557,12 +3557,12 @@ function RegularHoursDrawer({
                     {row.isActive ? (
                       <div style={{ display: "flex", gap: "4px", alignItems: "center", flexShrink: 0 }}>
                         {row.weekday <= 4 ? (
-                          <button type="button" className="svc-text-btn"
+                          <button type="button" className="cs-svc-text-btn"
                             onClick={() => copyToWeekdays(row.weekday)}
                             title="Copy to Mon–Fri"
                             style={{ fontSize: "10px", padding: "4px 6px" }}>→ weekdays</button>
                         ) : null}
-                        <button type="button" className="svc-text-btn"
+                        <button type="button" className="cs-svc-text-btn"
                           onClick={() => copyToAll(row.weekday)}
                           title="Copy to all 7 days"
                           style={{ fontSize: "10px", padding: "4px 6px" }}>→ all</button>
@@ -3596,8 +3596,8 @@ function RegularHoursDrawer({
           padding: "14px 18px", borderTop: "1px solid #E5D7BB", background: "#FDF8F0",
           display: "flex", gap: "8px", justifyContent: "flex-end",
         }}>
-          <button type="button" className="ghost-action" onClick={onClose}>Cancel</button>
-          <button type="button" className="svc-save-btn"
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>Cancel</button>
+          <button type="button" className="cs-svc-save-btn"
             onClick={handleSave} disabled={submitting}>
             {submitting ? "Saving..." : "Save regular hours"}
           </button>
@@ -3620,11 +3620,11 @@ function ModalShell({
   wide?: boolean;
 }) {
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={title}>
-      <div className={`modal-panel${wide ? " modal-panel--wide" : ""}`}>
-        <header className="modal-header">
+    <div className="cs-modal" role="dialog" aria-modal="true" aria-label={title}>
+      <div className={`cs-modal__panel${wide ? " cs-modal__panel--wide" : ""}`}>
+        <header className="cs-modal__header">
           <h4>{title}</h4>
-          <button type="button" className="ghost-action" onClick={onClose} aria-label="Close">
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose} aria-label="Close">
             ×
           </button>
         </header>
@@ -3705,7 +3705,7 @@ function AddStaffModal({
 
   return (
     <ModalShell title="Add staff" onClose={onClose} wide>
-      <form className="modal-form" onSubmit={submit}>
+      <form className="cs-modal__form" onSubmit={submit}>
         <label>
           <span>Name</span>
           <input
@@ -3755,9 +3755,9 @@ function AddStaffModal({
             minLength={8}
             required
           />
-          <small className="settings-form-help">Minimum 8 characters. Share securely.</small>
+          <small className="cs-settings-form-help">Minimum 8 characters. Share securely.</small>
         </label>
-        <label className="settings-toggle">
+        <label className="cs-settings-toggle">
           <input
             type="checkbox"
             checked={form.isProvider}
@@ -3768,14 +3768,14 @@ function AddStaffModal({
 
         {form.isProvider ? (
           <>
-            <fieldset className="staff-fieldset">
+            <fieldset className="cs-staff-fieldset">
               <legend>Locations</legend>
               {locations.length === 0 ? (
-                <p className="settings-form-help">No locations configured.</p>
+                <p className="cs-settings-form-help">No locations configured.</p>
               ) : (
-                <div className="staff-checkbox-grid">
+                <div className="cs-staff-checkbox-grid">
                   {locations.map((loc) => (
-                    <label key={loc.id} className="settings-toggle">
+                    <label key={loc.id} className="cs-settings-toggle">
                       <input
                         type="checkbox"
                         checked={form.locationIds.includes(loc.id)}
@@ -3789,14 +3789,14 @@ function AddStaffModal({
                 </div>
               )}
             </fieldset>
-            <fieldset className="staff-fieldset">
+            <fieldset className="cs-staff-fieldset">
               <legend>Services performed</legend>
               {services.length === 0 ? (
-                <p className="settings-form-help">No services configured.</p>
+                <p className="cs-settings-form-help">No services configured.</p>
               ) : (
-                <div className="staff-checkbox-grid">
+                <div className="cs-staff-checkbox-grid">
                   {services.map((svc) => (
-                    <label key={svc.id} className="settings-toggle">
+                    <label key={svc.id} className="cs-settings-toggle">
                       <input
                         type="checkbox"
                         checked={form.serviceIds.includes(svc.id)}
@@ -3810,7 +3810,7 @@ function AddStaffModal({
                 </div>
               )}
             </fieldset>
-            <label className="settings-toggle">
+            <label className="cs-settings-toggle">
               <input
                 type="checkbox"
                 checked={form.isBookableOnline}
@@ -3824,15 +3824,15 @@ function AddStaffModal({
         ) : null}
 
         {error ? (
-          <p role="alert" className="settings-error">
+          <p role="alert" className="cs-settings-error">
             {error}
           </p>
         ) : null}
-        <div className="modal-actions">
-          <button type="button" className="ghost-action" onClick={onClose}>
+        <div className="cs-modal__actions">
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="primary-action" disabled={disabled}>
+          <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={disabled}>
             {submitting ? "Saving…" : "Create staff"}
           </button>
         </div>
@@ -3889,12 +3889,12 @@ function AddProviderModal({
 
   return (
     <ModalShell title={`Make ${user.name} a service provider`} onClose={onClose} wide>
-      <form className="modal-form" onSubmit={submit}>
-        <fieldset className="staff-fieldset">
+      <form className="cs-modal__form" onSubmit={submit}>
+        <fieldset className="cs-staff-fieldset">
           <legend>Locations</legend>
-          <div className="staff-checkbox-grid">
+          <div className="cs-staff-checkbox-grid">
             {locations.map((loc) => (
-              <label key={loc.id} className="settings-toggle">
+              <label key={loc.id} className="cs-settings-toggle">
                 <input
                   type="checkbox"
                   checked={locationIds.includes(loc.id)}
@@ -3905,11 +3905,11 @@ function AddProviderModal({
             ))}
           </div>
         </fieldset>
-        <fieldset className="staff-fieldset">
+        <fieldset className="cs-staff-fieldset">
           <legend>Services performed</legend>
-          <div className="staff-checkbox-grid">
+          <div className="cs-staff-checkbox-grid">
             {services.map((svc) => (
-              <label key={svc.id} className="settings-toggle">
+              <label key={svc.id} className="cs-settings-toggle">
                 <input
                   type="checkbox"
                   checked={serviceIds.includes(svc.id)}
@@ -3920,7 +3920,7 @@ function AddProviderModal({
             ))}
           </div>
         </fieldset>
-        <label className="settings-toggle">
+        <label className="cs-settings-toggle">
           <input
             type="checkbox"
             checked={isBookableOnline}
@@ -3930,15 +3930,15 @@ function AddProviderModal({
         </label>
 
         {error ? (
-          <p role="alert" className="settings-error">
+          <p role="alert" className="cs-settings-error">
             {error}
           </p>
         ) : null}
-        <div className="modal-actions">
-          <button type="button" className="ghost-action" onClick={onClose}>
+        <div className="cs-modal__actions">
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="primary-action" disabled={submitting}>
+          <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={submitting}>
             {submitting ? "Saving…" : "Create provider"}
           </button>
         </div>
@@ -3978,7 +3978,7 @@ function ResetPasswordModal({
 
   return (
     <ModalShell title={`Reset password for ${user.name}`} onClose={onClose}>
-      <form className="modal-form" onSubmit={submit}>
+      <form className="cs-modal__form" onSubmit={submit}>
         <label>
           <span>New password</span>
           <input
@@ -3988,22 +3988,22 @@ function ResetPasswordModal({
             minLength={8}
             required
           />
-          <small className="settings-form-help">
+          <small className="cs-settings-form-help">
             Minimum 8 characters. Share securely with the user.
           </small>
         </label>
         {error ? (
-          <p role="alert" className="settings-error">
+          <p role="alert" className="cs-settings-error">
             {error}
           </p>
         ) : null}
-        <div className="modal-actions">
-          <button type="button" className="ghost-action" onClick={onClose}>
+        <div className="cs-modal__actions">
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>
             Cancel
           </button>
           <button
             type="submit"
-            className="primary-action"
+            className="cs-btn cs-btn--primary cs-btn--sm"
             disabled={submitting || password.length < 8}
           >
             {submitting ? "Saving…" : "Save new password"}
@@ -4052,22 +4052,22 @@ type ModeCardProps = {
 function ModeCard({ value, title, desc, mode, onSelect, children, preview }: ModeCardProps) {
   const selected = mode === value;
   return (
-    <div className={`comp-mode-card${selected ? " comp-mode-card--selected" : ""}`}>
-      <label className="comp-mode-card__head">
+    <div className={`cs-comp-mode-card${selected ? " cs-comp-mode-card--selected" : ""}`}>
+      <label className="cs-comp-mode-card__head">
         <input
           type="radio"
           name="compensationMode"
           value={value}
           checked={selected}
           onChange={() => onSelect(value)}
-          className="comp-mode-card__radio-input"
+          className="cs-comp-mode-card__radio-input"
         />
-        <span className="comp-mode-card__radio" aria-hidden="true" />
-        <span className="comp-mode-card__title">{title}</span>
+        <span className="cs-comp-mode-card__radio" aria-hidden="true" />
+        <span className="cs-comp-mode-card__title">{title}</span>
       </label>
-      <p className="comp-mode-card__desc">{desc}</p>
-      {selected && children ? <div className="comp-mode-card__body">{children}</div> : null}
-      {!selected && preview ? <div className="comp-mode-card__preview">{preview}</div> : null}
+      <p className="cs-comp-mode-card__desc">{desc}</p>
+      {selected && children ? <div className="cs-comp-mode-card__body">{children}</div> : null}
+      {!selected && preview ? <div className="cs-comp-mode-card__preview">{preview}</div> : null}
     </div>
   );
 }
@@ -4239,9 +4239,9 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
   const overrideCount = earnings?.overrideBookingsCount ?? 0;
 
   const slidingPreview = slidingTiers.length > 0 ? (
-    <span className="comp-tier-preview">
+    <span className="cs-comp-tier-preview">
       {slidingTiers.map((tier, i) => (
-        <span key={i} className="comp-tier-chip comp-tier-chip--readonly">
+        <span key={i} className="cs-comp-tier-chip cs-comp-tier-chip--readonly">
           {i === slidingTiers.length - 1 && tier.upToAmountCents === 0
             ? `above · ${tier.percentBp / 100}%`
             : `to $${Math.round(tier.upToAmountCents / 100) / 1000}k · ${tier.percentBp / 100}%`}
@@ -4251,19 +4251,19 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
   ) : null;
 
   return (
-    <div className="staff-detail-form">
+    <div className="cs-md-form">
       {status ? (
-        <div className="message-banner" role="status">
+        <div className="cs-banner" role="status">
           {status}
-          <button type="button" className="ghost-action" onClick={() => setStatus(null)}>Dismiss</button>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setStatus(null)}>Dismiss</button>
         </div>
       ) : null}
 
-      <p className="comp-lead">
+      <p className="cs-comp-lead">
         Pick one model. Per-treatment overrides on the Services tab always win over what's set here.
       </p>
 
-      <div className="comp-mode-list">
+      <div className="cs-comp-mode-list">
         <ModeCard
           value="service_percent"
           title="Percent of service"
@@ -4271,9 +4271,9 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
           mode={mode}
           onSelect={setMode}
         >
-          <div className="comp-value-row">
+          <div className="cs-comp-value-row">
             <input
-              className="comp-value-input"
+              className="cs-comp-value-input"
               type="number"
               min={0}
               max={100}
@@ -4282,8 +4282,8 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
               onChange={(e) => setServicePercent(e.target.value)}
               placeholder="0"
             />
-            <span className="comp-value-suffix">%</span>
-            {servicePercentHelper ? <span className="comp-helper">{servicePercentHelper}</span> : null}
+            <span className="cs-comp-value-suffix">%</span>
+            {servicePercentHelper ? <span className="cs-comp-helper">{servicePercentHelper}</span> : null}
           </div>
         </ModeCard>
 
@@ -4295,21 +4295,21 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
           onSelect={setMode}
           preview={slidingPreview}
         >
-          <div className="comp-tier-list">
+          <div className="cs-comp-tier-list">
             {slidingTiers.map((tier, i) => (
-              <div key={i} className="comp-tier-chip">
-                <span className="comp-tier-chip__label">to $</span>
+              <div key={i} className="cs-comp-tier-chip">
+                <span className="cs-comp-tier-chip__label">to $</span>
                 <input
-                  className="comp-tier-chip__input"
+                  className="cs-comp-tier-chip__input"
                   type="number"
                   min={0}
                   step="1"
                   value={Math.round(tier.upToAmountCents / 100)}
                   onChange={(e) => updateSlidingTier(i, "upToAmountCents", String(Number(e.target.value) * 100))}
                 />
-                <span className="comp-tier-chip__label">·</span>
+                <span className="cs-comp-tier-chip__label">·</span>
                 <input
-                  className="comp-tier-chip__input comp-tier-chip__input--pct"
+                  className="cs-comp-tier-chip__input cs-comp-tier-chip__input--pct"
                   type="number"
                   min={0}
                   max={100}
@@ -4317,10 +4317,10 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
                   value={tier.percentBp / 100}
                   onChange={(e) => updateSlidingTier(i, "percentBp", String(Number(e.target.value) * 100))}
                 />
-                <span className="comp-tier-chip__label">%</span>
+                <span className="cs-comp-tier-chip__label">%</span>
                 <button
                   type="button"
-                  className="comp-tier-chip__remove"
+                  className="cs-comp-tier-chip__remove"
                   onClick={() => removeSlidingTier(i)}
                   aria-label="Remove tier"
                 >
@@ -4328,7 +4328,7 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
                 </button>
               </div>
             ))}
-            <button type="button" className="comp-tier-add" onClick={addSlidingTier}>
+            <button type="button" className="cs-comp-tier-add" onClick={addSlidingTier}>
               + Tier
             </button>
           </div>
@@ -4341,10 +4341,10 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
           mode={mode}
           onSelect={setMode}
         >
-          <div className="comp-value-row">
-            <span className="comp-value-prefix">$</span>
+          <div className="cs-comp-value-row">
+            <span className="cs-comp-value-prefix">$</span>
             <input
-              className="comp-value-input"
+              className="cs-comp-value-input"
               type="number"
               min={0}
               step="0.01"
@@ -4352,7 +4352,7 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
               onChange={(e) => setFlatPerBooking(e.target.value)}
               placeholder="0.00"
             />
-            <span className="comp-value-suffix">per booking</span>
+            <span className="cs-comp-value-suffix">per booking</span>
           </div>
         </ModeCard>
 
@@ -4363,10 +4363,10 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
           mode={mode}
           onSelect={setMode}
         >
-          <div className="comp-value-row">
-            <span className="comp-value-prefix">$</span>
+          <div className="cs-comp-value-row">
+            <span className="cs-comp-value-prefix">$</span>
             <input
-              className="comp-value-input"
+              className="cs-comp-value-input"
               type="number"
               min={0}
               step="0.01"
@@ -4374,20 +4374,20 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
               onChange={(e) => setHourlyRate(e.target.value)}
               placeholder="0.00"
             />
-            <span className="comp-value-suffix">/ hr</span>
+            <span className="cs-comp-value-suffix">/ hr</span>
           </div>
         </ModeCard>
       </div>
 
-      <div className="comp-section">
-        <div className="comp-section__head">
-          <h5 className="comp-section__title">Product commission</h5>
-          <span className="comp-section__note">Set separately from treatments</span>
+      <div className="cs-comp-section">
+        <div className="cs-comp-section__head">
+          <h5 className="cs-comp-section__title">Product commission</h5>
+          <span className="cs-comp-section__note">Set separately from treatments</span>
         </div>
-        <p className="comp-section__desc">
+        <p className="cs-comp-section__desc">
           What they earn on retail sold at checkout — serums, SPF, aftercare kits. Applies to every product line unless one is excluded below.
         </p>
-        <div className="comp-product-card">
+        <div className="cs-comp-product-card">
           <div className="cs-seg" role="group" aria-label="Product commission mode">
             <button
               type="button"
@@ -4408,9 +4408,9 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
             </button>
           </div>
           {productCommissionEnabled ? (
-            <div className="comp-value-row" style={{ marginTop: "12px" }}>
+            <div className="cs-comp-value-row" style={{ marginTop: "12px" }}>
               <input
-                className="comp-value-input"
+                className="cs-comp-value-input"
                 type="number"
                 min={0}
                 max={100}
@@ -4419,35 +4419,35 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
                 onChange={(e) => setProductPercent(e.target.value)}
                 placeholder="0"
               />
-              <span className="comp-value-suffix">% of product sales</span>
+              <span className="cs-comp-value-suffix">% of product sales</span>
             </div>
           ) : null}
         </div>
       </div>
 
-      <div className="comp-summary">
-        <h5 className="comp-summary__title">{earnings ? `${earnings.monthLabel} so far` : "This month so far"}</h5>
+      <div className="cs-comp-summary">
+        <h5 className="cs-comp-summary__title">{earnings ? `${earnings.monthLabel} so far` : "This month so far"}</h5>
         {earningsError ? (
-          <p className="comp-summary__error">{earningsError}</p>
+          <p className="cs-comp-summary__error">{earningsError}</p>
         ) : earnings ? (
-          <div className="comp-summary__body">
-            <div className="comp-summary__breakdown">
+          <div className="cs-comp-summary__body">
+            <div className="cs-comp-summary__breakdown">
               <p>{formatCentsWhole(earnings.treatmentRevenueCents)} in treatments · {formatCentsWhole(earnings.retailRevenueCents)} in retail{overrideCount > 0 ? ` · ${overrideCount} treatment${overrideCount === 1 ? "" : "s"} on an override rate` : ""}</p>
             </div>
-            <div className="comp-summary__total">
-              <span className="comp-summary__total-amount">{formatCentsWhole(earnings.totalPayoutCents)}</span>
-              <span className="comp-summary__total-split">
+            <div className="cs-comp-summary__total">
+              <span className="cs-comp-summary__total-amount">{formatCentsWhole(earnings.totalPayoutCents)}</span>
+              <span className="cs-comp-summary__total-split">
                 {formatCentsWhole(earnings.servicePayoutCents)} service + {formatCentsWhole(earnings.productPayoutCents)} product
               </span>
             </div>
           </div>
         ) : (
-          <p className="comp-summary__loading">Loading…</p>
+          <p className="cs-comp-summary__loading">Loading…</p>
         )}
       </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "18px" }}>
-        <button type="button" className="primary-action" onClick={handleSave} disabled={saving}>
+        <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={handleSave} disabled={saving}>
           {saving ? "Saving…" : "Save compensation"}
         </button>
       </div>
@@ -4553,10 +4553,10 @@ function PermissionsTab({ tenantSlug, user }: PermissionsTabProps) {
   };
 
   if (loadState.kind === "loading") {
-    return <p className="settings-form-help">Loading permissions…</p>;
+    return <p className="cs-settings-form-help">Loading permissions…</p>;
   }
   if (loadState.kind === "error") {
-    return <p className="error-message">{loadState.message}</p>;
+    return <p className="cs-error">{loadState.message}</p>;
   }
   if (!catalog) return null;
 
@@ -4575,38 +4575,38 @@ function PermissionsTab({ tenantSlug, user }: PermissionsTabProps) {
   // Read-only full-access view for owners.
   if (isOwner) {
     return (
-      <div className="perm">
-        <div className="perm-banner">
-          <div className="perm-banner__text">
+      <div className="cs-perm">
+        <div className="cs-perm-banner">
+          <div className="cs-perm-banner__text">
             <strong>Owners have full access</strong>
-            <p className="perm-banner__sub">Every permission is granted automatically. Customize access on managers, providers, and staff instead.</p>
+            <p className="cs-perm-banner__sub">Every permission is granted automatically. Customize access on managers, providers, and staff instead.</p>
           </div>
         </div>
 
-        <div className="perm-grid-cols">
+        <div className="cs-perm-grid-cols">
           <span>Permission</span>
           <span>Owner default</span>
           <span>For {firstName}</span>
         </div>
 
         {groupAll(catalog.permissions).map(([category, defs]) => (
-          <section key={category} className="perm-group">
-            <p className="perm-group__label">{category}</p>
-            <div className="perm-group__list">
+          <section key={category} className="cs-perm-group">
+            <p className="cs-perm-group__label">{category}</p>
+            <div className="cs-perm-group__list">
               {defs.map((def) => (
-                <div key={def.key} className="perm-row">
-                  <div className="perm-row__label">
+                <div key={def.key} className="cs-perm-row">
+                  <div className="cs-perm-row__label">
                     <strong>{overrideLabel(def.key, def.label)}</strong>
-                    <span className="perm-row__key">{def.key}</span>
+                    <span className="cs-perm-row__key">{def.key}</span>
                   </div>
-                  <div className="perm-row__default">
-                    <span className="perm-row__count-label">Allowed</span>
+                  <div className="cs-perm-row__default">
+                    <span className="cs-perm-row__count-label">Allowed</span>
                   </div>
-                  <div className="perm-row__control">
-                    <div className="perm-seg" role="radiogroup" aria-label={def.label}>
-                      <button type="button" className="perm-seg__btn" disabled>Default</button>
-                      <button type="button" className="perm-seg__btn" aria-pressed="true" disabled>Allow</button>
-                      <button type="button" className="perm-seg__btn" disabled>Deny</button>
+                  <div className="cs-perm-row__control">
+                    <div className="cs-perm-seg" role="radiogroup" aria-label={def.label}>
+                      <button type="button" className="cs-perm-seg__btn" disabled>Default</button>
+                      <button type="button" className="cs-perm-seg__btn" aria-pressed="true" disabled>Allow</button>
+                      <button type="button" className="cs-perm-seg__btn" disabled>Deny</button>
                     </div>
                   </div>
                 </div>
@@ -4615,8 +4615,8 @@ function PermissionsTab({ tenantSlug, user }: PermissionsTabProps) {
           </section>
         ))}
 
-        <div className="perm-summary">
-          <p className="perm-summary__text">{firstName} is an Owner — all permissions are always allowed and cannot be restricted from this screen.</p>
+        <div className="cs-perm-summary">
+          <p className="cs-perm-summary__text">{firstName} is an Owner — all permissions are always allowed and cannot be restricted from this screen.</p>
         </div>
       </div>
     );
@@ -4639,22 +4639,22 @@ function PermissionsTab({ tenantSlug, user }: PermissionsTabProps) {
   const summaryInheritedAllowed = summaryOverrideKey ? roleDefaults.has(summaryOverrideKey) : false;
 
   return (
-    <div className="perm">
+    <div className="cs-perm">
       {status ? (
-        <div className="message-banner" role="alert">
+        <div className="cs-banner" role="alert">
           {status}
-          <button type="button" className="ghost-action" onClick={() => setStatus(null)}>Dismiss</button>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setStatus(null)}>Dismiss</button>
         </div>
       ) : null}
 
-      <div className="perm-banner">
-        <div className="perm-banner__text">
+      <div className="cs-perm-banner">
+        <div className="cs-perm-banner__text">
           <strong>{roleLabel} defaults apply</strong>
-          <p className="perm-banner__sub">Change the role on Details to move the whole baseline.</p>
+          <p className="cs-perm-banner__sub">Change the role on Details to move the whole baseline.</p>
         </div>
         <button
           type="button"
-          className="perm-banner__reset"
+          className="cs-perm-banner__reset"
           onClick={handleReset}
           disabled={saving || overrideCount === 0}
         >
@@ -4662,36 +4662,36 @@ function PermissionsTab({ tenantSlug, user }: PermissionsTabProps) {
         </button>
       </div>
 
-      <div className="perm-grid-cols">
+      <div className="cs-perm-grid-cols">
         <span>Permission</span>
         <span>{roleLabel} default</span>
         <span>For {firstName}</span>
       </div>
 
       {groupAll(catalog.permissions).map(([category, defs]) => (
-        <section key={category} className="perm-group">
-          <p className="perm-group__label">{category}</p>
-          <div className="perm-group__list">
+        <section key={category} className="cs-perm-group">
+          <p className="cs-perm-group__label">{category}</p>
+          <div className="cs-perm-group__list">
             {defs.map((def) => {
               const current: PermissionTriState = overrides[def.key] ?? "inherit";
               const inheritedAllowed = roleDefaults.has(def.key);
               const overridden = savedOverrides[def.key] != null;
               return (
-                <div key={def.key} className={`perm-row${overridden ? " perm-row--overridden" : ""}`}>
-                  <div className="perm-row__label">
+                <div key={def.key} className={`cs-perm-row${overridden ? " cs-perm-row--overridden" : ""}`}>
+                  <div className="cs-perm-row__label">
                     <strong>{overrideLabel(def.key, def.label)}</strong>
-                    <span className="perm-row__key">{def.key}</span>
+                    <span className="cs-perm-row__key">{def.key}</span>
                   </div>
-                  <div className="perm-row__default">
-                    <span className="perm-row__count-label">{inheritedAllowed ? "Allowed" : "Denied"}</span>
+                  <div className="cs-perm-row__default">
+                    <span className="cs-perm-row__count-label">{inheritedAllowed ? "Allowed" : "Denied"}</span>
                   </div>
-                  <div className="perm-row__control">
-                    <div className="perm-seg" role="radiogroup" aria-label={def.label}>
+                  <div className="cs-perm-row__control">
+                    <div className="cs-perm-seg" role="radiogroup" aria-label={def.label}>
                       {(["inherit", "allow", "deny"] as const).map((opt) => (
                         <button
                           key={opt}
                           type="button"
-                          className={`perm-seg__btn${current === opt ? ` perm-seg__btn--${opt}` : ""}`}
+                          className={`cs-perm-seg__btn${current === opt ? ` cs-perm-seg__btn--${opt}` : ""}`}
                           aria-pressed={current === opt}
                           onClick={() => handleChange(def.key, opt)}
                         >
@@ -4707,13 +4707,13 @@ function PermissionsTab({ tenantSlug, user }: PermissionsTabProps) {
         </section>
       ))}
 
-      <div className="perm-summary">
+      <div className="cs-perm-summary">
         {dirty ? (
-          <p className="perm-summary__text">
+          <p className="cs-perm-summary__text">
             {saving ? "Saving changes…" : "Saving your changes…"}
           </p>
         ) : savedCount > 0 && summaryDef ? (
-          <p className="perm-summary__text">
+          <p className="cs-perm-summary__text">
             {savedCount === 1
               ? summaryOverrideAllowed
                 ? summaryInheritedAllowed
@@ -4724,7 +4724,7 @@ function PermissionsTab({ tenantSlug, user }: PermissionsTabProps) {
             {" "}Overrides are logged and surfaced to the owner.
           </p>
         ) : (
-          <p className="perm-summary__text">No overrides active for {firstName} — they follow the {roleLabel} defaults.</p>
+          <p className="cs-perm-summary__text">No overrides active for {firstName} — they follow the {roleLabel} defaults.</p>
         )}
       </div>
     </div>

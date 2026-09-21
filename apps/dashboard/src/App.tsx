@@ -1,5 +1,3 @@
-import "@booking/ui-components/styles.css";
-
 import { startTransition, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import type {
@@ -32,13 +30,7 @@ import { CustomersPage } from "./clients-page";
 
 import { FormsPage } from "./forms-page";
 import { ResourcesPage } from "./resources-page";
-// Load order matters: staff-services.css must load AFTER styles.css so the
-// redesigned staff-tab rules (scoped under .staff-services-fieldset) override
-// the legacy .staff-*/.svc-* fallbacks in styles.css. Do not reorder or remove
-// this import without checking the Staff page's Services/Work Hours tabs.
-import "./styles.css";
-import "./club-sunday.css";
-import "./staff-services.css";
+import "./theme.css";
 
 type RouteGroupKey = "settings-management";
 
@@ -358,7 +350,7 @@ function AuthenticatedLayout({
     return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
   };
 
-  const NAV_ICONS: Record<string, JSX.Element> = {
+  const NAV_ICONS: Record<string, ReactNode> = {
     "/calendar": (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="5" width="18" height="16" rx="2" />
@@ -414,7 +406,7 @@ function AuthenticatedLayout({
       </svg>
     ),
   };
-  const navIcon = (path: string): JSX.Element =>
+  const navIcon = (path: string): ReactNode =>
     NAV_ICONS[path] ?? (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="4" />
@@ -562,7 +554,7 @@ function CalendarSearchBar({ tenantSlug }: { tenantSlug: string }) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [searching, setSearching] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     if (!showDropdown) return;
@@ -635,7 +627,7 @@ function CalendarSearchBar({ tenantSlug }: { tenantSlug: string }) {
   });
 
   return (
-    <div className="ops-topbar-search" ref={containerRef} style={{ position: "relative" }}>
+    <div className="cs-topbar-search" ref={containerRef} style={{ position: "relative" }}>
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
       <input
         placeholder="Search customers & appointments…"
@@ -643,11 +635,11 @@ function CalendarSearchBar({ tenantSlug }: { tenantSlug: string }) {
         onChange={(e) => handleChange(e.target.value)}
         onFocus={() => { if (results.length > 0) setShowDropdown(true); }}
       />
-      {searching ? <span style={{ fontSize: "0.8rem", color: "var(--ui-ink-soft)" }}>…</span> : null}
+      {searching ? <span style={{ fontSize: "0.8rem", color: "var(--cs-label)" }}>…</span> : null}
       {showDropdown && results.length > 0 ? (
-        <div className="search-dropdown" style={{
+        <div className="cs-search-dropdown" style={{
           position: "absolute", top: "100%", left: 0, right: 0,
-          background: "#fff", border: "1px solid var(--ui-border, #e5e7eb)",
+          background: "#fff", border: "1px solid var(--cs-hairline)",
           borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
           zIndex: 50, maxHeight: "400px", overflowY: "auto", marginTop: "4px",
         }}>
@@ -670,12 +662,12 @@ function CalendarSearchBar({ tenantSlug }: { tenantSlug: string }) {
                   navigate(`/calendar?bookingId=${r.id}`);
                 }
               }}
-              onMouseEnter={(e) => { (e.target as HTMLElement).style.background = "var(--ui-sand, #f5f0eb)"; }}
+              onMouseEnter={(e) => { (e.target as HTMLElement).style.background = "var(--cs-hover)"; }}
               onMouseLeave={(e) => { (e.target as HTMLElement).style.background = "none"; }}
             >
               <span style={{
                 fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase",
-                color: r.kind === "customer" ? "var(--ui-amber-deep, #b45309)" : "var(--ui-cat-pink-bar, #c2416c)",
+                color: r.kind === "customer" ? "var(--cs-warn-text)" : "var(--cs-risk-text)",
                 minWidth: "3.5rem",
               }}>
                 {r.kind === "customer" ? "Client" : "Appt"}
@@ -684,7 +676,7 @@ function CalendarSearchBar({ tenantSlug }: { tenantSlug: string }) {
                 <strong style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {r.kind === "customer" ? r.name : r.serviceName}
                 </strong>
-                <span style={{ color: "var(--ui-ink-soft)", fontSize: "0.8rem" }}>
+                <span style={{ color: "var(--cs-label)", fontSize: "0.8rem" }}>
                   {r.kind === "customer"
                     ? (r.email ?? r.phone ?? "")
                     : `${r.customerName} · ${timeFormatter.format(new Date(r.startsAt))}`}
@@ -785,7 +777,7 @@ export function App() {
       <Route
         path="/onboarding"
         element={
-          <div className="public-route-shell">
+          <div className="cs-public-shell">
             <OnboardingPage definition={onboardingDefinition} onSessionCreated={handleSessionCreated} />
           </div>
         }
@@ -938,42 +930,42 @@ function OnboardingPage({
   };
 
   return (
-    <main className="ops-page-stack">
-      <section className="ops-hero ops-hero--compact">
-        <div className="ops-hero-copy">
-          <p className="eyebrow">{definition.eyebrow}</p>
+    <main className="cs-page-stack">
+      <section className="cs-hero cs-hero--compact">
+        <div className="cs-hero__copy">
+          <p className="cs-eyebrow">{definition.eyebrow}</p>
           <h3>Stand up a new studio, owner login, and storefront in one pass.</h3>
           <p>{definition.description}</p>
         </div>
-        <div className="ops-hero-panel">
-          <p className="eyebrow">Launch outcome</p>
+        <div className="cs-hero__panel">
+          <p className="cs-eyebrow">Launch outcome</p>
           <strong>{saveState.kind === "success" ? saveState.result.tenant.name : definition.metric}</strong>
           <span>The onboarding slice creates the tenant, default location, owner account, and a publishable storefront route.</span>
         </div>
       </section>
 
-      <section className="catalog-layout">
-        <article className="ops-panel">
-          <div className="panel-title-row">
+      <section className="cs-catalog-layout">
+        <article className="cs-panel-card">
+          <div className="cs-panel-title-row">
             <div>
-              <p className="eyebrow">Business setup</p>
+              <p className="cs-eyebrow">Business setup</p>
               <h4>Set up a new business</h4>
             </div>
-            <span className="status-chip status-chip--planned">Launch checklist</span>
+            <span className="cs-status-chip cs-status-chip--planned">Launch checklist</span>
           </div>
 
           {saveState.kind !== "idle" ? (
-            <div className={saveState.kind === "error" ? "message-banner message-banner--error" : "message-banner"}>
+            <div className={saveState.kind === "error" ? "cs-banner cs-banner--error" : "cs-banner"}>
               {saveState.kind === "saving" ? "Creating business..." : saveState.message}
             </div>
           ) : null}
 
           {ownerSignInState.kind === "error" ? (
-            <div className="message-banner message-banner--error">{ownerSignInState.message}</div>
+            <div className="cs-banner cs-banner--error">{ownerSignInState.message}</div>
           ) : null}
 
-          <form className="catalog-form" onSubmit={handleCreateBusiness}>
-            <div className="form-grid">
+          <form className="cs-catalog-form" onSubmit={handleCreateBusiness}>
+            <div className="cs-form-grid">
               <label>
                 <span>Business name</span>
                 <input value={formState.name} onChange={(event) => updateFormField("name", event.target.value)} required />
@@ -1040,27 +1032,27 @@ function OnboardingPage({
               </label>
             </div>
 
-            <div className="inline-meta">
+            <div className="cs-inline-meta">
               <span>Create the tenant, owner login, and first location before catalog import.</span>
-              <button type="submit" className="primary-action" disabled={saveState.kind === "saving"}>
+              <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={saveState.kind === "saving"}>
                 Create business
               </button>
             </div>
           </form>
         </article>
 
-        <aside className="ops-panel">
-          <div className="panel-title-row">
+        <aside className="cs-panel-card">
+          <div className="cs-panel-title-row">
             <div>
-              <p className="eyebrow">Launch summary</p>
+              <p className="cs-eyebrow">Launch summary</p>
               <h4>{saveState.kind === "success" ? "Storefront published" : "What gets provisioned"}</h4>
             </div>
-            {saveState.kind === "success" ? <span className="status-chip status-chip--ready">Published</span> : null}
+            {saveState.kind === "success" ? <span className="cs-status-chip cs-status-chip--ready">Published</span> : null}
           </div>
 
           {saveState.kind === "success" ? (
-            <div className="launch-summary">
-              <dl className="launch-summary-list">
+            <div className="cs-launch-summary">
+              <dl className="cs-launch-summary-list">
                 <div>
                   <dt>Tenant</dt>
                   <dd>{saveState.result.tenant.name}</dd>
@@ -1079,12 +1071,12 @@ function OnboardingPage({
                 </div>
               </dl>
               {storefrontUrl ? (
-                <div className="action-row">
-                  <a href={storefrontUrl} target="_blank" rel="noreferrer" className="secondary-action">
+                <div className="cs-action-row">
+                  <a href={storefrontUrl} target="_blank" rel="noreferrer" className="cs-btn cs-btn--sm">
                     Open storefront
                   </a>
                   {onSessionCreated ? (
-                    <button type="button" className="primary-action" onClick={handleContinueAsOwner} disabled={ownerSignInState.kind === "submitting"}>
+                    <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={handleContinueAsOwner} disabled={ownerSignInState.kind === "submitting"}>
                       {ownerSignInState.kind === "submitting" ? "Signing in..." : "Continue as owner"}
                     </button>
                   ) : null}
@@ -1092,7 +1084,7 @@ function OnboardingPage({
               ) : null}
             </div>
           ) : (
-            <ul className="check-list">
+            <ul className="cs-check-list">
               <li>Create the tenant with portable policy defaults.</li>
               <li>Issue the first owner login and default location.</li>
               <li>Publish a storefront route before services are imported.</li>
@@ -1106,37 +1098,37 @@ function OnboardingPage({
 
 function SectionPage({ definition }: { definition: RouteDefinition }) {
   return (
-    <main className="ops-page-stack">
-      <section className="ops-hero ops-hero--compact">
-        <div className="ops-hero-copy">
-          <p className="eyebrow">{definition.eyebrow}</p>
+    <main className="cs-page-stack">
+      <section className="cs-hero cs-hero--compact">
+        <div className="cs-hero__copy">
+          <p className="cs-eyebrow">{definition.eyebrow}</p>
           <h3>{definition.title}</h3>
           <p>{definition.description}</p>
         </div>
-        <div className="ops-hero-panel">
-          <p className="eyebrow">Current state</p>
+        <div className="cs-hero__panel">
+          <p className="cs-eyebrow">Current state</p>
           <strong>{definition.metric}</strong>
           <span>{getStatusLabel(definition.tone)} for greenfield implementation.</span>
         </div>
       </section>
 
-      <section className="ops-dashboard-grid">
-        <article className="ops-panel">
-          <p className="eyebrow">Workflow design</p>
+      <section className="cs-dashboard-grid">
+        <article className="cs-panel-card">
+          <p className="cs-eyebrow">Workflow design</p>
           <h4>Expected operator controls</h4>
-          <div className="action-grid">
+          <div className="cs-action-grid">
             {definition.actions.map((action) => (
-              <button key={action} type="button" className="action-tile" disabled>
+              <button key={action} type="button" className="cs-action-tile" disabled>
                 {action}
               </button>
             ))}
           </div>
         </article>
 
-        <article className="ops-panel">
-          <p className="eyebrow">Build sequence</p>
+        <article className="cs-panel-card">
+          <p className="cs-eyebrow">Build sequence</p>
           <h4>Implementation workstreams</h4>
-          <ul className="check-list">
+          <ul className="cs-check-list">
             {definition.workstreams.map((stream) => (
               <li key={stream}>{stream}</li>
             ))}
@@ -1192,23 +1184,23 @@ function LoginPage({
   };
 
   return (
-    <main className="login-screen">
-      <section className="login-panel">
-        <span className="brand-mark">BB</span>
-        <p className="eyebrow">Operator access</p>
+    <main className="cs-login">
+      <section className="cs-login__panel">
+        <span className="cs-login__brand">BB</span>
+        <p className="cs-eyebrow">Operator access</p>
         <h2>Sign in to Studio OS</h2>
         <p>
           Backend-issued sessions now gate the operator shell. The demo owner account is prefilled for the current local stack.
         </p>
-        <div className="login-meta">
+        <div className="cs-login__meta">
           <span>{apiBaseUrl}/auth/login</span>
           <strong>{dashboardDefinition?.title ?? "Overview"}</strong>
         </div>
 
-        {loginState.kind === "error" ? <div className="message-banner message-banner--error">{loginState.message}</div> : null}
-  {authNotice !== null ? <div className="message-banner message-banner--muted">{authNotice}</div> : null}
+        {loginState.kind === "error" ? <div className="cs-banner cs-banner--error">{loginState.message}</div> : null}
+  {authNotice !== null ? <div className="cs-banner cs-banner--muted">{authNotice}</div> : null}
 
-        <form className="login-form" onSubmit={handleLogin}>
+        <form className="cs-login__form" onSubmit={handleLogin}>
           <label>
             <span>Email</span>
             <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
@@ -1219,11 +1211,11 @@ function LoginPage({
             <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required />
           </label>
 
-          <div className="action-row">
-            <button type="submit" className="primary-action" disabled={loginState.kind === "submitting"}>
+          <div className="cs-action-row">
+            <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={loginState.kind === "submitting"}>
               {loginState.kind === "submitting" ? "Signing in..." : "Sign in"}
             </button>
-            <NavLink to="/onboarding" className="secondary-action">
+            <NavLink to="/onboarding" className="cs-btn cs-btn--sm">
               Set up a new business
             </NavLink>
           </div>

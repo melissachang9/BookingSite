@@ -64,6 +64,7 @@ const baseFollowUpItem = {
       locationIds: ["location-1"],
       formIds: [],
       sortOrder: 0,
+      requireCardOnFile: false,
     },
     provider: {
       id: "provider-1",

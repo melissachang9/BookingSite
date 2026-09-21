@@ -376,7 +376,7 @@ Warm cream tints with cocoa text — visually distinct from customer-facing CTAs
 
 ## 10. Implementation Notes
 
-- **Token source**: define tokens once in `packages/ui-components/src/tokens.css` and import from both apps. Do not redefine palette in component files.
+- **Token source**: define tokens once in each app's own stylesheet — `apps/dashboard/src/theme.css` (`--cs-*`) and `apps/storefront/app/storefront.css` (`--sf-*`) — and import them per app. Do not redefine palette in component files.
 - **No tailwind palette overrides**: this system uses raw CSS variables and CSS modules. If introducing Tailwind, map these tokens to the theme — do not invent parallel color names.
 - **Reference mockup**: when uncertain about a recipe, open `mockups/preview.html` in a browser and inspect the rule. The mockup IS the spec.
 - **Drift control**: PRs that introduce new colors, fonts, or radii must update this file. Reject one-off hex values in component CSS.

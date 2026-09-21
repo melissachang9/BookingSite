@@ -180,39 +180,39 @@ export function FormsPage({
   }, [filteredForms, selectedFormId]);
 
   if (!currentUser) {
-    return <main className="ops-page-stack"><p className="staff-list-empty">Sign in required</p></main>;
+    return <main className="cs-page-stack"><p className="cs-empty">Sign in required</p></main>;
   }
   if (!canView) {
-    return <main className="ops-page-stack"><p className="staff-list-empty">You do not have permission to view forms.</p></main>;
+    return <main className="cs-page-stack"><p className="cs-empty">You do not have permission to view forms.</p></main>;
   }
   if (loadState.kind === "error") {
-    return <main className="ops-page-stack"><div className="message-banner message-banner--error" role="alert">{loadState.message}</div></main>;
+    return <main className="cs-page-stack"><div className="cs-banner cs-banner--error" role="alert">{loadState.message}</div></main>;
   }
 
   return (
-    <main className="ops-page-stack">
+    <main className="cs-page-stack">
       {status ? (
-        <div className="message-banner" role="status">
+        <div className="cs-banner" role="status">
           {status}
-          <button type="button" className="ghost-action" onClick={() => setStatus(null)}>Dismiss</button>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setStatus(null)}>Dismiss</button>
         </div>
       ) : null}
 
       {builder.kind !== "none" ? (
         <>
-          <section className="staff-master-detail">
-            <div className="staff-grid">
-              <aside className="staff-list-rail" aria-label="Form list">
-                <div className="staff-list-rail-header">
+          <section className="cs-md-shell">
+            <div className="cs-md-grid">
+              <aside className="cs-md-rail" aria-label="Form list">
+                <div className="cs-md-rail__header">
                   <h4>Forms</h4>
                   {canManage ? (
-                    <button type="button" className="ghost-action" onClick={() => setBuilder({ kind: "add" })}>
+                    <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setBuilder({ kind: "add" })}>
                       + Build form
                     </button>
                   ) : null}
                 </div>
                 <label style={{ display: "grid", gap: "0.35rem", marginBottom: "0.75rem" }}>
-                  <span className="staff-list-empty" style={{ margin: 0, fontSize: "0.72rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                  <span className="cs-staff-list-empty" style={{ margin: 0, fontSize: "0.72rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
                     Category filter
                   </span>
                   <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
@@ -224,15 +224,15 @@ export function FormsPage({
                   </select>
                 </label>
                 {forms.length === 0 ? (
-                  <p className="staff-list-empty">No forms yet. Click "Build form" to create one.</p>
+                  <p className="cs-empty">No forms yet. Click "Build form" to create one.</p>
                 ) : groupedFilteredForms.length === 0 ? (
-                  <p className="staff-list-empty">No forms in this category.</p>
+                  <p className="cs-empty">No forms in this category.</p>
                 ) : (
-                  <ul className="staff-list">
+                  <ul className="cs-md-list">
                     {groupedFilteredForms.map((group) => (
                       <li key={group.category}>
-                        <p className="staff-list-empty" style={{ margin: "0.6rem 0 0.35rem", fontSize: "0.72rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-                          <strong style={{ color: "var(--ui-ink)" }}>{group.category}</strong>
+                        <p className="cs-staff-list-empty" style={{ margin: "0.6rem 0 0.35rem", fontSize: "0.72rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                          <strong style={{ color: "var(--cs-ink)" }}>{group.category}</strong>
                           <span style={{ marginLeft: "0.35rem" }}>({group.items.length})</span>
                         </p>
                         <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
@@ -240,15 +240,15 @@ export function FormsPage({
                             <li key={form.id}>
                               <button
                                 type="button"
-                                className={`staff-list-item${selectedFormId === form.id ? " is-active" : ""}`}
+                                className={`cs-md-list__item${selectedFormId === form.id ? " is-active" : ""}`}
                                 onClick={() => setSelectedFormId(form.id)}
                               >
-                                <span className="staff-avatar staff-avatar--initials" aria-hidden>
+                                <span className="cs-staff-avatar cs-staff-avatar--initials" aria-hidden>
                                   {form.name.charAt(0)}
                                 </span>
-                                <span className="staff-list-meta">
-                                  <span className="staff-list-name">{form.name}</span>
-                                  <span className="staff-list-role">
+                                <span className="cs-md-list__meta">
+                                  <span className="cs-md-list__name">{form.name}</span>
+                                  <span className="cs-md-list__role">
                                     {form.schema?.fields.length ?? 0} field{(form.schema?.fields.length ?? 0) !== 1 ? "s" : ""}
                                     {!form.isActive ? " · Inactive" : ""}
                                   </span>
@@ -262,7 +262,7 @@ export function FormsPage({
                   </ul>
                 )}
               </aside>
-              <div className="staff-detail">
+              <div className="cs-md-detail">
                 <FormBuilderEditor
                   tenantSlug={tenantSlug}
                   builder={builder}
@@ -279,19 +279,19 @@ export function FormsPage({
         </>
       ) : (
         <>
-          <section className="staff-master-detail">
-            <div className="staff-grid">
-              <aside className="staff-list-rail" aria-label="Form list">
-                <div className="staff-list-rail-header">
+          <section className="cs-md-shell">
+            <div className="cs-md-grid">
+              <aside className="cs-md-rail" aria-label="Form list">
+                <div className="cs-md-rail__header">
                   <h4>Forms</h4>
                   {canManage ? (
-                    <button type="button" className="ghost-action" onClick={() => setBuilder({ kind: "add" })}>
+                    <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setBuilder({ kind: "add" })}>
                       + Build form
                     </button>
                   ) : null}
                 </div>
                 <label style={{ display: "grid", gap: "0.35rem", marginBottom: "0.75rem" }}>
-                  <span className="staff-list-empty" style={{ margin: 0, fontSize: "0.72rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                  <span className="cs-staff-list-empty" style={{ margin: 0, fontSize: "0.72rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
                     Category filter
                   </span>
                   <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
@@ -303,15 +303,15 @@ export function FormsPage({
                   </select>
                 </label>
                 {forms.length === 0 ? (
-                  <p className="staff-list-empty">No forms yet. Click "Build form" to create one.</p>
+                  <p className="cs-empty">No forms yet. Click "Build form" to create one.</p>
                 ) : groupedFilteredForms.length === 0 ? (
-                  <p className="staff-list-empty">No forms in this category.</p>
+                  <p className="cs-empty">No forms in this category.</p>
                 ) : (
-                  <ul className="staff-list">
+                  <ul className="cs-md-list">
                     {groupedFilteredForms.map((group) => (
                       <li key={group.category}>
-                        <p className="staff-list-empty" style={{ margin: "0.6rem 0 0.35rem", fontSize: "0.72rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-                          <strong style={{ color: "var(--ui-ink)" }}>{group.category}</strong>
+                        <p className="cs-staff-list-empty" style={{ margin: "0.6rem 0 0.35rem", fontSize: "0.72rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                          <strong style={{ color: "var(--cs-ink)" }}>{group.category}</strong>
                           <span style={{ marginLeft: "0.35rem" }}>({group.items.length})</span>
                         </p>
                         <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
@@ -319,15 +319,15 @@ export function FormsPage({
                             <li key={form.id}>
                               <button
                                 type="button"
-                                className={`staff-list-item${selectedFormId === form.id ? " is-active" : ""}`}
+                                className={`cs-md-list__item${selectedFormId === form.id ? " is-active" : ""}`}
                                 onClick={() => setSelectedFormId(form.id)}
                               >
-                                <span className="staff-avatar staff-avatar--initials" aria-hidden>
+                                <span className="cs-staff-avatar cs-staff-avatar--initials" aria-hidden>
                                   {form.name.charAt(0)}
                                 </span>
-                                <span className="staff-list-meta">
-                                  <span className="staff-list-name">{form.name}</span>
-                                  <span className="staff-list-role">
+                                <span className="cs-md-list__meta">
+                                  <span className="cs-md-list__name">{form.name}</span>
+                                  <span className="cs-md-list__role">
                                     {form.schema?.fields.length ?? 0} field{(form.schema?.fields.length ?? 0) !== 1 ? "s" : ""}
                                     {!form.isActive ? " · Inactive" : ""}
                                   </span>
@@ -342,7 +342,7 @@ export function FormsPage({
                 )}
               </aside>
 
-              <div className="staff-detail">
+              <div className="cs-md-detail">
                 {selectedForm ? (
                   <FormDetail
                     form={selectedForm}
@@ -362,7 +362,7 @@ export function FormsPage({
                     }}
                   />
                 ) : (
-                  <p className="settings-form-help">Select a form to view details, or click "Build form" to create one.</p>
+                  <p className="cs-settings-form-help">Select a form to view details, or click "Build form" to create one.</p>
                 )}
               </div>
             </div>
@@ -518,15 +518,15 @@ function FormDetail({
   ];
 
   return (
-    <div className="staff-detail-inner">
-      <header className="staff-detail-header">
+    <div className="cs-md-detail__inner">
+      <header className="cs-md-detail__header">
         <div>
-          <p className="eyebrow">Form</p>
+          <p className="cs-eyebrow">Form</p>
           <h4>{form.name}</h4>
         </div>
         {canManage ? (
-          <div className="staff-detail-actions">
-            <label className={`svc-toggle${!form.isActive ? " svc-toggle--off" : ""}`} style={{ marginRight: "0.5rem" }} aria-label="Active toggle">
+          <div className="cs-md-detail__actions">
+            <label className={`cs-switch${!form.isActive ? " cs-switch--off" : ""}`} style={{ marginRight: "0.5rem" }} aria-label="Active toggle">
               <input
                 type="checkbox"
                 checked={form.isActive}
@@ -534,22 +534,22 @@ function FormDetail({
                 style={{ position: "absolute", opacity: 0, width: 0, height: 0 }}
               />
             </label>
-            <span style={{ fontSize: "0.8rem", color: form.isActive ? "var(--ui-ink)" : "var(--color-muted, #6b7280)", marginRight: "0.75rem" }}>
+            <span style={{ fontSize: "0.8rem", color: form.isActive ? "var(--cs-ink)" : "var(--cs-label)", marginRight: "0.75rem" }}>
               {form.isActive ? "Enabled" : "Disabled"}
             </span>
-            <button type="button" className="ghost-action ghost-action--danger" onClick={onDelete}>Delete</button>
+            <button type="button" className="cs-btn cs-btn--danger cs-btn--sm" onClick={onDelete}>Delete</button>
           </div>
         ) : null}
       </header>
 
-      <nav className="staff-detail-tabs" role="tablist" aria-label="Form sections">
+      <nav className="cs-md-tabs" role="tablist" aria-label="Form sections">
         {tabs.map((tab) => (
           <button
             key={tab.key}
             type="button"
             role="tab"
             aria-selected={activeTab === tab.key}
-            className={`staff-detail-tab${activeTab === tab.key ? " is-active" : ""}`}
+            className={`cs-md-tab${activeTab === tab.key ? " is-active" : ""}`}
             onClick={() => onTabChange(tab.key)}
           >
             {tab.label}
@@ -558,8 +558,8 @@ function FormDetail({
       </nav>
 
       {activeTab === "details" ? (
-        <div className="staff-detail-form">
-          <div className="form-editor__card">
+        <div className="cs-md-form">
+          <div className="cs-form-editor__card">
             <h4>Form category</h4>
             <label>
               <span>Category</span>
@@ -573,10 +573,10 @@ function FormDetail({
           </div>
 
           {/* Who fills out this form? */}
-          <div className="form-editor__card">
+          <div className="cs-form-editor__card">
             <h4>Who fills out this form?</h4>
-            <div className="form-editor__radio-group">
-              <label className="settings-toggle">
+            <div className="cs-form-editor__radio-group">
+              <label className="cs-settings-toggle">
                 <input
                   type="radio" name="detail-scope" checked={scope === "customer"}
                   onChange={() => { setScope("customer"); }}
@@ -587,7 +587,7 @@ function FormDetail({
                   <small>A link will be included in reminders and other automated messages</small>
                 </span>
               </label>
-              <label className="settings-toggle">
+              <label className="cs-settings-toggle">
                 <input
                   type="radio" name="detail-scope" checked={scope === "internal"}
                   onChange={() => { setScope("internal"); }}
@@ -602,10 +602,10 @@ function FormDetail({
           </div>
 
           {/* How often? */}
-          <div className="form-editor__card">
+          <div className="cs-form-editor__card">
             <h4>How often do clients need to fill it out?</h4>
-            <div className="form-editor__radio-group">
-              <label className="settings-toggle">
+            <div className="cs-form-editor__radio-group">
+              <label className="cs-settings-toggle">
                 <input
                   type="radio" name="detail-timing" checked={timing === "pre_booking"}
                   onChange={() => { setTiming("pre_booking"); }}
@@ -616,7 +616,7 @@ function FormDetail({
                   <small>Clients will be asked to submit the form every time they book</small>
                 </span>
               </label>
-              <label className="settings-toggle">
+              <label className="cs-settings-toggle">
                 <input
                   type="radio" name="detail-timing" checked={timing === ""}
                   onChange={() => { setTiming(""); }}
@@ -631,10 +631,10 @@ function FormDetail({
           </div>
 
           {/* Which appointments? */}
-          <div className="form-editor__card">
+          <div className="cs-form-editor__card">
             <h4>Which appointments is it for?</h4>
-            <div className="form-editor__radio-group">
-              <label className="settings-toggle">
+            <div className="cs-form-editor__radio-group">
+              <label className="cs-settings-toggle">
                 <input
                   type="radio" name="detail-services" checked={serviceIds.length === 0}
                   onChange={() => { setServiceIds([]); }}
@@ -645,7 +645,7 @@ function FormDetail({
                   <small>Regardless of which services were booked</small>
                 </span>
               </label>
-              <label className="settings-toggle">
+              <label className="cs-settings-toggle">
                 <input
                   type="radio" name="detail-services" checked={serviceIds.length > 0}
                   onChange={() => {}}
@@ -662,11 +662,11 @@ function FormDetail({
               <div style={{ marginTop: "0.75rem" }}>
                 {/* Selected services */}
                 {serviceIds.length > 0 ? (
-                  <div className="form-editor__service-selected" style={{ marginBottom: "0.5rem" }}>
+                  <div className="cs-form-editor__service-selected" style={{ marginBottom: "0.5rem" }}>
                     {allServices.filter((s) => serviceIds.includes(s.id)).map((svc) => (
-                      <div key={svc.id} className="form-editor__service-row">
+                      <div key={svc.id} className="cs-form-editor__service-row">
                         <span>{svc.name}</span>
-                        <button type="button" className="ghost-action" onClick={() => {
+                        <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => {
                           const next = serviceIds.filter((id) => id !== svc.id);
                           setServiceIds(next);
                         }}>✕</button>
@@ -677,8 +677,8 @@ function FormDetail({
 
                 {/* All services in category */}
                 {allCategories.length > 0 ? (
-                  <div className="form-editor__category-actions" style={{ marginBottom: "0.5rem" }}>
-                    <span className="form-editor__category-label">All services in category</span>
+                  <div className="cs-form-editor__category-actions" style={{ marginBottom: "0.5rem" }}>
+                    <span className="cs-form-editor__category-label">All services in category</span>
                     {allCategories.map((cat) => {
                       const catServices = allServices.filter((s) => s.categoryId === cat.id);
                       if (catServices.length === 0) return null;
@@ -687,7 +687,7 @@ function FormDetail({
                         <button
                           key={cat.id}
                           type="button"
-                          className={`ghost-action${allSelected ? " is-active" : ""}`}
+                          className={`cs-btn cs-btn--ghost cs-btn--sm${allSelected ? " cs-btn--checked" : ""}`}
                           onClick={() => {
                             const catIds = catServices.map((s) => s.id);
                             const next = allSelected
@@ -704,7 +704,7 @@ function FormDetail({
                 ) : null}
 
                 {/* Add a service button */}
-                <button type="button" className="ghost-action" onClick={() => setShowServicePicker(true)}>
+                <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setShowServicePicker(true)}>
                   + Add a service
                 </button>
               </div>
@@ -713,19 +713,19 @@ function FormDetail({
 
           {/* Service picker modal */}
           {showServicePicker ? (
-            <div className="modal-backdrop" role="dialog" aria-label="Add services">
-              <div className="modal-panel" style={{ maxWidth: "min(520px, 100%)" }}>
-                <div className="modal-header">
+            <div className="cs-modal" role="dialog" aria-label="Add services">
+              <div className="cs-modal__panel" style={{ maxWidth: "min(520px, 100%)" }}>
+                <div className="cs-modal__header">
                   <h4>Add services</h4>
-                  <button type="button" className="ghost-action" onClick={() => setShowServicePicker(false)}>Done</button>
+                  <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setShowServicePicker(false)}>Done</button>
                 </div>
-                <div className="modal-form">
+                <div className="cs-modal__form">
                   {allServices.filter((s) => !serviceIds.includes(s.id)).length === 0 ? (
-                    <p className="settings-form-help">All services are already selected.</p>
+                    <p className="cs-settings-form-help">All services are already selected.</p>
                   ) : (
-                    <div className="form-editor__service-list">
+                    <div className="cs-form-editor__service-list">
                       {allServices.filter((s) => !serviceIds.includes(s.id)).map((svc) => (
-                        <label key={svc.id} className="settings-toggle" style={{ padding: "0.4rem 0" }}>
+                        <label key={svc.id} className="cs-settings-toggle" style={{ padding: "0.4rem 0" }}>
                           <input
                             type="checkbox"
                             onChange={() => {
@@ -747,10 +747,10 @@ function FormDetail({
           ) : null}
 
           {/* Review? */}
-          <div className="form-editor__card">
+          <div className="cs-form-editor__card">
             <h4>Does this form require review?</h4>
-            <div className="form-editor__radio-group">
-              <label className="settings-toggle">
+            <div className="cs-form-editor__radio-group">
+              <label className="cs-settings-toggle">
                 <input
                   type="radio" name="detail-review" checked={!reviewRequired}
                   onChange={() => { setReviewRequired(false); }}
@@ -761,7 +761,7 @@ function FormDetail({
                   <small>Most common, for forms that don't need additional review</small>
                 </span>
               </label>
-              <label className="settings-toggle">
+              <label className="cs-settings-toggle">
                 <input
                   type="radio" name="detail-review" checked={reviewRequired}
                   onChange={() => { setReviewRequired(true); }}
@@ -776,10 +776,10 @@ function FormDetail({
           </div>
 
           {canManage ? (
-            <div className="form-editor__save-bar">
+            <div className="cs-form-editor__save-bar">
               <button
                 type="button"
-                className="primary-action"
+                className="cs-btn cs-btn--primary cs-btn--sm"
                 disabled={tabSaving}
                 onClick={() => { void saveCurrentTab("details"); }}
               >
@@ -791,27 +791,27 @@ function FormDetail({
       ) : null}
 
       {activeTab === "fields" ? (
-        <div className="staff-detail-form">
+        <div className="cs-md-form">
           {form.schema ? (
             <>
               {form.schema.description ? (
-                <p className="settings-form-help" style={{ marginBottom: "0.75rem" }}>{form.schema.description}</p>
+                <p className="cs-settings-form-help" style={{ marginBottom: "0.75rem" }}>{form.schema.description}</p>
               ) : null}
               {localFields.length === 0 ? (
-                <p className="staff-list-empty">No fields defined yet.</p>
+                <p className="cs-empty">No fields defined yet.</p>
               ) : (
-                <ul className="form-field-preview-list">
+                <ul className="cs-form-field-preview-list">
                   {localFields.map((field, index) => (
                     <li key={field.id}>
                       {editingFieldIndex === index ? (
-                        <div className="form-editor__field-card is-expanded" style={{ marginBottom: "0.5rem" }}>
-                          <div className="form-editor__field-card-header">
-                            <span className="form-editor__field-card-icon" aria-hidden="true">
+                        <div className="cs-form-editor__field-card is-expanded" style={{ marginBottom: "0.5rem" }}>
+                          <div className="cs-form-editor__field-card-header">
+                            <span className="cs-form-editor__field-card-icon" aria-hidden="true">
                               {FIELD_TYPE_ICONS[field.type] ?? "?"}
                             </span>
-                            <span className="form-editor__field-card-type">{FIELD_TYPE_LABELS[field.type]}</span>
-                            <div className="form-editor__field-card-menu">
-                              <button type="button" className="ghost-action" onClick={() => setEditingFieldIndex(null)}>Done</button>
+                            <span className="cs-form-editor__field-card-type">{FIELD_TYPE_LABELS[field.type]}</span>
+                            <div className="cs-form-editor__field-card-menu">
+                              <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setEditingFieldIndex(null)}>Done</button>
                             </div>
                           </div>
                           <FieldInlineEditor
@@ -829,12 +829,12 @@ function FormDetail({
                       ) : (
                         <button
                           type="button"
-                          className="form-field-preview-item"
+                          className="cs-form-field-preview-item"
                           onClick={() => { if (canManage) setEditingFieldIndex(index); }}
                           style={{ width: "100%", textAlign: "left", cursor: canManage ? "pointer" : "default", background: "none", border: "none", font: "inherit" }}
                         >
-                          <span className="form-field-preview-type">{field.type.replace(/_/g, " ")}</span>
-                          <span className="form-field-preview-label">{field.label}{field.required ? " *" : ""}</span>
+                          <span className="cs-form-field-preview-type">{field.type.replace(/_/g, " ")}</span>
+                          <span className="cs-form-field-preview-label">{field.label}{field.required ? " *" : ""}</span>
                         </button>
                       )}
                     </li>
@@ -843,21 +843,21 @@ function FormDetail({
               )}
               {canManage ? (
                 <div style={{ marginTop: "0.75rem" }}>
-                  <button type="button" className="ghost-action" onClick={() => setShowFieldPalette(true)}>
+                  <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setShowFieldPalette(true)}>
                     + Add a field
                   </button>
                 </div>
               ) : null}
             </>
           ) : (
-            <p className="staff-list-empty">No schema defined.</p>
+            <p className="cs-empty">No schema defined.</p>
           )}
 
           {canManage ? (
-            <div className="form-editor__save-bar">
+            <div className="cs-form-editor__save-bar">
               <button
                 type="button"
-                className="primary-action"
+                className="cs-btn cs-btn--primary cs-btn--sm"
                 disabled={tabSaving}
                 onClick={() => { void saveCurrentTab("fields"); }}
               >
@@ -892,28 +892,28 @@ function FormDetail({
       ) : null}
 
       {activeTab === "preview" ? (
-        <div className="staff-detail-form">
-          <div className="form-preview">
-            <h4 className="form-preview__title">{form.name || "Untitled form"}</h4>
-            {form.schema?.description ? <p className="form-preview__desc">{form.schema.description}</p> : null}
+        <div className="cs-md-form">
+          <div className="cs-form-preview">
+            <h4 className="cs-form-preview__title">{form.name || "Untitled form"}</h4>
+            {form.schema?.description ? <p className="cs-form-preview__desc">{form.schema.description}</p> : null}
             {localFields.length > 0 ? (
-              <div className="form-preview__fields">
+              <div className="cs-form-preview__fields">
                 {localFields.map((field) => (
-                  <div key={field.id} className="form-preview__field">
+                  <div key={field.id} className="cs-form-preview__field">
                     <FieldPreview field={field} />
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="settings-form-help">No fields defined yet.</p>
+              <p className="cs-settings-form-help">No fields defined yet.</p>
             )}
           </div>
 
           {canManage ? (
-            <div className="form-editor__save-bar">
+            <div className="cs-form-editor__save-bar">
               <button
                 type="button"
-                className="primary-action"
+                className="cs-btn cs-btn--primary cs-btn--sm"
                 disabled={tabSaving}
                 onClick={() => { void saveCurrentTab("preview"); }}
               >
@@ -925,13 +925,13 @@ function FormDetail({
       ) : null}
 
       {activeTab === "advanced" ? (
-        <div className="staff-detail-form">
-          <p className="settings-form-help">Advanced settings coming soon.</p>
+        <div className="cs-md-form">
+          <p className="cs-settings-form-help">Advanced settings coming soon.</p>
           {canManage ? (
-            <div className="form-editor__save-bar">
+            <div className="cs-form-editor__save-bar">
               <button
                 type="button"
-                className="primary-action"
+                className="cs-btn cs-btn--primary cs-btn--sm"
                 disabled={tabSaving}
                 onClick={() => { void saveCurrentTab("advanced"); }}
               >
@@ -1066,18 +1066,18 @@ function FormBuilderEditor({
   ];
 
   return (
-    <div className="staff-detail-inner">
-      <header className="staff-detail-header">
+    <div className="cs-md-detail__inner">
+      <header className="cs-md-detail__header">
         <div>
-          <p className="eyebrow">{isEdit ? "Edit form" : "New form"}</p>
+          <p className="cs-eyebrow">{isEdit ? "Edit form" : "New form"}</p>
           <h4>{name.trim() || "Untitled form"}</h4>
         </div>
-        <div className="staff-detail-actions">
-          <button type="button" className="ghost-action" onClick={onClose}>Cancel</button>
+        <div className="cs-md-detail__actions">
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>Cancel</button>
         </div>
       </header>
 
-      <nav className="staff-detail-tabs" role="tablist" aria-label="Form editor sections">
+      <nav className="cs-md-tabs" role="tablist" aria-label="Form editor sections">
         {steps.map((s) => (
           <button
             key={s.key}
@@ -1085,7 +1085,7 @@ function FormBuilderEditor({
             role="tab"
             aria-selected={step === s.key}
             disabled={s.disabled}
-            className={`staff-detail-tab${step === s.key ? " is-active" : ""}`}
+            className={`cs-md-tab${step === s.key ? " is-active" : ""}`}
             onClick={() => setStep(s.key)}
           >
             {s.label}
@@ -1093,7 +1093,7 @@ function FormBuilderEditor({
         ))}
       </nav>
 
-      <div className="staff-detail-form">
+      <div className="cs-md-form">
         {step === "details" ? (
           <DetailsStep
             name={name} setName={setName}
@@ -1122,21 +1122,21 @@ function FormBuilderEditor({
         ) : null}
 
         {step === "advanced" ? (
-          <div className="form-editor__card">
+          <div className="cs-form-editor__card">
             <h4>Advanced</h4>
-            <p className="settings-form-help">Advanced settings coming soon.</p>
+            <p className="cs-settings-form-help">Advanced settings coming soon.</p>
           </div>
         ) : null}
 
-        {error ? <div className="message-banner message-banner--error" style={{ marginTop: "1rem" }}>{error}</div> : null}
+        {error ? <div className="cs-banner cs-banner--error" style={{ marginTop: "1rem" }}>{error}</div> : null}
 
-        <div className="form-editor__save-bar">
-          <button type="button" className="ghost-action" onClick={() => setStep("preview")}>
+        <div className="cs-form-editor__save-bar">
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setStep("preview")}>
             Preview
           </button>
           <button
             type="button"
-            className="primary-action"
+            className="cs-btn cs-btn--primary cs-btn--sm"
             disabled={saving || !name.trim()}
             onClick={() => saveForm(saveMessage)}
           >
@@ -1197,10 +1197,10 @@ function DetailsStep({
     setSelectKey(selectKey + 1);
   };
   return (
-    <div className="form-editor__cards">
+    <div className="cs-form-editor__cards">
 
       {/* Name & Description */}
-      <div className="form-editor__card">
+      <div className="cs-form-editor__card">
         <h4>Name &amp; description</h4>
         <label>
           <span>Form name</span>
@@ -1217,14 +1217,14 @@ function DetailsStep({
       </div>
 
       {/* Scope */}
-      <div className="form-editor__card">
+      <div className="cs-form-editor__card">
         <h4>Who fills out this form?</h4>
-        <div className="form-editor__radio-group">
-          <label className="settings-toggle">
+        <div className="cs-form-editor__radio-group">
+          <label className="cs-settings-toggle">
             <input type="radio" name="scope" checked={scope === "customer"} onChange={() => setScope("customer")} />
             <span>Clients who book an appointment</span>
           </label>
-          <label className="settings-toggle">
+          <label className="cs-settings-toggle">
             <input type="radio" name="scope" checked={scope === "internal"} onChange={() => setScope("internal")} />
             <span>Staff members</span>
           </label>
@@ -1232,22 +1232,22 @@ function DetailsStep({
       </div>
 
       {/* Timing */}
-      <div className="form-editor__card">
+      <div className="cs-form-editor__card">
         <h4>When should clients fill this out?</h4>
-        <div className="form-editor__radio-group">
-          <label className="settings-toggle">
+        <div className="cs-form-editor__radio-group">
+          <label className="cs-settings-toggle">
             <input type="radio" name="timing" checked={timing === "pre_booking"} onChange={() => setTiming("pre_booking")} />
             <span>Before booking (required to confirm)</span>
           </label>
-          <label className="settings-toggle">
+          <label className="cs-settings-toggle">
             <input type="radio" name="timing" checked={timing === "pre_visit"} onChange={() => setTiming("pre_visit")} />
             <span>Before the appointment</span>
           </label>
-          <label className="settings-toggle">
+          <label className="cs-settings-toggle">
             <input type="radio" name="timing" checked={timing === "post_visit"} onChange={() => setTiming("post_visit")} />
             <span>After the appointment</span>
           </label>
-          <label className="settings-toggle">
+          <label className="cs-settings-toggle">
             <input type="radio" name="timing" checked={timing === ""} onChange={() => setTiming("")} />
             <span>No specific timing</span>
           </label>
@@ -1256,33 +1256,33 @@ function DetailsStep({
 
       {/* Services */}
       {servicesLoaded && services.length > 0 ? (
-        <div className="form-editor__card">
+        <div className="cs-form-editor__card">
           <h4>Which appointments is it for?</h4>
-          <div className="form-editor__radio-group">
-            <label className="settings-toggle">
+          <div className="cs-form-editor__radio-group">
+            <label className="cs-settings-toggle">
               <input type="radio" name="services" checked={serviceMode === "all"} onChange={() => { setServiceMode("all"); setSelectedServiceIds([]); }} />
               <span>For all appointments</span>
             </label>
-            <label className="settings-toggle">
+            <label className="cs-settings-toggle">
               <input type="radio" name="services" checked={serviceMode === "specific"} onChange={() => setServiceMode("specific")} />
               <span>Only for appointments with specific services</span>
             </label>
           </div>
           {serviceMode === "specific" ? (
-            <div className="form-editor__service-list">
+            <div className="cs-form-editor__service-list">
               {selectedServiceIds.length > 0 ? (
-                <div className="form-editor__service-selected">
+                <div className="cs-form-editor__service-selected">
                   {services.filter((s) => selectedServiceIds.includes(s.id)).map((svc) => (
-                    <div key={svc.id} className="form-editor__service-row">
+                    <div key={svc.id} className="cs-form-editor__service-row">
                       <span>{svc.name}</span>
-                      <button type="button" className="ghost-action" onClick={() => setSelectedServiceIds(selectedServiceIds.filter((id: string) => id !== svc.id))}>
+                      <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setSelectedServiceIds(selectedServiceIds.filter((id: string) => id !== svc.id))}>
                         ✕
                       </button>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="settings-form-help">No services selected yet. Add one below.</p>
+                <p className="cs-settings-form-help">No services selected yet. Add one below.</p>
               )}
 
               {services.filter((s) => !selectedServiceIds.includes(s.id)).length > 0 ? (
@@ -1304,8 +1304,8 @@ function DetailsStep({
               ) : null}
 
               {categories.length > 0 ? (
-                <div className="form-editor__category-actions">
-                  <span className="form-editor__category-label">Add all services in a category</span>
+                <div className="cs-form-editor__category-actions">
+                  <span className="cs-form-editor__category-label">Add all services in a category</span>
                   {categories.map((cat) => {
                     const catServices = (categoryMap.get(cat.id) ?? []).filter((s) => !selectedServiceIds.includes(s.id));
                     if (catServices.length === 0) return null;
@@ -1313,7 +1313,7 @@ function DetailsStep({
                       <button
                         key={cat.id}
                         type="button"
-                        className="ghost-action"
+                        className="cs-btn cs-btn--ghost cs-btn--sm"
                         onClick={() => handleAddAllInCategory(cat.id)}
                       >
                         + All in {cat.name} ({catServices.length})
@@ -1328,14 +1328,14 @@ function DetailsStep({
       ) : null}
 
       {/* Review */}
-      <div className="form-editor__card">
+      <div className="cs-form-editor__card">
         <h4>Does this form require review?</h4>
-        <div className="form-editor__radio-group">
-          <label className="settings-toggle">
+        <div className="cs-form-editor__radio-group">
+          <label className="cs-settings-toggle">
             <input type="radio" name="review" checked={!reviewRequired} onChange={() => setReviewRequired(false)} />
             <span>No review needed</span>
           </label>
-          <label className="settings-toggle">
+          <label className="cs-settings-toggle">
             <input type="radio" name="review" checked={reviewRequired} onChange={() => setReviewRequired(true)} />
             <span>Review required</span>
           </label>
@@ -1387,27 +1387,27 @@ function FormFieldsStep({
   };
 
   return (
-    <div className="form-editor__cards">
+    <div className="cs-form-editor__cards">
 
-      <div className="form-editor__card">
+      <div className="cs-form-editor__card">
         <h4>Form fields</h4>
 
         {fields.length === 0 ? (
-          <p className="settings-form-help">No fields yet. Add your first field below.</p>
+          <p className="cs-settings-form-help">No fields yet. Add your first field below.</p>
         ) : (
-          <ul className="form-editor__field-list">
+          <ul className="cs-form-editor__field-list">
             {fields.map((field, index) => (
               <li key={field.id}>
-                <div className="form-editor__field-card is-expanded">
-                  <div className="form-editor__field-card-header">
-                    <span className="form-editor__field-card-icon" aria-hidden="true">
+                <div className="cs-form-editor__field-card is-expanded">
+                  <div className="cs-form-editor__field-card-header">
+                    <span className="cs-form-editor__field-card-icon" aria-hidden="true">
                       {FIELD_TYPE_ICONS[field.type] ?? "?"}
                     </span>
-                    <span className="form-editor__field-card-type">{FIELD_TYPE_LABELS[field.type]}</span>
-                    <div className="form-editor__field-card-menu">
-                      <button type="button" className="ghost-action" disabled={index === 0} onClick={() => handleMoveField(index, -1)}>↑</button>
-                      <button type="button" className="ghost-action" disabled={index === fields.length - 1} onClick={() => handleMoveField(index, 1)}>↓</button>
-                      <button type="button" className="ghost-action" onClick={() => handleRemoveField(index)}>✕</button>
+                    <span className="cs-form-editor__field-card-type">{FIELD_TYPE_LABELS[field.type]}</span>
+                    <div className="cs-form-editor__field-card-menu">
+                      <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" disabled={index === 0} onClick={() => handleMoveField(index, -1)}>↑</button>
+                      <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" disabled={index === fields.length - 1} onClick={() => handleMoveField(index, 1)}>↓</button>
+                      <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => handleRemoveField(index)}>✕</button>
                     </div>
                   </div>
                   <FieldInlineEditor
@@ -1421,7 +1421,7 @@ function FormFieldsStep({
         )}
 
         <div style={{ marginTop: "0.75rem" }}>
-          <button type="button" className="ghost-action" onClick={() => setPaletteOpen(true)}>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setPaletteOpen(true)}>
             + Add a field
           </button>
         </div>
@@ -1464,23 +1464,23 @@ function FieldPaletteModal({
   onClose: () => void;
 }) {
   return (
-    <div className="modal-backdrop" role="dialog" aria-label="Add a field">
-      <div className="modal-panel" style={{ maxWidth: "min(480px, 100%)" }}>
-        <div className="modal-header">
+    <div className="cs-modal" role="dialog" aria-label="Add a field">
+      <div className="cs-modal__panel" style={{ maxWidth: "min(480px, 100%)" }}>
+        <div className="cs-modal__header">
           <h4>Add a field</h4>
-          <button type="button" className="ghost-action" onClick={onClose}>Cancel</button>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>Cancel</button>
         </div>
-        <div className="modal-form">
-          <div className="field-palette">
+        <div className="cs-modal__form">
+          <div className="cs-field-palette">
             {(Object.keys(FIELD_TYPE_LABELS) as FormFieldType[]).map((type) => (
               <button
                 key={type}
                 type="button"
-                className="field-palette__item"
+                className="cs-field-palette__item"
                 onClick={() => onSelect(type)}
               >
-                <span className="field-palette__icon" aria-hidden="true">{FIELD_TYPE_ICONS[type] ?? "?"}</span>
-                <span className="field-palette__label">{FIELD_TYPE_LABELS[type]}</span>
+                <span className="cs-field-palette__icon" aria-hidden="true">{FIELD_TYPE_ICONS[type] ?? "?"}</span>
+                <span className="cs-field-palette__label">{FIELD_TYPE_LABELS[type]}</span>
               </button>
             ))}
           </div>
@@ -1505,7 +1505,7 @@ function FieldInlineEditor({
   const hasOptions = field.type === "select" || field.type === "multi_select";
 
   return (
-    <div className="form-editor__field-editor">
+    <div className="cs-form-editor__field-editor">
       <label>
         <span>Label</span>
         <input
@@ -1528,8 +1528,8 @@ function FieldInlineEditor({
       ) : null}
 
       {!isLayout ? (
-        <div className="form-editor__field-row">
-          <label className="settings-toggle">
+        <div className="cs-form-editor__field-row">
+          <label className="cs-settings-toggle">
             <input type="checkbox" checked={field.required ?? false} onChange={(e) => onUpdate({ required: e.target.checked })} />
             <span>Required</span>
           </label>
@@ -1555,10 +1555,10 @@ function FieldInlineEditor({
       ) : null}
 
       {hasOptions ? (
-        <div className="form-editor__field-options">
-          <span className="form-editor__field-options-label">Options</span>
+        <div className="cs-form-editor__field-options">
+          <span className="cs-form-editor__field-options-label">Options</span>
           {(field.options ?? []).map((opt, optIdx) => (
-            <div key={optIdx} className="form-editor__field-option-row">
+            <div key={optIdx} className="cs-form-editor__field-option-row">
               <input
                 value={opt.label}
                 onChange={(e) => {
@@ -1568,12 +1568,12 @@ function FieldInlineEditor({
                 }}
                 placeholder="Option label"
               />
-              <button type="button" className="ghost-action" onClick={() => {
+              <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => {
                 onUpdate({ options: (field.options ?? []).filter((_, i) => i !== optIdx) });
               }}>✕</button>
             </div>
           ))}
-          <button type="button" className="ghost-action" onClick={() => {
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => {
             onUpdate({ options: [...(field.options ?? []), { label: "", value: "" }] });
           }}>+ Add option</button>
         </div>
@@ -1596,21 +1596,21 @@ function PreviewStep({
   fields: FormField[];
 }) {
   return (
-    <div className="form-editor__cards">
-      <div className="form-editor__card">
+    <div className="cs-form-editor__cards">
+      <div className="cs-form-editor__card">
         <h4>Preview</h4>
-        <p className="settings-form-help">This is how the form will appear to the person filling it out.</p>
+        <p className="cs-settings-form-help">This is how the form will appear to the person filling it out.</p>
 
-        <div className="form-preview">
-          <h4 className="form-preview__title">{name || "Untitled form"}</h4>
-          {description ? <p className="form-preview__desc">{description}</p> : null}
+        <div className="cs-form-preview">
+          <h4 className="cs-form-preview__title">{name || "Untitled form"}</h4>
+          {description ? <p className="cs-form-preview__desc">{description}</p> : null}
 
           {fields.length === 0 ? (
-            <p className="settings-form-help">No fields defined yet.</p>
+            <p className="cs-settings-form-help">No fields defined yet.</p>
           ) : (
-            <div className="form-preview__fields">
+            <div className="cs-form-preview__fields">
               {fields.map((field) => (
-                <div key={field.id} className="form-preview__field">
+                <div key={field.id} className="cs-form-preview__field">
                   <FieldPreview field={field} />
                 </div>
               ))}
@@ -1624,20 +1624,20 @@ function PreviewStep({
 
 function FieldPreview({ field }: { field: FormField }) {
   const label = (
-    <span className="form-preview__label">
+    <span className="cs-form-preview__label">
       {field.label || FIELD_TYPE_LABELS[field.type]}
-      {field.required ? <span className="form-preview__required"> *</span> : null}
+      {field.required ? <span className="cs-form-preview__required"> *</span> : null}
     </span>
   );
 
   const help = field.helpText ? (
-    <span className="form-preview__help">{field.helpText}</span>
+    <span className="cs-form-preview__help">{field.helpText}</span>
   ) : null;
 
   switch (field.type) {
     case "section":
       return (
-        <div className="form-preview__section">
+        <div className="cs-form-preview__section">
           <h5>{field.label || "Section"}</h5>
           {field.content ? <p>{field.content}</p> : null}
         </div>
@@ -1645,7 +1645,7 @@ function FieldPreview({ field }: { field: FormField }) {
 
     case "static_text":
       return (
-        <div className="form-preview__static">
+        <div className="cs-form-preview__static">
           {field.label ? <h5>{field.label}</h5> : null}
           <p>{field.content || "Static text content"}</p>
         </div>
@@ -1653,7 +1653,7 @@ function FieldPreview({ field }: { field: FormField }) {
 
     case "short_text":
       return (
-        <label className="form-preview__input-label">
+        <label className="cs-form-preview__input-label">
           {label}
           {help}
           <input type="text" disabled placeholder={field.placeholder || "Short answer"} />
@@ -1662,7 +1662,7 @@ function FieldPreview({ field }: { field: FormField }) {
 
     case "long_text":
       return (
-        <label className="form-preview__input-label">
+        <label className="cs-form-preview__input-label">
           {label}
           {help}
           <textarea disabled rows={3} placeholder={field.placeholder || "Long answer"} />
@@ -1671,7 +1671,7 @@ function FieldPreview({ field }: { field: FormField }) {
 
     case "select":
       return (
-        <label className="form-preview__input-label">
+        <label className="cs-form-preview__input-label">
           {label}
           {help}
           <select disabled>
@@ -1685,14 +1685,14 @@ function FieldPreview({ field }: { field: FormField }) {
 
     case "multi_select":
       return (
-        <fieldset className="form-preview__check-group">
+        <fieldset className="cs-form-preview__check-group">
           <legend>{field.label || "Multi select"}{field.required ? " *" : ""}</legend>
           {help}
           {(field.options ?? []).length === 0 ? (
-            <p className="settings-form-help">No options defined.</p>
+            <p className="cs-settings-form-help">No options defined.</p>
           ) : (
             (field.options ?? []).map((opt, i) => (
-              <label key={i} className="settings-toggle" style={{ fontWeight: 400 }}>
+              <label key={i} className="cs-settings-toggle" style={{ fontWeight: 400 }}>
                 <input type="checkbox" disabled />
                 <span>{opt.label || `Option ${i + 1}`}</span>
               </label>
@@ -1703,7 +1703,7 @@ function FieldPreview({ field }: { field: FormField }) {
 
     case "checkbox":
       return (
-        <label className="settings-toggle" style={{ fontWeight: 400 }}>
+        <label className="cs-settings-toggle" style={{ fontWeight: 400 }}>
           <input type="checkbox" disabled />
           <span>{field.label || "Checkbox"}{field.required ? " *" : ""}</span>
         </label>
@@ -1711,14 +1711,14 @@ function FieldPreview({ field }: { field: FormField }) {
 
     case "yes_no":
       return (
-        <fieldset className="form-preview__radio-group">
+        <fieldset className="cs-form-preview__radio-group">
           <legend>{field.label || "Yes / No"}{field.required ? " *" : ""}</legend>
           {help}
-          <label className="settings-toggle" style={{ fontWeight: 400 }}>
+          <label className="cs-settings-toggle" style={{ fontWeight: 400 }}>
             <input type="radio" name={field.id} disabled />
             <span>Yes</span>
           </label>
-          <label className="settings-toggle" style={{ fontWeight: 400 }}>
+          <label className="cs-settings-toggle" style={{ fontWeight: 400 }}>
             <input type="radio" name={field.id} disabled />
             <span>No</span>
           </label>
@@ -1727,7 +1727,7 @@ function FieldPreview({ field }: { field: FormField }) {
 
     case "date":
       return (
-        <label className="form-preview__input-label">
+        <label className="cs-form-preview__input-label">
           {label}
           {help}
           <input type="date" disabled />
@@ -1736,7 +1736,7 @@ function FieldPreview({ field }: { field: FormField }) {
 
     case "number":
       return (
-        <label className="form-preview__input-label">
+        <label className="cs-form-preview__input-label">
           {label}
           {help}
           <input type="number" disabled placeholder={field.placeholder || "0"} />
@@ -1745,7 +1745,7 @@ function FieldPreview({ field }: { field: FormField }) {
 
     case "file_upload":
       return (
-        <label className="form-preview__input-label">
+        <label className="cs-form-preview__input-label">
           {label}
           {help}
           <input type="file" disabled />
@@ -1754,16 +1754,16 @@ function FieldPreview({ field }: { field: FormField }) {
 
     case "signature":
       return (
-        <div className="form-preview__signature">
+        <div className="cs-form-preview__signature">
           {label}
           {help}
-          <div className="form-preview__signature-pad">Signature pad</div>
+          <div className="cs-form-preview__signature-pad">Signature pad</div>
         </div>
       );
 
     default:
       return (
-        <label className="form-preview__input-label">
+        <label className="cs-form-preview__input-label">
           {label}
           {help}
           <input type="text" disabled placeholder={field.placeholder || ""} />

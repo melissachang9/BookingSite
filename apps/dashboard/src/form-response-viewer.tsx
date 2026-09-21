@@ -103,27 +103,27 @@ export function FormResponseViewer({ response }: FormResponseViewerProps): React
   const timingLabel = response.customerPromptTiming?.replaceAll("_", " ") ?? response.scope;
 
   return (
-    <div className="form-response-viewer">
-      <header className="form-response-viewer__header">
+    <div className="cs-form-response-viewer">
+      <header className="cs-form-response-viewer__header">
         <div>
-          <strong className="form-response-viewer__title">{response.formName}</strong>
-          <span className="form-response-viewer__version">v{response.formVersionNumber}</span>
+          <strong className="cs-form-response-viewer__title">{response.formName}</strong>
+          <span className="cs-form-response-viewer__version">v{response.formVersionNumber}</span>
         </div>
-        <p className="form-response-viewer__meta">
+        <p className="cs-form-response-viewer__meta">
           {formatDateTime(response.submittedAt)} &middot; {timingLabel}
         </p>
       </header>
 
       {!hasSchema ? (
-        <div className="form-response-viewer__answers">
+        <div className="cs-form-response-viewer__answers">
           {Object.keys(response.answers).length === 0 ? (
-            <p className="form-response-viewer__empty">No answers recorded.</p>
+            <p className="cs-form-response-viewer__empty">No answers recorded.</p>
           ) : (
-            <dl className="form-response-viewer__dl">
+            <dl className="cs-form-response-viewer__dl">
               {Object.entries(response.answers).map(([key, value]) => (
-                <div key={key} className="form-response-viewer__answer">
-                  <dt className="form-response-viewer__label">{key}</dt>
-                  <dd className="form-response-viewer__value">
+                <div key={key} className="cs-form-response-viewer__answer">
+                  <dt className="cs-form-response-viewer__label">{key}</dt>
+                  <dd className="cs-form-response-viewer__value">
                     {value === null || value === undefined
                       ? "\u2014"
                       : typeof value === "string"
@@ -136,23 +136,23 @@ export function FormResponseViewer({ response }: FormResponseViewerProps): React
           )}
         </div>
       ) : (
-        <div className="form-response-viewer__answers">
+        <div className="cs-form-response-viewer__answers">
           {promptableFields.length === 0 && sectionFields.length === 0 ? (
-            <p className="form-response-viewer__empty">No answers recorded.</p>
+            <p className="cs-form-response-viewer__empty">No answers recorded.</p>
           ) : (
-            <dl className="form-response-viewer__dl">
+            <dl className="cs-form-response-viewer__dl">
               {schema.fields.map((field) => {
                 if (field.type === "section") {
                   return (
-                    <div key={field.id} className="form-response-viewer__section-divider">
-                      <dt className="form-response-viewer__section-label">{field.label}</dt>
+                    <div key={field.id} className="cs-form-response-viewer__section-divider">
+                      <dt className="cs-form-response-viewer__section-label">{field.label}</dt>
                     </div>
                   );
                 }
                 if (field.type === "static_text") {
                   return (
-                    <div key={field.id} className="form-response-viewer__answer">
-                      <dd className="form-response-viewer__static-text">{field.content ?? field.label}</dd>
+                    <div key={field.id} className="cs-form-response-viewer__answer">
+                      <dd className="cs-form-response-viewer__static-text">{field.content ?? field.label}</dd>
                     </div>
                   );
                 }
@@ -161,24 +161,24 @@ export function FormResponseViewer({ response }: FormResponseViewerProps): React
                 const attachments = isAttachmentField && isAttachmentArray(answer) ? (answer as FormAttachment[]) : null;
 
                 return (
-                  <div key={field.id} className="form-response-viewer__answer">
-                    <dt className="form-response-viewer__label">{field.label}</dt>
+                  <div key={field.id} className="cs-form-response-viewer__answer">
+                    <dt className="cs-form-response-viewer__label">{field.label}</dt>
                     {attachments ? (
-                      <dd className="form-response-viewer__value">
-                        <div className="form-response-viewer__thumbnails">
+                      <dd className="cs-form-response-viewer__value">
+                        <div className="cs-form-response-viewer__thumbnails">
                           {attachments.map((att) =>
                             isImageMime(att.mimeType) ? (
                               <button
                                 key={att.id}
                                 type="button"
-                                className="form-response-viewer__thumbnail-btn"
+                                className="cs-form-response-viewer__thumbnail-btn"
                                 onClick={() => setLightboxUrl(att.url)}
                                 title={att.fileName}
                               >
                                 <img
                                   src={att.url}
                                   alt={att.fileName}
-                                  className="form-response-viewer__thumbnail"
+                                  className="cs-form-response-viewer__thumbnail"
                                   loading="lazy"
                                 />
                               </button>
@@ -186,7 +186,7 @@ export function FormResponseViewer({ response }: FormResponseViewerProps): React
                               <a
                                 key={att.id}
                                 href={att.url}
-                                className="form-response-viewer__file-link"
+                                className="cs-form-response-viewer__file-link"
                                 target="_blank"
                                 rel="noopener noreferrer"
                               >
@@ -197,7 +197,7 @@ export function FormResponseViewer({ response }: FormResponseViewerProps): React
                         </div>
                       </dd>
                     ) : (
-                      <dd className="form-response-viewer__value">
+                      <dd className="cs-form-response-viewer__value">
                         {formatAnswerValue(answer, field)}
                       </dd>
                     )}
@@ -211,14 +211,14 @@ export function FormResponseViewer({ response }: FormResponseViewerProps): React
 
       {lightboxUrl ? (
         <div
-          className="form-response-viewer__lightbox-backdrop"
+          className="cs-form-response-viewer__lightbox-backdrop"
           role="dialog"
           aria-label="Image preview"
           onClick={() => setLightboxUrl(null)}
         >
           <button
             type="button"
-            className="form-response-viewer__lightbox-close"
+            className="cs-form-response-viewer__lightbox-close"
             onClick={() => setLightboxUrl(null)}
             aria-label="Close preview"
           >
@@ -227,7 +227,7 @@ export function FormResponseViewer({ response }: FormResponseViewerProps): React
           <img
             src={lightboxUrl}
             alt=""
-            className="form-response-viewer__lightbox-image"
+            className="cs-form-response-viewer__lightbox-image"
             onClick={(e) => e.stopPropagation()}
           />
         </div>

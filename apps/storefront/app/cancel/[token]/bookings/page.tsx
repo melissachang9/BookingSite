@@ -122,7 +122,7 @@ export default async function CustomerBookingHistoryPage({ params }: BookingHist
                 <h2>No appointments yet</h2>
               </div>
             </div>
-            <p style={{ color: "var(--ui-ink-soft)" }}>
+            <p style={{ color: "var(--sf-ink-soft)" }}>
               When you book an appointment with {tenant.name}, it will appear here. You can manage each appointment from its private link.
             </p>
           </section>

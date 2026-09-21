@@ -10,7 +10,7 @@ A visual redesign of the operator-facing calendar in `apps/dashboard` — week v
 
 The task is to **recreate these designs inside the existing dashboard app**: React 18 + Vite + TypeScript, routed with `react-router-dom`, styled with vanilla CSS / CSS Modules per `apps/dashboard/AGENTS.md`. Keep business logic in the backend APIs and typed contracts in `packages/shared-types`; only the presentation layer changes.
 
-The prototype uses inline styles because of how it was authored. **Do not port inline styles.** Translate them into the app's CSS conventions — extend `apps/dashboard/src/styles.css` (or add CSS Modules) and put the tokens below in `packages/ui-components/src/tokens.css` so the storefront can share them later.
+The prototype uses inline styles because of how it was authored. **Do not port inline styles.** Translate them into the app's CSS conventions — extend `apps/dashboard/src/theme.css` (the dashboard design system) and put the tokens below there.
 
 Note: `docs/ui-design-system.md` §0 currently specifies a light-mint + amber dashboard palette. This design supersedes it. Update that doc as part of the change, per its own drift-control rule.
 
@@ -201,6 +201,5 @@ Target files in the repo:
 
 - `apps/dashboard/src/calendar-page.tsx` — week/day board, drawers, checkout panel
 - `apps/dashboard/src/App.tsx` — sidebar, month rail slot, top bar
-- `apps/dashboard/src/styles.css` — `.schedule-board__*`, `.appointment-details-drawer*`, `.slot-action-*`, `.view-mode-toggle*`, `.month-rail`
-- `packages/ui-components/src/tokens.css` — token definitions
+- `apps/dashboard/src/theme.css` — token definitions and dashboard styles
 - `docs/ui-design-system.md` — update §0 to this palette

@@ -22,6 +22,7 @@ import type {
   CustomPaymentMethod,
   ProviderListResponse,
   ProviderTimeOffEntry,
+  ProviderTimeOffList,
   RecordManualPaymentRequest,
   SendFormReminderResponse,
   ServiceCategoryListResponse,
@@ -210,6 +211,7 @@ export type CalendarPageApi = {
   getBooking: (tenantSlug: string, bookingId: string) => Promise<BookingSummary>;
   getCustomerProfile: (tenantSlug: string, customerId: string) => Promise<CustomerProfileResponse>;
   listServiceProviders: (tenantSlug: string, serviceId: string) => Promise<ProviderListResponse>;
+  listProviderTimeOff: (tenantSlug: string, providerId: string) => Promise<ProviderTimeOffList>;
   listServiceCategories: (tenantSlug: string) => Promise<ServiceCategoryListResponse>;
   lookupCustomers: (query: CustomerLookupQuery) => Promise<CustomerLookupResponse>;
   getAvailability: (request: AvailabilityRequest) => Promise<AvailabilityResponse>;
@@ -494,6 +496,17 @@ function formatTimeInputValue(value: string): string {
   const hour = parts.find((part) => part.type === "hour")?.value ?? "00";
   const minute = parts.find((part) => part.type === "minute")?.value ?? "00";
   return `${hour}:${minute}`;
+}
+
+function normalizeTime(value: string): string {
+  const minuteOfDay = getMinutesFromTimeInput(value);
+  if (minuteOfDay === null) {
+    return value;
+  }
+
+  const hour = Math.floor(minuteOfDay / 60);
+  const minute = minuteOfDay % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
 function addMinutesToTimeInput(timeValue: string, durationMinutes: number): string {
@@ -922,7 +935,7 @@ export function CalendarPage({
     if (!availMenuOpen) return;
     const handler = (e: Event) => {
       const target = e.target as HTMLElement;
-      if (!target.closest(".avail-context")) setAvailMenuOpen(false);
+      if (!target.closest(".cs-avail-context")) setAvailMenuOpen(false);
     };
     document.addEventListener("click", handler, true);
     return () => document.removeEventListener("click", handler, true);
@@ -2088,10 +2101,10 @@ export function CalendarPage({
   );
 
   return (
-    <main className="ops-page-stack">
+    <main className="cs-page-stack">
       {sidebarRailHost ? createPortal(monthRail, sidebarRailHost) : null}
 
-      <section className="calendar-workspace">
+      <section className="cs-calendar-workspace">
         <div className="cs-toolbar" role="toolbar" aria-label="Calendar controls">
           <div className="cs-toolbar__title-group">
             <div className="cs-range">{visibleDateRangeLabel || "Calendar"}</div>
@@ -2128,7 +2141,7 @@ export function CalendarPage({
 
           <div className="cs-toolbar__controls">
             {calendarState.kind === "ready" && calendarState.services.length > 0 ? (
-              <div className="avail-context" style={{ position: "relative" }}>
+              <div className="cs-avail-context" style={{ position: "relative" }}>
                 <button
                   type="button"
                   className="cs-select"
@@ -2194,7 +2207,7 @@ export function CalendarPage({
             ) : null}
 
             {viewMode === "week" && weekProviderOptions.length > 0 ? (
-              <div className="context" style={{ position: "relative" }}>
+              <div className="cs-context" style={{ position: "relative" }}>
                 <button
                   type="button"
                   className="cs-select cs-select--ink"
@@ -2341,7 +2354,7 @@ export function CalendarPage({
           </div>
         ) : null}
       </section>
-      {sidebarRailHost ? null : <div className="calendar-fallback-month-rail">{monthRail}</div>}
+      {sidebarRailHost ? null : <div className="cs-minical-rail">{monthRail}</div>}
       {createPortal(
         <SlotActionDrawer
           selectedSlot={selectedSlot}
@@ -2515,106 +2528,106 @@ function TimeOffDetailsDrawer({
 
   return (
     <>
-      <button type="button" className="appointment-drawer-backdrop" aria-label="Close time off details" onClick={onClose} />
-      <aside className="appointment-details-drawer" role="dialog" aria-label="Time off details">
-        <header className="appointment-details-drawer__header">
-          <span className="appointment-status-chip" style={{ background: "var(--ui-ivory)", color: "var(--ui-ink-soft)" }}>
+      <button type="button" className="cs-drawer-backdrop" aria-label="Close time off details" onClick={onClose} />
+      <aside className="cs-drawer-legacy" role="dialog" aria-label="Time off details">
+        <header className="cs-drawer-legacy__header">
+          <span className="cs-drawer-status-chip" style={{ background: "var(--cs-surface)", color: "var(--cs-label)" }}>
             <span aria-hidden="true" />
             {isCustom ? "Override shift" : "Blocked date"}
           </span>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
             {!editing ? (
               <>
-                <button type="button" className="appointment-drawer-outline-action" onClick={() => setEditing(true)}>Edit</button>
-                <button type="button" className="appointment-drawer-outline-action" onClick={handleDelete} disabled={saving}
-                  style={{ color: "var(--ui-danger)", borderColor: "var(--ui-sand)" }}>Delete</button>
+                <button type="button" className="cs-drawer-outline-action" onClick={() => setEditing(true)}>Edit</button>
+                <button type="button" className="cs-drawer-outline-action" onClick={handleDelete} disabled={saving}
+                  style={{ color: "var(--cs-risk-text)", borderColor: "var(--cs-hairline)" }}>Delete</button>
               </>
             ) : null}
-            <button type="button" className="ghost-action" onClick={onClose} aria-label="Close">×</button>
+            <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose} aria-label="Close">×</button>
           </div>
         </header>
-        <div className="booking-rail__body" style={{ padding: "0 1rem 1rem" }}>
+        <div className="cs-booking-rail__body" style={{ padding: "0 1rem 1rem" }}>
           {editing ? (
             <>
-              <section className="booking-rail-section">
-                <div className="booking-rail-section__label">Dates</div>
+              <section className="cs-booking-rail-section">
+                <div className="cs-booking-rail-section__label">Dates</div>
                 <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                  <input type="date" className="svc-input" style={{ width: "140px" }}
+                  <input type="date" className="cs-svc-input" style={{ width: "140px" }}
                     value={startDate} aria-label="Start date"
                     onChange={(e) => setStartDate(e.target.value)} />
-                  <span style={{ color: "var(--ui-muted)", fontSize: "12px" }}>to</span>
-                  <input type="date" className="svc-input" style={{ width: "140px" }}
+                  <span style={{ color: "var(--cs-label)", fontSize: "12px" }}>to</span>
+                  <input type="date" className="cs-svc-input" style={{ width: "140px" }}
                     value={endDate} aria-label="End date"
                     onChange={(e) => setEndDate(e.target.value)} />
                 </div>
               </section>
-              <section className="booking-rail-section">
-                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--ui-ink)", cursor: "pointer" }}>
+              <section className="cs-booking-rail-section">
+                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--cs-ink)", cursor: "pointer" }}>
                   <input type="checkbox" checked={allDay}
                     onChange={(e) => setAllDay(e.target.checked)} />
                   Block all day
                 </label>
                 {!allDay ? (
                   <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "6px" }}>
-                    <input type="text" className="svc-input" style={{ width: "80px", textAlign: "center" }}
+                    <input type="text" className="cs-svc-input" style={{ width: "80px", textAlign: "center" }}
                       value={startTime} placeholder="09:00" aria-label="Start time"
                       onChange={(e) => setStartTime(e.target.value)} />
-                    <span style={{ color: "var(--ui-muted)", fontSize: "12px" }}>to</span>
-                    <input type="text" className="svc-input" style={{ width: "80px", textAlign: "center" }}
+                    <span style={{ color: "var(--cs-label)", fontSize: "12px" }}>to</span>
+                    <input type="text" className="cs-svc-input" style={{ width: "80px", textAlign: "center" }}
                       value={endTime} placeholder="17:00" aria-label="End time"
                       onChange={(e) => setEndTime(e.target.value)} />
                   </div>
                 ) : null}
               </section>
-              <section className="booking-rail-section">
-                <div className="booking-rail-section__label">Reason</div>
-                <input type="text" className="svc-input" style={{ width: "100%" }}
+              <section className="cs-booking-rail-section">
+                <div className="cs-booking-rail-section__label">Reason</div>
+                <input type="text" className="cs-svc-input" style={{ width: "100%" }}
                   value={reason} placeholder="e.g. Vacation"
                   onChange={(e) => setReason(e.target.value)} />
               </section>
               {error ? (
-                <div role="alert" style={{ padding: "8px 10px", background: "var(--ui-danger-soft)", borderRadius: "6px", fontSize: "12px", color: "var(--ui-danger)", marginTop: "8px" }}>
+                <div role="alert" style={{ padding: "8px 10px", background: "var(--cs-risk-fill)", borderRadius: "6px", fontSize: "12px", color: "var(--cs-risk-text)", marginTop: "8px" }}>
                   {error}
                 </div>
               ) : null}
               <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
-                <button type="button" className="svc-save-btn" onClick={handleSave} disabled={saving}>
+                <button type="button" className="cs-svc-save-btn" onClick={handleSave} disabled={saving}>
                   {saving ? "Saving..." : "Save"}
                 </button>
-                <button type="button" className="svc-text-btn" onClick={() => setEditing(false)}>Cancel</button>
+                <button type="button" className="cs-svc-text-btn" onClick={() => setEditing(false)}>Cancel</button>
               </div>
             </>
           ) : (
             <>
-              <section className="booking-rail-section">
-                <div className="booking-rail-section__label">Type</div>
-                <div style={{ fontSize: "13px", color: "var(--ui-ink)" }}>
+              <section className="cs-booking-rail-section">
+                <div className="cs-booking-rail-section__label">Type</div>
+                <div style={{ fontSize: "13px", color: "var(--cs-ink)" }}>
                   {isCustom ? "Custom hours override" : "Full-day block"}
                 </div>
               </section>
-              <section className="booking-rail-section">
-                <div className="booking-rail-section__label">Date</div>
-                <div style={{ fontSize: "13px", color: "var(--ui-ink)" }}>
+              <section className="cs-booking-rail-section">
+                <div className="cs-booking-rail-section__label">Date</div>
+                <div style={{ fontSize: "13px", color: "var(--cs-ink)" }}>
                   {sameDay ? fmtD(startD) : `${fmtD(startD)} – ${fmtD(endD)}`}
                 </div>
               </section>
               {isCustom && timeOff.startTime ? (
-                <section className="booking-rail-section">
-                  <div className="booking-rail-section__label">Time</div>
-                  <div style={{ fontSize: "13px", color: "var(--ui-ink)" }}>
+                <section className="cs-booking-rail-section">
+                  <div className="cs-booking-rail-section__label">Time</div>
+                  <div style={{ fontSize: "13px", color: "var(--cs-ink)" }}>
                     {timeOff.startTime} – {timeOff.endTime}
                   </div>
                 </section>
               ) : null}
               {timeOff.reason ? (
-                <section className="booking-rail-section">
-                  <div className="booking-rail-section__label">Reason</div>
-                  <div style={{ fontSize: "13px", color: "var(--ui-ink)" }}>{timeOff.reason}</div>
+                <section className="cs-booking-rail-section">
+                  <div className="cs-booking-rail-section__label">Reason</div>
+                  <div style={{ fontSize: "13px", color: "var(--cs-ink)" }}>{timeOff.reason}</div>
                 </section>
               ) : null}
-              <section className="booking-rail-section">
-                <div className="booking-rail-section__label">Duration</div>
-                <div style={{ fontSize: "13px", color: "var(--ui-ink)" }}>
+              <section className="cs-booking-rail-section">
+                <div className="cs-booking-rail-section__label">Duration</div>
+                <div style={{ fontSize: "13px", color: "var(--cs-ink)" }}>
                   {sameDay ? "1 day" : `${Math.ceil((endD.getTime() - startD.getTime()) / 86400000) + 1} days`}
                 </div>
               </section>
@@ -2666,8 +2679,8 @@ function MonthRail({
         </div>
       </div>
       <div className="cs-minical__grid" role="grid">
-        {monthDayLabel.map((label) => (
-          <div key={label} className="cs-minical__dow">{label}</div>
+        {monthDayLabel.map((label, index) => (
+          <div key={`${label}-${index}`} className="cs-minical__dow">{label}</div>
         ))}
         {monthGrid.map((date) => {
           const dayData = monthDatesByDay.get(date);
@@ -2822,44 +2835,12 @@ function CalendarBoard({
   displayStartHour?: number;
   displayEndHour?: number;
 }) {
-  const boardBodyRef = useRef<HTMLDivElement | null>(null);
-
-  // §4: land the board on "now" on mount — scroll the board body so the
-  // current time sits one row below the top (clamped to 0).
-  useEffect(() => {
-    if (state.kind !== "ready") {
-      return;
-    }
-
-    const startHour = Math.min(24, Math.max(0, Math.round(displayStartHour ?? 9)));
-    let endHour = Math.min(24, Math.max(0, Math.round(displayEndHour ?? 19)));
-    if (endHour <= startHour) {
-      endHour = Math.min(24, startHour + SCHEDULE_MIN_VISIBLE_HOURS);
-    }
-
-    const parts = tenantTimePartsFormatter.formatToParts(new Date());
-    const hh = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-    const mm = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
-    const nowMinutes = hh * 60 + mm;
-
-    if (nowMinutes < startHour * 60 || nowMinutes > endHour * 60) {
-      return; // "now" is outside the displayed range; nothing to scroll to
-    }
-
-    const rowHpx = viewMode === "day" ? SCHEDULE_DAY_HOUR_HEIGHT_PX : SCHEDULE_HOUR_HEIGHT_PX;
-    const nowTopPx = ((nowMinutes - startHour * 60) / 60) * rowHpx;
-    const el = boardBodyRef.current;
-    if (el) {
-      el.scrollTop = Math.max(0, nowTopPx - rowHpx);
-    }
-  }, [state.kind, viewMode, displayStartHour, displayEndHour]);
-
   if (state.kind === "loading") {
-    return <div className="calendar-state">Loading booked appointments...</div>;
+    return <div className="cs-empty">Loading booked appointments...</div>;
   }
 
   if (state.kind === "error" || state.kind === "empty") {
-    return <div className="calendar-state calendar-state--muted">{state.message}</div>;
+    return <div className="cs-empty cs-empty--muted">{state.message}</div>;
   }
 
   const clampHour = (value: number) => Math.min(24, Math.max(0, Math.round(value)));
@@ -3074,7 +3055,7 @@ function CalendarBoard({
           })}
         </div>
 
-        <div className="cs-board__body" ref={boardBodyRef}>
+        <div className="cs-board__body">
           <div className="cs-gutter" aria-hidden="true">
             {Array.from({ length: totalHours }, (_, i) => (
               <div key={i} className="cs-gutter__hour">{padHour(startHour + i)}</div>
@@ -3498,8 +3479,8 @@ function SlotActionDrawer({
 
   return (
     <>
-      <button type="button" className="appointment-drawer-backdrop" aria-label="Close calendar slot actions" onClick={onClose} />
-      <aside className="appointment-details-drawer slot-action-drawer cs-drawer-shim" role="dialog" aria-label="Calendar slot actions">
+      <button type="button" className="cs-drawer-backdrop" aria-label="Close calendar slot actions" onClick={onClose} />
+      <aside className="cs-drawer-legacy cs-slot-drawer cs-drawer-shim" role="dialog" aria-label="Calendar slot actions">
         <div className="cs-drawer__inner">
           {/* Header */}
           <div className="cs-drawer__head">
@@ -3608,7 +3589,7 @@ function SlotActionDrawer({
                             : "Create client"}
                         </button>
                         {customerCreateState.kind === "error" ? (
-                          <div className="message-banner message-banner--error" role="alert" style={{ marginTop: 8 }}>
+                          <div className="cs-banner cs-banner--error" role="alert" style={{ marginTop: 8 }}>
                             {customerCreateState.message}
                           </div>
                         ) : null}
@@ -3672,10 +3653,10 @@ function SlotActionDrawer({
                       </div>
                     ) : null}
                     {customerLookupState.kind === "loading" ? (
-                      <div className="slot-customer-lookup-note" role="status" style={{ marginTop: 8 }}>Searching clients…</div>
+                      <div className="cs-slot-customer-lookup-note" role="status" style={{ marginTop: 8 }}>Searching clients…</div>
                     ) : null}
                     {customerLookupState.kind === "error" ? (
-                      <div className="message-banner message-banner--error" role="alert" style={{ marginTop: 8 }}>{customerLookupState.message}</div>
+                      <div className="cs-banner cs-banner--error" role="alert" style={{ marginTop: 8 }}>{customerLookupState.message}</div>
                     ) : null}
                   </div>
                 );
@@ -3761,7 +3742,7 @@ function SlotActionDrawer({
                 </div>
               ) : null}
               {draftCreationState.kind === "error" ? (
-                <div className="message-banner message-banner--error" role="alert">{draftCreationState.message}</div>
+                <div className="cs-banner cs-banner--error" role="alert">{draftCreationState.message}</div>
               ) : null}
               {draftCreationState.kind === "success" ? (
                 <div className="cs-panel cs-panel--success cs-alert" role="status">
@@ -3818,16 +3799,16 @@ function SlotActionDrawer({
 
           {/* Change-date popover (unchanged UX) */}
           {showDatePopover ? (
-            <div ref={datePickerContainerRef} className="appointment-drawer-date-popover">
-              <div className="month-rail__header">
+            <div ref={datePickerContainerRef} className="cs-date-popover">
+              <div className="cs-date-popover__head">
                 <h5>{monthLabelFormatter.format(parseIsoDate(pickerMonth))}</h5>
-                <div className="month-rail__controls">
-                  <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, -1))}>Prev</button>
-                  <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, 1))}>Next</button>
+                <div className="cs-date-popover__controls">
+                  <button type="button" className="cs-date-popover__nav" onClick={() => setPickerMonth(addMonths(pickerMonth, -1))}>Prev</button>
+                  <button type="button" className="cs-date-popover__nav" onClick={() => setPickerMonth(addMonths(pickerMonth, 1))}>Next</button>
                 </div>
               </div>
-              <div className="month-grid-labels" role="presentation">{monthDayLabel.map((label) => (<span key={label}>{label}</span>))}</div>
-              <div className="month-grid" role="grid">
+              <div className="cs-date-popover__dow" role="presentation">{monthDayLabel.map((label, index) => (<span key={`${label}-${index}`}>{label}</span>))}</div>
+              <div className="cs-date-popover__grid" role="grid">
                 {pickerGrid.map((date) => {
                   const isInCurrentMonth = date.slice(0, 7) === pickerMonth.slice(0, 7);
                   const isSelected = date === selectedSlot.date;
@@ -3839,7 +3820,7 @@ function SlotActionDrawer({
                       disabled={!isInCurrentMonth}
                       aria-pressed={isSelected}
                       aria-label={getDateLabel(date)}
-                      className={["month-day", !isInCurrentMonth ? "month-day--outside" : "", isSelected ? "month-day--focused" : ""].filter(Boolean).join(" ")}
+                      className={["cs-date-popover__day", !isInCurrentMonth ? "cs-date-popover__day--out" : "", isSelected ? "cs-date-popover__day--selected" : ""].filter(Boolean).join(" ")}
                       onClick={() => { onStartDateChange(date); setShowDatePopover(false); }}
                     >
                       <span>{parseIsoDate(date).getUTCDate()}</span>
@@ -3852,7 +3833,7 @@ function SlotActionDrawer({
           {showTimeInput ? (
             <input
               type="time"
-              className="appointment-drawer-time-input"
+              className="cs-drawer-time-input"
               value={formatTimeInputValue(selectedSlot.startAt)}
               onChange={(event) => { onStartTimeChange(event.target.value); setShowTimeInput(false); }}
               autoFocus
@@ -4006,22 +3987,22 @@ function TimeBlockDetailsDrawer({
     <>
       <button
         type="button"
-        className="appointment-drawer-backdrop"
+        className="cs-drawer-backdrop"
         aria-label="Close time block details"
         onClick={onClose}
       />
-      <aside className="appointment-details-drawer time-block-details-drawer" role="dialog" aria-label="Time block details">
-        <header className="appointment-details-drawer__header">
-          <span className="appointment-status-chip appointment-status-chip--block">
+      <aside className="cs-drawer-legacy cs-time-block-drawer" role="dialog" aria-label="Time block details">
+        <header className="cs-drawer-legacy__header">
+          <span className="cs-drawer-status-chip cs-drawer-status-chip--block">
             <span aria-hidden="true" />
             Time block
           </span>
-          <button type="button" className="appointment-drawer-outline-action" onClick={onClose}>
+          <button type="button" className="cs-drawer-outline-action" onClick={onClose}>
             Close
           </button>
         </header>
 
-        <div className="appointment-drawer-when" aria-label="Time block timing">
+        <div className="cs-drawer-when" aria-label="Time block timing">
           <div>
             On <strong>{dayLabel}</strong>
           </div>
@@ -4030,16 +4011,16 @@ function TimeBlockDetailsDrawer({
           </div>
         </div>
 
-        <section className="booking-rail-section" aria-label="Time block summary">
-          <p className="rail-section-kicker">Block details</p>
-          <div className="appointment-summary-card time-block-summary-card">
+        <section className="cs-booking-rail-section" aria-label="Time block summary">
+          <p className="cs-rail-section-kicker">Block details</p>
+          <div className="cs-drawer-summary-card cs-time-block-summary-card">
             <div>
               <strong>{blockedServiceNames || selectedService?.name || "Selected service"}</strong>
               <span>{durationLabel}</span>
             </div>
             <p>{`${selectedTimeBlock.providerName} · ${formatDateTime(startIso ?? selectedTimeBlock.startAt)}`}</p>
           </div>
-          <div className="drawer-form-preview drawer-form-preview--compact">
+          <div className="cs-drawer-form-preview cs-drawer-form-preview--compact">
             <label>
               <span>Provider</span>
               <input value={selectedTimeBlock.providerName} readOnly />
@@ -4095,8 +4076,8 @@ function TimeBlockDetailsDrawer({
           </div>
         </section>
 
-        <section className="booking-rail-section" aria-label="Time block notes">
-          <label className="time-block-notes-field">
+        <section className="cs-booking-rail-section" aria-label="Time block notes">
+          <label className="cs-time-block-notes-field">
             <span>Notes</span>
             <textarea
               value={notesDraft}
@@ -4110,9 +4091,9 @@ function TimeBlockDetailsDrawer({
           </label>
         </section>
 
-        <section className="booking-rail-section" aria-label="Appointment types blocked by this time block">
-          <p className="rail-section-kicker">Appointment types blocked</p>
-          <div className="time-block-service-options">
+        <section className="cs-booking-rail-section" aria-label="Appointment types blocked by this time block">
+          <p className="cs-rail-section-kicker">Appointment types blocked</p>
+          <div className="cs-time-block-service-options">
             {serviceOptions.map((service) => {
               const checked = blockedServiceIdsDraft.includes(service.id);
               return (
@@ -4129,20 +4110,20 @@ function TimeBlockDetailsDrawer({
           </div>
         </section>
 
-        <section className="booking-rail-section" aria-label="Appointments blocked by this time block">
-          <div className="rail-section-heading">
+        <section className="cs-booking-rail-section" aria-label="Appointments blocked by this time block">
+          <div className="cs-rail-section-heading">
             <div>
-              <p className="eyebrow">Affected appointments</p>
+              <p className="cs-eyebrow">Affected appointments</p>
               <h4>Appointments blocked</h4>
             </div>
-            <span className="intake-status-badge">{blockedAppointments.length}</span>
+            <span className="cs-intake-status-badge">{blockedAppointments.length}</span>
           </div>
           {blockedAppointments.length === 0 ? (
-            <div className="message-banner message-banner--muted" role="status">
+            <div className="cs-banner cs-banner--muted" role="status">
               No booked appointments fall inside this block.
             </div>
           ) : (
-            <ul className="time-block-appointment-list">
+            <ul className="cs-time-block-appointment-list">
               {blockedAppointments.map((appointment) => (
                 <li key={appointment.id}>
                   <strong>{appointment.customerName}</strong>
@@ -4154,17 +4135,17 @@ function TimeBlockDetailsDrawer({
         </section>
 
         {saveState === "error" ? (
-          <div className="message-banner message-banner--error" role="alert">
+          <div className="cs-banner cs-banner--error" role="alert">
             End time must be after start time.
           </div>
         ) : null}
         {saveState === "saved" && !hasUnsavedChanges ? (
-          <div className="message-banner" role="status">
+          <div className="cs-banner" role="status">
             Time block updated.
           </div>
         ) : null}
         {draftCreationState.kind === "error" ? (
-          <div className="message-banner message-banner--error" role="alert">
+          <div className="cs-banner cs-banner--error" role="alert">
             {draftCreationState.message}
           </div>
         ) : null}
@@ -4175,13 +4156,13 @@ function TimeBlockDetailsDrawer({
           </div>
         ) : null}
 
-        <div className="time-block-drawer-actions">
-          <button type="button" className="time-block-delete-action" onClick={onDelete}>
+        <div className="cs-time-block-drawer-actions">
+          <button type="button" className="cs-time-block-delete-action" onClick={onDelete}>
             Delete time block
           </button>
           <button
             type="button"
-            className="primary-action"
+            className="cs-btn cs-btn--primary cs-btn--sm"
             onClick={handleSave}
             disabled={!hasUnsavedChanges || !hasValidRange}
           >
@@ -4189,14 +4170,14 @@ function TimeBlockDetailsDrawer({
           </button>
           <button
             type="button"
-            className="secondary-action"
+            className="cs-btn cs-btn--sm"
             onClick={onCreateDraft}
             disabled={!canCreateDraft}
           >
             {draftCreationState.kind === "submitting" ? "Creating draft..." : draftCreated ? "Draft created" : "Create draft from time block"}
           </button>
           {draftHref ? (
-            <a className="secondary-action" href={draftHref} target="_blank" rel="noopener noreferrer">
+            <a className="cs-btn cs-btn--sm" href={draftHref} target="_blank" rel="noopener noreferrer">
               Open draft in storefront
             </a>
           ) : null}
@@ -4263,7 +4244,7 @@ function AppointmentDetailsDrawer({
   onPaymentRecorded,
 }: AppointmentDetailsDrawerProps): ReactElement | null {
   const [viewingFormEntry, setViewingFormEntry] = useState<BookingFormResponseEntry | null>(null);
-  const [drawerView, setDrawerView] = useState<"details" | "checkout">("details");
+  const [drawerView, setDrawerView] = useState<"details" | "checkout" | "profile">("details");
   const [showRescheduleDatePopover, setShowRescheduleDatePopover] = useState(false);
   const [showRescheduleTimeInput, setShowRescheduleTimeInput] = useState(false);
   const [rescheduleTimeDraft, setRescheduleTimeDraft] = useState("");
@@ -4284,29 +4265,26 @@ function AppointmentDetailsDrawer({
   const [customerNotesSaveState, setCustomerNotesSaveState] = useState<"idle" | "submitting" | "error">("idle");
   const [customerNotesError, setCustomerNotesError] = useState("");
   const [isEditingCustomerContact, setIsEditingCustomerContact] = useState(false);
-  const [showCustomerOverlay, setShowCustomerOverlay] = useState(false);
-  const [customerProfileForOverlay, setCustomerProfileForOverlay] = useState<CustomerProfileResponse | null>(null);
 
-  // Load the full customer profile once the overlay opens so the tabs can show
-  // wallet/lifetime/forms/history instead of just the few fields the booking
-  // already carries.
+  // Load the full customer profile when the drawer opens the profile sub-view so
+  // the tabs can show wallet/lifetime/forms/history instead of just the few
+  // fields the booking already carries.
   useEffect(() => {
-    if (!showCustomerOverlay || !api) {
+    if (drawerView !== "profile" || !api) {
       return;
     }
     let cancelled = false;
-    setCustomerProfileForOverlay(null);
+    setClientCardProfile(null);
     api.getCustomerProfile(tenantSlug, selectedAppointment?.customerId ?? "")
       .then((profile) => {
-        if (!cancelled) setCustomerProfileForOverlay(profile);
+        if (!cancelled) setClientCardProfile(profile);
       })
       .catch(() => {
-        if (!cancelled) setCustomerProfileForOverlay(null);
+        if (!cancelled) setClientCardProfile(null);
       });
     return () => { cancelled = true; };
-  }, [showCustomerOverlay, api, tenantSlug, selectedAppointment?.customerId]);
+  }, [drawerView, api, tenantSlug, selectedAppointment?.customerId]);
 
-  const [customerOverlayTab, setCustomerOverlayTab] = useState<"history" | "forms" | "photos" | "notes" | "messages">("history");
   const [clientCardTab, setClientCardTab] = useState<"history" | "forms" | "photos" | "notes" | "messages">("history");
   const [clientCardProfile, setClientCardProfile] = useState<CustomerProfileResponse | null>(null);
 
@@ -4337,6 +4315,7 @@ function AppointmentDetailsDrawer({
   // Reset drawer view when switching appointments
   useEffect(() => {
     setDrawerView("details");
+    setClientCardTab("history");
     setShowRescheduleDatePopover(false);
     setShowRescheduleTimeInput(false);
     setRescheduleTimeDraft("");
@@ -4390,12 +4369,19 @@ function AppointmentDetailsDrawer({
   const isCompleted = selectedAppointment.status === "completed";
   const isNoShow = selectedAppointment.status === "no_show";
   const showFooter = isConfirmed || isCompleted || isNoShow;
+  // Service-family swatch (same palette as the calendar chips) so the drawer
+  // and checkout tint match the colour the booking shows on the calendar.
+  const drawerServiceForFamily = services.find((s) => s.id === selectedAppointment.serviceId);
+  const drawerCategoryForFamily = drawerServiceForFamily?.categoryId
+    ? categoryNameById?.[drawerServiceForFamily.categoryId] ?? null
+    : null;
+  const drawerFamilyColor = swatchForService(selectedAppointment.serviceName, drawerCategoryForFamily);
   if (drawerView === "checkout" && api) {
     return (
       <>
         <button
           type="button"
-          className="appointment-drawer-backdrop"
+          className="cs-drawer-backdrop"
           aria-label="Close appointment details"
           onClick={onClose}
         />
@@ -4404,6 +4390,7 @@ function AppointmentDetailsDrawer({
           api={api}
           tenantSlug={tenantSlug}
           customPaymentMethods={customPaymentMethods}
+          familyColor={drawerFamilyColor}
           onBack={() => {
             setDrawerView("details");
           }}
@@ -4415,11 +4402,105 @@ function AppointmentDetailsDrawer({
     );
   }
 
-  const bookedService = services.find((s) => s.id === selectedAppointment.serviceId);
-  const categoryName = bookedService?.categoryId ? categoryNameById?.[bookedService.categoryId] ?? null : null;
-  const chipFamily = getChipFamily(selectedAppointment.serviceName, categoryName);
-  const familyBg = FAMILY_SWATCH[chipFamily] ?? "#F0EDEA";
-  const familyLabel = (categoryName ?? statusLabel).toUpperCase();
+  // Customer profile sub-view — shown inside the drawer when the operator taps
+  // "Profile" from the appointment details view. Replaces the old overlay modal.
+  if (drawerView === "profile") {
+    const p = clientCardProfile;
+    const clientSince = p?.customer?.createdAt
+      ? `Client since ${new Date(p.customer.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })}`
+      : null;
+    const contactLine = [selectedAppointment.customerEmail, selectedAppointment.customerPhone].filter(Boolean);
+    const balanceDue = p?.outstandingBalanceCents ?? selectedAppointment.balanceDueCents ?? 0;
+    const recentVisits = (p?.bookings ?? [])
+      .slice()
+      .sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime())
+      .slice(0, 5);
+    return (
+      <>
+        <button
+          type="button"
+          className="cs-drawer-backdrop"
+          aria-label="Close appointment details"
+          onClick={onClose}
+        />
+        <aside className="cs-drawer cs-drawer--profile" role="dialog" aria-label="Customer profile">
+          <div className="cs-drawer__inner cs-profile-drawer">
+            <div className="cs-profile-drawer__top">
+              <p className="cs-profile-drawer__kicker">Client profile</p>
+              <button type="button" className="cs-drawer__close" onClick={onClose} aria-label="Close">×</button>
+            </div>
+
+            <div className="cs-profile-drawer__intro">
+              <span className="cs-avatar cs-avatar--xl" aria-hidden="true">{getInitials(selectedAppointment.customerName)}</span>
+              <div>
+                <h3 className="cs-profile-drawer__name">{selectedAppointment.customerName}</h3>
+                {clientSince ? <p className="cs-profile-drawer__meta">{clientSince}</p> : null}
+              </div>
+              <a className="cs-profile-drawer__open" href={`/customers?customerId=${selectedAppointment.customerId}`}>Full profile →</a>
+            </div>
+
+            <div className="cs-profile-drawer__metrics">
+              <div className="cs-metric cs-metric--due">
+                <span className="cs-metric__label">Balance due</span>
+                <span className="cs-metric__value">{formatMoney(balanceDue)}</span>
+              </div>
+              <div className="cs-metric">
+                <span className="cs-metric__label">Lifetime spend</span>
+                <span className="cs-metric__value">{formatMoney(p?.lifetimeSpendCents ?? 0)}</span>
+              </div>
+            </div>
+
+            <div className="cs-profile-block">
+              <p className="cs-profile-block__label">Contact</p>
+              {contactLine.length > 0 ? (
+                <p className="cs-profile-block__value">{contactLine.join("\n")}</p>
+              ) : (
+                <p className="cs-profile-block__value cs-profile-block__value--muted">No contact on file</p>
+              )}
+            </div>
+
+            {selectedAppointment.customerNotes ? (
+              <div className="cs-profile-block">
+                <p className="cs-profile-block__label">Note for staff</p>
+                <p className="cs-profile-block__value">{selectedAppointment.customerNotes}</p>
+              </div>
+            ) : null}
+
+            <div className="cs-profile-block cs-profile-block--plain">
+              <p className="cs-profile-block__label">Recent visits</p>
+              {p === null ? (
+                <p className="cs-profile-block__value cs-profile-block__value--muted">Loading…</p>
+              ) : recentVisits.length === 0 ? (
+                <p className="cs-profile-block__value cs-profile-block__value--muted">No bookings yet.</p>
+              ) : (
+                <ul className="cs-profile-visits">
+                  {recentVisits.map((b) => {
+                    const bDate = new Date(b.startsAt);
+                    const owed = b.balanceDueCents > 0 ? formatMoney(b.balanceDueCents) + " owed" : null;
+                    return (
+                      <li key={b.id} className="cs-profile-visits__row">
+                        <span className="cs-profile-visits__service">{b.serviceName}</span>
+                        <span className="cs-profile-visits__meta">
+                          {bDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          {owed ? ` · ${owed}` : ""}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <button type="button" className="cs-btn cs-btn--ghost cs-profile-drawer__back" onClick={() => setDrawerView("details")}>
+              ← Back to appointment
+            </button>
+          </div>
+        </aside>
+      </>
+    );
+  }
+
+  const familyBg = drawerFamilyColor;
   // Compact 24-hour en-dash range for the when-card ("10:00 – 11:00"),
   // matching the mockup and keeping the time on a single line next to the
   // Reschedule / Check-in actions.
@@ -4481,9 +4562,9 @@ function AppointmentDetailsDrawer({
       ? "Client has not submitted the required intake forms yet."
       : "Some responses need staff attention before the visit.";
   const providerRecord = providers.find((p) => p.id === selectedAppointment.providerId);
-  const subtitleParts = [selectedAppointment.serviceName];
-  if (selectedAppointment.providerName) subtitleParts.push(selectedAppointment.providerName);
-  const subtitle = subtitleParts.join(" · ");
+  // Service name now lives in the tinted treatment card, so the header
+  // subtitle only carries the provider (matching the mock).
+  const subtitle = selectedAppointment.providerName || "";
 
   // "TODAY" / "TOMORROW" kicker for the when-card; falls back to the stored dayLabel.
   const apptDate = getTenantDate(selectedAppointment.startAt);
@@ -4494,18 +4575,26 @@ function AppointmentDetailsDrawer({
 
   // Earliest successful payment date — used to annotate the "Deposit paid" line
   // ("Deposit paid 19 Aug" style, matching the mockup).
-  const depositPaidDate: string | null = (() => {
-    if (selectedAppointment.depositCents <= 0) return null;
-    const succeeded = selectedAppointment.payments
-      .filter((p) => p.status === "succeeded" && p.amountCents > 0)
-      .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
-    if (succeeded.length === 0) return null;
-    return new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/Los_Angeles",
-      day: "numeric",
-      month: "short",
-    }).format(new Date(succeeded[0].createdAt));
-  })();
+  // Credit lines derived from real payment records (deposit, card, cash…),
+  // shown against the balance in both the details drawer and checkout.
+  const paymentCredits = selectedAppointment.payments
+    .filter((p) => p.status === "succeeded" && p.amountCents > 0)
+    .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))
+    .map((p) => {
+      const dateLabel = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/Los_Angeles",
+        day: "numeric",
+        month: "short",
+      }).format(new Date(p.createdAt));
+      const kind = p.checkoutSessionKind ?? "";
+      let label: string;
+      if (kind.includes("deposit")) label = `Deposit paid ${dateLabel}`;
+      else if (p.paymentMethodType === "wallet") label = "Wallet credit";
+      else if (p.paymentMethodType === "cash") label = `Cash paid ${dateLabel}`;
+      else if (p.paymentMethodType === "card") label = `Card paid ${dateLabel}`;
+      else label = `Paid ${dateLabel}`;
+      return { id: p.id, label, amountCents: p.amountCents };
+    });
 
   const formsReady = formResponsesState.kind === "ready" ? formResponsesState : null;
   const hasFormsContent = !!formsReady && (formsReady.items.length > 0 || formsReady.requirements.length > 0);
@@ -4539,23 +4628,29 @@ function AppointmentDetailsDrawer({
     <>
       <button
         type="button"
-        className="appointment-drawer-backdrop"
+        className="cs-drawer-backdrop"
         aria-label="Close appointment details"
         onClick={onClose}
         // Forward the ref so we can relay wheel events to the calendar board
         // (without breaking click-outside-to-close).
         ref={attachBackdropWheelForwarding}
       />
-      <aside className="appointment-details-drawer cs-drawer-shim" role="dialog" aria-label="Appointment details">
+      <aside className="cs-drawer-legacy cs-drawer-shim" role="dialog" aria-label="Appointment details">
         <div className="cs-drawer__inner">
           {/* Header */}
           <div className="cs-drawer__head">
             <div style={{ minWidth: 0, flex: 1 }}>
-              <span className="cs-pill" style={{ background: familyBg, color: "var(--cs-ink)" }}>{familyLabel}</span>
+              <span className={`cs-pill cs-pill--${selectedAppointment.status}`}>{statusLabel.toUpperCase()}</span>
               <div className="cs-drawer__title" style={{ marginTop: 10 }}>{selectedAppointment.customerName}</div>
               <div className="cs-drawer__meta">{subtitle}</div>
             </div>
             <button type="button" className="cs-drawer__close" onClick={onClose} aria-label="Close">×</button>
+          </div>
+
+          {/* Treatment card — tinted with the service family colour */}
+          <div className="cs-treatment-card" style={{ background: familyBg }}>
+            <div className="cs-treatment-card__kicker">Treatment</div>
+            <div className="cs-treatment-card__name">{selectedAppointment.serviceName}</div>
           </div>
 
           {/* Today / time card with actions */}
@@ -4567,7 +4662,7 @@ function AppointmentDetailsDrawer({
                   <div className="cs-when-card__time-editor">
                     <input
                       type="time"
-                      className="appointment-drawer-time-input"
+                      className="cs-drawer-time-input"
                       value={rescheduleTimeDraft}
                       autoFocus
                       disabled={rescheduleSaveState === "submitting"}
@@ -4638,7 +4733,7 @@ function AppointmentDetailsDrawer({
               ) : null}
             </div>
           </div>
-          {rescheduleSaveState === "error" ? <p role="alert" className="settings-error">{rescheduleErrorMessage}</p> : null}
+          {rescheduleSaveState === "error" ? <p role="alert" className="cs-settings-error">{rescheduleErrorMessage}</p> : null}
           {pendingRescheduleDate ? (
             <div className="cs-reschedule-confirm" style={{ marginTop: 12 }}>
               <div className="cs-reschedule-confirm__title">
@@ -4647,7 +4742,7 @@ function AppointmentDetailsDrawer({
               <div className="cs-reschedule-confirm__time">
                 <input
                   type="time"
-                  className="appointment-drawer-time-input"
+                  className="cs-drawer-time-input"
                   value={rescheduleTimeDraft}
                   disabled={rescheduleSaveState === "submitting"}
                   onChange={(event) => setRescheduleTimeDraft(event.target.value)}
@@ -4729,15 +4824,15 @@ function AppointmentDetailsDrawer({
           <div>
             <div className="cs-section__label">Client</div>
             {isEditingCustomerContact ? (
-              <div className="customer-notes-editor">
+              <div className="cs-customer-notes-editor">
                 <label style={{ display: "block", marginBottom: "0.5rem" }}><span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Name</span><input type="text" value={customerContactDraft.name} onChange={(e) => setCustomerContactDraft((d) => ({ ...d, name: e.target.value }))} disabled={customerContactSaveState === "submitting"} style={{ width: "100%" }} /></label>
                 <label style={{ display: "block", marginBottom: "0.5rem" }}><span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Email</span><input type="email" value={customerContactDraft.email} onChange={(e) => setCustomerContactDraft((d) => ({ ...d, email: e.target.value }))} disabled={customerContactSaveState === "submitting"} style={{ width: "100%" }} /></label>
                 <label style={{ display: "block", marginBottom: "0.5rem" }}><span style={{ display: "block", fontSize: "0.85em", marginBottom: "0.25rem" }}>Phone</span><input type="tel" value={customerContactDraft.phone} onChange={(e) => setCustomerContactDraft((d) => ({ ...d, phone: e.target.value }))} disabled={customerContactSaveState === "submitting"} style={{ width: "100%" }} /></label>
-                <div className="customer-notes-editor__actions">
+                <div className="cs-customer-notes-editor__actions">
                   <button type="button" className="cs-btn cs-btn--ghost" onClick={() => { setIsEditingCustomerContact(false); setCustomerContactError(""); }} disabled={customerContactSaveState === "submitting"}>Cancel</button>
                   <button type="button" className="cs-btn cs-btn--primary" onClick={async () => { if (!onUpdateCustomerContact) return; if (!customerContactDraft.name.trim()) { setCustomerContactSaveState("error"); setCustomerContactError("Name is required."); return; } setCustomerContactSaveState("submitting"); setCustomerContactError(""); try { await onUpdateCustomerContact(selectedAppointment, { name: customerContactDraft.name.trim(), email: customerContactDraft.email.trim(), phone: customerContactDraft.phone.trim() }); setIsEditingCustomerContact(false); setCustomerContactSaveState("idle"); } catch (err) { setCustomerContactSaveState("error"); setCustomerContactError(err instanceof Error ? err.message : "Unable to save contact."); } }} disabled={customerContactSaveState === "submitting"}>{customerContactSaveState === "submitting" ? "Saving…" : "Save"}</button>
                 </div>
-                {customerContactSaveState === "error" ? <p role="alert" className="settings-error">{customerContactError}</p> : null}
+                {customerContactSaveState === "error" ? <p role="alert" className="cs-settings-error">{customerContactError}</p> : null}
               </div>
             ) : (
               <>
@@ -4750,30 +4845,33 @@ function AppointmentDetailsDrawer({
                       <div className="cs-clientrow__identity">
                         <div className="cs-clientrow__name">{selectedAppointment.customerName}</div>
                         <div className="cs-clientrow__meta">
-                          {[
-                            selectedAppointment.customerPhone,
-                            selectedAppointment.customerEmail,
-                          ]
-                            .filter(Boolean)
-                            .join("  ·  ") || "No contact on file"}
+                          {(clientCardProfile?.lifetimeSpendCents ?? 0) > 0 ? "Returning client" : "New client"}
                         </div>
                       </div>
                       <button
                         type="button"
                         className="cs-btn cs-btn--sm"
-                        onClick={() => {
-                          setShowCustomerOverlay(true);
-                          setCustomerProfileForOverlay(null);
-                          if (api) {
-                            void api.getCustomerProfile(tenantSlug, selectedAppointment.customerId)
-                              .then(setCustomerProfileForOverlay)
-                              .catch(() => {});
-                          }
-                        }}
+                        onClick={() => setDrawerView("profile")}
                       >
                         Profile
                       </button>
                     </div>
+                    {(selectedAppointment.customerPhone || selectedAppointment.customerEmail) ? (
+                      <div className="cs-clientrow__contact">
+                        {selectedAppointment.customerPhone ? (
+                          <div className="cs-clientrow__contact-row">
+                            <span className="cs-clientrow__contact-icon" aria-hidden="true">☎</span>
+                            <span>{selectedAppointment.customerPhone}</span>
+                          </div>
+                        ) : null}
+                        {selectedAppointment.customerEmail ? (
+                          <div className="cs-clientrow__contact-row">
+                            <span className="cs-clientrow__contact-icon" aria-hidden="true">✉</span>
+                            <span>{selectedAppointment.customerEmail}</span>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <div className="cs-clientrow__stats">
                       <div className="cs-clientrow__stat cs-clientrow__stat--credits">
                         <span className="cs-clientrow__stat-label">Credits</span>
@@ -4785,7 +4883,7 @@ function AppointmentDetailsDrawer({
                       </div>
                       <div className="cs-clientrow__stat cs-clientrow__stat--lifetime">
                         <span className="cs-clientrow__stat-label">Lifetime</span>
-                        <span className="cs-clientrow__stat-value">{formatMoney(selectedAppointment.amountPaidCents ?? 0)}</span>
+                        <span className="cs-clientrow__stat-value">{formatMoney(clientCardProfile?.lifetimeSpendCents ?? selectedAppointment.amountPaidCents ?? 0)}</span>
                       </div>
                     </div>
                     <div className="cs-clientrow__tabs" role="tablist">
@@ -4816,19 +4914,13 @@ function AppointmentDetailsDrawer({
                       ) : clientCardTab === "forms" ? (
                         <ClientCardForms state={formResponsesState} onViewForm={setViewingFormEntry} />
                       ) : clientCardTab === "photos" ? (
-                        <p className="staff-list-empty">Before/after photos aren't stored yet. Placeholder for a future phase.</p>
+                        <p className="cs-empty">Before/after photos aren't stored yet. Placeholder for a future phase.</p>
                       ) : clientCardTab === "notes" ? (
-                        <p className="staff-list-empty">{selectedAppointment.customerNotes ? selectedAppointment.customerNotes : "No staff note for this client."}</p>
+                        <p className="cs-empty">{selectedAppointment.customerNotes ? selectedAppointment.customerNotes : "No staff note for this client."}</p>
                       ) : (
-                        <p className="staff-list-empty">Client messaging isn't implemented yet. Placeholder for a future phase.</p>
+                        <p className="cs-empty">Client messaging isn't implemented yet. Placeholder for a future phase.</p>
                       )}
                     </div>
-                    {selectedAppointment.customerNotes ? (
-                      <div className="cs-clientrow__note">
-                        <span className="cs-clientrow__note-label">Note for staff</span>
-                        <p className="cs-clientrow__note-text">{selectedAppointment.customerNotes}</p>
-                      </div>
-                    ) : null}
                   </div>
                 </div>
                 {isEditingCustomerNotes ? (
@@ -4846,7 +4938,7 @@ function AppointmentDetailsDrawer({
                       <button type="button" className="cs-btn cs-btn--sm cs-btn--ghost" onClick={() => { setIsEditingCustomerNotes(false); setCustomerNotesError(""); }} disabled={customerNotesSaveState === "submitting"}>Cancel</button>
                       <button type="button" className="cs-btn cs-btn--sm cs-btn--primary" style={{ flex: "none" }} onClick={async () => { if (!onUpdateCustomerNotes) return; setCustomerNotesSaveState("submitting"); setCustomerNotesError(""); try { await onUpdateCustomerNotes(selectedAppointment, customerNotesDraft); setIsEditingCustomerNotes(false); setCustomerNotesSaveState("idle"); } catch (err) { setCustomerNotesSaveState("error"); setCustomerNotesError(err instanceof Error ? err.message : "Unable to save notes."); } }} disabled={customerNotesSaveState === "submitting"}>{customerNotesSaveState === "submitting" ? "Saving…" : "Save"}</button>
                     </div>
-                    {customerNotesSaveState === "error" ? <p role="alert" className="settings-error">{customerNotesError}</p> : null}
+                    {customerNotesSaveState === "error" ? <p role="alert" className="cs-settings-error">{customerNotesError}</p> : null}
                   </div>
                 ) : (
                   <button
@@ -4869,15 +4961,12 @@ function AppointmentDetailsDrawer({
             {selectedAppointment.taxCents > 0 ? (
               <div className="cs-money"><span>Tax</span><span>{formatMoney(selectedAppointment.taxCents)}</span></div>
             ) : null}
-            {selectedAppointment.depositCents > 0 ? (
-              <div className="cs-money cs-money--credit">
-                <span>{depositPaidDate ? `Deposit paid ${depositPaidDate}` : "Deposit paid"}</span>
-                <span>−{formatMoney(selectedAppointment.depositCents)}</span>
+            {paymentCredits.map((credit) => (
+              <div key={credit.id} className="cs-money cs-money--credit">
+                <span>{credit.label}</span>
+                <span>−{formatMoney(credit.amountCents)}</span>
               </div>
-            ) : null}
-            {selectedAppointment.amountPaidCents > 0 && selectedAppointment.amountPaidCents !== selectedAppointment.depositCents ? (
-              <div className="cs-money cs-money--credit"><span>Paid</span><span>−{formatMoney(selectedAppointment.amountPaidCents)}</span></div>
-            ) : null}
+            ))}
             <div className="cs-money cs-money--total">
               <span>{selectedAppointment.balanceDueCents > 0 ? "Due at checkout" : "Paid in full"}</span>
               <span>{formatMoney(Math.max(0, selectedAppointment.balanceDueCents))}</span>
@@ -4886,7 +4975,7 @@ function AppointmentDetailsDrawer({
 
           {/* Forms panel — kept as operator tool for detailed review */}
           {showFormsPanel ? (
-            <div data-forms-panel="true" className="booking-rail-section booking-rail-section--forms" aria-label="Intake forms">
+            <div data-forms-panel="true" className="cs-booking-rail-section cs-booking-rail-section--forms" aria-label="Intake forms">
               <FormResponsesPanel
                 selectedAppointment={selectedAppointment}
                 state={formResponsesState}
@@ -4936,140 +5025,21 @@ function AppointmentDetailsDrawer({
           </div>
         ) : null}
         {completionState?.kind === "error" ? (
-          <div className="message-banner message-banner--error" role="alert" style={{ margin: "0 24px 12px" }}>{completionState.message}</div>
+          <div className="cs-banner cs-banner--error" role="alert" style={{ margin: "0 24px 12px" }}>{completionState.message}</div>
         ) : null}
       </aside>
-      {showCustomerOverlay ? (
-        <>
-          <button
-            type="button"
-            className="customer-overlay__backdrop"
-            aria-label="Close customer profile"
-            onClick={() => setShowCustomerOverlay(false)}
-          />
-          <div className="customer-overlay" role="dialog" aria-label="Customer profile" aria-modal="true">
-            <div className="customer-overlay__panel">
-              <header className="customer-overlay__head">
-                <span className="customer-overlay__avatar" aria-hidden="true">
-                  {selectedAppointment.customerName.split(" ").map(p => p[0]).join("").slice(0,2).toUpperCase()}
-                </span>
-                <div className="customer-overlay__identity">
-                  <h3 className="customer-overlay__name">{selectedAppointment.customerName}</h3>
-                  <p className="customer-overlay__meta">
-                    {[selectedAppointment.customerEmail, selectedAppointment.customerPhone]
-                      .filter(Boolean)
-                      .join("  ·  ") || "No contact on file"}
-                  </p>
-                  {[customerProfileForOverlay?.customer?.addressStreet, customerProfileForOverlay?.customer?.addressCity, customerProfileForOverlay?.customer?.addressState, customerProfileForOverlay?.customer?.addressZip]
-                    .filter(Boolean)
-                    .length > 0 ? (
-                    <p className="customer-overlay__address">
-                      {[
-                        customerProfileForOverlay?.customer?.addressStreet,
-                        customerProfileForOverlay?.customer?.addressCity,
-                        customerProfileForOverlay?.customer?.addressState,
-                        customerProfileForOverlay?.customer?.addressZip,
-                      ]
-                        .filter(Boolean)
-                        .join(", ")}
-                    </p>
-                  ) : null}
-                </div>
-                <button
-                  type="button"
-                  className="cs-drawer__close"
-                  onClick={() => setShowCustomerOverlay(false)}
-                  aria-label="Close customer profile"
-                >
-                  ×
-                </button>
-              </header>
-
-              <div className="customer-overlay__body">
-
-                <div className="customer-overlay__stats">
-                  <div className="customer-overlay__stat customer-overlay__stat--credits">
-                    <span className="customer-overlay__stat-label">Credits</span>
-                    <span className="customer-overlay__stat-value">–</span>
-                  </div>
-                  <div className="customer-overlay__stat customer-overlay__stat--wallet">
-                    <span className="customer-overlay__stat-label">Wallet</span>
-                    <span className="customer-overlay__stat-value">
-                      {formatMoney(selectedAppointment.walletBalanceCents)}
-                    </span>
-                  </div>
-                  <div className="customer-overlay__stat customer-overlay__stat--lifetime">
-                    <span className="customer-overlay__stat-label">Lifetime</span>
-                    <span className="customer-overlay__stat-value">
-                      {formatMoney(customerProfileForOverlay?.lifetimeSpendCents ?? selectedAppointment.amountPaidCents)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="customer-overlay__tabs" role="tablist">
-                  {(
-                    [
-                      ["history", "History"],
-                      ["forms", "Forms"],
-                      ["photos", "Photos"],
-                      ["notes", "Notes"],
-                      ["messages", "Messages"],
-                    ] as const
-                  ).map(([tab, label]) => (
-                    <button
-                      key={tab}
-                      type="button"
-                      role="tab"
-                      aria-selected={customerOverlayTab === tab}
-                      className={`customer-overlay__tab${customerOverlayTab === tab ? " is-active" : ""}`}
-                      onClick={() => setCustomerOverlayTab(tab)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {customerProfileForOverlay === null ? (
-                  <p className="customer-overlay__loading">Loading profile…</p>
-                ) : null}
-
-                {selectedAppointment.customerNotes ? (
-                  <div className="customer-overlay__note">
-                    <span className="customer-overlay__note-label">Note for staff</span>
-                    <p className="customer-overlay__note-text">{selectedAppointment.customerNotes}</p>
-                  </div>
-                ) : null}
-
-                <div className="customer-overlay__footer">
-                  <a className="cs-btn cs-btn--ghost" href={`/customers?customerId=${selectedAppointment.customerId}`}>
-                    Open full profile
-                  </a>
-                  <button
-                    type="button"
-                    className="cs-btn cs-btn--primary"
-                    onClick={() => setShowCustomerOverlay(false)}
-                  >
-                    Done
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
-      ) : null}
-
       {showRescheduleDatePopover
         ? createPortal(
-            <div className="appointment-drawer-date-popover" style={reschedulePopoverStyle} ref={datePopoverRef}>
-              <div className="month-rail__header">
+            <div className="cs-date-popover" style={reschedulePopoverStyle} ref={datePopoverRef}>
+              <div className="cs-date-popover__head">
                 <h5>{monthLabelFormatter.format(parseIsoDate(pickerMonth))}</h5>
-                <div className="month-rail__controls">
-                  <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, -1))}>Prev</button>
-                  <button type="button" className="filter-chip" onClick={() => setPickerMonth(addMonths(pickerMonth, 1))}>Next</button>
+                <div className="cs-date-popover__controls">
+                  <button type="button" className="cs-date-popover__nav" onClick={() => setPickerMonth(addMonths(pickerMonth, -1))}>Prev</button>
+                  <button type="button" className="cs-date-popover__nav" onClick={() => setPickerMonth(addMonths(pickerMonth, 1))}>Next</button>
                 </div>
               </div>
-              <div className="month-grid-labels" role="presentation">{monthDayLabel.map((label) => (<span key={label}>{label}</span>))}</div>
-              <div className="month-grid" role="grid">
+              <div className="cs-date-popover__dow" role="presentation">{monthDayLabel.map((label, index) => (<span key={`${label}-${index}`}>{label}</span>))}</div>
+              <div className="cs-date-popover__grid" role="grid">
                 {pickerGrid.map((date) => {
                   const isInCurrentMonth = date.slice(0, 7) === pickerMonth.slice(0, 7);
                   const currentDate = new Date(selectedAppointment.startAt).toISOString().slice(0, 10);
@@ -5082,7 +5052,7 @@ function AppointmentDetailsDrawer({
                       disabled={!isInCurrentMonth}
                       aria-pressed={isSelected}
                       aria-label={getDateLabel(date)}
-                      className={["month-day", !isInCurrentMonth ? "month-day--outside" : "", isSelected ? "month-day--focused" : ""].filter(Boolean).join(" ")}
+                      className={["cs-date-popover__day", !isInCurrentMonth ? "cs-date-popover__day--out" : "", isSelected ? "cs-date-popover__day--selected" : ""].filter(Boolean).join(" ")}
                       onClick={() => selectRescheduleDate(date)}
                     >
                       <span>{parseIsoDate(date).getUTCDate()}</span>
@@ -5110,6 +5080,7 @@ type CheckoutPanelProps = {
   api: CalendarPageApi;
   tenantSlug: string;
   customPaymentMethods: CustomPaymentMethod[];
+  familyColor: string;
   onBack: () => void;
   onClose: () => void;
   onPaymentRecorded: () => void;
@@ -5124,6 +5095,7 @@ function CheckoutPanel({
   api,
   tenantSlug,
   customPaymentMethods,
+  familyColor,
   onBack,
   onClose,
   onPaymentRecorded,
@@ -5238,7 +5210,7 @@ function CheckoutPanel({
     if (openMenuPaymentId === null) return;
     const handler = (e: globalThis.MouseEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target && target.closest(".checkout-panel__payment-menu, .checkout-panel__payment-menu-trigger")) {
+      if (target && target.closest(".cs-checkout-panel__payment-menu, .cs-checkout-panel__payment-menu-trigger")) {
         return;
       }
       setOpenMenuPaymentId(null);
@@ -5442,19 +5414,19 @@ function CheckoutPanel({
   const isSettled = remainingBalance <= 0;
 
   return (
-    <aside className="appointment-details-drawer checkout-panel" role="dialog" aria-label="Checkout">
-      <header className="appointment-details-drawer__header checkout-panel__header">
-        <div className="checkout-panel__heading">
-          <p className="checkout-panel__kicker">Complete appointment</p>
-          <h3 className="checkout-panel__name">{appointment.customerName}</h3>
-          <p className="checkout-panel__subtitle">
+    <aside className="cs-drawer-legacy cs-checkout-panel" role="dialog" aria-label="Checkout">
+      <header className="cs-drawer-legacy__header cs-checkout-panel__header">
+        <div className="cs-checkout-panel__heading">
+          <p className="cs-checkout-panel__kicker cs-checkout-panel__kicker--pill" style={{ background: familyColor }}>Checkout</p>
+          <h3 className="cs-checkout-panel__name">{appointment.customerName}</h3>
+          <p className="cs-checkout-panel__subtitle">
             {appointment.providerName} · {appointment.dayLabel} · {timeFormatter.format(new Date(appointment.startAt))}
           </p>
         </div>
-        <div className="checkout-panel__header-actions">
+        <div className="cs-checkout-panel__header-actions">
           <button
             type="button"
-            className="checkout-panel__back"
+            className="cs-checkout-panel__back"
             onClick={onBack}
             aria-label="Back to appointment details"
           >
@@ -5462,7 +5434,7 @@ function CheckoutPanel({
           </button>
           <button
             type="button"
-            className="checkout-panel__close"
+            className="cs-checkout-panel__close"
             onClick={onClose}
             aria-label="Close checkout"
           >
@@ -5470,17 +5442,23 @@ function CheckoutPanel({
           </button>
         </div>
       </header>
-      <div className="checkout-panel__body">
-        <section className="checkout-panel__totals">
-          <div className="checkout-panel__totals-row">
-            <span className="checkout-panel__line-item-name">{appointment.serviceName}</span>
-            {!isReadOnly ? (
-              editingSubtotal ? (
-                <span className="checkout-panel__editable-price">
+      <div className="cs-checkout-panel__body">
+        <section className="cs-checkout-panel__totals">
+          <div className="cs-checkout-panel__totals-row cs-checkout-panel__totals-row--service" style={{ background: familyColor }}>
+            <span className="cs-checkout-panel__line-item-name">
+              {appointment.serviceName}
+              <span className="cs-checkout-panel__line-item-sub">
+                {appointment.durationMinutes} min{appointment.providerName ? ` · ${appointment.providerName}` : ""}
+              </span>
+            </span>
+            <div className="cs-checkout-panel__line-item-actions">
+              {!isReadOnly ? (
+                editingSubtotal ? (
+                <span className="cs-checkout-panel__editable-price">
                   <input
                     type="text"
                     inputMode="decimal"
-                    className="checkout-panel__price-input"
+                    className="cs-checkout-panel__price-input"
                     value={subtotalText}
                     onChange={(e) => setSubtotalText(e.target.value)}
                     onBlur={() => {
@@ -5500,7 +5478,7 @@ function CheckoutPanel({
                 </span>
               ) : (
                 <span
-                  className="checkout-panel__clickable-price"
+                  className="cs-checkout-panel__clickable-price"
                   onClick={() => { setSubtotalText((adjustedSubtotal / 100).toFixed(2)); setEditingSubtotal(true); }}
                   title="Click to adjust price"
                   role="button"
@@ -5513,23 +5491,46 @@ function CheckoutPanel({
             ) : (
               <span>{formatMoney(adjustedSubtotal)}</span>
             )}
+            </div>
+            {!isReadOnly ? (
+              <button
+                type="button"
+                className="cs-checkout-panel__item-remove"
+                aria-label={`Remove ${appointment.serviceName}`}
+                title="Remove from sale"
+                onClick={() => {
+                  if (window.confirm(`Remove ${appointment.serviceName} from this sale? This will clear the amount due.`)) {
+                    setAdjustedSubtotal(0);
+                    setSubtotalText("0.00");
+                    setEditingSubtotal(false);
+                  }
+                }}
+              >
+                ×
+              </button>
+            ) : null}
           </div>
+          {!isReadOnly ? (
+            <button type="button" className="cs-checkout-panel__add-item" aria-disabled="true" title="Add product or service — coming soon">
+              + Add product or service
+            </button>
+          ) : null}
           {adjustedTaxCents > 0 ? (
-            <div className="checkout-panel__totals-row">
+            <div className="cs-checkout-panel__totals-row">
               <span>Tax</span>
               <span>{formatMoney(adjustedTaxCents)}</span>
             </div>
           ) : null}
           {!isReadOnly ? (
           <>
-          <div className="checkout-panel__totals-row checkout-panel__discount-row">
-            <span className="checkout-panel__discount-label">Discount</span>
+          <div className="cs-checkout-panel__totals-row cs-checkout-panel__discount-row">
+            <span className="cs-checkout-panel__discount-label">Discount</span>
             {showDiscountPopup ? (
-              <span className="checkout-panel__discount-popup">
+              <span className="cs-checkout-panel__discount-popup">
                 <input
                   type="text"
                   inputMode="decimal"
-                  className="checkout-panel__discount-percent-input"
+                  className="cs-checkout-panel__discount-percent-input"
                   value={discountPopupText}
                   onChange={(e) => setDiscountPopupText(e.target.value)}
                   onBlur={() => {
@@ -5543,11 +5544,11 @@ function CheckoutPanel({
                   onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                   autoFocus
                 />
-                <span className="checkout-panel__discount-percent-sign">%</span>
+                <span className="cs-checkout-panel__discount-percent-sign">%</span>
               </span>
             ) : (
               <span
-                className="checkout-panel__discount-link"
+                className="cs-checkout-panel__discount-link"
                 onClick={() => { setDiscountPopupText(String(discountPercent)); setShowDiscountPopup(true); }}
                 role="button"
                 tabIndex={0}
@@ -5557,15 +5558,15 @@ function CheckoutPanel({
               </span>
             )}
           </div>
-          <div className="checkout-panel__totals-row checkout-panel__tip-row">
-            <span className="checkout-panel__tip-label">
+          <div className="cs-checkout-panel__totals-row cs-checkout-panel__tip-row">
+            <span className="cs-checkout-panel__tip-label">
               Tip
-              <span className="checkout-panel__tip-quick">
-                {[18, 20, 22].map((pct) => (
+              <span className="cs-checkout-panel__tip-quick">
+                {[15, 20, 25].map((pct) => (
                   <button
                     key={pct}
                     type="button"
-                    className={`checkout-panel__tip-chip${tipPercent === pct ? " is-active" : ""}`}
+                    className={`cs-checkout-panel__tip-chip${tipPercent === pct ? " is-active" : ""}`}
                     onClick={() => setTipFromPercent(pct)}
                     disabled={state === "submitting"}
                   >
@@ -5577,7 +5578,7 @@ function CheckoutPanel({
             <input
               type="text"
               inputMode="decimal"
-              className="checkout-panel__tip-input"
+              className="cs-checkout-panel__tip-input"
               value={tipText}
               onChange={(e) => handleTipTextChange(e.target.value)}
               disabled={state === "submitting"}
@@ -5586,24 +5587,24 @@ function CheckoutPanel({
           </div>
           </>
           ) : tipCents > 0 ? (
-          <div className="checkout-panel__totals-row">
+          <div className="cs-checkout-panel__totals-row">
             <span>Tip</span>
             <span>{formatMoney(tipCents)}</span>
           </div>
           ) : null}
-          <div className="checkout-panel__totals-row checkout-panel__totals-row--total">
-            <span>Total</span>
+          <div className="cs-checkout-panel__totals-row cs-checkout-panel__totals-row--total">
+            <span>Total due</span>
             <strong>{formatMoney(total)}</strong>
           </div>
         </section>
 
         {!isReadOnly && appointment.walletBalanceCents > 0 && remainingBalance > 0 ? (
-          <section className="checkout-panel__wallet">
+          <section className="cs-checkout-panel__wallet">
             <span>Wallet credit available</span>
             <strong>{formatMoney(appointment.walletBalanceCents)}</strong>
             <button
               type="button"
-              className="checkout-panel__wallet-apply"
+              className="cs-checkout-panel__wallet-apply"
               onClick={() => {
                 const cap = Math.min(appointment.walletBalanceCents, remainingBalance);
                 setWalletApplyText((cap / 100).toFixed(2));
@@ -5617,29 +5618,29 @@ function CheckoutPanel({
         ) : null}
 
         {showWalletPopup ? (
-          <section className="checkout-panel__wallet-popup">
-            <div className="checkout-panel__wallet-popup-header">
+          <section className="cs-checkout-panel__wallet-popup">
+            <div className="cs-checkout-panel__wallet-popup-header">
               <h3>Apply Wallet Credit</h3>
               <button
                 type="button"
-                className="checkout-panel__wallet-popup-close"
+                className="cs-checkout-panel__wallet-popup-close"
                 onClick={() => setShowWalletPopup(false)}
                 aria-label="Close"
               >
                 ×
               </button>
             </div>
-            <div className="checkout-panel__wallet-popup-balances">
-              <div className="checkout-panel__wallet-popup-balance-row">
+            <div className="cs-checkout-panel__wallet-popup-balances">
+              <div className="cs-checkout-panel__wallet-popup-balance-row">
                 <span>Wallet balance</span>
                 <strong>{formatMoney(appointment.walletBalanceCents)}</strong>
               </div>
-              <div className="checkout-panel__wallet-popup-balance-row">
+              <div className="cs-checkout-panel__wallet-popup-balance-row">
                 <span>Remaining after apply</span>
                 <strong>{formatMoney(Math.max(0, appointment.walletBalanceCents - Math.round(parseFloat(walletApplyText || "0") * 100)))}</strong>
               </div>
             </div>
-            <label className="checkout-panel__wallet-popup-amount">
+            <label className="cs-checkout-panel__wallet-popup-amount">
               <span>Amount to apply</span>
               <input
                 type="text"
@@ -5651,12 +5652,12 @@ function CheckoutPanel({
               />
             </label>
             {state === "error" ? (
-              <p className="checkout-panel__error">{errorMessage}</p>
+              <p className="cs-checkout-panel__error">{errorMessage}</p>
             ) : null}
-            <div className="checkout-panel__wallet-popup-actions">
+            <div className="cs-checkout-panel__wallet-popup-actions">
               <button
                 type="button"
-                className="checkout-panel__wallet-popup-cancel"
+                className="cs-checkout-panel__wallet-popup-cancel"
                 onClick={() => setShowWalletPopup(false)}
                 disabled={state === "submitting"}
               >
@@ -5664,7 +5665,7 @@ function CheckoutPanel({
               </button>
               <button
                 type="button"
-                className="primary-action"
+                className="cs-btn cs-btn--primary cs-btn--sm"
                 onClick={() => void handleApplyWallet()}
                 disabled={
                   state === "submitting" ||
@@ -5683,16 +5684,17 @@ function CheckoutPanel({
         ) : null}
 
         {payments.length > 0 ? (
-          <section className="checkout-panel__paid">
+          <section className="cs-checkout-panel__paid">
+            <h4 className="cs-checkout-panel__section-kicker">Payments applied</h4>
             {payments.map((p) => (
-              <div key={p.id} className="checkout-panel__paid-row">
-                <span className="checkout-panel__paid-label">{labelForPayment(p)}</span>
-                <span className="checkout-panel__paid-amount">{formatMoney(p.amountCents)}</span>
+              <div key={p.id} className="cs-checkout-panel__paid-row">
+                <span className="cs-checkout-panel__paid-label">{labelForPayment(p)}</span>
+                <span className="cs-checkout-panel__paid-amount">−{formatMoney(p.amountCents)}</span>
                 {!isReadOnly ? (
-                <div className="checkout-panel__payment-menu-wrap">
+                <div className="cs-checkout-panel__payment-menu-wrap">
                   <button
                     type="button"
-                    className="checkout-panel__payment-menu-trigger"
+                    className="cs-checkout-panel__payment-menu-trigger"
                     aria-label={`Payment actions for ${labelForPayment(p)}`}
                     aria-haspopup="menu"
                     aria-expanded={openMenuPaymentId === p.id}
@@ -5702,25 +5704,25 @@ function CheckoutPanel({
                     ⋯
                   </button>
                   {openMenuPaymentId === p.id ? (
-                    <div className="checkout-panel__payment-menu" role="menu">
-                      <div className="checkout-panel__refund-form">
-                        <label className="checkout-panel__refund-label">
+                    <div className="cs-checkout-panel__payment-menu" role="menu">
+                      <div className="cs-checkout-panel__refund-form">
+                        <label className="cs-checkout-panel__refund-label">
                           Refund amount
                           <input
                             type="text"
                             inputMode="decimal"
-                            className="checkout-panel__refund-input"
+                            className="cs-checkout-panel__refund-input"
                             placeholder={formatMoney(p.amountCents)}
                             value={refundAmountText}
                             onChange={(e) => setRefundAmountText(e.target.value)}
                             disabled={refundingId === p.id}
                           />
                         </label>
-                        <label className="checkout-panel__refund-label">
+                        <label className="cs-checkout-panel__refund-label">
                           Reason (required)
                           <input
                             type="text"
-                            className="checkout-panel__refund-input checkout-panel__refund-reason"
+                            className="cs-checkout-panel__refund-input cs-checkout-panel__refund-reason"
                             placeholder="e.g. Client cancelled, service adjustment"
                             value={refundReason}
                             onChange={(e) => setRefundReason(e.target.value)}
@@ -5730,7 +5732,7 @@ function CheckoutPanel({
                         <button
                           type="button"
                           role="menuitem"
-                          className="checkout-panel__payment-menu-item checkout-panel__refund-button"
+                          className="cs-checkout-panel__payment-menu-item cs-checkout-panel__refund-button"
                           onClick={() => void handleRefund(p)}
                           disabled={refundingId === p.id || !refundReason.trim()}
                         >
@@ -5747,19 +5749,19 @@ function CheckoutPanel({
         ) : null}
 
         {refundedPayments.length > 0 ? (
-          <section className="checkout-panel__refunded">
-            <h4 className="checkout-panel__refunded-heading">Refunded</h4>
+          <section className="cs-checkout-panel__refunded">
+            <h4 className="cs-checkout-panel__refunded-heading">Refunded</h4>
             {refundedPayments.map((r) => (
-              <div key={r.id} className="checkout-panel__refunded-row">
-                <span className="checkout-panel__refunded-label">{r.label}</span>
-                <span className="checkout-panel__refunded-amount">−{formatMoney(r.amountCents)}</span>
-                <span className="checkout-panel__refunded-reason">{r.reason}</span>
+              <div key={r.id} className="cs-checkout-panel__refunded-row">
+                <span className="cs-checkout-panel__refunded-label">{r.label}</span>
+                <span className="cs-checkout-panel__refunded-amount">−{formatMoney(r.amountCents)}</span>
+                <span className="cs-checkout-panel__refunded-reason">{r.reason}</span>
               </div>
             ))}
           </section>
         ) : null}
 
-        <section className="checkout-panel__balance">
+        <section className="cs-checkout-panel__balance">
           <span>Balance due</span>
           <strong>{formatMoney(remainingBalance)}</strong>
         </section>
@@ -5767,33 +5769,33 @@ function CheckoutPanel({
         {!isReadOnly && !isSettled ? (
           <>
             {paymentStep === "register" && selectedMethod ? (
-              <section className="checkout-panel__register">
-                <div className="checkout-panel__register-header">
+              <section className="cs-checkout-panel__register">
+                <div className="cs-checkout-panel__register-header">
                   <button
                     type="button"
-                    className="checkout-panel__back"
+                    className="cs-checkout-panel__back"
                     onClick={() => { setPaymentStep("methods"); setSelectedMethod(null); }}
                     aria-label="Back to payment methods"
                   >
                     ←
                   </button>
-                  <span className="checkout-panel__register-method">
+                  <span className="cs-checkout-panel__register-method">
                     {allMethods.find((m) => m.id === selectedMethod)?.label ?? selectedMethod}
                   </span>
                 </div>
-                <label className="checkout-panel__amount-row">
+                <label className="cs-checkout-panel__amount-row">
                   <span>Amount to charge</span>
                   <input
                     type="text"
                     inputMode="decimal"
-                    className="checkout-panel__amount-input"
+                    className="cs-checkout-panel__amount-input"
                     value={amountText}
                     onChange={(e) => setAmountText(e.target.value)}
                     disabled={state === "submitting"}
                     autoFocus
                   />
                 </label>
-                <label className="checkout-panel__notes">
+                <label className="cs-checkout-panel__notes">
                   <span>Notes (optional)</span>
                   <input
                     type="text"
@@ -5805,7 +5807,7 @@ function CheckoutPanel({
                 </label>
                 <button
                   type="button"
-                  className="primary-action checkout-panel__record-button"
+                  className="cs-btn cs-btn--primary cs-checkout-panel__record-button"
                   onClick={() => void handleRecord(selectedMethod)}
                   disabled={state === "submitting" || parseAmount() <= 0 || parseAmount() > remainingBalance}
                 >
@@ -5813,25 +5815,25 @@ function CheckoutPanel({
                 </button>
               </section>
             ) : (
-              <section className="checkout-panel__methods">
-                <h4 className="checkout-panel__section-kicker">How was it settled?</h4>
-                <div className="checkout-panel__methods-grid">
+              <section className="cs-checkout-panel__methods">
+                <h4 className="cs-checkout-panel__section-kicker">How was it settled?</h4>
+                <div className="cs-checkout-panel__methods-grid">
                   {allMethods.map((m) => (
                     <button
                       key={m.id}
                       type="button"
-                      className={`checkout-panel__method-button checkout-panel__method-button--${paymentMethodTone(m.id)}${selectedMethod === m.id ? " is-active" : ""}`}
+                      className={`cs-checkout-panel__method-button cs-checkout-panel__method-button--${paymentMethodTone(m.id)}${selectedMethod === m.id ? " is-active" : ""}`}
                       aria-pressed={selectedMethod === m.id}
                       onClick={() => { setSelectedMethod(m.id); setPaymentStep("register"); }}
                       disabled={state === "submitting"}
                     >
-                      <span className="checkout-panel__method-name">{m.label}</span>
-                      <span className="checkout-panel__method-description">{paymentMethodDescription(m.id)}</span>
+                      <span className="cs-checkout-panel__method-name">{m.label}</span>
+                      <span className="cs-checkout-panel__method-description">{paymentMethodDescription(m.id)}</span>
                     </button>
                   ))}
                 </div>
                 {showAddMethod ? (
-                  <div className="checkout-panel__add-method">
+                  <div className="cs-checkout-panel__add-method">
                     <input
                       type="text"
                       placeholder="Method label (e.g. Venmo)"
@@ -5841,7 +5843,7 @@ function CheckoutPanel({
                     />
                     <button
                       type="button"
-                      className="text-action"
+                      className="cs-btn cs-btn--ghost cs-btn--sm"
                       onClick={handleAddCustomMethod}
                       disabled={!newMethodLabel.trim() || state === "submitting"}
                     >
@@ -5849,7 +5851,7 @@ function CheckoutPanel({
                     </button>
                     <button
                       type="button"
-                      className="text-action"
+                      className="cs-btn cs-btn--ghost cs-btn--sm"
                       onClick={() => setShowAddMethod(false)}
                     >
                       Cancel
@@ -5858,7 +5860,7 @@ function CheckoutPanel({
                 ) : (
                   <button
                     type="button"
-                    className="text-action checkout-panel__add-method-toggle"
+                    className="cs-btn cs-btn--ghost cs-btn--sm cs-checkout-panel__add-method-toggle"
                     onClick={() => setShowAddMethod(true)}
                     disabled={state === "submitting"}
                   >
@@ -5868,11 +5870,11 @@ function CheckoutPanel({
               </section>
             )}
 
-            <section className="checkout-panel__resolutions" hidden>
-              <div className="checkout-panel__resolutions-buttons">
+            <section className="cs-checkout-panel__resolutions" hidden>
+              <div className="cs-checkout-panel__resolutions-buttons">
                 <button
                   type="button"
-                  className="text-action"
+                  className="cs-btn cs-btn--ghost cs-btn--sm"
                   onClick={handleWaive}
                   disabled={state === "submitting"}
                 >
@@ -5882,26 +5884,26 @@ function CheckoutPanel({
             </section>
           </>
         ) : saleCompleted ? (
-          <section className="checkout-panel__completed-banner">
-            <div className="checkout-panel__completed-icon">✓</div>
-            <h4 className="checkout-panel__completed-heading">Sale Complete</h4>
-            <p className="checkout-panel__completed-total">
+          <section className="cs-checkout-panel__completed-banner">
+            <div className="cs-checkout-panel__completed-icon">✓</div>
+            <h4 className="cs-checkout-panel__completed-heading">Sale Complete</h4>
+            <p className="cs-checkout-panel__completed-total">
               Total collected: <strong>{formatMoney(totalPaid)}</strong>
             </p>
             {payments.length > 0 ? (
-              <p className="checkout-panel__completed-detail">
+              <p className="cs-checkout-panel__completed-detail">
                 {payments.length} payment{payments.length !== 1 ? "s" : ""} recorded
                 {tipCents > 0 ? ` · Includes $${(tipCents / 100).toFixed(2)} tip` : ""}
               </p>
             ) : null}
             {!isReadOnly ? (
-              <p className="checkout-panel__completed-hint">
+              <p className="cs-checkout-panel__completed-hint">
                 Use the ⋯ menu on each payment to refund if needed.
               </p>
             ) : null}
           </section>
         ) : (
-          <p className="checkout-panel__settled-note">
+          <p className="cs-checkout-panel__settled-note">
             {tipCents > 0
               ? "All payments collected. Ready to complete."
               : "All payments collected. Add a tip above if needed before completing."}
@@ -5909,23 +5911,23 @@ function CheckoutPanel({
         )}
 
         {wasReopened ? (
-          <div className="checkout-panel__reopen-warning" role="alert">
+          <div className="cs-checkout-panel__reopen-warning" role="alert">
             ⚠️ Sale has been reopened for adjustments. Changes are tracked in the audit log.
           </div>
         ) : null}
 
         {state === "error" ? (
-          <div className="message-banner message-banner--error" role="alert">
+          <div className="cs-banner cs-banner--error" role="alert">
             {errorMessage}
           </div>
         ) : null}
       </div>
-      <footer className="checkout-panel__footer">
-        <div className="checkout-panel__footer-left">
+      <footer className="cs-checkout-panel__footer">
+        <div className="cs-checkout-panel__footer-left">
           {!isReadOnly && !isSettled ? (
             <button
               type="button"
-              className="checkout-panel__waive-link"
+              className="cs-checkout-panel__waive-link"
               onClick={handleWaive}
               disabled={state === "submitting"}
             >
@@ -5933,11 +5935,11 @@ function CheckoutPanel({
             </button>
           ) : null}
         </div>
-        <div className="checkout-panel__footer-right">
+        <div className="cs-checkout-panel__footer-right">
           {!isReadOnly && remainingBalance > 0 ? (
             <button
               type="button"
-              className="text-action checkout-panel__payment-link-button"
+              className="cs-btn cs-btn--ghost cs-btn--sm cs-checkout-panel__payment-link-button"
               onClick={() => void handleSendPaymentLink()}
               disabled={state === "submitting"}
             >
@@ -5948,31 +5950,31 @@ function CheckoutPanel({
             <>
               <button
                 type="button"
-                className="text-action checkout-panel__reopen-button"
+                className="cs-btn cs-btn--ghost cs-btn--sm cs-checkout-panel__reopen-button"
                 onClick={handleReopenSale}
               >
                 Re-open sale
               </button>
               <button
                 type="button"
-                className="checkout-panel__complete-button checkout-panel__complete-button--done"
+                className="cs-checkout-panel__complete-button cs-checkout-panel__complete-button--done"
                 onClick={onClose}
               >
                 Close
               </button>
             </>
           ) : (
-            <div className="checkout-panel__complete-wrap">
+            <div className="cs-checkout-panel__complete-wrap">
               <button
                 type="button"
-                className="checkout-panel__complete-button"
+                className="cs-checkout-panel__complete-button"
                 onClick={handleComplete}
                 disabled={!isSettled || state === "submitting"}
               >
                 Complete & collect
               </button>
               {!isSettled ? (
-                <span className="checkout-panel__complete-hint">
+                <span className="cs-checkout-panel__complete-hint">
                   Balance due {formatMoney(remainingBalance)}
                 </span>
               ) : null}
@@ -6026,9 +6028,9 @@ function FormResponsesPanel({
 
   return (
     <>
-      <div className="rail-section-heading">
-        <p className="rail-section-kicker">Forms</p>
-        <span className={`intake-status-badge intake-status-badge--${intakeStatus}`}>
+      <div className="cs-rail-section-heading">
+        <p className="cs-rail-section-kicker">Forms</p>
+        <span className={`cs-intake-status-badge cs-intake-status-badge--${intakeStatus}`}>
           {pendingCount > 0 ? `${pendingCount} missing` : intakeLabel}
         </span>
       </div>
@@ -6037,16 +6039,16 @@ function FormResponsesPanel({
       ) : state.kind === "loading" ? (
         <p>Checking intake status...</p>
       ) : state.kind === "error" ? (
-        <div className="message-banner message-banner--error" role="alert">
+        <div className="cs-banner cs-banner--error" role="alert">
           {state.message}
         </div>
       ) : requirements.length === 0 && responses.length === 0 ? (
-        <p className="form-responses-empty">
+        <p className="cs-form-responses-empty">
           {intakeStatus === "not_required" ? "No forms required for this service." : "No forms attached."}
         </p>
       ) : (
         <>
-          <div className="form-responses-list" aria-label="Intake forms">
+          <div className="cs-form-responses-list" aria-label="Intake forms">
             {requirements.length > 0
               ? requirements.map((req) => {
                   const matchedResponse = responseByRequirementId.get(req.id);
@@ -6058,19 +6060,19 @@ function FormResponsesPanel({
                   return (
                     <div
                       key={req.id}
-                      className={`form-response-item form-response-item--${isCompleted ? "submitted" : "missing"}`}
+                      className={`cs-form-response-item cs-form-response-item--${isCompleted ? "submitted" : "missing"}`}
                       role={viewableResponse ? "button" : undefined}
                       tabIndex={viewableResponse ? 0 : undefined}
                       onClick={viewableResponse && viewForm ? () => viewForm(viewableResponse) : undefined}
                       onKeyDown={viewableResponse && viewForm ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); viewForm(viewableResponse); } } : undefined}
                     >
-                      <div className="form-response-item__name">
+                      <div className="cs-form-response-item__name">
                         {req.formName}
-                        <span className={`form-response-item__badge form-response-item__badge--${isCompleted ? "submitted" : "missing"}`}>
+                        <span className={`cs-form-response-item__badge cs-form-response-item__badge--${isCompleted ? "submitted" : "missing"}`}>
                           {isCompleted ? "Submitted" : "Missing"}
                         </span>
                       </div>
-                      <div className="form-response-item__date">
+                      <div className="cs-form-response-item__date">
                         {isCompleted
                           ? submittedAt
                             ? `Submitted ${submittedAt}`
@@ -6086,17 +6088,17 @@ function FormResponsesPanel({
                   return (
                     <div
                       key={entry.id}
-                      className="form-response-item form-response-item--submitted"
+                      className="cs-form-response-item cs-form-response-item--submitted"
                       role={onViewForm ? "button" : undefined}
                       tabIndex={onViewForm ? 0 : undefined}
                       onClick={onViewForm ? () => onViewForm(entry) : undefined}
                       onKeyDown={onViewForm ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onViewForm(entry); } } : undefined}
                     >
-                      <div className="form-response-item__name">
+                      <div className="cs-form-response-item__name">
                         {entry.formName}
-                        <span className="form-response-item__badge form-response-item__badge--submitted">Submitted</span>
+                        <span className="cs-form-response-item__badge cs-form-response-item__badge--submitted">Submitted</span>
                       </div>
-                      <div className="form-response-item__date">Submitted {submittedAt} · {timingLabel}</div>
+                      <div className="cs-form-response-item__date">Submitted {submittedAt} · {timingLabel}</div>
                     </div>
                   );
                 })}
@@ -6104,7 +6106,7 @@ function FormResponsesPanel({
           {hasPending && onSendReminder ? (
             <button
               type="button"
-              className="form-reminder-btn"
+              className="cs-form-reminder-btn"
               onClick={onSendReminder}
               disabled={reminderSending}
             >
@@ -6112,10 +6114,10 @@ function FormResponsesPanel({
             </button>
           ) : null}
           {reminderForThisBooking?.kind === "success" ? (
-            <span className="form-reminder-status" role="status">{reminderForThisBooking.message}</span>
+            <span className="cs-form-reminder-status" role="status">{reminderForThisBooking.message}</span>
           ) : null}
           {reminderForThisBooking?.kind === "error" ? (
-            <span className="form-reminder-status form-reminder-status--error" role="alert">{reminderForThisBooking.message}</span>
+            <span className="cs-form-reminder-status cs-form-reminder-status--error" role="alert">{reminderForThisBooking.message}</span>
           ) : null}
         </>
       )}
@@ -6135,18 +6137,18 @@ function FormResponseDrawer({ entry, onClose }: FormResponseDrawerProps): ReactE
     <>
       <button
         type="button"
-        className="appointment-drawer-backdrop"
+        className="cs-drawer-backdrop"
         aria-label="Close form response"
         onClick={onClose}
       />
-      <aside className="appointment-details-drawer form-response-drawer" role="dialog" aria-label="Form response">
-        <header className="appointment-details-drawer__header">
-          <span className="appointment-status-chip">
+      <aside className="cs-drawer-legacy cs-form-response-drawer" role="dialog" aria-label="Form response">
+        <header className="cs-drawer-legacy__header">
+          <span className="cs-drawer-status-chip">
             <span aria-hidden="true" />
             Form response
           </span>
-          <div className="slot-action-drawer__header-actions">
-            <button type="button" className="appointment-drawer-outline-action" onClick={onClose}>
+          <div className="cs-slot-drawer-header-actions">
+            <button type="button" className="cs-drawer-outline-action" onClick={onClose}>
               Close
             </button>
           </div>
@@ -6166,30 +6168,30 @@ function ClientCardHistory({ profile }: { profile: CustomerProfileResponse | nul
     (a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime(),
   );
   if (profile === null) {
-    return <p className="staff-list-empty">Loading visits…</p>;
+    return <p className="cs-empty">Loading visits…</p>;
   }
   if (bookings.length === 0) {
-    return <p className="staff-list-empty">No bookings yet.</p>;
+    return <p className="cs-empty">No bookings yet.</p>;
   }
   return (
-    <ul className="client-history-list">
+    <ul className="cs-client-history-list">
       {bookings.slice(0, 5).map((booking) => (
-        <li key={booking.id} className="client-history-row">
-          <span className="client-history-row__date">
-            <strong className="client-history-row__day">
+        <li key={booking.id} className="cs-client-history-row">
+          <span className="cs-client-history-row__date">
+            <strong className="cs-client-history-row__day">
               {new Intl.DateTimeFormat("en-US", { day: "2-digit" }).format(new Date(booking.startsAt))}
             </strong>
-            <span className="client-history-row__month">
+            <span className="cs-client-history-row__month">
               {new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date(booking.startsAt)).toUpperCase()}
             </span>
           </span>
-          <a className="client-history-row__body" href={`/calendar?bookingId=${booking.id}`}>
-            <strong className="client-history-row__title">{booking.serviceName}</strong>
-            <span className="client-history-row__meta">
+          <a className="cs-client-history-row__body" href={`/calendar?bookingId=${booking.id}`}>
+            <strong className="cs-client-history-row__title">{booking.serviceName}</strong>
+            <span className="cs-client-history-row__meta">
               {booking.providerName} · {new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric" }).format(new Date(booking.startsAt))}
             </span>
           </a>
-          <span className="client-history-row__amount">{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(booking.priceCents / 100)}</span>
+          <span className="cs-client-history-row__amount">{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(booking.priceCents / 100)}</span>
         </li>
       ))}
     </ul>
@@ -6204,39 +6206,39 @@ function ClientCardForms({
   onViewForm: (entry: BookingFormResponseEntry) => void;
 }) {
   if (state.kind === "idle" || state.kind === "loading") {
-    return <p className="staff-list-empty">Loading forms…</p>;
+    return <p className="cs-empty">Loading forms…</p>;
   }
   if (state.kind === "error") {
-    return <p className="staff-list-empty" role="alert">{state.message}</p>;
+    return <p className="cs-empty" role="alert">{state.message}</p>;
   }
   if (state.requirements.length === 0) {
-    return <p className="staff-list-empty">No forms attached to this appointment.</p>;
+    return <p className="cs-empty">No forms attached to this appointment.</p>;
   }
 
   const responsesById = new Map(state.items.map((response) => [response.id, response]));
 
   return (
-    <ul className="client-history-list">
+    <ul className="cs-client-history-list">
       {state.requirements.map((requirement) => {
         const response = requirement.satisfiedByResponseId
           ? responsesById.get(requirement.satisfiedByResponseId)
           : undefined;
 
         return (
-          <li key={requirement.id} className="client-history-row client-history-row--form">
+          <li key={requirement.id} className="cs-client-history-row cs-client-history-row--form">
             <button
               type="button"
-              className="client-history-row__body client-history-row__button"
+              className="cs-client-history-row__body cs-client-history-row__button"
               onClick={() => response && onViewForm(response)}
               disabled={!response}
             >
-              <span className="client-history-row__title-line">
-                <strong className="client-history-row__title">{requirement.formName}</strong>
+              <span className="cs-client-history-row__title-line">
+                <strong className="cs-client-history-row__title">{requirement.formName}</strong>
                 <span className={`cs-pill ${response ? "cs-pill--ok" : "cs-pill--warn"}`}>
                   {response ? "Submitted" : "Pending"}
                 </span>
               </span>
-              <span className="client-history-row__meta">
+              <span className="cs-client-history-row__meta">
                 {response
                   ? `Submitted ${new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric" }).format(new Date(response.submittedAt))}`
                   : "Awaiting client response"}
