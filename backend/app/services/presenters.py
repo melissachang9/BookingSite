@@ -4,7 +4,7 @@ from sqlalchemy import inspect as sa_inspect
 
 from app.core.security import create_customer_manage_token
 from app.db.models import Booking, BookingDraft, BookingDraftFormRequirement, BookingDraftIntakePlan, Customer, Location, Provider, Service, Tenant
-from app.schemas.bookings import BookingPaymentSummary, BookingSummaryResponse
+from app.schemas.bookings import BookingItemSummary, BookingPaymentSummary, BookingSummaryResponse
 from app.schemas.booking_drafts import BookingDraftSummaryResponse, CustomerSummaryResponse, IntakePlanResponse
 from app.schemas.forms import FormRequirementResponse
 from app.schemas.catalog import (
@@ -39,20 +39,37 @@ def _safe_form_ids(service: Service) -> list[str]:
     return []
 
 
+def booking_items_total_cents(booking: Booking) -> int:
+    items = booking.items if isinstance(getattr(booking, "items", None), list) else []
+    return sum(item.price_cents * item.quantity for item in items)
+
+
+def booking_subtotal_cents(booking: Booking) -> int:
+    return booking.service.price_cents + booking_items_total_cents(booking)
+
+
 def booking_tax_cents(booking: Booking) -> int:
-    return round(booking.service.price_cents * (_tenant_tax_rate_percent(booking.tenant) / 100))
+    return round(booking_subtotal_cents(booking) * (_tenant_tax_rate_percent(booking.tenant) / 100))
 
 
 def booking_total_cents(booking: Booking) -> int:
-    return booking.service.price_cents + booking_tax_cents(booking)
+    return booking_subtotal_cents(booking) + booking_tax_cents(booking)
 
 
 def booking_amount_paid_cents(booking: Booking) -> int:
-    return sum(payment.amount_cents for payment in booking.payments if payment.status == "succeeded")
+    return sum(
+        max(payment.amount_cents - payment.tip_cents, 0)
+        for payment in booking.payments
+        if payment.status == "succeeded"
+    )
+
+
+def booking_discount_cents(booking: Booking) -> int:
+    return sum(event.amount_cents for event in booking.payment_events if event.event_kind == "discount_applied")
 
 
 def booking_balance_due_cents(booking: Booking) -> int:
-    return max(booking_total_cents(booking) - booking_amount_paid_cents(booking), 0)
+    return max(booking_total_cents(booking) - booking_amount_paid_cents(booking) - booking_discount_cents(booking), 0)
 
 
 def _extract_refund_reason(payment) -> str | None:
@@ -384,6 +401,7 @@ def booking_to_summary(booking: Booking) -> BookingSummaryResponse:
         BookingPaymentSummary(
             id=payment.id,
             amount_cents=payment.amount_cents,
+            tip_cents=payment.tip_cents,
             status=payment.status,
             deposit_status=payment.deposit_status,
             payment_method_type=payment.payment_method_type,
@@ -393,6 +411,18 @@ def booking_to_summary(booking: Booking) -> BookingSummaryResponse:
         )
         for payment in sorted(booking.payments, key=lambda p: p.created_at)
         if payment.amount_cents > 0
+    ]
+
+    booking_items = booking.items if isinstance(getattr(booking, "items", None), list) else []
+    items_summary = [
+        BookingItemSummary(
+            id=item.id,
+            name=item.name,
+            price_cents=item.price_cents,
+            quantity=item.quantity,
+            source_service_id=item.source_service_id,
+        )
+        for item in sorted(booking_items, key=lambda i: i.created_at)
     ]
 
     return BookingSummaryResponse(
@@ -427,4 +457,5 @@ def booking_to_summary(booking: Booking) -> BookingSummaryResponse:
             else None
         ),
         payments=payments_summary,
+        items=items_summary,
     )

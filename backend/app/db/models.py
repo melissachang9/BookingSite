@@ -350,6 +350,26 @@ class Booking(Base, IdMixin, TimestampMixin):
         cascade="all, delete-orphan",
     )
     source_draft: Mapped[Optional[BookingDraft]] = relationship(back_populates="confirmed_booking", uselist=False)
+    items: Mapped[list["BookingItem"]] = relationship(
+        back_populates="booking",
+        cascade="all, delete-orphan",
+    )
+
+
+class BookingItem(Base, IdMixin, TimestampMixin):
+    """An extra service/product added to a booking at checkout."""
+
+    __tablename__ = "booking_items"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    booking_id: Mapped[str] = mapped_column(String(36), ForeignKey("bookings.id"), index=True, nullable=False)
+    source_service_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("services.id"), nullable=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+
+    booking: Mapped[Booking] = relationship(back_populates="items")
+
 
 
 class BookingPaymentEvent(Base, IdMixin, TimestampMixin):
@@ -375,6 +395,7 @@ class Payment(Base, IdMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     deposit_status: Mapped[str] = mapped_column(String(32), nullable=False)
     amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    tip_cents: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     currency: Mapped[str] = mapped_column(String(8), default="USD", nullable=False)
     payment_method_type: Mapped[str] = mapped_column(String(32), nullable=False)
     checkout_session_kind: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)

@@ -95,6 +95,7 @@ export type SendPaymentReminderResponse = {
 
 export type RecordManualPaymentRequest = {
   amountCents: number;
+  tipCents?: number;
   paymentMethodType: string;
   notes?: string;
 };

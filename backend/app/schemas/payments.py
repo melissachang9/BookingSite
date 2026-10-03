@@ -55,12 +55,14 @@ class SendPaymentReminderResponse(CamelModel):
 
 class RecordManualPaymentRequest(CamelModel):
     amount_cents: int = Field(gt=0)
+    tip_cents: int = Field(default=0, ge=0)
     payment_method_type: str
     notes: str | None = Field(default=None, max_length=500)
 
 
 class ApplyWalletCreditRequest(CamelModel):
     amount_cents: int = Field(gt=0)
+    tip_cents: int = Field(default=0, ge=0)
 
 
 class RefundPaymentRequest(CamelModel):

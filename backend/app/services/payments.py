@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
-from app.db.models import BookingDraft, BookingDraftFormRequirement, Payment, PaymentEvent, Provider, Service, User
+from app.db.models import Booking, BookingDraft, BookingDraftFormRequirement, Payment, PaymentEvent, Provider, Service, User
 from app.db.models import BookingPaymentEvent
 from app.schemas.bookings import BookingSummaryResponse
 from app.schemas.payments import (
@@ -221,6 +221,7 @@ async def _load_checkout_payment(
         .options(
             selectinload(Payment.booking_draft),
             selectinload(Payment.booking),
+            selectinload(Payment.booking).selectinload(Booking.payment_events),
             selectinload(Payment.events),
         )
         .where(Payment.tenant_id == tenant_id, Payment.checkout_session_id == session_id)

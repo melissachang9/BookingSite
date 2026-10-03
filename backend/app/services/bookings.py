@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
-from app.db.models import Booking, BookingDraft, BookingPaymentEvent, Payment, PaymentEvent, Provider, Service, Tenant, User
-from app.schemas.bookings import BookingListResponse, BookingSummaryResponse, CancelBookingRequest, PaginationMetaResponse, UpdateBookingRequest, UpdateBookingStatusRequest
+from app.db.models import Booking, BookingDraft, BookingItem, BookingPaymentEvent, Payment, PaymentEvent, Provider, Service, Tenant, User
+from app.schemas.bookings import AddBookingItemRequest, BookingListResponse, BookingSummaryResponse, CancelBookingRequest, PaginationMetaResponse, UpdateBookingRequest, UpdateBookingStatusRequest
 from app.schemas.payments import ApplyWalletCreditRequest, RecordManualPaymentRequest, RefundPaymentRequest
 from app.services.booking_drafts import _cancellation_policy_for_booking, _load_booking
 from app.services.payment_processor import charge_stripe_no_show_fee, refund_payment_via_processor
@@ -97,6 +97,8 @@ def _booking_query_options():
         selectinload(Booking.provider).selectinload(Provider.service_links),
         selectinload(Booking.customer),
         selectinload(Booking.payments).selectinload(Payment.events),
+        selectinload(Booking.payment_events),
+        selectinload(Booking.items),
         selectinload(Booking.source_draft).selectinload(BookingDraft.intake_plan),
     )
 
@@ -192,6 +194,8 @@ async def record_manual_payment(
 
     if payload.amount_cents <= 0:
         raise api_exception(409, "conflict", "Manual payment amount must be at least 1 cent.")
+    if payload.tip_cents > payload.amount_cents:
+        raise api_exception(409, "conflict", "Tip amount cannot exceed the recorded payment amount.")
 
     notes = _clean_notes(payload.notes)
     payment = Payment(
@@ -201,9 +205,10 @@ async def record_manual_payment(
         status="succeeded",
         deposit_status="paid_in_full",
         amount_cents=payload.amount_cents,
+        tip_cents=payload.tip_cents,
         currency="USD",
         payment_method_type=payload.payment_method_type,
-        checkout_session_kind=None,
+        checkout_session_kind="admin_completion",
     )
     session.add(payment)
     await session.flush()
@@ -229,6 +234,7 @@ async def record_manual_payment(
         notes=notes,
         extra_payload={
             "paymentMethodType": payload.payment_method_type,
+            "tipCents": payload.tip_cents,
             "bookingStatus": booking.status,
             "paymentResolutionAfter": "collected" if fully_paid else "pending",
             "remainingBalanceCents": max(new_balance_cents, 0),
@@ -237,6 +243,99 @@ async def record_manual_payment(
 
     if fully_paid:
         _apply_payment_resolution(booking, "collected")
+
+    reload_booking_id = booking.id
+    await session.commit()
+    session.expire_all()
+    updated_booking = await _load_booking(session, reload_booking_id, tenant_id)
+    return booking_to_summary(updated_booking)
+
+
+async def add_booking_item(
+    session: AsyncSession,
+    tenant_slug: str,
+    booking_id: str,
+    payload: AddBookingItemRequest,
+    actor: User,
+) -> BookingSummaryResponse:
+    tenant = await _load_tenant(session, tenant_slug)
+    tenant_id = tenant.id
+    booking = await _load_booking(session, booking_id, tenant.id)
+
+    if booking.status not in {"confirmed", "completed"}:
+        raise api_exception(409, "conflict", "Items can only be added to confirmed or completed bookings.")
+
+    name = (payload.name or "").strip()
+    price_cents = payload.price_cents
+
+    if payload.source_service_id is not None:
+        service = await session.scalar(
+            select(Service).where(
+                Service.id == payload.source_service_id,
+                Service.tenant_id == tenant.id,
+            )
+        )
+        if service is None:
+            raise api_exception(404, "not_found", "Service was not found.")
+        if not name:
+            name = service.name
+        if price_cents is None:
+            price_cents = service.price_cents
+
+    if not name:
+        raise api_exception(422, "validation_error", "An item name is required.")
+    if price_cents is None or price_cents < 0:
+        raise api_exception(422, "validation_error", "A valid item price is required.")
+
+    item = BookingItem(
+        tenant_id=booking.tenant_id,
+        booking_id=booking.id,
+        source_service_id=payload.source_service_id,
+        name=name[:255],
+        price_cents=price_cents,
+        quantity=payload.quantity,
+    )
+    session.add(item)
+    _append_booking_event(
+        session,
+        booking,
+        event_kind="item_added",
+        actor=actor,
+        amount_cents=price_cents * payload.quantity,
+        extra_payload={"itemName": name[:255], "quantity": payload.quantity},
+    )
+
+    reload_booking_id = booking.id
+    await session.commit()
+    session.expire_all()
+    updated_booking = await _load_booking(session, reload_booking_id, tenant_id)
+    return booking_to_summary(updated_booking)
+
+
+async def remove_booking_item(
+    session: AsyncSession,
+    tenant_slug: str,
+    booking_id: str,
+    item_id: str,
+    actor: User,
+) -> BookingSummaryResponse:
+    tenant = await _load_tenant(session, tenant_slug)
+    tenant_id = tenant.id
+    booking = await _load_booking(session, booking_id, tenant.id)
+
+    item = next((i for i in booking.items if i.id == item_id), None)
+    if item is None:
+        raise api_exception(404, "not_found", "Booking item was not found.")
+
+    _append_booking_event(
+        session,
+        booking,
+        event_kind="item_removed",
+        actor=actor,
+        amount_cents=item.price_cents * item.quantity,
+        extra_payload={"itemName": item.name, "quantity": item.quantity},
+    )
+    await session.delete(item)
 
     reload_booking_id = booking.id
     await session.commit()
@@ -263,6 +362,8 @@ async def apply_wallet_credit(
         raise api_exception(409, "conflict", "This customer has no wallet balance to apply.")
 
     apply_amount = min(payload.amount_cents, wallet_balance)
+    if payload.tip_cents > apply_amount:
+        raise api_exception(409, "conflict", "Tip amount cannot exceed the applied wallet amount.")
 
     # Deduct from wallet via ledger
     await record_wallet_transaction(
@@ -283,9 +384,10 @@ async def apply_wallet_credit(
         status="succeeded",
         deposit_status="paid_in_full",
         amount_cents=apply_amount,
+        tip_cents=payload.tip_cents,
         currency="USD",
         payment_method_type="wallet",
-        checkout_session_kind=None,
+        checkout_session_kind="admin_completion",
     )
     session.add(payment)
     await session.flush()
@@ -310,6 +412,7 @@ async def apply_wallet_credit(
         amount_cents=apply_amount,
         extra_payload={
             "paymentMethodType": "wallet",
+            "tipCents": payload.tip_cents,
             "bookingStatus": booking.status,
             "paymentResolutionAfter": "collected" if fully_paid else "pending",
             "remainingBalanceCents": max(new_balance, 0),
@@ -542,7 +645,19 @@ async def update_booking_status(
         if booking.status != "confirmed":
             raise api_exception(409, "conflict", "Only confirmed bookings can be marked completed.")
 
-        remaining_balance_cents = booking_balance_due_cents(booking)
+        if payload.discount_cents > booking_balance_due_cents(booking):
+            raise api_exception(409, "conflict", "Discount cannot exceed the remaining booking balance.")
+        if payload.discount_cents > 0:
+            _append_booking_event(
+                session,
+                booking,
+                event_kind="discount_applied",
+                actor=actor,
+                amount_cents=payload.discount_cents,
+                extra_payload={"discountType": payload.discount_type or "amount"},
+            )
+
+        remaining_balance_cents = booking_balance_due_cents(booking) - payload.discount_cents
         payment_resolution = payload.payment_resolution
         if payment_resolution is None:
             if remaining_balance_cents > 0:

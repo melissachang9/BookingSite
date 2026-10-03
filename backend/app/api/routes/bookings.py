@@ -9,6 +9,7 @@ from app.api.dependencies.auth import require_tenant_permission
 from app.db.models import User
 from app.db.session import get_db_session
 from app.schemas.bookings import (
+    AddBookingItemRequest,
     BookingListResponse,
     BookingSummaryResponse,
     CancelBookingRequest,
@@ -36,7 +37,7 @@ from app.services.booking_forms import (
     send_booking_form_reminder,
     submit_booking_form_requirement_by_token,
 )
-from app.services.bookings import apply_wallet_credit, cancel_booking, list_bookings, record_manual_payment, refund_payment, update_booking, update_booking_status
+from app.services.bookings import add_booking_item, apply_wallet_credit, cancel_booking, list_bookings, record_manual_payment, refund_payment, remove_booking_item, update_booking, update_booking_status
 
 
 router = APIRouter(tags=["bookings"])
@@ -151,6 +152,36 @@ async def record_manual_payment_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingSummaryResponse:
     return await record_manual_payment(session, tenant_slug, booking_id, payload, current_user)
+
+
+@router.post(
+    "/tenants/{tenant_slug}/bookings/{booking_id}/items",
+    response_model=BookingSummaryResponse,
+    summary="Add an extra service/product line item to a booking",
+)
+async def add_booking_item_route(
+    tenant_slug: str,
+    booking_id: str,
+    payload: AddBookingItemRequest,
+    current_user: User = Depends(require_tenant_permission("bookings.collect_payment")),
+    session: AsyncSession = Depends(get_db_session),
+) -> BookingSummaryResponse:
+    return await add_booking_item(session, tenant_slug, booking_id, payload, current_user)
+
+
+@router.delete(
+    "/tenants/{tenant_slug}/bookings/{booking_id}/items/{item_id}",
+    response_model=BookingSummaryResponse,
+    summary="Remove a booking line item",
+)
+async def remove_booking_item_route(
+    tenant_slug: str,
+    booking_id: str,
+    item_id: str,
+    current_user: User = Depends(require_tenant_permission("bookings.collect_payment")),
+    session: AsyncSession = Depends(get_db_session),
+) -> BookingSummaryResponse:
+    return await remove_booking_item(session, tenant_slug, booking_id, item_id, current_user)
 
 
 @router.post(

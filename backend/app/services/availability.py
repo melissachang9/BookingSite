@@ -10,9 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
-from app.db.models import Booking, Provider, ProviderSchedule, ProviderTimeOff, Service, SlotHold
+from app.db.models import Booking, Location, Provider, ProviderSchedule, ProviderTimeOff, Service, SlotHold
 from app.schemas.availability import AvailabilityDayResponse, AvailabilityResponse, SlotAvailabilityResponse
 from app.services.tenants import get_tenant_by_slug
+from app.services.timezones import resolve_zone
 
 
 @dataclass
@@ -142,7 +143,26 @@ async def list_availability(
     except ValueError as error:
         raise api_exception(422, "validation_error", "Date must be in YYYY-MM-DD format.") from error
 
-    tenant_timezone = ZoneInfo(tenant.timezone)
+    tenant_timezone = resolve_zone(tenant.timezone)
+    # Scheduling times are interpreted in the location's timezone, falling back
+    # to the business timezone for records without a location.
+    location_ids_all = {lid for context in provider_contexts for lid in context.location_ids}
+    location_zones: dict[str, ZoneInfo] = {}
+    if location_ids_all:
+        location_rows = (
+            await session.execute(
+                select(Location.id, Location.time_zone).where(Location.id.in_(location_ids_all))
+            )
+        ).all()
+        location_zones = {
+            row.id: resolve_zone(row.time_zone, tenant.timezone) for row in location_rows
+        }
+
+    def zone_for(location_id: str | None) -> ZoneInfo:
+        if location_id is not None and location_id in location_zones:
+            return location_zones[location_id]
+        return tenant_timezone
+
     settings = _normalize_settings(tenant.settings_json)
     resolved_window_days = max(1, min(window_days, int(settings["maxAdvanceBookingDays"])))
     min_start = datetime.now(timezone.utc) + timedelta(minutes=int(settings["minLeadTimeMinutes"]))
@@ -151,8 +171,15 @@ async def list_availability(
     setup_buffer = timedelta(minutes=service.setup_buffer_minutes)
     cleanup_buffer = timedelta(minutes=service.cleanup_buffer_minutes)
     total_block = duration + setup_buffer + cleanup_buffer
-    window_start = datetime.combine(requested_date, time.min, tzinfo=tenant_timezone).astimezone(timezone.utc)
-    window_end = datetime.combine(requested_date + timedelta(days=resolved_window_days), time.min, tzinfo=tenant_timezone).astimezone(timezone.utc)
+    # Widen the DB query window by a day on each side so rows are never missed
+    # when a location's timezone differs from the business default.
+    window_start = (
+        datetime.combine(requested_date, time.min, tzinfo=tenant_timezone) - timedelta(days=1)
+    ).astimezone(timezone.utc)
+    window_end = (
+        datetime.combine(requested_date + timedelta(days=resolved_window_days), time.min, tzinfo=tenant_timezone)
+        + timedelta(days=1)
+    ).astimezone(timezone.utc)
     provider_ids = [context.provider.id for context in provider_contexts]
 
     schedules = (
@@ -214,8 +241,9 @@ async def list_availability(
     custom_hours_map: dict[tuple[str, str | None, date], tuple[time, time]] = {}
     for time_off in time_off_rows:
         if time_off.override_type == "custom_hours" and time_off.start_time and time_off.end_time:
-            current = time_off.starts_at.astimezone(tenant_timezone).date()
-            end_date = time_off.ends_at.astimezone(tenant_timezone).date()
+            override_zone = zone_for(time_off.location_id)
+            current = time_off.starts_at.astimezone(override_zone).date()
+            end_date = time_off.ends_at.astimezone(override_zone).date()
             while current <= end_date:
                 custom_hours_map[(time_off.provider_id, time_off.location_id, current)] = (time_off.start_time, time_off.end_time)
                 current += timedelta(days=1)
@@ -301,8 +329,9 @@ async def list_availability(
                             effective_start = business_open
                         if business_close < effective_end:
                             effective_end = business_close
-                    cursor = datetime.combine(current_date, effective_start, tzinfo=tenant_timezone)
-                    end_boundary = datetime.combine(current_date, effective_end, tzinfo=tenant_timezone)
+                    slot_zone = zone_for(resolved_location_id)
+                    cursor = datetime.combine(current_date, effective_start, tzinfo=slot_zone)
+                    end_boundary = datetime.combine(current_date, effective_end, tzinfo=slot_zone)
                     while cursor + total_block <= end_boundary:
                         slot_start = cursor.astimezone(timezone.utc)
                         slot_end = (cursor + duration).astimezone(timezone.utc)

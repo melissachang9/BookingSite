@@ -205,6 +205,8 @@ function createApi(
     recordManualPayment: vi.fn().mockResolvedValue(baseBooking),
     applyWalletCredit: vi.fn().mockResolvedValue(baseBooking),
     refundBookingPayment: vi.fn().mockResolvedValue(baseBooking),
+    addBookingItem: vi.fn().mockResolvedValue(baseBooking),
+    removeBookingItem: vi.fn().mockResolvedValue(baseBooking),
     createCheckoutSession: vi.fn().mockResolvedValue({
       checkoutUrl: "http://127.0.0.1:3001/cancel/manage-token-1/payment/session-1",
       sessionId: "session-1",
@@ -253,8 +255,240 @@ describe("CalendarPage", () => {
       expect(within(dialog).getByRole("tab", { name: "History" })).toBeInTheDocument();
       expect(within(dialog).getByText("$325.00")).toBeInTheDocument();
 
+      fireEvent.click(within(dialog).getByRole("button", { name: "Profile" }));
+      const profile = await screen.findByRole("dialog", { name: "Customer profile" });
+      fireEvent.click(within(profile).getByRole("button", { name: "Back to appointment details" }));
+      expect(await screen.findByRole("dialog", { name: "Appointment details" })).toBeInTheDocument();
+
       fireEvent.click(screen.getByRole("button", { name: "Close" }));
       expect(screen.queryByRole("dialog", { name: "Appointment details" })).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancels time editing when clicking outside the time editor", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const api = createApi([baseBooking]);
+
+      render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      await screen.findByText("24 – 30 May");
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
+      const dialog = await screen.findByRole("dialog", { name: "Appointment details" });
+
+      fireEvent.click(within(dialog).getByTitle("Change time"));
+      const timeInput = within(dialog).getByDisplayValue("10:00");
+      fireEvent.mouseDown(timeInput);
+      expect(timeInput).toBeInTheDocument();
+
+      fireEvent.mouseDown(document.body);
+      expect(within(dialog).queryByDisplayValue("10:00")).not.toBeInTheDocument();
+      expect(within(dialog).getByTitle("Change time")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("applies checkout discounts as a percentage or fixed dollar amount", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const api = createApi([baseBooking]);
+
+      render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      await screen.findByText("24 – 30 May");
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
+      const details = await screen.findByRole("dialog", { name: "Appointment details" });
+      fireEvent.click(within(details).getByRole("button", { name: "Complete & check out" }));
+      const checkout = await screen.findByRole("dialog", { name: "Checkout" });
+
+      fireEvent.click(within(checkout).getByRole("button", { name: "Add discount" }));
+      expect(within(checkout).getByRole("button", { name: "Percentage" })).toHaveAttribute("aria-pressed", "true");
+      fireEvent.change(within(checkout).getByLabelText("Discount value"), { target: { value: "10" } });
+      fireEvent.click(within(checkout).getByRole("button", { name: "Apply" }));
+      expect(within(checkout).getByRole("button", { name: /10%/ })).toHaveTextContent("−$10.00");
+      expect(within(checkout).getAllByText("$90.00").length).toBeGreaterThan(0);
+
+      fireEvent.click(within(checkout).getByRole("button", { name: /10%/ }));
+      fireEvent.click(within(checkout).getByRole("button", { name: "Fixed amount" }));
+      fireEvent.change(within(checkout).getByLabelText("Discount value"), { target: { value: "15" } });
+      fireEvent.click(within(checkout).getByRole("button", { name: "Apply" }));
+      expect(within(checkout).getByRole("button", { name: "−$15.00" })).toBeInTheDocument();
+      expect(within(checkout).getAllByText("$85.00").length).toBeGreaterThan(0);
+
+      fireEvent.click(within(checkout).getByRole("button", { name: "−$15.00" }));
+      fireEvent.change(within(checkout).getByLabelText("Discount value"), { target: { value: "100" } });
+      fireEvent.click(within(checkout).getByRole("button", { name: "Apply" }));
+      expect(within(checkout).queryByText("Sale Complete")).not.toBeInTheDocument();
+      fireEvent.click(within(checkout).getByRole("button", { name: "Complete sale" }));
+
+      await waitFor(() => {
+        expect(api.updateBookingStatus).toHaveBeenCalledWith("brow-beauty-lab", "booking-1", {
+          status: "completed",
+          paymentResolution: "collected",
+          discountCents: 10000,
+          discountType: "amount",
+        });
+      });
+      expect(within(checkout).getByText("Sale Complete")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("locks the tip to its payment method and completes once fully settled", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const deposit = {
+        id: "payment-deposit",
+        amountCents: 2500,
+        tipCents: 0,
+        status: "succeeded",
+        depositStatus: "deposit_paid",
+        paymentMethodType: "card",
+        checkoutSessionKind: "deposit",
+        createdAt: "2026-05-24T15:00:00.000Z",
+      };
+      const booking = createBooking({ payments: [deposit] });
+      const api = createApi([booking]);
+      const checkoutPayment = {
+        id: "payment-checkout",
+        amountCents: 9500,
+        tipCents: 2000,
+        status: "succeeded",
+        depositStatus: "paid_in_full",
+        paymentMethodType: "cash",
+        checkoutSessionKind: "admin_completion",
+        createdAt: "2026-05-26T19:05:00.000Z",
+      };
+      vi.mocked(api.recordManualPayment).mockResolvedValue(
+        createBooking({ payments: [deposit, checkoutPayment], balanceDueCents: 0 }),
+      );
+
+      render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      await screen.findByText("24 – 30 May");
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
+      const details = await screen.findByRole("dialog", { name: "Appointment details" });
+      fireEvent.click(within(details).getByRole("button", { name: "Complete & check out" }));
+
+      const checkout = await screen.findByRole("dialog", { name: "Checkout" });
+      fireEvent.click(within(checkout).getByRole("button", { name: "20%" }));
+      fireEvent.click(within(checkout).getByRole("button", { name: /^Cash/ }));
+      fireEvent.click(within(checkout).getByRole("button", { name: "Record $95.00" }));
+
+      await waitFor(() => {
+        expect(api.recordManualPayment).toHaveBeenCalledWith(
+          "brow-beauty-lab",
+          "booking-1",
+          expect.objectContaining({
+            amountCents: 9500,
+            tipCents: 2000,
+            paymentMethodType: "cash",
+          }),
+        );
+        expect(api.updateBookingStatus).toHaveBeenCalledWith("brow-beauty-lab", "booking-1", {
+          status: "completed",
+          paymentResolution: "collected",
+        });
+      });
+
+      // The tip is recorded on the completed sale and shown read-only (the
+      // editable tip input is replaced by the completed-sale summary).
+      expect(within(checkout).queryByLabelText("Tip amount")).not.toBeInTheDocument();
+      expect(within(checkout).getByText("$20.00")).toBeInTheDocument();
+      expect(within(checkout).getByText("Sale Complete")).toBeInTheDocument();
+      expect(within(checkout).queryByRole("button", { name: "Complete & collect" })).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("records a partial charge smaller than the tip without forcing the tip", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const deposit = {
+        id: "payment-deposit",
+        amountCents: 2500,
+        tipCents: 0,
+        status: "succeeded",
+        depositStatus: "deposit_paid",
+        paymentMethodType: "card",
+        checkoutSessionKind: "deposit",
+        createdAt: "2026-05-24T15:00:00.000Z",
+      };
+      const booking = createBooking({ payments: [deposit] });
+      const api = createApi([booking]);
+
+      render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      await screen.findByText("24 – 30 May");
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
+      const details = await screen.findByRole("dialog", { name: "Appointment details" });
+      fireEvent.click(within(details).getByRole("button", { name: "Complete & check out" }));
+
+      const checkout = await screen.findByRole("dialog", { name: "Checkout" });
+      fireEvent.click(within(checkout).getByRole("button", { name: "20%" }));
+      fireEvent.click(within(checkout).getByRole("button", { name: /^Cash/ }));
+
+      fireEvent.change(within(checkout).getByLabelText("Amount to charge"), { target: { value: "7.00" } });
+      fireEvent.click(within(checkout).getByRole("button", { name: "Record $7.00" }));
+
+      await waitFor(() => {
+        expect(api.recordManualPayment).toHaveBeenCalledWith(
+          "brow-beauty-lab",
+          "booking-1",
+          expect.objectContaining({ amountCents: 700, tipCents: 0, paymentMethodType: "cash" }),
+        );
+      });
+      // The tip was not collected, so it stays editable rather than locked.
+      expect(within(checkout).getByLabelText("Tip amount")).not.toBeDisabled();
     } finally {
       vi.useRealTimers();
     }

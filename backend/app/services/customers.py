@@ -171,6 +171,7 @@ async def get_customer_profile(
                 selectinload(Booking.service),
                 selectinload(Booking.provider),
                 selectinload(Booking.payments).selectinload(Payment.events),
+                selectinload(Booking.payment_events),
             )
             .where(Booking.tenant_id == tenant.id, Booking.customer_id == customer_id)
             .order_by(Booking.starts_at.desc())
@@ -251,6 +252,7 @@ async def update_customer(
                 selectinload(Booking.service),
                 selectinload(Booking.provider),
                 selectinload(Booking.payments).selectinload(Payment.events),
+                selectinload(Booking.payment_events),
             )
             .where(Booking.tenant_id == tenant.id, Booking.customer_id == customer_id)
             .order_by(Booking.starts_at.desc())

@@ -11,6 +11,7 @@ import type {
   BookingListQuery,
   BookingListResponse,
   BookingPaymentSummary,
+  BookingItemSummary,
   BookingSummary,
   CreateBookingDraftRequest,
   CreateCheckoutSessionRequest,
@@ -96,6 +97,7 @@ type CalendarAppointment = {
   durationMinutes: number;
   notes?: string | null;
   payments: BookingPaymentSummary[];
+  items: BookingItemSummary[];
 };
 
 type ScheduleColumn = {
@@ -224,13 +226,19 @@ export type CalendarPageApi = {
   updateBooking: (tenantSlug: string, bookingId: string, body: UpdateBookingRequest) => Promise<BookingSummary>;
   cancelBooking: (tenantSlug: string, bookingId: string, body: { reason?: string }) => Promise<BookingSummary>;
   recordManualPayment: (tenantSlug: string, bookingId: string, body: RecordManualPaymentRequest) => Promise<BookingSummary>;
-  applyWalletCredit: (tenantSlug: string, bookingId: string, body: { amountCents: number }) => Promise<BookingSummary>;
+  applyWalletCredit: (tenantSlug: string, bookingId: string, body: { amountCents: number; tipCents?: number }) => Promise<BookingSummary>;
   refundBookingPayment: (
     tenantSlug: string,
     bookingId: string,
     paymentId: string,
     body?: { amountCents?: number; reason?: string },
   ) => Promise<BookingSummary>;
+  addBookingItem: (
+    tenantSlug: string,
+    bookingId: string,
+    body: { sourceServiceId?: string | null; name?: string; priceCents?: number; quantity?: number },
+  ) => Promise<BookingSummary>;
+  removeBookingItem: (tenantSlug: string, bookingId: string, itemId: string) => Promise<BookingSummary>;
   createCheckoutSession: (body: CreateCheckoutSessionRequest) => Promise<CreateCheckoutSessionResponse>;
   updateTenantSettings: (tenantSlug: string, body: { customPaymentMethods: CustomPaymentMethod[] }) => Promise<unknown>;
   updateCustomer: (
@@ -646,6 +654,7 @@ function createCalendarAppointment(booking: BookingSummary): CalendarAppointment
     durationMinutes: booking.service.durationMinutes,
     notes: booking.notes ?? null,
     payments: booking.payments ?? [],
+    items: booking.items ?? [],
   };
 }
 
@@ -1968,12 +1977,19 @@ export function CalendarPage({
       ? `${storefrontBaseUrl}/${tenantSlug}/book/${draftCreationState.draftId}`
       : null;
 
-  const handleCompleteAppointment = async (appointment: SelectedCalendarAppointment, resolution: "collected" | "waived" = "collected") => {
+  const handleCompleteAppointment = async (
+    appointment: SelectedCalendarAppointment,
+    resolution: "collected" | "waived" = "collected",
+    discount?: { cents: number; type: "percent" | "amount" },
+  ) => {
     setCompletionState({ kind: "submitting" });
     try {
       await api.updateBookingStatus(tenantSlug, appointment.id, {
         status: "completed",
         paymentResolution: resolution,
+        ...(discount && discount.cents > 0
+          ? { discountCents: discount.cents, discountType: discount.type }
+          : {}),
       });
       // Keep drawer open — CheckoutPanel will show completed-sale view
       setCompletionState({ kind: "idle" });
@@ -1983,6 +1999,7 @@ export function CalendarPage({
         kind: "error",
         message: error instanceof Error ? error.message : "Unable to mark booking as completed.",
       });
+      throw error;
     }
   };
 
@@ -4253,6 +4270,7 @@ function AppointmentDetailsDrawer({
   const pickerGrid = useMemo(() => buildMonthGrid(pickerMonth), [pickerMonth]);
   const datePickerContainerRef = useRef<HTMLDivElement | null>(null);
   const datePopoverRef = useRef<HTMLDivElement | null>(null);
+  const timeEditorRef = useRef<HTMLDivElement | null>(null);
   const backdropRef = useRef<HTMLButtonElement | null>(null);
   const [rescheduleSaveState, setRescheduleSaveState] = useState<"idle" | "submitting" | "error">("idle");
   const [rescheduleErrorMessage, setRescheduleErrorMessage] = useState("");
@@ -4338,6 +4356,17 @@ function AppointmentDetailsDrawer({
     return () => document.removeEventListener("mousedown", handler);
   }, [showRescheduleDatePopover]);
 
+  useEffect(() => {
+    if (!showRescheduleTimeInput) return;
+    const handler = (event: Event) => {
+      if (!timeEditorRef.current?.contains(event.target as Node)) {
+        setShowRescheduleTimeInput(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showRescheduleTimeInput]);
+
   // The drawer backdrop sits on top of the page and swallows wheel events, so
   // the calendar underneath can't be scrolled to inspect a reschedule target
   // time. Forward wheel events on the backdrop to the calendar board.
@@ -4391,6 +4420,7 @@ function AppointmentDetailsDrawer({
           tenantSlug={tenantSlug}
           customPaymentMethods={customPaymentMethods}
           familyColor={drawerFamilyColor}
+          services={services}
           onBack={() => {
             setDrawerView("details");
           }}
@@ -4426,6 +4456,14 @@ function AppointmentDetailsDrawer({
         <aside className="cs-drawer cs-drawer--profile" role="dialog" aria-label="Customer profile">
           <div className="cs-drawer__inner cs-profile-drawer">
             <div className="cs-profile-drawer__top">
+              <button
+                type="button"
+                className="cs-profile-drawer__back"
+                onClick={() => setDrawerView("details")}
+                aria-label="Back to appointment details"
+              >
+                ←
+              </button>
               <p className="cs-profile-drawer__kicker">Client profile</p>
               <button type="button" className="cs-drawer__close" onClick={onClose} aria-label="Close">×</button>
             </div>
@@ -4490,10 +4528,6 @@ function AppointmentDetailsDrawer({
                 </ul>
               )}
             </div>
-
-            <button type="button" className="cs-btn cs-btn--ghost cs-profile-drawer__back" onClick={() => setDrawerView("details")}>
-              ← Back to appointment
-            </button>
           </div>
         </aside>
       </>
@@ -4659,7 +4693,7 @@ function AppointmentDetailsDrawer({
               <div className="cs-when-card__kicker">{whenKicker}</div>
               <div className="cs-when-card__time">
                 {showRescheduleTimeInput ? (
-                  <div className="cs-when-card__time-editor">
+                  <div className="cs-when-card__time-editor" ref={timeEditorRef}>
                     <input
                       type="time"
                       className="cs-drawer-time-input"
@@ -5081,12 +5115,14 @@ type CheckoutPanelProps = {
   tenantSlug: string;
   customPaymentMethods: CustomPaymentMethod[];
   familyColor: string;
+  services: ServiceSummary[];
   onBack: () => void;
   onClose: () => void;
   onPaymentRecorded: () => void;
   onComplete: (
     appointment: SelectedCalendarAppointment,
     resolution?: "collected" | "waived",
+    discount?: { cents: number; type: "percent" | "amount" },
   ) => Promise<void> | void;
 };
 
@@ -5096,6 +5132,7 @@ function CheckoutPanel({
   tenantSlug,
   customPaymentMethods,
   familyColor,
+  services,
   onBack,
   onClose,
   onPaymentRecorded,
@@ -5112,8 +5149,14 @@ function CheckoutPanel({
   );
   const totalPaid = payments.reduce((sum, p) => sum + p.amountCents, 0);
 
+  const persistedTipCents = payments.reduce((sum, payment) => sum + (payment.tipCents ?? 0), 0);
+  // The tip is only locked once it has actually been recorded on a persisted
+  // payment. A partial charge made before the tip is collected keeps the tip
+  // editable rather than forcing it onto the first (often smaller) payment.
+  const tipLocked = persistedTipCents > 0;
+
   const [tipPercent, setTipPercent] = useState<number | null>(null);
-  const [tipText, setTipText] = useState("0.00");
+  const [tipText, setTipText] = useState(() => (persistedTipCents / 100).toFixed(2));
   const parseTip = (): number => {
     const cleaned = tipText.replace(/[^0-9.]/g, "");
     const dollars = parseFloat(cleaned);
@@ -5121,16 +5164,30 @@ function CheckoutPanel({
     return Math.round(dollars * 100);
   };
   const tipCents = parseTip();
-  const [discountPercent, setDiscountPercent] = useState<number>(0);
+  const [discountType, setDiscountType] = useState<"percent" | "amount">("percent");
+  const [discountValue, setDiscountValue] = useState(0);
   const [showDiscountPopup, setShowDiscountPopup] = useState(false);
   const [discountPopupText, setDiscountPopupText] = useState("0");
   const [editingSubtotal, setEditingSubtotal] = useState(false);
   const [subtotalText, setSubtotalText] = useState((appointment.priceCents / 100).toFixed(2));
   const [adjustedSubtotal, setAdjustedSubtotal] = useState(appointment.priceCents);
-  const effectiveSubtotal = adjustedSubtotal;
-  const discountCents = Math.round(effectiveSubtotal * (discountPercent / 100));
-  // Recalculate tax when subtotal changes
-  const taxRate = appointment.priceCents > 0 ? (appointment.taxCents ?? 0) / appointment.priceCents : 0;
+  // Extra services/products added to this sale — persisted on the booking.
+  const [showAddItemMenu, setShowAddItemMenu] = useState(false);
+  const [itemBusy, setItemBusy] = useState(false);
+  const addedItems = (appointment.items ?? []).map((i) => ({
+    id: i.id,
+    name: i.name,
+    priceCents: i.priceCents * i.quantity,
+  }));
+  const addedItemsTotal = addedItems.reduce((sum, item) => sum + item.priceCents, 0);
+  const effectiveSubtotal = adjustedSubtotal + addedItemsTotal;
+  const discountCents = discountType === "percent"
+    ? Math.round(effectiveSubtotal * (discountValue / 100))
+    : Math.min(Math.round(discountValue * 100), effectiveSubtotal);
+  // Tax rate is derived from the persisted tax over the persisted taxable base
+  // (service price + already-saved items), so adding items doesn't double-count.
+  const persistedTaxableBase = appointment.priceCents + addedItemsTotal;
+  const taxRate = persistedTaxableBase > 0 ? (appointment.taxCents ?? 0) / persistedTaxableBase : 0;
   const adjustedTaxCents = Math.round(effectiveSubtotal * taxRate);
   const total = effectiveSubtotal + adjustedTaxCents + tipCents - discountCents;
   const remainingBalance = Math.max(total - totalPaid, 0);
@@ -5142,6 +5199,12 @@ function CheckoutPanel({
   const handleTipTextChange = (value: string) => {
     setTipText(value);
     setTipPercent(null);
+  };
+  const applyDiscount = () => {
+    const parsedValue = parseFloat(discountPopupText.replace(/[^0-9.]/g, ""));
+    if (Number.isNaN(parsedValue) || parsedValue < 0) return;
+    setDiscountValue(discountType === "percent" ? Math.min(parsedValue, 100) : parsedValue);
+    setShowDiscountPopup(false);
   };
 
   const [amountText, setAmountText] = useState((appointment.balanceDueCents / 100).toFixed(2));
@@ -5221,6 +5284,18 @@ function CheckoutPanel({
     return () => document.removeEventListener("mousedown", handler);
   }, [openMenuPaymentId]);
 
+  // Close the add-item menu when clicking outside it.
+  useEffect(() => {
+    if (!showAddItemMenu) return;
+    const handler = (e: globalThis.MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && target.closest(".cs-checkout-panel__add-item-wrap")) return;
+      setShowAddItemMenu(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showAddItemMenu]);
+
   const parseAmount = (): number => {
     const cleaned = amountText.replace(/[^0-9.]/g, "");
     const dollars = parseFloat(cleaned);
@@ -5235,15 +5310,20 @@ function CheckoutPanel({
       setState("error");
       return;
     }
+    // A tip only rides on a payment large enough to include it. A smaller
+    // (partial) charge records just the service amount and leaves the tip
+    // editable for a later payment.
+    const recordedTipCents = tipLocked ? 0 : cents >= tipCents ? tipCents : 0;
 
     setSelectedMethod(methodId);
     setState("submitting");
     setErrorMessage("");
     try {
-      const tipNote = tipCents > 0 ? `Includes $${(tipCents / 100).toFixed(2)} tip` : null;
+      const tipNote = recordedTipCents > 0 ? `Includes $${(recordedTipCents / 100).toFixed(2)} tip` : null;
       const combinedNotes = [notes.trim() || null, tipNote].filter(Boolean).join(" — ") || undefined;
       const updated = await api.recordManualPayment(tenantSlug, appointment.id, {
         amountCents: cents,
+        tipCents: recordedTipCents,
         paymentMethodType: methodId,
         notes: combinedNotes,
       });
@@ -5255,7 +5335,15 @@ function CheckoutPanel({
       setNotes("");
       setPaymentStep("methods");
       const newRemaining = Math.max(total - updatedPayments.reduce((s, p) => s + p.amountCents, 0), 0);
-      setState(newRemaining <= 0 ? "success" : "idle");
+      if (newRemaining <= 0) {
+        await onComplete(appointment, "collected", { cents: discountCents, type: discountType });
+        setSaleCompleted(true);
+        setIsReadOnly(true);
+        setState("success");
+      } else {
+        setState("idle");
+        onPaymentRecorded();
+      }
     } catch (error) {
       setState("error");
       setErrorMessage(error instanceof Error ? error.message : "Payment recording failed.");
@@ -5264,20 +5352,61 @@ function CheckoutPanel({
     }
   };
 
+  const handleAddItem = async (service: ServiceSummary) => {
+    setShowAddItemMenu(false);
+    setItemBusy(true);
+    setErrorMessage("");
+    try {
+      await api.addBookingItem(tenantSlug, appointment.id, { sourceServiceId: service.id });
+      onPaymentRecorded();
+    } catch (error) {
+      setState("error");
+      setErrorMessage(error instanceof Error ? error.message : "Failed to add item.");
+    } finally {
+      setItemBusy(false);
+    }
+  };
+
+  const handleRemoveItem = async (itemId: string) => {
+    setItemBusy(true);
+    setErrorMessage("");
+    try {
+      await api.removeBookingItem(tenantSlug, appointment.id, itemId);
+      onPaymentRecorded();
+    } catch (error) {
+      setState("error");
+      setErrorMessage(error instanceof Error ? error.message : "Failed to remove item.");
+    } finally {
+      setItemBusy(false);
+    }
+  };
+
   const handleApplyWallet = async () => {
     const applyCents = Math.round(parseFloat(walletApplyText) * 100);
     if (isNaN(applyCents) || applyCents <= 0 || applyCents > Math.min(appointment.walletBalanceCents, remainingBalance)) return;
+    const recordedTipCents = tipLocked ? 0 : applyCents >= tipCents ? tipCents : 0;
     setState("submitting");
     setErrorMessage("");
     try {
-      const updated = await api.applyWalletCredit(tenantSlug, appointment.id, { amountCents: applyCents });
+      const updated = await api.applyWalletCredit(tenantSlug, appointment.id, {
+        amountCents: applyCents,
+        tipCents: recordedTipCents,
+      });
       const updatedPayments = (updated.payments ?? []).filter(
         (p) => p.status === "succeeded" && p.amountCents > 0,
       );
       setPayments(updatedPayments);
       const newRemaining = Math.max(total - updatedPayments.reduce((s, p) => s + p.amountCents, 0), 0);
-      setState(newRemaining <= 0 ? "success" : "idle");
       setShowWalletPopup(false);
+      if (newRemaining <= 0) {
+        await onComplete(appointment, "collected", { cents: discountCents, type: discountType });
+        setSaleCompleted(true);
+        setIsReadOnly(true);
+        setState("success");
+      } else {
+        setState("idle");
+        onPaymentRecorded();
+      }
     } catch (error) {
       setState("error");
       setErrorMessage(error instanceof Error ? error.message : "Failed to apply wallet credit.");
@@ -5366,19 +5495,6 @@ function CheckoutPanel({
   const handleWaive = () => {
     if (window.confirm("Waive the remaining balance and complete this booking?")) {
       void onComplete(appointment, "waived");
-    }
-  };
-
-  const handleComplete = () => {
-    const result = onComplete(appointment);
-    if (result instanceof Promise) {
-      result.then(() => {
-        setSaleCompleted(true);
-        setIsReadOnly(true);
-      });
-    } else {
-      setSaleCompleted(true);
-      setIsReadOnly(true);
     }
   };
 
@@ -5510,10 +5626,66 @@ function CheckoutPanel({
               </button>
             ) : null}
           </div>
+          {addedItems.map((item) => (
+            <div
+              key={item.id}
+              className="cs-checkout-panel__totals-row cs-checkout-panel__totals-row--service"
+              style={{ background: swatchForService(item.name) }}
+            >
+              <span className="cs-checkout-panel__line-item-name">{item.name}</span>
+              <div className="cs-checkout-panel__line-item-actions">
+                <span>{formatMoney(item.priceCents)}</span>
+              </div>
+              {!isReadOnly ? (
+                <button
+                  type="button"
+                  className="cs-checkout-panel__item-remove"
+                  aria-label={`Remove ${item.name}`}
+                  title="Remove from sale"
+                  disabled={itemBusy}
+                  onClick={() => void handleRemoveItem(item.id)}
+                >
+                  ×
+                </button>
+              ) : null}
+            </div>
+          ))}
           {!isReadOnly ? (
-            <button type="button" className="cs-checkout-panel__add-item" aria-disabled="true" title="Add product or service — coming soon">
-              + Add product or service
-            </button>
+            <div className="cs-checkout-panel__add-item-wrap">
+              <button
+                type="button"
+                className="cs-checkout-panel__add-item"
+                aria-haspopup="listbox"
+                aria-expanded={showAddItemMenu}
+                disabled={itemBusy}
+                onClick={() => setShowAddItemMenu((prev) => !prev)}
+              >
+                {itemBusy ? "Updating…" : "+ Add product or service"}
+              </button>
+              {showAddItemMenu ? (
+                <div className="cs-checkout-panel__add-item-menu" role="listbox">
+                  {services.filter((s) => s.isActive).length === 0 ? (
+                    <div className="cs-checkout-panel__add-item-empty">No services available to add.</div>
+                  ) : (
+                    services
+                      .filter((s) => s.isActive)
+                      .map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          role="option"
+                          aria-selected={false}
+                          className="cs-checkout-panel__add-item-option"
+                          onClick={() => void handleAddItem(s)}
+                        >
+                          <span>{s.name}</span>
+                          <span className="cs-checkout-panel__add-item-option-price">{formatMoney(s.priceCents)}</span>
+                        </button>
+                      ))
+                  )}
+                </div>
+              ) : null}
+            </div>
           ) : null}
           {adjustedTaxCents > 0 ? (
             <div className="cs-checkout-panel__totals-row">
@@ -5526,36 +5698,64 @@ function CheckoutPanel({
           <div className="cs-checkout-panel__totals-row cs-checkout-panel__discount-row">
             <span className="cs-checkout-panel__discount-label">Discount</span>
             {showDiscountPopup ? (
-              <span className="cs-checkout-panel__discount-popup">
+              <span className="cs-checkout-panel__discount-popup" role="group" aria-label="Discount type and value">
+                <span className="cs-checkout-panel__discount-types" role="group" aria-label="Discount type">
+                  <button
+                    type="button"
+                    className={`cs-checkout-panel__discount-type${discountType === "amount" ? " is-active" : ""}`}
+                    aria-pressed={discountType === "amount"}
+                    aria-label="Fixed amount"
+                    onClick={() => {
+                      setDiscountType("amount");
+                      setDiscountPopupText(discountValue.toFixed(2));
+                    }}
+                  >
+                    $
+                  </button>
+                  <button
+                    type="button"
+                    className={`cs-checkout-panel__discount-type${discountType === "percent" ? " is-active" : ""}`}
+                    aria-pressed={discountType === "percent"}
+                    aria-label="Percentage"
+                    onClick={() => {
+                      setDiscountType("percent");
+                      setDiscountPopupText(String(discountValue));
+                    }}
+                  >
+                    %
+                  </button>
+                </span>
                 <input
                   type="text"
                   inputMode="decimal"
                   className="cs-checkout-panel__discount-percent-input"
                   value={discountPopupText}
                   onChange={(e) => setDiscountPopupText(e.target.value)}
-                  onBlur={() => {
-                    const pct = parseFloat(discountPopupText.replace(/[^0-9.]/g, ""));
-                    if (!isNaN(pct) && pct >= 0 && pct <= 100) {
-                      setDiscountPercent(pct);
-                    }
-                    setDiscountPopupText(String(discountPercent));
-                    setShowDiscountPopup(false);
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") applyDiscount();
+                    if (e.key === "Escape") setShowDiscountPopup(false);
                   }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                  aria-label="Discount value"
                   autoFocus
                 />
-                <span className="cs-checkout-panel__discount-percent-sign">%</span>
+                <button type="button" className="cs-checkout-panel__discount-apply" onClick={applyDiscount}>Apply</button>
+                <button type="button" className="cs-checkout-panel__discount-cancel" onClick={() => setShowDiscountPopup(false)} aria-label="Cancel discount editing">×</button>
               </span>
             ) : (
-              <span
+              <button
+                type="button"
                 className="cs-checkout-panel__discount-link"
-                onClick={() => { setDiscountPopupText(String(discountPercent)); setShowDiscountPopup(true); }}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter') { setDiscountPopupText(String(discountPercent)); setShowDiscountPopup(true); } }}
+                onClick={() => {
+                  setDiscountPopupText(discountType === "amount" ? discountValue.toFixed(2) : String(discountValue));
+                  setShowDiscountPopup(true);
+                }}
               >
-                {discountPercent > 0 ? `${discountPercent}% (−${formatMoney(discountCents)})` : "Add discount"}
-              </span>
+                {discountValue > 0
+                  ? discountType === "percent"
+                    ? `${discountValue}% (−${formatMoney(discountCents)})`
+                    : `−${formatMoney(discountCents)}`
+                  : "Add discount"}
+              </button>
             )}
           </div>
           <div className="cs-checkout-panel__totals-row cs-checkout-panel__tip-row">
@@ -5568,7 +5768,7 @@ function CheckoutPanel({
                     type="button"
                     className={`cs-checkout-panel__tip-chip${tipPercent === pct ? " is-active" : ""}`}
                     onClick={() => setTipFromPercent(pct)}
-                    disabled={state === "submitting"}
+                    disabled={state === "submitting" || tipLocked}
                   >
                     {pct}%
                   </button>
@@ -5581,7 +5781,7 @@ function CheckoutPanel({
               className="cs-checkout-panel__tip-input"
               value={tipText}
               onChange={(e) => handleTipTextChange(e.target.value)}
-              disabled={state === "submitting"}
+              disabled={state === "submitting" || tipLocked}
               aria-label="Tip amount"
             />
           </div>
@@ -5883,7 +6083,7 @@ function CheckoutPanel({
               </div>
             </section>
           </>
-        ) : saleCompleted ? (
+        ) : saleCompleted || isReadOnly ? (
           <section className="cs-checkout-panel__completed-banner">
             <div className="cs-checkout-panel__completed-icon">✓</div>
             <h4 className="cs-checkout-panel__completed-heading">Sale Complete</h4>
@@ -5902,13 +6102,7 @@ function CheckoutPanel({
               </p>
             ) : null}
           </section>
-        ) : (
-          <p className="cs-checkout-panel__settled-note">
-            {tipCents > 0
-              ? "All payments collected. Ready to complete."
-              : "All payments collected. Add a tip above if needed before completing."}
-          </p>
-        )}
+        ) : null}
 
         {wasReopened ? (
           <div className="cs-checkout-panel__reopen-warning" role="alert">
@@ -5946,40 +6140,37 @@ function CheckoutPanel({
               {state === "submitting" ? "Creating link..." : "Send payment link"}
             </button>
           ) : null}
-          {isReadOnly ? (
-            <>
-              <button
-                type="button"
-                className="cs-btn cs-btn--ghost cs-btn--sm cs-checkout-panel__reopen-button"
-                onClick={handleReopenSale}
-              >
-                Re-open sale
-              </button>
-              <button
-                type="button"
-                className="cs-checkout-panel__complete-button cs-checkout-panel__complete-button--done"
-                onClick={onClose}
-              >
-                Close
-              </button>
-            </>
-          ) : (
-            <div className="cs-checkout-panel__complete-wrap">
-              <button
-                type="button"
-                className="cs-checkout-panel__complete-button"
-                onClick={handleComplete}
-                disabled={!isSettled || state === "submitting"}
-              >
-                Complete & collect
-              </button>
-              {!isSettled ? (
-                <span className="cs-checkout-panel__complete-hint">
-                  Balance due {formatMoney(remainingBalance)}
-                </span>
-              ) : null}
-            </div>
-          )}
+          {!isReadOnly && isSettled && !saleCompleted ? (
+            <button
+              type="button"
+              className="cs-btn cs-btn--primary cs-btn--sm"
+              onClick={async () => {
+                setState("submitting");
+                setErrorMessage("");
+                try {
+                  await onComplete(appointment, "collected", { cents: discountCents, type: discountType });
+                  setSaleCompleted(true);
+                  setIsReadOnly(true);
+                  setState("success");
+                } catch (error) {
+                  setState("error");
+                  setErrorMessage(error instanceof Error ? error.message : "Unable to complete sale.");
+                }
+              }}
+              disabled={state === "submitting"}
+            >
+              {state === "submitting" ? "Completing..." : "Complete sale"}
+            </button>
+          ) : null}
+          {isReadOnly || saleCompleted ? (
+            <button
+              type="button"
+              className="cs-btn cs-btn--ghost cs-btn--sm cs-checkout-panel__reopen-button"
+              onClick={handleReopenSale}
+            >
+              Re-open sale
+            </button>
+          ) : null}
         </div>
       </footer>
     </aside>

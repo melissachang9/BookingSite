@@ -555,6 +555,21 @@ async def _ensure_postgres_schema_compatibility() -> None:
                 text("ALTER TABLE customers ADD COLUMN stripe_customer_id VARCHAR(255)")
             )
 
+        payment_tip_cents_exists = await connection.scalar(
+            text(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'payments'
+                  AND column_name = 'tip_cents'
+                """
+            )
+        )
+        if not payment_tip_cents_exists:
+            await connection.execute(
+                text("ALTER TABLE payments ADD COLUMN tip_cents INTEGER NOT NULL DEFAULT 0")
+            )
+
 
 async def initialize_database() -> None:
     async with get_engine().begin() as connection:

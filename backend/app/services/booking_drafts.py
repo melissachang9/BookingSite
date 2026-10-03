@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
@@ -18,6 +17,7 @@ from app.db.models import (
     BookingPaymentEvent,
     Customer,
     FormDefinition,
+    Location,
     Payment,
     PaymentEvent,
     Provider,
@@ -36,9 +36,22 @@ from app.schemas.booking_drafts import BookingDraftSummaryResponse, ConfirmWithP
 from app.services.availability import list_availability
 from app.services.presenters import booking_draft_to_summary, booking_to_summary, tenant_to_summary
 from app.services.tenants import get_tenant_by_slug
+from app.services.timezones import resolve_zone
 
 
 ACTIVE_DRAFT_STATUSES = {"draft", "slot_held", "awaiting_form", "awaiting_payment"}
+
+
+async def _location_date_text(
+    session: AsyncSession, location_id: str | None, tenant: Tenant, instant: datetime
+) -> str:
+    """Date of ``instant`` in the location's timezone (business tz fallback)."""
+    location_tz: str | None = None
+    if location_id:
+        location_tz = await session.scalar(
+            select(Location.time_zone).where(Location.id == location_id)
+        )
+    return instant.astimezone(resolve_zone(location_tz, tenant.timezone)).date().isoformat()
 MANAGE_LINK_ERROR_MESSAGE = "Manage booking link is invalid or expired."
 
 
@@ -267,6 +280,8 @@ async def _load_booking(
             selectinload(Booking.provider).selectinload(Provider.service_links),
             selectinload(Booking.customer),
             selectinload(Booking.payments).selectinload(Payment.events),
+            selectinload(Booking.payment_events),
+            selectinload(Booking.items),
             selectinload(Booking.source_draft).selectinload(BookingDraft.intake_plan),
         )
         .where(*filters)
@@ -522,7 +537,7 @@ async def create_booking_draft(
         raise api_exception(404, "not_found", "Provider was not found for this tenant.")
 
     start_at = _ensure_aware(payload.starts_at)
-    requested_date_text = start_at.astimezone(ZoneInfo(tenant.timezone)).date().isoformat()
+    requested_date_text = await _location_date_text(session, payload.location_id, tenant, start_at)
     availability = await list_availability(
         session=session,
         tenant_slug=tenant_slug,
@@ -807,7 +822,7 @@ async def reschedule_manage_booking(
     new_ends_at = new_starts_at + duration
 
     # Verify the new slot is available
-    requested_date_text = new_starts_at.astimezone(ZoneInfo(tenant.timezone)).date().isoformat()
+    requested_date_text = await _location_date_text(session, booking.location_id, tenant, new_starts_at)
     availability = await list_availability(
         session=session,
         tenant_slug=tenant.slug,

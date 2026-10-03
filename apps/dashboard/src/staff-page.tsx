@@ -1197,13 +1197,20 @@ function DetailsTab({
               </div>
             ) : null}
           </div>
-          <p className="cs-dt-helper">
-            {slugError ? (
-              <span role="alert" className="cs-settings-error">{slugError}</span>
-            ) : (
-              "Available. Lowercase letters, numbers and hyphens — changing it breaks any link already shared. Leave it blank and this person is bookable only from the studio's main page."
-            )}
-          </p>
+          {slugError ? (
+            <p className="cs-dt-helper" role="alert">
+              <span className="cs-settings-error">{slugError}</span>
+            </p>
+          ) : (
+            <div className="cs-dt-booking-notes">
+              <p className="cs-dt-note cs-dt-note--ok">
+                Available. Lowercase letters, numbers and hyphens — changing it breaks any link already shared.
+              </p>
+              <p className="cs-dt-note cs-dt-note--muted">
+                Leave it blank and this person is bookable only from the studio&rsquo;s main page.
+              </p>
+            </div>
+          )}
           {bookingSlug.trim() !== (provider.bookingSlug ?? "") ? (
             <button
               type="button"
@@ -1795,6 +1802,36 @@ function normalizeTime(raw: string): string {
   return trimmed;
 }
 
+/**
+ * Convert a wall-clock date + time, interpreted in `timeZone` (an IANA zone such
+ * as the location's business timezone), to a UTC ISO instant. Handles DST by
+ * measuring the zone's offset at that instant. `timeStr` may be HH:MM or HH:MM:SS.
+ */
+function zonedWallTimeToUtcISO(dateStr: string, timeStr: string, timeZone: string): string {
+  const [y, mo, d] = dateStr.split("-").map(Number);
+  const [h, mi, se] = timeStr.split(":").map(Number);
+  const utcGuess = Date.UTC(y, (mo || 1) - 1, d || 1, h || 0, mi || 0, se || 0);
+  let f: Record<string, number> = {};
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).formatToParts(new Date(utcGuess));
+    for (const p of parts) if (p.type !== "literal") f[p.type] = Number(p.value);
+  } catch {
+    // Unknown timezone — fall back to treating the wall time as UTC.
+    return new Date(utcGuess).toISOString();
+  }
+  const seenAsUtc = Date.UTC(f.year, f.month - 1, f.day, f.hour === 24 ? 0 : f.hour, f.minute, f.second);
+  return new Date(utcGuess - (seenAsUtc - utcGuess)).toISOString();
+}
+
 const BUSINESS_HOURS_DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 const BUSINESS_HOURS_DAY_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -1857,6 +1894,15 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
   const [reloadKey, setReloadKey] = useState(0);
 
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  // Build an override instant from a wall-clock date + time in the selected
+  // location's timezone (business timezone fallback), so overrides are consistent
+  // with the availability engine's per-location timezone resolution.
+  const toLocationUtcISO = (dateStr: string, timeStr: string) =>
+    zonedWallTimeToUtcISO(
+      dateStr,
+      timeStr,
+      locations.find((loc) => loc.id === selectedLocationId)?.timeZone || tenant?.timezone || "UTC",
+    );
   const [shifts, setShifts] = useState<Map<number, ProviderScheduleEntry[]>>(new Map());
   const [overrides, setOverrides] = useState<ProviderTimeOffEntry[]>([]);
   const [summary, setSummary] = useState<WorkHoursSummary>({ hoursPerWeek: 0, workingDays: 0, upcomingOverridesCount: 0 });
@@ -2129,8 +2175,8 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
     setError(null);
     try {
       await platformApi.createProviderTimeOff(tenantSlug, provider.id, {
-        startsAt: new Date(addShiftDate).toISOString(),
-        endsAt: new Date(addShiftDate + "T23:59:59").toISOString(),
+        startsAt: toLocationUtcISO(addShiftDate, "00:00"),
+        endsAt: toLocationUtcISO(addShiftDate, "23:59:59"),
         reason: null,
         overrideType: "custom_hours",
         startTime: addShiftStart,
@@ -2163,8 +2209,8 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
     setError(null);
     try {
       await platformApi.createProviderTimeOff(tenantSlug, provider.id, {
-        startsAt: new Date(newOverride.startDate).toISOString(),
-        endsAt: new Date(newOverride.endDate + "T23:59:59").toISOString(),
+        startsAt: toLocationUtcISO(newOverride.startDate, "00:00"),
+        endsAt: toLocationUtcISO(newOverride.endDate, "23:59:59"),
         reason: newOverride.reason.trim() || null,
         overrideType: newOverride.overrideType,
         startTime: newOverride.overrideType === "custom_hours" ? newOverride.startTime : null,
@@ -2200,6 +2246,7 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
       closedAllDay: boolean;
       startTime: string;
       endTime: string;
+      blockWindow?: { startTime: string; endTime: string } | null;
       blockedServiceIds: string[];
       existingOverrideId: string | null;
       startDate?: string;
@@ -2213,13 +2260,32 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
     try {
       const start = payload.startDate || dateStr;
       const end = payload.endDate || dateStr;
+      // A "Block" on a regularly-working day blocks only the chosen window
+      // (the availability engine blocks a closed override over [startsAt, endsAt]).
+      // Times are interpreted in the location's timezone.
+      const startsAt = payload.blockWindow
+        ? toLocationUtcISO(start, normalizeTime(payload.blockWindow.startTime))
+        : toLocationUtcISO(start, "00:00");
+      const endsAt = payload.blockWindow
+        ? toLocationUtcISO(end, normalizeTime(payload.blockWindow.endTime))
+        : toLocationUtcISO(end, "23:59:59");
       const body: CreateProviderTimeOffRequest = {
-        startsAt: `${start}T00:00:00.000Z`,
-        endsAt: `${end}T23:59:59.000Z`,
+        startsAt,
+        endsAt,
         reason: payload.reason?.trim() || null,
         overrideType: payload.closedAllDay ? "closed" : "custom_hours",
-        startTime: payload.closedAllDay ? null : normalizeTime(payload.startTime),
-        endTime: payload.closedAllDay ? null : normalizeTime(payload.endTime),
+        // For a windowed "Block" we also persist the window in start/end time so the
+        // panel can show it back on reload; the engine blocks it via startsAt/endsAt.
+        startTime: payload.blockWindow
+          ? normalizeTime(payload.blockWindow.startTime)
+          : payload.closedAllDay
+            ? null
+            : normalizeTime(payload.startTime),
+        endTime: payload.blockWindow
+          ? normalizeTime(payload.blockWindow.endTime)
+          : payload.closedAllDay
+            ? null
+            : normalizeTime(payload.endTime),
         locationId: selectedLocationId,
         blockedServiceIds: payload.blockedServiceIds.length > 0 ? payload.blockedServiceIds : null,
       };
@@ -2366,8 +2432,8 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
     setStatus(null);
     try {
       await platformApi.createProviderTimeOff(tenantSlug, provider.id, {
-        startsAt: `${payload.startDate}T00:00:00.000Z`,
-        endsAt: `${payload.endDate}T23:59:59.000Z`,
+        startsAt: toLocationUtcISO(payload.startDate, "00:00"),
+        endsAt: toLocationUtcISO(payload.endDate, "23:59:59"),
         reason: payload.reason.trim() || null,
         overrideType: "closed",
         startTime: null,
@@ -2628,18 +2694,18 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
                     <button type="button"
                       className={`cs-wh-seg-toggle__btn${panelMode === "closed" ? " is-active" : ""}`}
                       onClick={() => setPanelMode("closed")}>
-                      Not working
+                      {regularIsOn ? "Block" : "Not working"}
                     </button>
                   </div>
 
-                  {panelMode === "custom_hours" ? (
+                  {panelMode === "custom_hours" || (panelMode === "closed" && regularIsOn) ? (
                     <div className="cs-wh-time-range cs-wh-exception-panel__times">
                       <input type="time" className="cs-wh-time-input" value={panelStart}
-                        aria-label="Exception start time"
+                        aria-label={panelMode === "closed" ? "Block start time" : "Exception start time"}
                         onChange={(e) => setPanelStart(e.target.value)} />
                       <span className="cs-wh-time-sep">to</span>
                       <input type="time" className="cs-wh-time-input" value={panelEnd}
-                        aria-label="Exception end time"
+                        aria-label={panelMode === "closed" ? "Block end time" : "Exception end time"}
                         onChange={(e) => setPanelEnd(e.target.value)} />
                     </div>
                   ) : null}
@@ -2669,6 +2735,10 @@ function WorkHoursTab({ tenantSlug, tenant, provider, locations, services }: Wor
                         closedAllDay: panelMode === "closed",
                         startTime: panelStart,
                         endTime: panelEnd,
+                        blockWindow:
+                          panelMode === "closed" && regularIsOn
+                            ? { startTime: panelStart, endTime: panelEnd }
+                            : null,
                         blockedServiceIds: existing?.blockedServiceIds || [],
                         existingOverrideId: existing?.id || null,
                         reason: panelReason,
@@ -3447,155 +3517,100 @@ function RegularHoursDrawer({
     }
   };
 
-  const presetBtnStyle: React.CSSProperties = {
-    padding: "6px 12px",
-    fontSize: "12px",
-    background: "#FFFFFF",
-    color: "#4A3D30",
-    border: "1px solid #D4A574",
-    borderRadius: "6px",
-    cursor: "pointer",
-    fontWeight: 500,
-  };
-
   return (
     <div className="cs-modal" role="dialog" aria-label="Set regular hours" onClick={onClose}>
-      <div style={{
-        position: "fixed", top: 0, right: 0, height: "100vh",
-        width: "min(560px, 100vw)",
-        background: "#FFFFFF",
-        boxShadow: "-2px 0 12px rgba(31,22,18,0.15)",
-        display: "flex", flexDirection: "column",
-      }} onClick={(e) => e.stopPropagation()}>
-        <header style={{
-          padding: "16px 18px", borderBottom: "1px solid #E5D7BB",
-          display: "flex", justifyContent: "space-between", alignItems: "flex-start",
-        }}>
+      <div className="cs-wh-drawer" onClick={(e) => e.stopPropagation()}>
+        <header className="cs-wh-drawer__header">
           <div>
-            <div style={{ fontSize: "11px", color: "#8B7960", textTransform: "uppercase", letterSpacing: "0.5px" }}>Recurring template</div>
-            <div style={{ fontSize: "16px", fontWeight: 600, color: "#1F1612", marginTop: "2px" }}>Set regular hours</div>
-            <div style={{ fontSize: "11px", color: "#8B7960", marginTop: "4px" }}>
+            <div className="cs-wh-drawer__eyebrow">Recurring template</div>
+            <div className="cs-wh-drawer__title">Set regular hours</div>
+            <div className="cs-wh-drawer__sub">
               {activeCount} of 7 days · {totalHours.toFixed(1)} hrs / week
             </div>
           </div>
           <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose} aria-label="Close">×</button>
         </header>
 
-        <div style={{ flex: 1, overflowY: "auto", padding: "18px" }}>
-          {/* Presets */}
-          <div style={{ marginBottom: "16px" }}>
-            <div style={{ fontSize: "11px", color: "#8B7960", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Quick start</div>
-            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-              <button type="button" style={presetBtnStyle}
+        <div className="cs-wh-drawer__body">
+          <div>
+            <div className="cs-wh-drawer__section-label">Quick start</div>
+            <div className="cs-wh-drawer__presets">
+              <button type="button" className="cs-wh-drawer__preset"
                 onClick={() => applyPreset("weekdays9to5")}>Weekdays 9–5</button>
-              <button type="button" style={presetBtnStyle}
+              <button type="button" className="cs-wh-drawer__preset"
                 onClick={() => applyPreset("weekdays10to6")}>Weekdays 10–6</button>
-              <button type="button" style={presetBtnStyle}
+              <button type="button" className="cs-wh-drawer__preset"
                 onClick={() => applyPreset("everyday10to6")}>Every day 10–6</button>
-              <button type="button" style={{ ...presetBtnStyle, color: "#8A2E1E", borderColor: "#D9CBB1" }}
+              <button type="button" className="cs-wh-drawer__preset cs-wh-drawer__preset--danger"
                 onClick={() => applyPreset("clear")}>Clear all</button>
             </div>
           </div>
 
-          {/* 7-day table */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <div className="cs-wh-drawer__days">
             {rows.map((row) => {
               const label = WEEKDAY_LABELS[row.weekday];
               return (
-                <div key={row.weekday} style={{
-                  padding: "10px 12px",
-                  background: row.isActive ? "#FDF8F0" : "#FFFFFF",
-                  border: `1px solid ${row.isActive ? "#D4A574" : "#E5D7BB"}`,
-                  borderRadius: "8px",
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                    <label style={{
-                      display: "flex", alignItems: "center", gap: "8px",
-                      width: "110px", flexShrink: 0, cursor: "pointer",
-                    }}>
-                      <input type="checkbox" checked={row.isActive}
-                        onChange={() => toggleActive(row.weekday)}
-                        aria-label={`${label} active`}
-                        style={{ width: "16px", height: "16px" }} />
-                      <span style={{
-                        fontSize: "13px", fontWeight: 600,
-                        color: row.isActive ? "#1F1612" : "#8B7960",
-                      }}>{label}</span>
-                    </label>
-                    <div style={{ flex: 1 }}>
-                      {row.isActive ? (
-                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                          {row.shifts.map((s, i) => (
-                            <div key={i} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                              <input type="text" className="cs-svc-input"
-                                style={{ width: "78px", textAlign: "center", padding: "5px 8px" }}
-                                value={s.startTime} placeholder="09:00"
-                                aria-label={`${label} shift ${i + 1} start`}
-                                onChange={(e) => setShiftTime(row.weekday, i, { startTime: e.target.value })} />
-                              <span style={{ color: "#8B7960", fontSize: "12px" }}>→</span>
-                              <input type="text" className="cs-svc-input"
-                                style={{ width: "78px", textAlign: "center", padding: "5px 8px" }}
-                                value={s.endTime} placeholder="17:00"
-                                aria-label={`${label} shift ${i + 1} end`}
-                                onChange={(e) => setShiftTime(row.weekday, i, { endTime: e.target.value })} />
-                              <button type="button" className="cs-svc-text-btn"
-                                onClick={() => removeShift(row.weekday, i)}
-                                aria-label={`Remove ${label} shift ${i + 1}`}
-                                style={{ fontSize: "14px", padding: "0 6px" }}>×</button>
-                              {i === row.shifts.length - 1 ? (
-                                <button type="button" className="cs-svc-text-btn"
-                                  onClick={() => addShift(row.weekday)}
-                                  style={{ fontSize: "11px", textDecoration: "underline", marginLeft: "4px" }}>+ Add</button>
-                              ) : null}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: "12px", color: "#8B7960", fontStyle: "italic" }}>Closed</div>
-                      )}
-                    </div>
+                <div key={row.weekday}
+                  className={`cs-wh-drawer__day${row.isActive ? "" : " cs-wh-drawer__day--off"}`}>
+                  <input type="checkbox" className="cs-wh-drawer__switch" role="switch"
+                    checked={row.isActive}
+                    onChange={() => toggleActive(row.weekday)}
+                    aria-label={`${label} active`} />
+                  <span className="cs-wh-drawer__day-name">{label}</span>
+                  <div className="cs-wh-drawer__shifts">
                     {row.isActive ? (
-                      <div style={{ display: "flex", gap: "4px", alignItems: "center", flexShrink: 0 }}>
-                        {row.weekday <= 4 ? (
-                          <button type="button" className="cs-svc-text-btn"
-                            onClick={() => copyToWeekdays(row.weekday)}
-                            title="Copy to Mon–Fri"
-                            style={{ fontSize: "10px", padding: "4px 6px" }}>→ weekdays</button>
-                        ) : null}
-                        <button type="button" className="cs-svc-text-btn"
-                          onClick={() => copyToAll(row.weekday)}
-                          title="Copy to all 7 days"
-                          style={{ fontSize: "10px", padding: "4px 6px" }}>→ all</button>
-                      </div>
-                    ) : null}
+                      row.shifts.map((s, i) => (
+                        <div key={i} className="cs-wh-drawer__shift">
+                          <input type="text" className="cs-wh-drawer__time"
+                            value={s.startTime} placeholder="09:00"
+                            aria-label={`${label} shift ${i + 1} start`}
+                            onChange={(e) => setShiftTime(row.weekday, i, { startTime: e.target.value })} />
+                          <span className="cs-wh-drawer__to">to</span>
+                          <input type="text" className="cs-wh-drawer__time"
+                            value={s.endTime} placeholder="17:00"
+                            aria-label={`${label} shift ${i + 1} end`}
+                            onChange={(e) => setShiftTime(row.weekday, i, { endTime: e.target.value })} />
+                          <button type="button" className="cs-wh-drawer__icon-btn"
+                            onClick={() => removeShift(row.weekday, i)}
+                            aria-label={`Remove ${label} shift ${i + 1}`}>×</button>
+                          {i === row.shifts.length - 1 ? (
+                            <button type="button" className="cs-wh-drawer__add"
+                              onClick={() => addShift(row.weekday)}>+ Split shift</button>
+                          ) : null}
+                        </div>
+                      ))
+                    ) : (
+                      <span className="cs-wh-drawer__closed">Not working</span>
+                    )}
                   </div>
+                  {row.isActive ? (
+                    <div className="cs-wh-drawer__copy">
+                      {row.weekday <= 4 ? (
+                        <button type="button" className="cs-wh-drawer__copy-btn"
+                          onClick={() => copyToWeekdays(row.weekday)}
+                          title="Copy to Mon–Fri">→ weekdays</button>
+                      ) : null}
+                      <button type="button" className="cs-wh-drawer__copy-btn"
+                        onClick={() => copyToAll(row.weekday)}
+                        title="Copy to all 7 days">→ all</button>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
           </div>
 
           {saveError ? (
-            <div role="alert" style={{
-              marginTop: "12px",
-              padding: "8px 10px", background: "#FDE7E1", borderRadius: "6px",
-              fontSize: "12px", color: "#8A2E1E",
-            }}>{saveError}</div>
+            <div role="alert" className="cs-wh-drawer__error">{saveError}</div>
           ) : null}
 
-          <div style={{
-            marginTop: "16px", padding: "10px 12px",
-            background: "#F5EFE0", borderRadius: "6px",
-            fontSize: "11px", color: "#6B5A47",
-          }}>
+          <div className="cs-wh-drawer__note">
             <strong>Note:</strong> Saving replaces the entire weekly template for the selected location.
             One-off date overrides and time-off blocks are preserved.
           </div>
         </div>
 
-        <footer style={{
-          padding: "14px 18px", borderTop: "1px solid #E5D7BB", background: "#FDF8F0",
-          display: "flex", gap: "8px", justifyContent: "flex-end",
-        }}>
+        <footer className="cs-wh-drawer__footer">
           <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>Cancel</button>
           <button type="button" className="cs-svc-save-btn"
             onClick={handleSave} disabled={submitting}>

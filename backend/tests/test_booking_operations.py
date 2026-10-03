@@ -235,6 +235,41 @@ def test_record_manual_payment_collects_exact_remaining_balance(client) -> None:
     assert "admin_completion" in snapshot["bookingEventKinds"]
 
 
+def test_complete_booking_records_discount_before_validating_balance(client) -> None:
+    headers = _auth_headers(client)
+    bookings_response = client.get(
+        "/api/v1/tenants/brow-beauty-lab/bookings",
+        headers=headers,
+        params={"status": "confirmed"},
+    )
+    assert bookings_response.status_code == 200
+    booking = next(item for item in bookings_response.json()["items"] if item["balanceDueCents"] > 0)
+
+    response = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking['id']}/status",
+        headers=headers,
+        json={
+            "status": "completed",
+            "paymentResolution": "collected",
+            "discountCents": booking["balanceDueCents"],
+            "discountType": "amount",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "completed"
+    assert payload["paymentResolution"] == "collected"
+    assert payload["balanceDueCents"] == 0
+
+    snapshot = _booking_payment_snapshot(booking["id"])
+    assert "discount_applied" in snapshot["bookingEventKinds"]
+    assert any(
+        event.get("discountType") == "amount"
+        for event in snapshot["bookingEventPayloads"]
+    )
+
+
 def test_record_manual_payment_partial_leaves_remaining_balance(client) -> None:
     created = _confirm_paid_deposit_booking(client)
     headers = _auth_headers(client)
@@ -259,6 +294,35 @@ def test_record_manual_payment_partial_leaves_remaining_balance(client) -> None:
     snapshot = _booking_payment_snapshot(booking["id"])
     assert snapshot["paymentResolution"] == "pending"
     assert "payment_recorded" in snapshot["paymentEventKinds"]
+
+
+def test_record_manual_payment_records_tip_on_selected_method(client) -> None:
+    created = _confirm_paid_deposit_booking(client)
+    headers = _auth_headers(client)
+    booking = created["booking"]
+    tip_cents = 2000
+
+    response = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking['id']}/payments/manual",
+        headers=headers,
+        json={
+            "amountCents": booking["balanceDueCents"] + tip_cents,
+            "tipCents": tip_cents,
+            "paymentMethodType": "external_pos",
+        },
+    )
+
+    assert response.status_code == 200
+    payment = response.json()["payments"][-1]
+    assert payment["paymentMethodType"] == "external_pos"
+    assert payment["checkoutSessionKind"] == "admin_completion"
+    assert payment["tipCents"] == tip_cents
+
+    snapshot = _booking_payment_snapshot(booking["id"])
+    assert any(
+        payload.get("paymentMethodType") == "external_pos" and payload.get("tipCents") == tip_cents
+        for payload in snapshot["bookingEventPayloads"]
+    )
 
 
 def test_record_manual_payment_multiple_until_fully_paid(client) -> None:
@@ -358,3 +422,77 @@ def test_record_manual_payment_rejects_cross_tenant_actor(client) -> None:
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "forbidden"
+
+def test_add_and_remove_booking_item_updates_balance(client) -> None:
+    created = _confirm_paid_deposit_booking(client)
+    headers = _auth_headers(client)
+    booking = created["booking"]
+    booking_id = booking["id"]
+    original_balance = booking["balanceDueCents"]
+
+    add_response = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking_id}/items",
+        headers=headers,
+        json={"name": "Retail serum", "priceCents": 4000},
+    )
+    assert add_response.status_code == 200
+    payload = add_response.json()
+    assert len(payload["items"]) == 1
+    item = payload["items"][0]
+    assert item["name"] == "Retail serum"
+    assert item["priceCents"] == 4000
+    # Balance rises by at least the item price (plus tax on the item).
+    assert payload["balanceDueCents"] - original_balance >= 4000
+
+    remove_response = client.delete(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking_id}/items/{item['id']}",
+        headers=headers,
+    )
+    assert remove_response.status_code == 200
+    assert remove_response.json()["items"] == []
+    assert remove_response.json()["balanceDueCents"] == original_balance
+
+
+def test_add_booking_item_from_service_copies_price(client) -> None:
+    created = _confirm_paid_deposit_booking(client)
+    headers = _auth_headers(client)
+    booking_id = created["booking"]["id"]
+    brow = _service_by_name(client, "Brow Shape and Tint")
+
+    response = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking_id}/items",
+        headers=headers,
+        json={"sourceServiceId": brow["id"]},
+    )
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert len(items) == 1
+    assert items[0]["name"] == brow["name"]
+    assert items[0]["priceCents"] == brow["priceCents"]
+    assert items[0]["sourceServiceId"] == brow["id"]
+
+
+def test_add_booking_item_requires_name_or_service(client) -> None:
+    created = _confirm_paid_deposit_booking(client)
+    headers = _auth_headers(client)
+    booking_id = created["booking"]["id"]
+
+    response = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking_id}/items",
+        headers=headers,
+        json={"priceCents": 1000},
+    )
+    assert response.status_code == 422
+
+
+def test_add_booking_item_rejects_cross_tenant_actor(client) -> None:
+    created = _confirm_paid_deposit_booking(client)
+    owner_email, owner_password = _create_other_tenant_owner(client)
+    headers = _auth_headers(client, email=owner_email, password=owner_password)
+
+    response = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{created['booking']['id']}/items",
+        headers=headers,
+        json={"name": "Retail serum", "priceCents": 4000},
+    )
+    assert response.status_code == 403

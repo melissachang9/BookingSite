@@ -208,7 +208,7 @@ export function SettingsPage({
                   <li key={section.id}>
                     <a
                       href={`#${section.id}`}
-                      className={`settings-anchor-link${activeSection === section.id ? " cs-settings-link--active" : ""}`}
+                      className={`cs-settings-link${activeSection === section.id ? " cs-settings-link--active" : ""}`}
                       onClick={() => setActiveSection(section.id)}
                     >
                       {section.title}

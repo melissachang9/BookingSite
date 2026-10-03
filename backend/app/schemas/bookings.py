@@ -13,12 +13,28 @@ from app.schemas.catalog import ProviderSummaryResponse, ServiceSummaryResponse,
 class BookingPaymentSummary(CamelModel):
     id: str
     amount_cents: int
+    tip_cents: int = 0
     status: str
     deposit_status: str
     payment_method_type: str
     checkout_session_kind: str | None = None
     created_at: datetime
     refund_reason: str | None = None
+
+
+class BookingItemSummary(CamelModel):
+    id: str
+    name: str
+    price_cents: int
+    quantity: int
+    source_service_id: str | None = None
+
+
+class AddBookingItemRequest(CamelModel):
+    source_service_id: str | None = None
+    name: str | None = Field(default=None, max_length=255)
+    price_cents: int | None = Field(default=None, ge=0, le=1_000_000)
+    quantity: int = Field(default=1, ge=1, le=99)
 
 
 class BookingSummaryResponse(CamelModel):
@@ -49,6 +65,7 @@ class BookingSummaryResponse(CamelModel):
     customer: CustomerSummaryResponse
     intake_plan: IntakePlanResponse | None = None
     payments: list[BookingPaymentSummary] = Field(default_factory=list)
+    items: list[BookingItemSummary] = Field(default_factory=list)
 
 
 class PaginationMetaResponse(CamelModel):
@@ -88,6 +105,8 @@ class UpdateBookingStatusRequest(CamelModel):
     status: Literal["completed", "no_show"]
     notes: str | None = Field(default=None, max_length=500)
     payment_resolution: Literal["collected", "follow_up", "waived"] | None = None
+    discount_cents: int = Field(default=0, ge=0)
+    discount_type: Literal["percent", "amount"] | None = None
 
 
 class UpdateBookingRequest(CamelModel):

@@ -114,11 +114,21 @@ export type BookingSummary = AuditFields &
     customer: CustomerProfile | CustomerSummary;
     intakePlan?: BookingDraftIntakePlan | null;
     payments?: BookingPaymentSummary[];
+    items?: BookingItemSummary[];
   };
+
+export type BookingItemSummary = {
+  id: UUID;
+  name: string;
+  priceCents: number;
+  quantity: number;
+  sourceServiceId?: string | null;
+};
 
 export type BookingPaymentSummary = {
   id: UUID;
   amountCents: number;
+  tipCents?: number;
   status: string;
   depositStatus: string;
   paymentMethodType: string;
@@ -208,6 +218,8 @@ export type UpdateBookingStatusRequest = {
   status: Extract<BookingState, "completed" | "no_show">;
   notes?: string;
   paymentResolution?: Extract<PaymentResolution, "collected" | "follow_up" | "waived">;
+  discountCents?: number;
+  discountType?: "percent" | "amount";
 };
 
 export type UpdateBookingRequest = {
