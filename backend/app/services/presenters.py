@@ -266,6 +266,7 @@ def provider_to_summary(provider: Provider, tenant: Tenant | None = None) -> Pro
         compensation_mode=provider.compensation_mode,
         compensation_service_percent_bp=provider.compensation_service_percent_bp,
         compensation_product_percent_bp=provider.compensation_product_percent_bp,
+        compensation_product_flat_cents=provider.compensation_product_flat_cents,
         compensation_hourly_cents=provider.compensation_hourly_cents,
         compensation_flat_cents=provider.compensation_flat_cents,
         compensation_sliding_scale=provider.compensation_sliding_scale,

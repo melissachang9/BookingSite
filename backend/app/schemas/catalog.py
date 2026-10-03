@@ -660,6 +660,7 @@ class ProviderSummaryResponse(CamelModel):
     compensation_mode: str | None = None
     compensation_service_percent_bp: int | None = None
     compensation_product_percent_bp: int | None = None
+    compensation_product_flat_cents: int | None = None
     compensation_hourly_cents: int | None = None
     compensation_flat_cents: int | None = None
     compensation_sliding_scale: list[dict] | None = None
@@ -674,6 +675,7 @@ class UpdateProviderCompensationRequest(CamelModel):
     compensation_mode: str | None = None  # "service_percent" | "sliding_scale" | "flat_per_booking" | "hourly" | None
     compensation_service_percent_bp: int | None = Field(default=None, ge=0, le=10_000)
     compensation_product_percent_bp: int | None = Field(default=None, ge=0, le=10_000)
+    compensation_product_flat_cents: int | None = Field(default=None, ge=0, le=500_000)
     compensation_hourly_cents: int | None = Field(default=None, ge=0, le=100_000)
     compensation_flat_cents: int | None = Field(default=None, ge=0, le=500_000)
     compensation_sliding_scale: list[SlidingScaleTier] | None = None

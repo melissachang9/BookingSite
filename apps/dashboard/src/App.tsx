@@ -295,7 +295,6 @@ function AuthenticatedLayout({
   const location = useLocation();
   const pathKey = location.pathname === "/" ? "calendar" : location.pathname.replace(/^\//, "");
   const isCalendarRoute = pathKey === "calendar";
-  const currentDefinition = pageByPath.get(pathKey) ?? pageByPath.get("calendar") ?? routeDefinitions[0];
 
   const activePath = location.pathname === "/" ? "/calendar" : location.pathname;
   const groupedPathsByGroup = useMemo(() => {
@@ -414,7 +413,6 @@ function AuthenticatedLayout({
     );
 
   const initials = getInitials(session.user.name || session.user.email || "");
-  const pageTitle = currentDefinition.title;
 
   return (
     <div className="cs-desk">
@@ -510,14 +508,7 @@ function AuthenticatedLayout({
 
         <main className="cs-main">
           <header className="cs-topbar">
-            {isCalendarRoute ? (
-              <CalendarSearchBar tenantSlug={session.user.tenantSlug} />
-            ) : (
-              <div className="cs-page-title">
-                {currentDefinition.eyebrow ? <p className="cs-page-title__eyebrow">{currentDefinition.eyebrow}</p> : null}
-                <h2>{pageTitle}</h2>
-              </div>
-            )}
+            <TopbarSearch tenantSlug={session.user.tenantSlug} />
             <div className="cs-topbar__right">
               <a
                 href={`${storefrontBaseUrl}/${session.user.tenantSlug}`}
@@ -526,13 +517,31 @@ function AuthenticatedLayout({
                 className="cs-topbar__link"
               >
                 Open storefront
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M7 17 17 7" />
+                  <path d="M8 7h9v9" />
+                </svg>
               </a>
-              <button type="button" className="cs-topbar__link" onClick={onSignOut}>
+              <span className="cs-topbar__divider" aria-hidden="true" />
+              <div className="cs-topbar__user">
+                <div className="cs-avatar" aria-hidden="true">
+                  {initials}
+                </div>
+                <span className="cs-topbar__username">{session.user.name}</span>
+              </div>
+              <button type="button" className="cs-topbar__link cs-topbar__signout" onClick={onSignOut}>
                 Sign out
               </button>
-              <div className="cs-avatar" aria-label={session.user.name}>
-                {initials}
-              </div>
             </div>
           </header>
 
@@ -547,7 +556,7 @@ type SearchResult =
   | { kind: "customer"; id: string; name: string; email?: string | null; phone?: string | null }
   | { kind: "booking"; id: string; serviceName: string; customerName: string; startsAt: string; status: string };
 
-function CalendarSearchBar({ tenantSlug }: { tenantSlug: string }) {
+function TopbarSearch({ tenantSlug }: { tenantSlug: string }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);

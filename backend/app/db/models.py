@@ -218,6 +218,7 @@ class Provider(Base, IdMixin, TimestampMixin):
     compensation_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     compensation_service_percent_bp: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     compensation_product_percent_bp: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    compensation_product_flat_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     compensation_hourly_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     compensation_flat_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     compensation_sliding_scale: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)

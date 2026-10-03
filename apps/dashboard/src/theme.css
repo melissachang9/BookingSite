@@ -178,9 +178,15 @@
 .cs-topbar__right { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .cs-topbar__link {
   display: flex; align-items: center; gap: 6px;
+  border: 0; background: none; padding: 0;
   font: 600 12px var(--cs-font); color: var(--cs-ink); text-decoration: none; cursor: pointer;
 }
 .cs-topbar__link:hover { color: var(--cs-label); }
+.cs-topbar__divider { width: 1px; height: 22px; background: var(--cs-hairline); }
+.cs-topbar__user { display: flex; align-items: center; gap: 9px; }
+.cs-topbar__username { font: 600 13px var(--cs-font); color: var(--cs-ink); white-space: nowrap; }
+.cs-topbar__signout { color: var(--cs-label); font-weight: 500; }
+.cs-topbar__signout:hover { color: var(--cs-ink); }
 .cs-avatar {
   width: 28px; height: 28px; border-radius: var(--cs-r-pill);
   background: var(--cs-peach); color: var(--cs-ink);
@@ -2452,6 +2458,16 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   border-radius: var(--cs-r-16);
   padding: 14px 16px;
 }
+/* Compact, left-aligned pill group inside the product card (matches mock). */
+.cs-comp-product-card .cs-seg {
+  display: inline-flex;
+  width: auto;
+  background: var(--cs-surface);
+}
+.cs-comp-product-card .cs-seg > button {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+}
 .cs-comp-summary {
   margin-top: 22px;
   background: var(--cs-mint);
@@ -3366,17 +3382,25 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   box-shadow: inset 0 0 0 1px var(--cs-ink);
 }
 
-.cs-dt-grid {
-  display: flex;
-  gap: 14px;
-  margin-bottom: 14px;
-}
-.cs-dt-grid-col {
+/* Details form: three sections split by full-width hairline rules, each laid
+   out as aligned two-column rows. */
+.cs-dt-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  min-width: 0;
+  gap: 14px;
+}
+.cs-dt-row {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+.cs-dt-row > .cs-dt-field {
   flex: 1 1 0;
+  min-width: 0;
+}
+.cs-dt-divider {
+  height: 1px;
+  background: var(--cs-hairline);
 }
 .cs-dt-field {
   display: flex;
@@ -3646,7 +3670,7 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 }
 
 @media (max-width: 640px) {
-  .cs-dt-grid { flex-direction: column; }
+  .cs-dt-row { flex-direction: column; gap: 14px; }
 }
 
 /* ============================================================================
@@ -3870,8 +3894,44 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .cs-md-list__name { font: 600 13px var(--cs-font); color: var(--cs-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cs-md-list__role { font: 500 11px var(--cs-font); color: var(--cs-label); }
 
-.cs-md-detail { padding: 20px 24px; min-width: 0; }
-.cs-md-detail__inner { display: flex; flex-direction: column; gap: 16px; }
+/* Roster filter (All / Providers / Admin) */
+.cs-md-filters { display: flex; gap: 4px; padding: 12px 16px 4px; }
+.cs-md-filter {
+  border: 0;
+  background: transparent;
+  padding: 7px 14px;
+  border-radius: var(--cs-r-pill);
+  font: 600 13px var(--cs-font);
+  color: var(--cs-label);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.cs-md-filter:hover:not(.is-active) { background: var(--cs-hover); color: var(--cs-ink); }
+.cs-md-filter.is-active { background: var(--cs-ink); color: var(--cs-surface); }
+
+/* Roster grouped by booking role */
+.cs-md-groups { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 8px; }
+.cs-md-group__label {
+  margin: 0;
+  padding: 10px 20px 2px;
+  font: 700 10px var(--cs-font);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--cs-label);
+}
+.cs-md-group .cs-md-list { overflow-y: visible; }
+
+/* Grey inset column; the whole detail panel sits in a white rounded card. */
+.cs-md-detail { padding: 16px; min-width: 0; background: var(--cs-canvas); }
+.cs-md-detail__inner {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-hairline);
+  border-radius: var(--cs-r-inner);
+  padding: 22px 24px;
+}
 .cs-md-detail__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .cs-md-detail__header h4 { margin: 0; font: 700 17px var(--cs-font); color: var(--cs-ink); }
 .cs-md-detail__actions { display: flex; gap: 8px; flex-wrap: wrap; }

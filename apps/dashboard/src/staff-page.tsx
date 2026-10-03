@@ -477,6 +477,7 @@ export function StaffPage({
   const [categories, setCategories] = useState<ServiceCategorySummary[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("details");
+  const [rosterFilter, setRosterFilter] = useState<"all" | "providers" | "admin">("all");
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
   const [refreshKey, setRefreshKey] = useState(0);
   const hasLoadedRef = useRef(false);
@@ -535,6 +536,54 @@ export function StaffPage({
     [providers, selectedUser],
   );
 
+  // Split the roster into booking providers vs front-desk/admin so each group
+  // can be labelled and filtered independently.
+  const providerUsers = useMemo(
+    () => users.filter((u) => providers.some((p) => p.userId === u.id)),
+    [users, providers],
+  );
+  const adminUsers = useMemo(
+    () => users.filter((u) => !providers.some((p) => p.userId === u.id)),
+    [users, providers],
+  );
+
+  const renderRosterItem = (user: TenantUserSummary) => {
+    const provider = providers.find((p) => p.userId === user.id);
+    const isActive = user.id === selectedUserId;
+    return (
+      <li key={user.id}>
+        <button
+          type="button"
+          className={`cs-md-list__item${isActive ? " is-active" : ""}`}
+          onClick={() => {
+            setSelectedUserId(user.id);
+            setActiveTab("details");
+          }}
+        >
+          {user.avatarUrl ? (
+            <img className="cs-staff-avatar" src={user.avatarUrl} alt="" loading="lazy" />
+          ) : (
+            <span
+              className="cs-staff-avatar cs-staff-avatar--initials"
+              style={{ background: avatarColorFor(user.id) }}
+              aria-hidden
+            >
+              {initialsOf(user.name)}
+            </span>
+          )}
+          <span className="cs-md-list__meta">
+            <span className="cs-md-list__name">{user.name}</span>
+            <span className="cs-md-list__role">
+              {ROLE_LABELS[user.role] ?? user.role}
+              {provider ? " · Provider" : ""}
+              {!user.isActive ? " · Inactive" : ""}
+            </span>
+          </span>
+        </button>
+      </li>
+    );
+  };
+
   if (!canManage) {
     return <main className="cs-page-stack"><p className="cs-empty">You do not have permission to view the team roster.</p></main>;
   }
@@ -561,52 +610,36 @@ export function StaffPage({
                   Add staff
                 </button>
               </header>
+              <div className="cs-md-filters" role="group" aria-label="Filter team">
+                {(["all", "providers", "admin"] as const).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`cs-md-filter${rosterFilter === key ? " is-active" : ""}`}
+                    aria-pressed={rosterFilter === key}
+                    onClick={() => setRosterFilter(key)}
+                  >
+                    {key === "all" ? "All" : key === "providers" ? "Providers" : "Admin"}
+                  </button>
+                ))}
+              </div>
               {users.length === 0 ? (
                 <p className="cs-settings-form-help">No users configured yet.</p>
               ) : (
-                <ul className="cs-md-list">
-                  {users.map((user) => {
-                    const provider = providers.find((p) => p.userId === user.id);
-                    const isActive = user.id === selectedUserId;
-                    return (
-                      <li key={user.id}>
-                        <button
-                          type="button"
-                          className={`cs-md-list__item${isActive ? " is-active" : ""}`}
-                          onClick={() => {
-                            setSelectedUserId(user.id);
-                            setActiveTab("details");
-                          }}
-                        >
-                          {user.avatarUrl ? (
-                            <img
-                              className="cs-staff-avatar"
-                              src={user.avatarUrl}
-                              alt=""
-                              loading="lazy"
-                            />
-                          ) : (
-                            <span
-                              className="cs-staff-avatar cs-staff-avatar--initials"
-                              style={{ background: avatarColorFor(user.id) }}
-                              aria-hidden
-                            >
-                              {initialsOf(user.name)}
-                            </span>
-                          )}
-                          <span className="cs-md-list__meta">
-                            <span className="cs-md-list__name">{user.name}</span>
-                            <span className="cs-md-list__role">
-                              {ROLE_LABELS[user.role] ?? user.role}
-                              {provider ? " · Provider" : ""}
-                              {!user.isActive ? " · Inactive" : ""}
-                            </span>
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
+                <div className="cs-md-groups">
+                  {(rosterFilter === "all" || rosterFilter === "providers") && providerUsers.length > 0 ? (
+                    <div className="cs-md-group">
+                      <p className="cs-md-group__label">Takes bookings</p>
+                      <ul className="cs-md-list">{providerUsers.map(renderRosterItem)}</ul>
+                    </div>
+                  ) : null}
+                  {(rosterFilter === "all" || rosterFilter === "admin") && adminUsers.length > 0 ? (
+                    <div className="cs-md-group">
+                      <p className="cs-md-group__label">Front desk &amp; admin</p>
+                      <ul className="cs-md-list">{adminUsers.map(renderRosterItem)}</ul>
+                    </div>
+                  ) : null}
+                </div>
               )}
             </aside>
 
@@ -986,8 +1019,9 @@ function DetailsTab({
 
   return (
     <form className="cs-md-form cs-dt-form" onSubmit={submit}>
-      <div className="cs-dt-grid">
-        <div className="cs-dt-grid-col">
+      {/* Section 1 — identity */}
+      <div className="cs-dt-section">
+        <div className="cs-dt-row">
           <div className="cs-dt-field">
             <span className="cs-dt-label">Name</span>
             <input
@@ -998,92 +1032,6 @@ function DetailsTab({
               required
             />
           </div>
-
-          <div className="cs-dt-field">
-            <span className="cs-dt-label">Email</span>
-            <input className="cs-dt-input" type="email" value={user.email} disabled readOnly />
-          </div>
-
-          <div className="cs-dt-field">
-            <span className="cs-dt-label">Profile photo</span>
-            <div className="cs-dt-photo">
-              <AvatarUploader
-                tenantSlug={tenantSlug}
-                value={form.avatarUrl}
-                name={form.name}
-                inputId={`user-${user.id}-avatar-upload`}
-                pill={true}
-                onChange={(next) => setForm({ ...form, avatarUrl: next })}
-              />
-              <small className="cs-dt-photo__help">
-                JPG, PNG, GIF, WEBP, or HEIC up to 10&nbsp;MB.
-              </small>
-            </div>
-          </div>
-
-          {provider ? (
-            <div className="cs-dt-field">
-              <span className="cs-dt-label">Works at</span>
-              <div className="cs-dt-pill-row">
-                {locations.map((loc) => {
-                  const assigned = provider.locationIds.includes(loc.id);
-                  return (
-                    <button
-                      key={loc.id}
-                      type="button"
-                      className={`cs-dt-pill cs-dt-pill--location${assigned ? " is-assigned" : ""}`}
-                      onClick={() => {
-                        const next = assigned
-                          ? provider.locationIds.filter((id) => id !== loc.id)
-                          : [...provider.locationIds, loc.id];
-                        platformApi
-                          .updateProvider(tenantSlug, provider.id, { locationIds: next })
-                          .then(() => onSaved())
-                          .catch((e: unknown) => setError(readErrorMessage(e, "Unable to update locations.")));
-                      }}
-                      aria-pressed={assigned}
-                    >
-                      {loc.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-
-          <div className="cs-dt-field">
-            <span className="cs-dt-label">Can sign in</span>
-            <label className="cs-settings-toggle cs-dt-toggle-row">
-              <input
-                type="checkbox"
-                checked={form.isActive}
-                onChange={(event) => setForm({ ...form, isActive: event.target.checked })}
-              />
-              <span>Active</span>
-            </label>
-          </div>
-
-          {provider ? (
-            <div className="cs-dt-field">
-              <span className="cs-dt-label">Bookable online</span>
-              <label className="cs-settings-toggle cs-dt-toggle-row">
-                <input
-                  type="checkbox"
-                  checked={provider.isBookableOnline}
-                  onChange={(event) => {
-                    platformApi
-                      .updateProvider(tenantSlug, provider.id, { isBookableOnline: event.target.checked })
-                      .then(() => onSaved())
-                      .catch((e: unknown) => setError(readErrorMessage(e, "Unable to update bookability.")));
-                  }}
-                />
-                <span className="cs-dt-helper">Clients can request {user.name.split(" ")[0] || user.name} by name</span>
-              </label>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="cs-dt-grid-col">
           <div className="cs-dt-field">
             <span className="cs-dt-label">Role</span>
             <div className="cs-dt-role-pills" role="group" aria-label="Role">
@@ -1104,7 +1052,12 @@ function DetailsTab({
               <span className="cs-dt-helper">Role is locked while this person takes bookings.</span>
             ) : null}
           </div>
-
+        </div>
+        <div className="cs-dt-row">
+          <div className="cs-dt-field">
+            <span className="cs-dt-label">Email</span>
+            <input className="cs-dt-input" type="email" value={user.email} disabled readOnly />
+          </div>
           <div className="cs-dt-field">
             <span className="cs-dt-label">Phone</span>
             <input
@@ -1115,7 +1068,30 @@ function DetailsTab({
               placeholder="+1 555-555-1212"
             />
           </div>
+        </div>
+      </div>
 
+      <div className="cs-dt-divider" role="presentation" />
+
+      {/* Section 2 — profile */}
+      <div className="cs-dt-section">
+        <div className="cs-dt-row">
+          <div className="cs-dt-field">
+            <span className="cs-dt-label">Profile photo</span>
+            <div className="cs-dt-photo">
+              <AvatarUploader
+                tenantSlug={tenantSlug}
+                value={form.avatarUrl}
+                name={form.name}
+                inputId={`user-${user.id}-avatar-upload`}
+                pill={true}
+                onChange={(next) => setForm({ ...form, avatarUrl: next })}
+              />
+              <small className="cs-dt-photo__help">
+                JPG, PNG, GIF, WEBP, or HEIC up to 10&nbsp;MB.
+              </small>
+            </div>
+          </div>
           {provider ? (
             <div className="cs-dt-field">
               <span className="cs-dt-label">Title shown to clients</span>
@@ -1147,6 +1123,73 @@ function DetailsTab({
               />
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="cs-dt-divider" role="presentation" />
+
+      {/* Section 3 — availability & access */}
+      <div className="cs-dt-section">
+        {provider ? (
+          <div className="cs-dt-row">
+            <div className="cs-dt-field">
+              <span className="cs-dt-label">Works at</span>
+              <div className="cs-dt-pill-row">
+                {locations.map((loc) => {
+                  const assigned = provider.locationIds.includes(loc.id);
+                  return (
+                    <button
+                      key={loc.id}
+                      type="button"
+                      className={`cs-dt-pill cs-dt-pill--location${assigned ? " is-assigned" : ""}`}
+                      onClick={() => {
+                        const next = assigned
+                          ? provider.locationIds.filter((id) => id !== loc.id)
+                          : [...provider.locationIds, loc.id];
+                        platformApi
+                          .updateProvider(tenantSlug, provider.id, { locationIds: next })
+                          .then(() => onSaved())
+                          .catch((e: unknown) => setError(readErrorMessage(e, "Unable to update locations.")));
+                      }}
+                      aria-pressed={assigned}
+                    >
+                      {loc.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="cs-dt-field">
+              <span className="cs-dt-label">Bookable online</span>
+              <label className="cs-settings-toggle cs-dt-toggle-row">
+                <input
+                  type="checkbox"
+                  checked={provider.isBookableOnline}
+                  onChange={(event) => {
+                    platformApi
+                      .updateProvider(tenantSlug, provider.id, { isBookableOnline: event.target.checked })
+                      .then(() => onSaved())
+                      .catch((e: unknown) => setError(readErrorMessage(e, "Unable to update bookability.")));
+                  }}
+                />
+                <span className="cs-dt-helper">Clients can request {user.name.split(" ")[0] || user.name} by name</span>
+              </label>
+            </div>
+          </div>
+        ) : null}
+        <div className="cs-dt-row">
+          <div className="cs-dt-field">
+            <span className="cs-dt-label">Can sign in</span>
+            <label className="cs-settings-toggle cs-dt-toggle-row">
+              <input
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(event) => setForm({ ...form, isActive: event.target.checked })}
+              />
+              <span>Active</span>
+            </label>
+          </div>
+          <div className="cs-dt-field" aria-hidden="true" />
         </div>
       </div>
 
@@ -4101,8 +4144,17 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
       ? (provider.compensationProductPercentBp / 100).toString()
       : "",
   );
-  const [productCommissionEnabled, setProductCommissionEnabled] = useState(
-    provider.compensationProductPercentBp != null,
+  const [productMode, setProductMode] = useState<"percent" | "flat" | "none">(
+    provider.compensationProductPercentBp != null
+      ? "percent"
+      : provider.compensationProductFlatCents != null
+        ? "flat"
+        : "none",
+  );
+  const [productFlat, setProductFlat] = useState(
+    provider.compensationProductFlatCents != null
+      ? (provider.compensationProductFlatCents / 100).toFixed(2)
+      : "",
   );
   const [hourlyRate, setHourlyRate] = useState(
     provider.compensationHourlyCents != null
@@ -4136,7 +4188,18 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
         ? (provider.compensationProductPercentBp / 100).toString()
         : "",
     );
-    setProductCommissionEnabled(provider.compensationProductPercentBp != null);
+    setProductMode(
+      provider.compensationProductPercentBp != null
+        ? "percent"
+        : provider.compensationProductFlatCents != null
+          ? "flat"
+          : "none",
+    );
+    setProductFlat(
+      provider.compensationProductFlatCents != null
+        ? (provider.compensationProductFlatCents / 100).toFixed(2)
+        : "",
+    );
     setHourlyRate(
       provider.compensationHourlyCents != null
         ? (provider.compensationHourlyCents / 100).toFixed(2)
@@ -4205,10 +4268,14 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
       if (mode === "sliding_scale") {
         body.compensationSlidingScale = slidingTiers.length > 0 ? slidingTiers : null;
       }
-      // Product commission is an add-on bonus that stacks on any primary mode
-      body.compensationProductPercentBp = productCommissionEnabled && productPercent
+      // Product commission is an add-on bonus that stacks on any primary mode.
+      // Send both fields so switching modes clears the other (0 → null server-side).
+      body.compensationProductPercentBp = productMode === "percent" && productPercent
         ? Math.round(Number(productPercent) * 100)
-        : null;
+        : 0;
+      body.compensationProductFlatCents = productMode === "flat" && productFlat
+        ? Math.round(Number(productFlat) * 100)
+        : 0;
       const session = await ensureActiveStoredSession();
       const token = session?.accessToken ?? "";
       const resp = await fetch(
@@ -4404,25 +4471,25 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
         </p>
         <div className="cs-comp-product-card">
           <div className="cs-seg" role="group" aria-label="Product commission mode">
-            <button
-              type="button"
-              aria-pressed={productCommissionEnabled}
-              onClick={() => setProductCommissionEnabled(true)}
-            >
+            <button type="button" aria-pressed={productMode === "percent"} onClick={() => setProductMode("percent")}>
               Percent
+            </button>
+            <button type="button" aria-pressed={productMode === "flat"} onClick={() => setProductMode("flat")}>
+              Flat per item
             </button>
             <button
               type="button"
-              aria-pressed={!productCommissionEnabled}
+              aria-pressed={productMode === "none"}
               onClick={() => {
-                setProductCommissionEnabled(false);
+                setProductMode("none");
                 setProductPercent("");
+                setProductFlat("");
               }}
             >
               None
             </button>
           </div>
-          {productCommissionEnabled ? (
+          {productMode === "percent" ? (
             <div className="cs-comp-value-row" style={{ marginTop: "12px" }}>
               <input
                 className="cs-comp-value-input"
@@ -4435,6 +4502,20 @@ function CompensationTab({ tenantSlug, provider, services, onSaved }: Compensati
                 placeholder="0"
               />
               <span className="cs-comp-value-suffix">% of product sales</span>
+            </div>
+          ) : productMode === "flat" ? (
+            <div className="cs-comp-value-row" style={{ marginTop: "12px" }}>
+              <span className="cs-comp-value-prefix">$</span>
+              <input
+                className="cs-comp-value-input"
+                type="number"
+                min={0}
+                step="0.01"
+                value={productFlat}
+                onChange={(e) => setProductFlat(e.target.value)}
+                placeholder="0.00"
+              />
+              <span className="cs-comp-value-suffix">per item sold</span>
             </div>
           ) : null}
         </div>

@@ -238,6 +238,7 @@ export type ProviderSummary = AuditFields &
     compensationMode?: string | null;
     compensationServicePercentBp?: number | null;
     compensationProductPercentBp?: number | null;
+    compensationProductFlatCents?: number | null;
     compensationHourlyCents?: number | null;
     compensationFlatCents?: number | null;
     compensationSlidingScale?: SlidingScaleTier[] | null;
@@ -252,6 +253,7 @@ export type UpdateProviderCompensationRequest = {
   compensationMode?: string | null;
   compensationServicePercentBp?: number | null;
   compensationProductPercentBp?: number | null;
+  compensationProductFlatCents?: number | null;
   compensationHourlyCents?: number | null;
   compensationFlatCents?: number | null;
   compensationSlidingScale?: SlidingScaleTier[] | null;

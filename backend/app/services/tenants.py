@@ -1022,6 +1022,8 @@ async def update_provider_compensation(
         provider.compensation_service_percent_bp = payload.compensation_service_percent_bp or None
     if payload.compensation_product_percent_bp is not None:
         provider.compensation_product_percent_bp = payload.compensation_product_percent_bp or None
+    if payload.compensation_product_flat_cents is not None:
+        provider.compensation_product_flat_cents = payload.compensation_product_flat_cents or None
     if payload.compensation_hourly_cents is not None:
         provider.compensation_hourly_cents = payload.compensation_hourly_cents or None
     if payload.compensation_flat_cents is not None:
