@@ -187,3 +187,38 @@ def test_create_user_accepts_phone_and_avatar(client) -> None:
     body = response.json()
     assert body["phone"] == "+1 555-867-5309"
     assert body["avatarUrl"] == "https://example.com/a.png"
+
+def test_provider_service_locations_round_trip(client) -> None:
+    """A service can be scoped to a subset of the provider's locations; offering
+    it at all of them is stored as the default (absent from the map)."""
+    headers = _auth_headers(client)
+    locations = _locations(client)
+    services = _services(client)
+    assert len(locations) >= 2, "seed is expected to have two locations"
+    svc_id = services[0]["id"]
+    loc0, loc1 = locations[0]["id"], locations[1]["id"]
+
+    created = client.post(
+        "/api/v1/tenants/brow-beauty-lab/providers",
+        headers=headers,
+        json={"name": "Loc Scoped", "locationIds": [loc0, loc1], "serviceIds": [svc_id]},
+    ).json()
+    pid = created["id"]
+
+    # Restrict the service to only the first location.
+    resp = client.patch(
+        f"/api/v1/tenants/brow-beauty-lab/providers/{pid}",
+        headers=headers,
+        json={"serviceLocations": {svc_id: [loc0]}},
+    )
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["serviceLocations"].get(svc_id) == [loc0]
+
+    # Offer at every provider location again -> normalized to the default (absent).
+    resp = client.patch(
+        f"/api/v1/tenants/brow-beauty-lab/providers/{pid}",
+        headers=headers,
+        json={"serviceLocations": {svc_id: [loc0, loc1]}},
+    )
+    assert resp.status_code == 200, resp.json()
+    assert svc_id not in resp.json()["serviceLocations"]

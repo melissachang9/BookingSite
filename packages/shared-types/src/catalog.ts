@@ -235,6 +235,9 @@ export type ProviderSummary = AuditFields &
     bookingUrl?: string | null;
     serviceIds: UUID[];
     locationIds: UUID[];
+    // Per-service location offering: serviceId -> [locationId]. A service absent
+    // from this map is offered at all of the provider's locations.
+    serviceLocations?: Record<string, string[]>;
     compensationMode?: string | null;
     compensationServicePercentBp?: number | null;
     compensationProductPercentBp?: number | null;
@@ -338,6 +341,7 @@ export type UpdateProviderRequest = {
   userId?: string | null;
   locationIds?: string[];
   serviceIds?: string[];
+  serviceLocations?: Record<string, string[]> | null;
   isActive?: boolean;
   isBookableOnline?: boolean;
   bookingSlug?: string | null;

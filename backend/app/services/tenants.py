@@ -973,6 +973,39 @@ async def update_tenant_provider(
         for svc_id in wanted - set(existing.keys()):
             session.add(ProviderService(tenant_id=tenant.id, provider_id=provider.id, service_id=svc_id))
 
+    if payload.service_locations is not None:
+        # Flush first so service rows added above exist, then set the per-service
+        # offered locations. All of the provider's locations selected -> null
+        # (meaning "everywhere"); a subset is stored explicitly.
+        await session.flush()
+        service_links = {
+            link.service_id: link
+            for link in (
+                await session.scalars(
+                    select(ProviderService).where(
+                        ProviderService.tenant_id == tenant.id,
+                        ProviderService.provider_id == provider.id,
+                    )
+                )
+            ).all()
+        }
+        valid_location_ids = set(
+            (
+                await session.scalars(
+                    select(ProviderLocation.location_id).where(
+                        ProviderLocation.tenant_id == tenant.id,
+                        ProviderLocation.provider_id == provider.id,
+                    )
+                )
+            ).all()
+        )
+        for svc_id, requested in payload.service_locations.items():
+            link = service_links.get(svc_id)
+            if link is None:
+                continue
+            filtered = [lid for lid in requested if lid in valid_location_ids]
+            link.offered_location_ids = None if set(filtered) == valid_location_ids else filtered
+
     await session.commit()
     provider = await _load_provider_with_links(session, provider.id, tenant.id)
     return provider_to_summary(provider, tenant)

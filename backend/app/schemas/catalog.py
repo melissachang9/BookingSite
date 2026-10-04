@@ -657,6 +657,9 @@ class ProviderSummaryResponse(CamelModel):
     booking_url: str | None = None
     service_ids: list[str]
     location_ids: list[str]
+    # Per-service location offering: serviceId -> [locationId]. A service absent
+    # from this map is offered at all of the provider's locations.
+    service_locations: dict[str, list[str]] = Field(default_factory=dict)
     compensation_mode: str | None = None
     compensation_service_percent_bp: int | None = None
     compensation_product_percent_bp: int | None = None
@@ -820,6 +823,7 @@ class UpdateProviderRequest(CamelModel):
     user_id: str | None = Field(default=None, max_length=36)
     location_ids: list[str] | None = None
     service_ids: list[str] | None = None
+    service_locations: dict[str, list[str]] | None = None
     is_active: bool | None = None
     is_bookable_online: bool | None = None
     booking_slug: str | None = Field(default=None, max_length=100)

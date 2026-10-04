@@ -75,6 +75,15 @@ const DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
 });
 
+// Soft category marker colors, assigned by group order on the Services tab.
+const CATEGORY_DOT_COLORS = [
+  "var(--cs-mint)",
+  "var(--cs-lilac)",
+  "var(--cs-blue)",
+  "var(--cs-peach)",
+  "var(--cs-pink)",
+];
+
 function readErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message;
   return fallback;
@@ -1317,8 +1326,14 @@ function ServicesTab({
 }) {
   const [locationIds, setLocationIds] = useState<string[]>(provider.locationIds);
   const [serviceIds, setServiceIds] = useState<string[]>(provider.serviceIds);
+  // Per-service location offering (serviceId -> locationIds). A service absent
+  // here is offered at all of the provider's locations.
+  const [serviceLocations, setServiceLocations] = useState<Record<string, string[]>>(
+    provider.serviceLocations ?? {},
+  );
   const [isBookableOnline, setIsBookableOnline] = useState(provider.isBookableOnline);
   const [isActive, setIsActive] = useState(provider.isActive);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locationQuery, setLocationQuery] = useState("");
@@ -1326,7 +1341,7 @@ function ServicesTab({
 
   // Per-service overrides (duration, price, commission)
   const [serviceOverrides, setServiceOverrides] = useState<
-    Record<string, { durationMinutes: string; priceCents: string; flatCents: string; basisPoints: string }>
+    Record<string, { durationMinutes: string; priceCents: string; depositCents: string; flatCents: string; basisPoints: string }>
   >({});
   // Explicit $/% choice per service, independent of whether a value has been typed yet
   // (without this, clicking % while the percent field is still blank would immediately
@@ -1338,7 +1353,7 @@ function ServicesTab({
   useEffect(() => {
     let cancelled = false;
     const loadOverrides = async () => {
-      const map: Record<string, { durationMinutes: string; priceCents: string; flatCents: string; basisPoints: string }> = {};
+      const map: Record<string, { durationMinutes: string; priceCents: string; depositCents: string; flatCents: string; basisPoints: string }> = {};
       for (const svcId of provider.serviceIds) {
         try {
           const resp = await platformApi.getServiceProviderVariants(tenantSlug, svcId);
@@ -1347,6 +1362,7 @@ function ServicesTab({
             map[svcId] = {
               durationMinutes: variant.durationMinutes != null ? String(variant.durationMinutes) : "",
               priceCents: variant.priceCents != null ? (variant.priceCents / 100).toFixed(2) : "",
+              depositCents: variant.depositCents != null ? (variant.depositCents / 100).toFixed(2) : "",
               flatCents: variant.commissionFlatCents != null ? (variant.commissionFlatCents / 100).toFixed(2) : "",
               basisPoints: variant.commissionBasisPoints != null ? (variant.commissionBasisPoints / 100).toString() : "",
             };
@@ -1367,12 +1383,22 @@ function ServicesTab({
   useEffect(() => {
     setLocationIds(provider.locationIds);
     setServiceIds(provider.serviceIds);
+    setServiceLocations(provider.serviceLocations ?? {});
     setIsBookableOnline(provider.isBookableOnline);
     setIsActive(provider.isActive);
   }, [provider]);
 
   const toggle = (list: string[], id: string): string[] =>
     list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+
+  // Toggle one location for a service (defaulting to all provider locations).
+  const toggleServiceLocation = (svcId: string, locId: string) => {
+    setServiceLocations((prev) => {
+      const current = prev[svcId] ?? locationIds;
+      const next = current.includes(locId) ? current.filter((l) => l !== locId) : [...current, locId];
+      return { ...prev, [svcId]: next };
+    });
+  };
 
   const filteredLocations = useMemo(() => {
     const q = locationQuery.trim().toLowerCase();
@@ -1407,7 +1433,12 @@ function ServicesTab({
     isActive !== provider.isActive ||
     Object.keys(serviceOverrides).some((svcId) => {
       const ov = serviceOverrides[svcId];
-      return ov.durationMinutes !== "" || ov.priceCents !== "" || ov.flatCents !== "" || ov.basisPoints !== "";
+      return ov.durationMinutes !== "" || ov.priceCents !== "" || ov.depositCents !== "" || ov.flatCents !== "" || ov.basisPoints !== "";
+    }) ||
+    serviceIds.some((svcId) => {
+      const current = serviceLocations[svcId] ?? locationIds;
+      const original = provider.serviceLocations?.[svcId] ?? provider.locationIds;
+      return !sameIds(current, original);
     });
 
   const submit = async (event: React.FormEvent) => {
@@ -1419,6 +1450,9 @@ function ServicesTab({
       const payload: UpdateProviderRequest = {
         locationIds,
         serviceIds,
+        serviceLocations: Object.fromEntries(
+          serviceIds.map((svcId) => [svcId, serviceLocations[svcId] ?? locationIds]),
+        ),
         isBookableOnline,
         isActive,
       };
@@ -1429,10 +1463,11 @@ function ServicesTab({
         const ov = serviceOverrides[svcId];
         const durationMinutes = ov?.durationMinutes ? Number(ov.durationMinutes) : null;
         const priceCents = ov?.priceCents ? Math.round(Number(ov.priceCents) * 100) : null;
+        const depositCents = ov?.depositCents ? Math.round(Number(ov.depositCents) * 100) : null;
         const flatCents = ov?.flatCents ? Math.round(Number(ov.flatCents) * 100) : null;
         const basisPoints = ov?.basisPoints ? Math.round(Number(ov.basisPoints) * 100) : null;
         const hasOverride =
-          durationMinutes != null || priceCents != null || flatCents != null || basisPoints != null;
+          durationMinutes != null || priceCents != null || depositCents != null || flatCents != null || basisPoints != null;
         try {
           const existing = await platformApi.getServiceProviderVariants(tenantSlug, svcId);
           const hadEntry = existing.variants.some((v) => v.providerId === provider.id);
@@ -1444,7 +1479,7 @@ function ServicesTab({
           // services-page ProviderCard can still round-trip its own overrides.
           let merged = existing.variants.map((v) =>
             v.providerId === provider.id
-              ? { ...v, durationMinutes, priceCents, commissionFlatCents: flatCents, commissionBasisPoints: basisPoints }
+              ? { ...v, durationMinutes, priceCents, depositCents, commissionFlatCents: flatCents, commissionBasisPoints: basisPoints }
               : v,
           );
           if (!hadEntry) {
@@ -1452,7 +1487,7 @@ function ServicesTab({
               providerId: provider.id,
               durationMinutes,
               priceCents,
-              depositCents: null,
+              depositCents,
               commissionFlatCents: flatCents,
               commissionBasisPoints: basisPoints,
             });
@@ -1482,7 +1517,7 @@ function ServicesTab({
   };
 
   return (
-    <form className="cs-md-form" onSubmit={submit}>
+    <form className="cs-md-form cs-svc-tab" onSubmit={submit}>
       <fieldset className="cs-staff-fieldset">
         <legend>
           Locations <span className="cs-staff-fieldset-count">{locationIds.length} of {locations.length}</span>
@@ -1554,13 +1589,6 @@ function ServicesTab({
           <p className="cs-settings-form-help">No services configured.</p>
         ) : (
           <>
-            <p className="cs-md-form__lead">
-              What they perform. Services come from the Treatments page, filtered to this person. Leave a
-              field blank to inherit that treatment's price and duration; enter a value to override
-              it just for them. Commission follows the model set on the Compensation tab for every
-              service they perform — override a specific treatment's commission below only when it
-              needs to differ from that baseline.
-            </p>
             <div className="cs-staff-list-toolbar">
               <input
                 type="search"
@@ -1601,11 +1629,12 @@ function ServicesTab({
                   <div className="cs-staff-services-groups">
                     <div className="cs-svc-staff-theader" aria-hidden="true">
                       <span />
-                      <span>Duration</span>
                       <span>Price</span>
+                      <span>Duration</span>
+                      <span>Deposit</span>
                       <span>Commission</span>
                     </div>
-                    {groups.map((group) => {
+                    {groups.map((group, groupIndex) => {
                       const groupIds = group.services.map((s) => s.id);
                       const allEnabled = groupIds.every((id) => serviceIds.includes(id));
                       const noneEnabled = groupIds.every((id) => !serviceIds.includes(id));
@@ -1614,7 +1643,14 @@ function ServicesTab({
                       return (
                         <section key={group.id ?? "uncategorized"} className="cs-staff-services-group">
                           <header className="cs-staff-services-group__header">
-                            <h4 className="cs-staff-services-group__title">{group.name}</h4>
+                            <h4 className="cs-staff-services-group__title">
+                              <span
+                                className="cs-staff-services-group__dot"
+                                style={{ background: CATEGORY_DOT_COLORS[groupIndex % CATEGORY_DOT_COLORS.length] }}
+                                aria-hidden="true"
+                              />
+                              {group.name}
+                            </h4>
                             <button
                               type="button"
                               className="cs-svc-text-btn"
@@ -1635,7 +1671,7 @@ function ServicesTab({
                           {[...performed, ...notOffered].map((svc) => {
                             const isAssigned = serviceIds.includes(svc.id);
                             const showNotOfferedHeader = !isAssigned && svc.id === notOffered[0]?.id;
-                            const ov = serviceOverrides[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" };
+                            const ov = serviceOverrides[svc.id] || { durationMinutes: "", priceCents: "", depositCents: "", flatCents: "", basisPoints: "" };
                             const commissionMode: "flat" | "percent" =
                               commissionModeOverride[svc.id] ?? (ov.basisPoints ? "percent" : "flat");
                             // Auto-enable the service if the operator starts editing any override
@@ -1647,7 +1683,7 @@ function ServicesTab({
                               ensureAssigned();
                               setServiceOverrides((prev) => ({
                                 ...prev,
-                                [svc.id]: { ...(prev[svc.id] || { durationMinutes: "", priceCents: "", flatCents: "", basisPoints: "" }), ...partial },
+                                [svc.id]: { ...(prev[svc.id] || { durationMinutes: "", priceCents: "", depositCents: "", flatCents: "", basisPoints: "" }), ...partial },
                               }));
                             };
                             return (
@@ -1677,19 +1713,6 @@ function ServicesTab({
                                 <div className="cs-svc-staff-trow__cell">
                                   <input
                                     className="cs-svc-input cs-svc-provider-row__input"
-                                    type="text" inputMode="numeric"
-                                    placeholder={`${svc.durationMinutes} min`}
-                                    value={ov.durationMinutes}
-                                    onFocus={(e) => { ensureAssigned(); e.target.select(); }}
-                                    onMouseUp={(e) => e.preventDefault()}
-                                    onChange={(e) => patch({ durationMinutes: e.target.value })}
-                                    aria-label={`${svc.name} duration`}
-                                  />
-                                </div>
-                              
-                                <div className="cs-svc-staff-trow__cell">
-                                  <input
-                                    className="cs-svc-input cs-svc-provider-row__input"
                                     type="text" inputMode="decimal"
                                     placeholder={`$${(svc.priceCents / 100).toFixed(2)}`}
                                     value={ov.priceCents}
@@ -1699,7 +1722,33 @@ function ServicesTab({
                                     aria-label={`${svc.name} price`}
                                   />
                                 </div>
-                              
+
+                                <div className="cs-svc-staff-trow__cell">
+                                  <input
+                                    className="cs-svc-input cs-svc-provider-row__input"
+                                    type="text" inputMode="numeric"
+                                    placeholder={`${svc.durationMinutes} min`}
+                                    value={ov.durationMinutes}
+                                    onFocus={(e) => { ensureAssigned(); e.target.select(); }}
+                                    onMouseUp={(e) => e.preventDefault()}
+                                    onChange={(e) => patch({ durationMinutes: e.target.value })}
+                                    aria-label={`${svc.name} duration`}
+                                  />
+                                </div>
+
+                                <div className="cs-svc-staff-trow__cell">
+                                  <input
+                                    className="cs-svc-input cs-svc-provider-row__input"
+                                    type="text" inputMode="decimal"
+                                    placeholder={`$${(svc.depositCents / 100).toFixed(2)}`}
+                                    value={ov.depositCents}
+                                    onFocus={(e) => { ensureAssigned(); e.target.select(); }}
+                                    onMouseUp={(e) => e.preventDefault()}
+                                    onChange={(e) => patch({ depositCents: e.target.value })}
+                                    aria-label={`${svc.name} deposit`}
+                                  />
+                                </div>
+
                                 <div className="cs-svc-staff-trow__cell cs-svc-staff-trow__commission">
                                   <div className="cs-svc-commission-toggle" role="group" aria-label="Commission type">
                                     <button type="button"
@@ -1748,6 +1797,26 @@ function ServicesTab({
                                   )}
                                 </div>
                               </div>
+                              {isAssigned && locationIds.length > 1 ? (
+                                <div className="cs-svc-staff-locrow">
+                                  <span className="cs-svc-staff-locrow__label">Offered at</span>
+                                  {locationIds.map((locId) => {
+                                    const loc = locations.find((l) => l.id === locId);
+                                    if (!loc) return null;
+                                    const offered = serviceLocations[svc.id] ?? locationIds;
+                                    return (
+                                      <label key={locId} className="cs-svc-staff-locchip">
+                                        <input
+                                          type="checkbox"
+                                          checked={offered.includes(locId)}
+                                          onChange={() => toggleServiceLocation(svc.id, locId)}
+                                        />
+                                        <span>{loc.name}</span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              ) : null}
                               </React.Fragment>
                             );
                           })}
@@ -1763,8 +1832,8 @@ function ServicesTab({
       </fieldset>
 
       <fieldset className="cs-staff-fieldset">
-        <legend>Visibility</legend>
-        <label className="cs-settings-toggle">
+        <legend>Online booking</legend>
+        <label className="cs-settings-toggle cs-dt-toggle-row">
           <input
             type="checkbox"
             checked={isBookableOnline}
@@ -1772,7 +1841,32 @@ function ServicesTab({
           />
           <span>Bookable online (shows on storefront)</span>
         </label>
-        <label className="cs-settings-toggle">
+        {isBookableOnline && provider.bookingUrl ? (
+          <div className="cs-svc-booking-link">
+            <span className="cs-svc-booking-link__url">{provider.bookingUrl}</span>
+            <div className="cs-svc-booking-link__actions">
+              <button
+                type="button"
+                className="cs-btn cs-btn--ghost cs-btn--sm"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(provider.bookingUrl!);
+                    setLinkCopied(true);
+                    setTimeout(() => setLinkCopied(false), 2000);
+                  } catch {
+                    // ignore
+                  }
+                }}
+              >
+                {linkCopied ? "Copied!" : "Copy"}
+              </button>
+              <a className="cs-btn cs-btn--ghost cs-btn--sm" href={provider.bookingUrl} target="_blank" rel="noreferrer">
+                Open
+              </a>
+            </div>
+          </div>
+        ) : null}
+        <label className="cs-settings-toggle cs-dt-toggle-row">
           <input
             type="checkbox"
             checked={isActive}

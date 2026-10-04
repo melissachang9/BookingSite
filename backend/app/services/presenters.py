@@ -263,6 +263,11 @@ def provider_to_summary(provider: Provider, tenant: Tenant | None = None) -> Pro
         booking_url=_build_provider_booking_url(provider, tenant),
         service_ids=[link.service_id for link in provider.service_links],
         location_ids=[link.location_id for link in provider.location_links],
+        service_locations={
+            link.service_id: list(link.offered_location_ids)
+            for link in provider.service_links
+            if link.offered_location_ids is not None
+        },
         compensation_mode=provider.compensation_mode,
         compensation_service_percent_bp=provider.compensation_service_percent_bp,
         compensation_product_percent_bp=provider.compensation_product_percent_bp,

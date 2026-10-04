@@ -244,6 +244,9 @@ class ProviderService(Base, IdMixin, TimestampMixin):
     deposit_cents_override: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     commission_flat_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     commission_basis_points: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Locations where this provider offers this service. null = all of the
+    # provider's locations (backward-compatible default).
+    offered_location_ids: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
 
     provider: Mapped[Provider] = relationship(back_populates="service_links")
     service: Mapped[Service] = relationship(back_populates="provider_links")

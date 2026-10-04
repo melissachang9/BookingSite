@@ -251,7 +251,7 @@ describe("StaffPage", () => {
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Services" }));
-    await waitFor(() => screen.getByText(/What they perform/));
+    await waitFor(() => screen.getByPlaceholderText(/Find a treatment/i));
 
     // Add Facial (svc2) to provider's services via checkbox
     fireEvent.click(screen.getByLabelText("Toggle Facial"));
@@ -261,6 +261,7 @@ describe("StaffPage", () => {
     expect(updateSpy).toHaveBeenCalledWith("brow-beauty-lab", "p1", {
       locationIds: ["loc1"],
       serviceIds: ["svc1", "svc2"],
+      serviceLocations: { svc1: ["loc1"], svc2: ["loc1"] },
       isBookableOnline: true,
       isActive: true,
     });
@@ -650,7 +651,7 @@ describe("StaffPage", () => {
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Services" }));
-    await waitFor(() => screen.getByText(/What they perform/));
+    await waitFor(() => screen.getByPlaceholderText(/Find a treatment/i));
 
     expect(screen.getByText(/Brow Shaping/)).toBeInTheDocument();
     expect(screen.getByText(/Facial/)).toBeInTheDocument();
@@ -671,7 +672,7 @@ describe("StaffPage", () => {
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Services" }));
-    await waitFor(() => screen.getByText(/What they perform/));
+    await waitFor(() => screen.getByPlaceholderText(/Find a treatment/i));
 
     // Enable all services in the (uncategorized) group.
     fireEvent.click(screen.getByRole("button", { name: "Enable all" }));
@@ -719,7 +720,7 @@ describe("StaffPage", () => {
     await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
     fireEvent.click(screen.getByRole("tab", { name: "Services" }));
-    await waitFor(() => screen.getByText(/What they perform/));
+    await waitFor(() => screen.getByPlaceholderText(/Find a treatment/i));
 
     const save = screen.getByRole("button", { name: "Save" });
     expect(save).toBeDisabled();

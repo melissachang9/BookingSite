@@ -102,10 +102,16 @@ async def _load_providers(
     for provider in providers:
         if provider_id and provider.id != provider_id:
             continue
+        # Per-service location offering: null = offered at all of the provider's
+        # locations; a list restricts the service to those locations only.
+        service_link = next((link for link in provider.service_links if link.service_id == service.id), None)
+        offered_location_ids = service_link.offered_location_ids if service_link else None
         provider_location_ids = [
             link.location_id
             for link in provider.location_links
-            if link.location_id in service_location_ids and (location_id is None or link.location_id == location_id)
+            if link.location_id in service_location_ids
+            and (location_id is None or link.location_id == location_id)
+            and (offered_location_ids is None or link.location_id in offered_location_ids)
         ]
         if provider_location_ids:
             resolved_contexts.append(ProviderContext(provider=provider, location_ids=provider_location_ids))
