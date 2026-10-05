@@ -8,7 +8,7 @@
   "scripts": {
     "dev:dashboard": "npm --workspace @booking/dashboard run dev",
     "dev:storefront": "npm --workspace @booking/storefront run dev",
-    "dev:all": "concurrently -k -n db,backend,dashboard -c yellow,cyan,green \"docker compose up -d db backend && docker compose logs -f backend\" \"npm --workspace @booking/dashboard run dev\"",
+    "dev:all": "concurrently -k -n db,backend,dashboard,storefront -c yellow,cyan,green,magenta \"docker compose up -d db backend && docker compose logs -f backend\" \"npm --workspace @booking/dashboard run dev\" \"npm --workspace @booking/storefront run dev\"",
     "dev:stripe-webhooks": "bash ./scripts/dev/stripe-webhooks.sh",
     "build:dashboard": "npm --workspace @booking/dashboard run build",
     "build:storefront": "npm --workspace @booking/storefront run build",

@@ -168,3 +168,11 @@ export function isoDateForTimeZone(timeZone: string, offsetDays = 0): string {
 
   return formatter.format(baseDate);
 }
+
+/** A service from its route key: its id, its URL slug, or its slugified name. */
+export function findServiceByRouteKey<T extends { id: string; name: string; slug?: string | null }>(
+  services: T[],
+  key: string,
+): T | undefined {
+  return services.find((entry) => entry.id === key || (entry.slug ? entry.slug === key : false) || slugify(entry.name) === key);
+}

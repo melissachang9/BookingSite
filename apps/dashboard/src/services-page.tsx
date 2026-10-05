@@ -410,10 +410,15 @@ export function ServicesPage({
                 return (
                   <div key={category.id} className="cs-svc-rail__group">
                     <div className="cs-svc-rail__group-head">
-                      <p className="cs-svc-rail__group-label">
+                      <button
+                        type="button"
+                        className={`cs-svc-rail__group-label${selection.kind === "category" && selection.categoryId === category.id ? " is-selected" : ""}`}
+                        aria-current={selection.kind === "category" && selection.categoryId === category.id ? "true" : undefined}
+                        onClick={() => setSelection({ kind: "category", categoryId: category.id })}
+                      >
                         <span className="cs-svc-rail__dot" style={{ background: categoryColor(index) }} aria-hidden="true" />
                         {category.name}
-                      </p>
+                      </button>
                       {canManage ? (
                         <OverflowMenu
                           label={`${category.name} actions`}
@@ -495,11 +500,25 @@ export function ServicesPage({
                     onDuplicate={handleDuplicateService}
                     refreshProviders={refreshProviders}
                     canManageSettings={canManageSettings}
+                    defaultDepositCents={tenant?.settings?.defaultDepositCents ?? 0}
                   />
                 );
               })()
+            ) : selectedCategory ? (
+              <CategoryDetailPanel
+                tenantSlug={tenantSlug}
+                category={selectedCategory}
+                color={categoryColor(Math.max(0, orderedCategories.findIndex((c) => c.id === selectedCategory.id)))}
+                canManage={canManage}
+                onChanged={async (message) => {
+                  await refreshCategories();
+                  if (message) setStatus(message);
+                }}
+                onStatus={setStatus}
+                onDelete={() => handleDeleteCategory(selectedCategory)}
+              />
             ) : (
-              <p className="cs-settings-form-help">Select a service to view details.</p>
+              <p className="cs-settings-form-help">Select a service or category to view details.</p>
             )}
           </div>
         </div>
@@ -536,6 +555,8 @@ export function ServicesPage({
         <DeleteCategoryDialog
           tenantSlug={tenantSlug}
           category={categoryModal.category}
+          serviceCount={(servicesByCategory.get(categoryModal.category.id) ?? []).length}
+          otherCategories={orderedCategories.filter((c) => c.id !== categoryModal.category.id)}
           onClose={() => setCategoryModal({ kind: "none" })}
           onDeleted={async (name, categoryId) => {
             await Promise.all([refreshCategories(), refreshServices()]);
@@ -569,13 +590,16 @@ type ServiceCardState = {
   isActive: boolean;
   onlineBookingDescription: string;
   requireCardOnFile: boolean;
-  bookingPaymentMode: string; // '', 'partial_percent', 'partial_flat', 'full'
-  bookingPaymentValueAmount: string; // dollar amount for partial_flat
+  bookingPaymentMode: string; // 'none' | 'full' | 'partial_flat' | 'partial_percent'
+  bookingPaymentValueAmount: string; // dollar amount for partial_flat; blank = studio default
   bookingPaymentPercent: string; // percentage for partial_percent
   providerSelectionMode: string; // 'client_choice', 'auto_assign', 'hide'
   featuredLabel: string; // '' for none
   imageUrl: string;
   formIds: string[]; // customer-facing forms this service requires
+  slug: string;
+  scarcityHint: string;
+  metaDescription: string;
 };
 
 function toCardState(service: ServiceSummary): ServiceCardState {
@@ -592,13 +616,23 @@ function toCardState(service: ServiceSummary): ServiceCardState {
     isActive: service.isActive,
     onlineBookingDescription: service.onlineBookingDescription ?? "",
     requireCardOnFile: service.requireCardOnFile ?? false,
-    bookingPaymentMode: service.bookingPaymentMode ?? "",
-    bookingPaymentValueAmount: service.bookingPaymentValueCents != null ? (service.bookingPaymentValueCents / 100).toFixed(2) : "",
+    // Services saved before payment modes existed take their plain deposit at
+    // booking, which is the same as a fixed partial payment (or none at $0).
+    bookingPaymentMode: service.bookingPaymentMode || (service.depositCents > 0 ? "partial_flat" : "none"),
+    bookingPaymentValueAmount:
+      service.bookingPaymentValueCents != null
+        ? (service.bookingPaymentValueCents / 100).toFixed(2)
+        : !service.bookingPaymentMode && service.depositCents > 0
+          ? (service.depositCents / 100).toFixed(2)
+          : "",
     bookingPaymentPercent: service.bookingPaymentPercent != null ? String(service.bookingPaymentPercent) : "",
     providerSelectionMode: service.providerSelectionMode ?? "client_choice",
     featuredLabel: service.featuredLabel ?? "",
     imageUrl: service.imageUrl ?? "",
     formIds: [...service.formIds],
+    slug: service.slug ?? "",
+    scarcityHint: service.scarcityHint ?? "",
+    metaDescription: service.metaDescription ?? "",
   };
 }
 
@@ -615,6 +649,7 @@ function ServiceDetail({
   onDuplicate,
   refreshProviders,
   canManageSettings,
+  defaultDepositCents,
 }: {
   service: ServiceSummary;
   categories: ServiceCategorySummary[];
@@ -628,6 +663,7 @@ function ServiceDetail({
   onDuplicate: (service: ServiceSummary) => void;
   refreshProviders: () => Promise<void>;
   canManageSettings: boolean;
+  defaultDepositCents: number;
 }) {
   const [form, setForm] = useState<ServiceCardState>(() => toCardState(service));
   const detailsFormId = useId();
@@ -696,7 +732,7 @@ function ServiceDetail({
 
   // Direct link deep-links to the service page on the storefront so the client lands
   // on this specific service instead of the generic tenant browse flow.
-  const schedulingHref = `${storefrontBaseUrl}/${tenantSlug}/services/${service.id}`;
+  const schedulingHref = `${storefrontBaseUrl}/${tenantSlug}/services/${service.slug || service.id}`;
 
   const handleCopyLink = async () => {
     try { await navigator.clipboard.writeText(schedulingHref); setCopyHint("Link copied!"); }
@@ -738,13 +774,32 @@ function ServiceDetail({
     else if (service.onlineBookingDescription) body.clearOnlineBookingDescription = true;
     // Payment value/percent
     if (form.bookingPaymentMode === "partial_flat") {
-      const val = parseMoneyInput(form.bookingPaymentValueAmount);
-      if (val != null) body.bookingPaymentValueCents = val;
+      if (form.bookingPaymentValueAmount.trim()) {
+        const val = parseMoneyInput(form.bookingPaymentValueAmount);
+        if (val == null) { onSaved("Enter a valid partial payment amount."); return; }
+        body.bookingPaymentValueCents = val;
+      } else {
+        // Blank means "use the studio default deposit".
+        body.clearBookingPaymentValue = true;
+      }
     }
     if (form.bookingPaymentMode === "partial_percent") {
       const pct = Number(form.bookingPaymentPercent);
-      if (Number.isFinite(pct) && pct >= 0 && pct <= 100) body.bookingPaymentPercent = pct;
+      if (!form.bookingPaymentPercent.trim() || !Number.isFinite(pct) || pct < 0 || pct > 100) {
+        onSaved("Enter a partial payment percentage from 0 to 100."); return;
+      }
+      body.bookingPaymentPercent = pct;
     }
+    // Storefront listing
+    const slug = form.slug.trim();
+    if (slug) body.slug = slug;
+    else if (service.slug) body.clearSlug = true;
+    const scarcity = form.scarcityHint.trim();
+    if (scarcity) body.scarcityHint = scarcity;
+    else if (service.scarcityHint) body.clearScarcityHint = true;
+    const meta = form.metaDescription.trim();
+    if (meta) body.metaDescription = meta;
+    else if (service.metaDescription) body.clearMetaDescription = true;
     // Provider selection mode
     body.providerSelectionMode = form.providerSelectionMode || null;
     if (form.featuredLabel) body.featuredLabel = form.featuredLabel as CategoryFeaturedLabel;
@@ -942,7 +997,7 @@ function ServiceDetail({
               </label>
             ) : null}
             <button type="button" className="cs-svc-pill-btn" onClick={() => onDuplicate(service)}>Duplicate</button>
-            {activeTab === "details" ? (
+            {activeTab === "details" || activeTab === "onlineBooking" ? (
               <button type="submit" form={detailsFormId} className="cs-svc-pill-btn cs-svc-pill-btn--primary" disabled={saving}>
                 {saving ? "Saving…" : "Save"}
               </button>
@@ -1005,9 +1060,9 @@ function ServiceDetail({
         <ServiceAddOnsTab service={service} tenantSlug={tenantSlug} canManage={canManage} />
       ) : null}
       {activeTab === "onlineBooking" ? (
-        <ServiceOnlineBookingTab form={form} setForm={setForm} canManage={canManage}
+        <ServiceOnlineBookingTab formId={detailsFormId} form={form} setForm={setForm} canManage={canManage}
           schedulingHref={schedulingHref} handleCopyLink={handleCopyLink} copyHint={copyHint}
-          saving={saving} handleSave={handleSave} />
+          saving={saving} handleSave={handleSave} defaultDepositCents={defaultDepositCents} />
       ) : null}
     </div>
   );
@@ -1622,9 +1677,10 @@ function ServiceStaffTab({
 }
 
 function ServiceOnlineBookingTab({
-  form, setForm, canManage, schedulingHref, handleCopyLink, copyHint,
-  saving, handleSave,
+  formId, form, setForm, canManage, schedulingHref, handleCopyLink, copyHint,
+  saving, handleSave, defaultDepositCents,
 }: {
+  formId: string;
   form: ServiceCardState;
   setForm: React.Dispatch<React.SetStateAction<ServiceCardState>>;
   canManage: boolean;
@@ -1633,118 +1689,162 @@ function ServiceOnlineBookingTab({
   copyHint: string | null;
   saving: boolean;
   handleSave: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  defaultDepositCents: number;
 }) {
+  const priceCents = parseMoneyInput(form.priceAmount) ?? 0;
+  // What's left to pay at the visit for the partial options (service price only).
+  const flatCents = form.bookingPaymentValueAmount.trim()
+    ? parseMoneyInput(form.bookingPaymentValueAmount) ?? 0
+    : defaultDepositCents;
+  const percent = Number(form.bookingPaymentPercent);
+  const percentCents = Number.isFinite(percent) ? Math.round((priceCents * percent) / 100) : 0;
+  const dueAtVisit = (takenCents: number) => formatMoney(Math.max(0, priceCents - Math.min(takenCents, priceCents)));
+  const selectMode = (mode: string) => setForm((c) => ({ ...c, bookingPaymentMode: mode }));
+  const prettyUrl = schedulingHref.replace(/^https?:\/\//, "");
+
+  const option = (mode: string, content: ReactNode, extra?: ReactNode) => (
+    <label className={`cs-svc-choice${form.bookingPaymentMode === mode ? " is-selected" : ""}`}>
+      <input type="radio" name="bookingPaymentMode" value={mode} className="cs-svc-choice__radio"
+        checked={form.bookingPaymentMode === mode} onChange={() => selectMode(mode)} />
+      <span className="cs-svc-choice__label">{content}</span>
+      {extra ? <span className="cs-svc-choice__extra">{extra}</span> : null}
+    </label>
+  );
+
   return (
-    <form className="cs-svc-detail-form" onSubmit={handleSave}>
-      <div className="cs-svc-card">
-        <span className="cs-svc-card__eyebrow">Online booking</span>
-        <div className="cs-svc-setting">
-          <span className="cs-svc-setting__text">
-            <span className="cs-svc-setting__title">Enable in online booking</span>
-            <span className="cs-svc-helper">Clients can self-book this service.</span>
-          </span>
-          <label className={`cs-switch${form.isActive ? "" : " cs-switch--off"}`} aria-label="Online booking toggle">
-            <input type="checkbox" className="cs-switch__input" checked={form.isActive} disabled={!canManage}
-              onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.checked }))} />
-          </label>
-        </div>
-        <div className="cs-svc-setting">
-          <span className="cs-svc-setting__title">Direct booking link</span>
-          <button type="button" className="cs-link-btn" onClick={handleCopyLink}>Copy link</button>
-        </div>
-        {copyHint ? <p className="cs-svc-helper cs-svc-helper--ok">{copyHint}</p> : null}
-      </div>
-
-      <div className="cs-svc-card">
-        <span className="cs-svc-card__eyebrow">Customer-facing description</span>
-        <div className="cs-svc-field">
-          <label className="cs-svc-field-label">Online booking description</label>
-          <textarea
-            className="cs-svc-input cs-svc-description-textarea"
-            value={form.onlineBookingDescription}
-            onChange={(e) => setForm((c) => ({ ...c, onlineBookingDescription: e.target.value }))}
-            disabled={!canManage}
-            rows={3}
-            maxLength={2000}
-            placeholder="Describe this service for customers browsing online…"
-          />
-          <p className="cs-svc-helper">Shown to customers on the online booking page.</p>
-        </div>
-      </div>
-
-      <div className="cs-svc-card">
-        <span className="cs-svc-card__eyebrow">Payment requirements</span>
-        <div className="cs-svc-setting">
-          <span className="cs-svc-setting__text">
-            <span className="cs-svc-setting__title">Require a credit card on file to book</span>
-            <span className="cs-svc-helper">Clients must have a saved payment method before booking.</span>
-          </span>
-          <button
-            type="button"
-            className={`cs-switch${form.requireCardOnFile ? "" : " cs-switch--off"}`}
-            aria-label="Require card on file toggle"
-            aria-pressed={form.requireCardOnFile}
-            disabled={!canManage}
-            onClick={() => setForm((c) => ({ ...c, requireCardOnFile: !c.requireCardOnFile }))}
-          />
-        </div>
-
-        <div className="cs-svc-setting cs-svc-setting--stacked">
-          <span className="cs-svc-setting__title">Require payment at time of booking</span>
-          <div className="cs-svc-radios">
-            <label className="cs-svc-radio-opt">
-              <input type="radio" name="bookingPaymentMode" value=""
-                checked={form.bookingPaymentMode === ""}
-                onChange={() => setForm((c) => ({ ...c, bookingPaymentMode: "" }))}
-                disabled={!canManage} />
-              <span>No payment required at booking</span>
-            </label>
-            <label className="cs-svc-radio-opt">
-              <input type="radio" name="bookingPaymentMode" value="full"
-                checked={form.bookingPaymentMode === "full"}
-                onChange={() => setForm((c) => ({ ...c, bookingPaymentMode: "full" }))}
-                disabled={!canManage} />
-              <span>Full payment</span>
-            </label>
-            <label className="cs-svc-radio-opt">
-              <input type="radio" name="bookingPaymentMode" value="partial_percent"
-                checked={form.bookingPaymentMode === "partial_percent"}
-                onChange={() => setForm((c) => ({ ...c, bookingPaymentMode: "partial_percent" }))}
-                disabled={!canManage} />
-              <span>Partial payment —</span>
-              <input type="number" className="cs-svc-input cs-svc-input--narrow" min="0" max="100"
-                value={form.bookingPaymentPercent}
-                onChange={(e) => setForm((c) => ({ ...c, bookingPaymentPercent: e.target.value, bookingPaymentMode: "partial_percent" }))}
-                disabled={!canManage || form.bookingPaymentMode !== "partial_percent"}
-                onFocus={() => { if (form.bookingPaymentMode !== "partial_percent") setForm((c) => ({ ...c, bookingPaymentMode: "partial_percent" })); }}
-              />
-              <span>%</span>
-            </label>
-            <label className="cs-svc-radio-opt">
-              <input type="radio" name="bookingPaymentMode" value="partial_flat"
-                checked={form.bookingPaymentMode === "partial_flat"}
-                onChange={() => setForm((c) => ({ ...c, bookingPaymentMode: "partial_flat" }))}
-                disabled={!canManage} />
-              <span>Partial payment — $</span>
-              <input type="text" className="cs-svc-input cs-svc-input--short"
-                value={form.bookingPaymentValueAmount}
-                onChange={(e) => setForm((c) => ({ ...c, bookingPaymentValueAmount: e.target.value, bookingPaymentMode: "partial_flat" }))}
-                disabled={!canManage || form.bookingPaymentMode !== "partial_flat"}
-                placeholder="0.00"
-                onFocus={() => { if (form.bookingPaymentMode !== "partial_flat") setForm((c) => ({ ...c, bookingPaymentMode: "partial_flat" })); }}
-              />
+    <form id={formId} className="cs-svc-detail-form" onSubmit={handleSave}>
+      <div className="cs-svc-card cs-svc-details">
+        <fieldset className="cs-svc-fieldset cs-svc-fieldset--inline" disabled={!canManage || saving}>
+          <div className="cs-svc-setting">
+            <span className="cs-svc-setting__text">
+              <span className="cs-svc-card__title">Bookable online</span>
+              <span className="cs-svc-section__lead">Clients can find and book this on the storefront.</span>
+            </span>
+            <label className={`cs-switch${form.isActive ? "" : " cs-switch--off"}`} aria-label="Online booking toggle">
+              <input type="checkbox" className="cs-switch__input" checked={form.isActive}
+                onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.checked }))} />
             </label>
           </div>
-        </div>
-      </div>
 
-      {canManage ? (
-        <div className="cs-svc-actions">
-          <button type="submit" className="cs-svc-save-btn" disabled={saving}>
-            {saving ? "Saving…" : "Save changes"}
-          </button>
-        </div>
-      ) : null}
+          <hr className="cs-svc-details__divider" />
+
+          <div className="cs-svc-details__field" role="radiogroup" aria-label="Taken at booking">
+            <span className="cs-svc-details__label">Taken at booking</span>
+            <div className="cs-svc-choices">
+              {option("none", "No payment required at booking")}
+              {option("full", `Full payment — ${formatMoney(priceCents)}`)}
+              {option(
+                "partial_flat",
+                <>
+                  Partial payment — $
+                  <input
+                    className="cs-svc-choice__input"
+                    type="text"
+                    inputMode="decimal"
+                    aria-label="Partial payment amount"
+                    placeholder={(defaultDepositCents / 100).toFixed(2)}
+                    value={form.bookingPaymentValueAmount}
+                    onFocus={() => selectMode("partial_flat")}
+                    onChange={(e) => setForm((c) => ({ ...c, bookingPaymentValueAmount: e.target.value, bookingPaymentMode: "partial_flat" }))}
+                  />
+                </>,
+                form.bookingPaymentMode === "partial_flat" ? `${dueAtVisit(flatCents)} due at visit` : null,
+              )}
+              {option(
+                "partial_percent",
+                <>
+                  Partial payment — %
+                  <input
+                    className="cs-svc-choice__input"
+                    type="number"
+                    min={0}
+                    max={100}
+                    aria-label="Partial payment percentage"
+                    value={form.bookingPaymentPercent}
+                    onFocus={() => selectMode("partial_percent")}
+                    onChange={(e) => setForm((c) => ({ ...c, bookingPaymentPercent: e.target.value, bookingPaymentMode: "partial_percent" }))}
+                  />
+                </>,
+                form.bookingPaymentMode === "partial_percent" ? `${dueAtVisit(percentCents)} due at visit` : null,
+              )}
+            </div>
+            <p className="cs-svc-helper">
+              Leave the amount blank to take the studio default deposit ({formatMoney(defaultDepositCents)}).
+              A deposit set for a provider on the Staff tab takes priority, and add-ons count toward full and
+              percentage payments. Refunds on cancellation follow your cancellation rules in Settings.
+            </p>
+          </div>
+
+          <hr className="cs-svc-details__divider" />
+
+          <div className="cs-svc-setting">
+            <span className="cs-svc-setting__text">
+              <span className="cs-svc-card__title">Require a card on file</span>
+              <span className="cs-svc-section__lead">
+                Not active yet — clients aren&apos;t asked for a card at booking until card collection is added.
+              </span>
+            </span>
+            <button
+              type="button"
+              className={`cs-switch${form.requireCardOnFile ? "" : " cs-switch--off"}`}
+              aria-label="Require card on file toggle"
+              aria-pressed={form.requireCardOnFile}
+              onClick={() => setForm((c) => ({ ...c, requireCardOnFile: !c.requireCardOnFile }))}
+            />
+          </div>
+
+          <hr className="cs-svc-details__divider" />
+
+          <div className="cs-svc-details__grid">
+            <label className="cs-svc-details__field cs-svc-details__field--half">
+              <span className="cs-svc-details__label">URL slug</span>
+              <input className="cs-svc-details__input" value={form.slug} placeholder="auto from name when blank"
+                onChange={(e) => setForm((c) => ({ ...c, slug: e.target.value.toLowerCase().replace(/\s+/g, "-") }))} />
+            </label>
+            <label className="cs-svc-details__field cs-svc-details__field--half">
+              <span className="cs-svc-details__label">Scarcity hint</span>
+              <input className="cs-svc-details__input" value={form.scarcityHint} placeholder="e.g. 3 spots left this week"
+                onChange={(e) => setForm((c) => ({ ...c, scarcityHint: e.target.value }))} />
+            </label>
+          </div>
+          <label className="cs-svc-details__field">
+            <span className="cs-svc-details__label">Meta description</span>
+            <textarea className="cs-svc-details__input cs-svc-details__textarea" rows={2} maxLength={320}
+              value={form.metaDescription} placeholder="Shown in search results and link previews."
+              onChange={(e) => setForm((c) => ({ ...c, metaDescription: e.target.value }))} />
+          </label>
+          <label className="cs-svc-details__field">
+            <span className="cs-svc-details__label">Booking page description</span>
+            <textarea className="cs-svc-details__input cs-svc-details__textarea" rows={2} maxLength={2000}
+              value={form.onlineBookingDescription}
+              placeholder="Optional — shown on the booking page instead of the client-facing description."
+              onChange={(e) => setForm((c) => ({ ...c, onlineBookingDescription: e.target.value }))} />
+          </label>
+        </fieldset>
+
+          {form.isActive ? (
+            <div className="cs-svc-live">
+              <span className="cs-svc-live__text">
+                <span className="cs-svc-live__title">Live on the storefront</span>
+                <span className="cs-svc-live__url">{prettyUrl}</span>
+                {copyHint ? <span className="cs-svc-helper cs-svc-helper--ok">{copyHint}</span> : null}
+              </span>
+              <span className="cs-svc-live__actions">
+                <button type="button" className="cs-link-btn" onClick={handleCopyLink}>Copy link</button>
+                <a className="cs-svc-pill-btn cs-svc-live__preview" href={schedulingHref} target="_blank" rel="noreferrer">
+                  Preview ↗
+                </a>
+              </span>
+            </div>
+          ) : (
+            <div className="cs-svc-live cs-svc-live--off">
+              <span className="cs-svc-live__text">
+                <span className="cs-svc-live__title">Hidden from the storefront</span>
+                <span className="cs-svc-live__url">Turn on Bookable online to publish it.</span>
+              </span>
+            </div>
+          )}
+      </div>
     </form>
   );
 }
@@ -2447,22 +2547,32 @@ function RenameCategoryDialog({
 function DeleteCategoryDialog({
   tenantSlug,
   category,
+  serviceCount,
+  otherCategories,
   onClose,
   onDeleted,
   onStatus,
 }: {
   tenantSlug: string;
   category: ServiceCategorySummary;
+  serviceCount: number;
+  otherCategories: ServiceCategorySummary[];
   onClose: () => void;
   onDeleted: (name: string, categoryId: string) => Promise<void> | void;
   onStatus: (message: string) => void;
 }) {
   const [deleting, setDeleting] = useState(false);
+  // Where the category's services go: another category, or uncategorized.
+  const [destination, setDestination] = useState<"move" | "uncategorize">(
+    otherCategories.length > 0 ? "move" : "uncategorize",
+  );
+  const [targetId, setTargetId] = useState(otherCategories[0]?.id ?? "");
 
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      await platformApi.deleteServiceCategory(tenantSlug, category.id);
+      const moveToCategoryId = serviceCount > 0 && destination === "move" && targetId ? targetId : undefined;
+      await platformApi.deleteServiceCategory(tenantSlug, category.id, { moveToCategoryId });
       await onDeleted(category.name, category.id);
     } catch (err) {
       onStatus(readErrorMessage(err, "Unable to delete category."));
@@ -2474,31 +2584,50 @@ function DeleteCategoryDialog({
 
   return (
     <div className="cs-modal" role="dialog" aria-modal="true" aria-label="Delete category">
-      <div className="cs-modal__panel">
-        <header className="cs-modal__header">
-          <h4>Delete category</h4>
-          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>
-            Close
-          </button>
-        </header>
-        <div className="cs-modal__form">
-          <p>
-            Delete category <strong>{category.name}</strong>? Services in this
-            category will become uncategorized.
+      <div className="cs-modal__panel cs-cat-delete">
+        <h4 className="cs-cat-delete__title">Delete category</h4>
+        {serviceCount > 0 ? (
+          <>
+            <p className="cs-cat-delete__lead">
+              {category.name} holds {serviceCount} {serviceCount === 1 ? "service" : "services"}. Choose where
+              {serviceCount === 1 ? " it goes" : " they go"} — nothing is deleted with the category.
+            </p>
+            <div className="cs-svc-choices" role="radiogroup" aria-label="Where its services go">
+              {otherCategories.length > 0 ? (
+                <label className={`cs-svc-choice${destination === "move" ? " is-selected" : ""}`}>
+                  <input type="radio" name="categoryDestination" className="cs-svc-choice__radio" aria-label="Move them to"
+                    checked={destination === "move"} onChange={() => setDestination("move")} />
+                  <span className="cs-svc-choice__label" aria-hidden="true">Move them to</span>
+                  <select
+                    className="cs-svc-choice__select"
+                    aria-label="Category to move them to"
+                    value={targetId}
+                    onFocus={() => setDestination("move")}
+                    onChange={(e) => { setTargetId(e.target.value); setDestination("move"); }}
+                  >
+                    {otherCategories.map((other) => (
+                      <option key={other.id} value={other.id}>{other.name}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              <label className={`cs-svc-choice${destination === "uncategorize" ? " is-selected" : ""}`}>
+                <input type="radio" name="categoryDestination" className="cs-svc-choice__radio"
+                  checked={destination === "uncategorize"} onChange={() => setDestination("uncategorize")} />
+                <span className="cs-svc-choice__label">Leave them uncategorised</span>
+              </label>
+            </div>
+          </>
+        ) : (
+          <p className="cs-cat-delete__lead">
+            {category.name} has no services, so nothing else changes.
           </p>
-          <div className="cs-modal__actions">
-            <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="cs-btn cs-btn--danger cs-btn--sm"
-              disabled={deleting}
-              onClick={handleDelete}
-            >
-              {deleting ? "Deleting…" : "Delete"}
-            </button>
-          </div>
+        )}
+        <div className="cs-svc-actions">
+          <button type="button" className="cs-svc-pill-btn" onClick={onClose}>Cancel</button>
+          <button type="button" className="cs-svc-pill-btn cs-svc-pill-btn--primary" disabled={deleting} onClick={handleDelete}>
+            {deleting ? "Deleting…" : "Delete category"}
+          </button>
         </div>
       </div>
     </div>
@@ -2569,18 +2698,26 @@ function categoryToFormState(category: ServiceCategorySummary): CategoryFormStat
 function CategoryDetailPanel({
   tenantSlug,
   category,
+  color,
   canManage,
   onChanged,
   onStatus,
+  onDelete,
 }: {
   tenantSlug: string;
   category: ServiceCategorySummary;
+  color: string;
   canManage: boolean;
   onChanged: (status?: string | null) => Promise<void>;
   onStatus: (msg: string) => void;
+  onDelete: () => void;
 }) {
   const [form, setForm] = useState<CategoryFormState>(() => categoryToFormState(category));
   const [saving, setSaving] = useState(false);
+  const formId = useId();
+  const heroInputRef = useRef<HTMLInputElement>(null);
+  const authorInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState<"heroImageUrl" | "socialImageUrl" | null>(null);
   const [copyHint, setCopyHint] = useState<string | null>(null);
   const copyTimerRef = useRef<number | null>(null);
 
@@ -2712,248 +2849,204 @@ function CategoryDetailPanel({
     }
   };
 
+  // Upload an image and drop its URL into a form field (hero image, author photo).
+  const uploadInto = async (file: File | undefined, field: "heroImageUrl" | "socialImageUrl") => {
+    if (!file) return;
+    setUploading(field);
+    try {
+      const uploaded = await uploadImageFile(tenantSlug, file);
+      setForm((prev) => ({ ...prev, [field]: uploaded.url }));
+    } catch (error) {
+      onStatus(readErrorMessage(error, "Unable to upload image."));
+    } finally {
+      setUploading(null);
+    }
+  };
+
   return (
-    <form className="cs-category-detail-panel" onSubmit={handleSave}>
-      <header className="cs-service-detail-header">
-        <div>
-          <p className="cs-eyebrow">Category</p>
-          <h4>{category.name}</h4>
+    <div className="cs-md-detail__inner">
+      <header className="cs-md-detail__header cs-svc-detail-head">
+        <div className="cs-svc-detail-head__text">
+          <p className="cs-svc-detail-head__eyebrow">Category</p>
+          <h4 className="cs-svc-detail-head__name">{category.name}</h4>
         </div>
-        <label className="cs-cat-toggle">
-          <input
-            type="checkbox"
-            checked={form.isActive}
-            disabled={!canManage}
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, isActive: event.target.checked }))
-            }
-          />
-          <span>{form.isActive ? "Active" : "Hidden"}</span>
-        </label>
+        <div className="cs-svc-detail-head__actions">
+          <span className="cs-cat-swatch" style={{ background: color }} aria-hidden="true" />
+          {canManage ? (
+            <>
+              <label className="cs-svc-active-toggle">
+                <input
+                  type="checkbox"
+                  className="cs-switch__input"
+                  checked={form.isActive}
+                  disabled={saving}
+                  onChange={(event) => setForm((prev) => ({ ...prev, isActive: event.target.checked }))}
+                />
+                <span className={`cs-switch${form.isActive ? "" : " cs-switch--off"}`} aria-hidden="true" />
+                {form.isActive ? "Active" : "Hidden"}
+              </label>
+              <button type="submit" form={formId} className="cs-svc-pill-btn cs-svc-pill-btn--primary" disabled={saving}>
+                {saving ? "Saving…" : "Save"}
+              </button>
+              <OverflowMenu
+                label="More category actions"
+                items={[{ label: "Delete category", danger: true, onSelect: onDelete }]}
+              />
+            </>
+          ) : null}
+        </div>
       </header>
 
-      <fieldset disabled={!canManage}>
-        <legend>Basics</legend>
-        <label className="cs-cat-field">
-          <span>Category name</span>
-          <input
-            type="text"
-            value={form.name}
-            onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-            required
-          />
-        </label>
-        <label className="cs-cat-field">
-          <span>URL slug</span>
-          <input
-            type="text"
-            value={form.slug}
-            placeholder="auto-generated from name when blank"
-            onChange={(event) =>
-              setForm((prev) => ({
-                ...prev,
-                slug: event.target.value.toLowerCase().replace(/\s+/g, "-"),
-              }))
-            }
-          />
-          <small className="cs-cat-field-help">
-            Lowercase letters, numbers, and hyphens only. Leave blank to regenerate from the name.
-          </small>
-        </label>
-        {landingHref ? (
-          <div className="cs-cat-inline-link">
-            <span>
-              Landing page:&nbsp;
-              <a href={landingHref} target="_blank" rel="noreferrer">
-                {landingHref}
-              </a>
-            </span>
-            <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={handleCopyLink}>
-              Copy
-            </button>
-            {copyHint ? <span className="cs-cat-copy-hint">{copyHint}</span> : null}
+      <form id={formId} className="cs-svc-detail-form cs-cat-editor" onSubmit={handleSave}>
+        <fieldset className="cs-svc-fieldset" disabled={!canManage || saving}>
+          <div className="cs-svc-card cs-svc-details">
+            <div className="cs-svc-details__grid">
+              <label className="cs-svc-details__field cs-svc-details__field--half">
+                <span className="cs-svc-details__label">Category name</span>
+                <input className="cs-svc-details__input" value={form.name} required
+                  onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
+              </label>
+              <label className="cs-svc-details__field cs-svc-details__field--half">
+                <span className="cs-svc-details__label">URL slug</span>
+                <input className="cs-svc-details__input" value={form.slug} placeholder="auto from name when blank"
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, slug: event.target.value.toLowerCase().replace(/\s+/g, "-") }))
+                  } />
+              </label>
+            </div>
+            {landingHref ? (
+              <p className="cs-cat-landing">
+                Landing page{" "}
+                <a href={landingHref} target="_blank" rel="noreferrer">{landingHref.replace(/^https?:\/\//, "")}</a>
+                <button type="button" className="cs-link-btn" onClick={handleCopyLink}>Copy</button>
+                {copyHint ? <span className="cs-svc-helper cs-svc-helper--ok">{copyHint}</span> : null}
+              </p>
+            ) : null}
+
+            <label className="cs-svc-details__field">
+              <span className="cs-svc-details__label">Outcome headline</span>
+              <input className="cs-svc-details__input" value={form.outcomeHeadline}
+                placeholder="The result your client wants, in one line"
+                onChange={(event) => setForm((prev) => ({ ...prev, outcomeHeadline: event.target.value }))} />
+            </label>
+            <label className="cs-svc-details__field">
+              <span className="cs-svc-details__label">Subheadline</span>
+              <input className="cs-svc-details__input" value={form.subheadline}
+                placeholder="A sentence expanding on the outcome"
+                onChange={(event) => setForm((prev) => ({ ...prev, subheadline: event.target.value }))} />
+            </label>
+
+            <div className="cs-cat-hero">
+              <span className="cs-cat-hero__thumb">
+                {form.heroImageUrl.trim() ? <img src={form.heroImageUrl.trim()} alt="" /> : null}
+              </span>
+              <div className="cs-cat-hero__fields">
+                <label className="cs-svc-details__field">
+                  <span className="cs-svc-details__label cs-cat-hero__label">
+                    Hero image
+                    {canManage ? (
+                      <button type="button" className="cs-link-btn" onClick={() => heroInputRef.current?.click()}>
+                        {uploading === "heroImageUrl" ? "Uploading…" : "Upload"}
+                      </button>
+                    ) : null}
+                  </span>
+                  <input className="cs-svc-details__input" value={form.heroImageUrl} placeholder="Upload or paste an image URL"
+                    onChange={(event) => setForm((prev) => ({ ...prev, heroImageUrl: event.target.value }))} />
+                </label>
+                <label className="cs-svc-details__field">
+                  <span className="cs-svc-details__label">Alt text</span>
+                  <input className="cs-svc-details__input" value={form.heroImageAlt} placeholder="Describe the image for screen readers"
+                    onChange={(event) => setForm((prev) => ({ ...prev, heroImageAlt: event.target.value }))} />
+                </label>
+              </div>
+              <input ref={heroInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif"
+                className="cs-visually-hidden" tabIndex={-1} aria-hidden="true"
+                onChange={(event) => { void uploadInto(event.target.files?.[0], "heroImageUrl"); event.target.value = ""; }} />
+            </div>
+
+            <label className="cs-svc-details__field">
+              <span className="cs-svc-details__label">Guarantee</span>
+              <input className="cs-svc-details__input" value={form.guaranteeText}
+                placeholder="What you promise if a client isn't happy"
+                onChange={(event) => setForm((prev) => ({ ...prev, guaranteeText: event.target.value }))} />
+            </label>
+
+            <div className="cs-cat-quote" role="group" aria-label="Testimonial">
+              <button type="button" className="cs-cat-quote__avatar" aria-label="Upload author photo"
+                onClick={() => authorInputRef.current?.click()} disabled={!canManage}>
+                {form.socialImageUrl.trim() ? <img src={form.socialImageUrl.trim()} alt="" /> : null}
+              </button>
+              <div className="cs-cat-quote__fields">
+                <textarea className="cs-cat-quote__text" rows={2} aria-label="Testimonial quote"
+                  value={form.socialQuote} placeholder="“A short quote from a happy client.”"
+                  onChange={(event) => setForm((prev) => ({ ...prev, socialQuote: event.target.value }))} />
+                <input className="cs-cat-quote__author" aria-label="Testimonial author"
+                  value={form.socialAuthor} placeholder="First name + last initial"
+                  onChange={(event) => setForm((prev) => ({ ...prev, socialAuthor: event.target.value }))} />
+              </div>
+              <input ref={authorInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif"
+                className="cs-visually-hidden" tabIndex={-1} aria-hidden="true"
+                onChange={(event) => { void uploadInto(event.target.files?.[0], "socialImageUrl"); event.target.value = ""; }} />
+            </div>
           </div>
-        ) : (
-          <p className="cs-cat-field-help">Save with a slug to publish a public landing page.</p>
-        )}
-        <label className="cs-cat-field">
-          <span>Featured label</span>
-          <select
-            value={form.featuredLabel}
-            onChange={(event) =>
-              setForm((prev) => ({
-                ...prev,
-                featuredLabel: event.target.value as "" | CategoryFeaturedLabel,
-              }))
-            }
-          >
-            {FEATURED_LABEL_OPTIONS.map((opt) => (
-              <option key={opt.value || "none"} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </fieldset>
 
-      <fieldset disabled={!canManage}>
-        <legend>Hero</legend>
-        <label className="cs-cat-field">
-          <span>Outcome headline</span>
-          <input
-            type="text"
-            value={form.outcomeHeadline}
-            placeholder="The result your customer wants in one line"
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, outcomeHeadline: event.target.value }))
-            }
-          />
-        </label>
-        <label className="cs-cat-field">
-          <span>Subheadline</span>
-          <textarea
-            value={form.subheadline}
-            rows={2}
-            placeholder="One or two sentences expanding on the outcome."
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, subheadline: event.target.value }))
-            }
-          />
-        </label>
-        <label className="cs-cat-field">
-          <span>Hero image URL</span>
-          <input
-            type="url"
-            value={form.heroImageUrl}
-            placeholder="https://…"
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, heroImageUrl: event.target.value }))
-            }
-          />
-        </label>
-        <label className="cs-cat-field">
-          <span>Hero image alt text</span>
-          <input
-            type="text"
-            value={form.heroImageAlt}
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, heroImageAlt: event.target.value }))
-            }
-          />
-        </label>
-        <label className="cs-cat-field">
-          <span>Scarcity hint</span>
-          <input
-            type="text"
-            value={form.scarcityHint}
-            placeholder="e.g. Only 3 slots left this week"
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, scarcityHint: event.target.value }))
-            }
-          />
-        </label>
-      </fieldset>
-
-      <ValueStackEditor
-        legend="Value stack"
-        help="Itemize what the customer is actually getting and what each piece is worth."
-        items={form.valueStack}
-        disabled={!canManage}
-        onChange={(next) => setForm((prev) => ({ ...prev, valueStack: next }))}
-      />
-
-      <ValueStackEditor
-        legend="Bonuses"
-        help="Extras included at no additional charge — risk reducers and surprise-and-delight items."
-        items={form.bonuses}
-        disabled={!canManage}
-        onChange={(next) => setForm((prev) => ({ ...prev, bonuses: next }))}
-      />
-
-      <fieldset disabled={!canManage}>
-        <legend>Guarantee</legend>
-        <label className="cs-cat-field">
-          <span>Guarantee text</span>
-          <textarea
-            value={form.guaranteeText}
-            rows={3}
-            placeholder="The reversal: what you promise the customer if they're not happy."
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, guaranteeText: event.target.value }))
-            }
-          />
-        </label>
-      </fieldset>
-
-      <fieldset disabled={!canManage}>
-        <legend>Social proof</legend>
-        <label className="cs-cat-field">
-          <span>Quote</span>
-          <textarea
-            value={form.socialQuote}
-            rows={3}
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, socialQuote: event.target.value }))
-            }
-          />
-        </label>
-        <label className="cs-cat-field">
-          <span>Author</span>
-          <input
-            type="text"
-            value={form.socialAuthor}
-            placeholder="First name + last initial works great"
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, socialAuthor: event.target.value }))
-            }
-          />
-        </label>
-        <label className="cs-cat-field">
-          <span>Author photo URL</span>
-          <input
-            type="url"
-            value={form.socialImageUrl}
-            placeholder="https://…"
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, socialImageUrl: event.target.value }))
-            }
-          />
-        </label>
-      </fieldset>
-
-      <FaqEditor
-        items={form.faqs}
-        disabled={!canManage}
-        onChange={(next) => setForm((prev) => ({ ...prev, faqs: next }))}
-      />
-
-      <fieldset disabled={!canManage}>
-        <legend>SEO</legend>
-        <label className="cs-cat-field">
-          <span>Meta description</span>
-          <textarea
-            value={form.metaDescription}
-            rows={2}
-            placeholder="Used for search engine snippets and social previews."
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, metaDescription: event.target.value }))
-            }
-          />
-        </label>
-      </fieldset>
-
-      {canManage ? (
-        <div className="cs-service-detail-actions">
-          <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={saving}>
-            {saving ? "Saving…" : "Save category"}
-          </button>
-        </div>
-      ) : (
-        <p className="cs-service-detail-locked">
-          You don't have permission to edit categories.
-        </p>
-      )}
-    </form>
+          <div className="cs-svc-card cs-svc-details">
+            <h3 className="cs-svc-card__title">More for the landing page</h3>
+            <div className="cs-svc-details__grid">
+              <div className="cs-svc-details__field cs-svc-details__field--half" role="group" aria-label="Featured label">
+                <span className="cs-svc-details__label" aria-hidden="true">Featured label</span>
+                <div className="cs-svc-featured">
+                  {[...FEATURED_LABEL_OPTIONS.filter((o) => o.value), ...FEATURED_LABEL_OPTIONS.filter((o) => !o.value)].map(
+                    ({ value, label }) => (
+                      <button
+                        key={label}
+                        type="button"
+                        className={`cs-svc-featured__pill${form.featuredLabel === value ? " is-active" : ""}`}
+                        aria-pressed={form.featuredLabel === value}
+                        onClick={() => setForm((prev) => ({ ...prev, featuredLabel: value }))}
+                      >
+                        {label}
+                      </button>
+                    ),
+                  )}
+                </div>
+              </div>
+              <label className="cs-svc-details__field cs-svc-details__field--half">
+                <span className="cs-svc-details__label">Scarcity hint</span>
+                <input className="cs-svc-details__input" value={form.scarcityHint} placeholder="e.g. Only 3 slots left this week"
+                  onChange={(event) => setForm((prev) => ({ ...prev, scarcityHint: event.target.value }))} />
+              </label>
+            </div>
+            <label className="cs-svc-details__field">
+              <span className="cs-svc-details__label">Meta description</span>
+              <textarea className="cs-svc-details__input cs-svc-details__textarea" rows={2} value={form.metaDescription}
+                placeholder="Shown in search results and link previews."
+                onChange={(event) => setForm((prev) => ({ ...prev, metaDescription: event.target.value }))} />
+            </label>
+            <ValueStackEditor
+              legend="Value stack"
+              help="What clients get, and what each piece is worth."
+              items={form.valueStack}
+              disabled={!canManage}
+              onChange={(next) => setForm((prev) => ({ ...prev, valueStack: next }))}
+            />
+            <ValueStackEditor
+              legend="Bonuses"
+              help="Extras included at no additional charge."
+              items={form.bonuses}
+              disabled={!canManage}
+              onChange={(next) => setForm((prev) => ({ ...prev, bonuses: next }))}
+            />
+            <FaqEditor
+              items={form.faqs}
+              disabled={!canManage}
+              onChange={(next) => setForm((prev) => ({ ...prev, faqs: next }))}
+            />
+          </div>
+          {!canManage ? <p className="cs-svc-helper">You don&apos;t have permission to edit categories.</p> : null}
+        </fieldset>
+      </form>
+    </div>
   );
 }
 

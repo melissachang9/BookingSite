@@ -410,6 +410,15 @@ class ServiceSummaryResponse(CamelModel):
     provider_selection_mode: str | None = None  # client_choice, auto_assign, hide
 
 
+def _validate_booking_payment(mode: str | None, percent: int | None) -> None:
+    if mode is None or mode == "":
+        return
+    if mode not in ("none", "full", "partial_flat", "partial_percent"):
+        raise ValueError("bookingPaymentMode must be one of: none, full, partial_flat, partial_percent.")
+    if mode == "partial_percent" and percent is None:
+        raise ValueError("bookingPaymentPercent is required for a percentage payment.")
+
+
 class CreateServiceRequest(CamelModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=2000)
@@ -433,6 +442,7 @@ class CreateServiceRequest(CamelModel):
     def validate_deposit(self) -> "CreateServiceRequest":
         if self.deposit_cents > self.price_cents:
             raise ValueError("Deposit cannot exceed the service price.")
+        _validate_booking_payment(self.booking_payment_mode, self.booking_payment_percent)
         return self
 
 
@@ -474,6 +484,8 @@ class UpdateServiceRequest(CamelModel):
     booking_payment_value_cents: int | None = Field(default=None, ge=0, le=500_000)
     booking_payment_percent: int | None = Field(default=None, ge=0, le=100)
     provider_selection_mode: str | None = Field(default=None, max_length=32)
+    # Clears a fixed amount so a partial payment uses the studio default deposit.
+    clear_booking_payment_value: bool = False
     clear_outcome_headline: bool = False
     clear_subheadline: bool = False
     clear_compare_at_price: bool = False
@@ -488,6 +500,7 @@ class UpdateServiceRequest(CamelModel):
 
     @model_validator(mode="after")
     def _validate(self) -> "UpdateServiceRequest":
+        _validate_booking_payment(self.booking_payment_mode, self.booking_payment_percent)
         if (
             self.featured_label is not None
             and self.featured_label.strip()

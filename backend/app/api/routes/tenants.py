@@ -893,11 +893,20 @@ async def patch_service_category(
 async def delete_service_category(
     tenant_slug: str,
     category_id: str,
+    move_to_category_id: str | None = Query(None, alias="moveToCategoryId"),
     actor: User = Depends(require_tenant_permission("services.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Response:
-    await delete_tenant_service_category(session, tenant_slug, category_id)
-    await record_audit(session, tenant_id="", entity_type="service_category", entity_id=category_id, action="delete", actor=actor)
+    await delete_tenant_service_category(session, tenant_slug, category_id, move_to_category_id)
+    await record_audit(
+        session,
+        tenant_id=actor.tenant_id,
+        entity_type="service_category",
+        entity_id=category_id,
+        action="delete",
+        actor=actor,
+        notes=f"services moved to {move_to_category_id}" if move_to_category_id else "services uncategorized",
+    )
     return Response(status_code=204)
 
 

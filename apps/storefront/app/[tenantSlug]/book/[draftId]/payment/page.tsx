@@ -124,14 +124,4 @@ export default async function BookingPaymentPage({ params, searchParams }: Booki
     const tenantName = titleFromSlug(tenantSlug);
     const detail = isApiClientError(error) ? error.message : "The payment page could not be loaded.";
 
-    return (
-      <main className="page-stack">
-        <section className="state-panel">
-          <p className="store-eyebrow">Payment unavailable</p>
-          <h2>{tenantName}</h2>
-          <p>{detail}</p>
-        </section>
-      </main>
-    );
-  }
-}
+    re

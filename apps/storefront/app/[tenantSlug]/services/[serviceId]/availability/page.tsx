@@ -5,6 +5,7 @@ import type { SlotAvailability } from "@booking/shared-types";
 import { startBookingDraftAction } from "../actions";
 import { storefrontApi, isApiClientError, isApiNotFoundError } from "../../../../lib/storefront-api";
 import {
+  findServiceByRouteKey,
   formatCurrency,
   isoDateForTimeZone,
   isoDateFromValueInTimeZone,
@@ -133,9 +134,7 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
       storefrontApi.listServices(tenantSlug),
       storefrontApi.listLocations(tenantSlug),
     ]);
-    const service = serviceResponse.services.find(
-      (entry) => entry.id === serviceId || slugify(entry.name) === serviceId,
-    );
+    const service = findServiceByRouteKey(serviceResponse.services, serviceId);
 
     if (!service) {
       notFound();

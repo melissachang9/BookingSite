@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { storefrontApi, isApiClientError, isApiNotFoundError } from "../../../lib/storefront-api";
 import {
+  findServiceByRouteKey,
   formatCurrency,
   formatDuration,
   isoDateForTimeZone,
@@ -17,6 +18,21 @@ type ServicePageProps = {
 };
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: Pick<ServicePageProps, "params">) {
+  const { tenantSlug, serviceId } = await params;
+  try {
+    const { services } = await storefrontApi.listServices(tenantSlug);
+    const service = findServiceByRouteKey(services, serviceId);
+    if (!service) return {};
+    return {
+      title: service.name,
+      description: service.metaDescription ?? service.onlineBookingDescription ?? service.description ?? undefined,
+    };
+  } catch {
+    return {};
+  }
+}
 
 const initialsFor = (name: string) =>
   name
@@ -36,9 +52,7 @@ export default async function ServiceRoutePage({ params, searchParams }: Service
       storefrontApi.listServices(tenantSlug),
       storefrontApi.listLocations(tenantSlug),
     ]);
-    const service = serviceResponse.services.find(
-      (entry) => entry.id === serviceId || slugify(entry.name) === serviceId,
-    );
+    const service = findServiceByRouteKey(serviceResponse.services, serviceId);
 
     if (!service) {
       notFound();
@@ -158,6 +172,8 @@ export default async function ServiceRoutePage({ params, searchParams }: Service
             </Link>
             <p className="store-eyebrow">Provider preference</p>
             <h2>{service.name}</h2>
+            {service.onlineBookingDescription ? <p className="booking-entry-intro">{service.onlineBookingDescription}</p> : null}
+            {service.scarcityHint ? <p className="category-scarcity">{service.scarcityHint}</p> : null}
           </div>
         </section>
 

@@ -175,8 +175,11 @@ export const createPlatformApi = (client: ApiClient) => ({
       `tenants/${tenantSlug}/service-categories/${categoryId}`,
       body,
     ),
-  deleteServiceCategory: (tenantSlug: string, categoryId: string) =>
-    client.delete<void>(`tenants/${tenantSlug}/service-categories/${categoryId}`),
+  /** Services move to `moveToCategoryId` when given, otherwise become uncategorized. */
+  deleteServiceCategory: (tenantSlug: string, categoryId: string, options?: { moveToCategoryId?: string }) =>
+    client.delete<void>(`tenants/${tenantSlug}/service-categories/${categoryId}`, {
+      query: { moveToCategoryId: options?.moveToCategoryId },
+    }),
   reorderServiceCategories: (tenantSlug: string, body: ReorderRequest) =>
     client.put<ServiceCategoryListResponse, ReorderRequest>(
       `tenants/${tenantSlug}/service-categories/reorder`,

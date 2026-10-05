@@ -4,7 +4,7 @@ import re
 from copy import deepcopy
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -2115,18 +2115,27 @@ async def update_tenant_service_category(
 
 
 async def delete_tenant_service_category(
-    session: AsyncSession, tenant_slug: str, category_id: str
+    session: AsyncSession, tenant_slug: str, category_id: str, move_to_category_id: str | None = None
 ) -> None:
+    """Delete a category without deleting its services: they move to
+    `move_to_category_id` (another category of this tenant) or become
+    uncategorized, in the same transaction as the delete."""
     tenant = await get_tenant_by_slug(session, tenant_slug)
     category = await _load_category_for_tenant(session, tenant.id, category_id)
-    # Detach services rather than cascade delete
-    services = (
-        await session.scalars(
-            select(Service).where(Service.tenant_id == tenant.id, Service.category_id == category.id)
-        )
-    ).all()
-    for service in services:
-        service.category_id = None
+    target_id: str | None = None
+    if move_to_category_id:
+        if move_to_category_id == category.id:
+            raise api_exception(422, "validation_error", "Choose a different category to move services into.")
+        target = await _load_category_for_tenant(session, tenant.id, move_to_category_id)
+        target_id = target.id
+    # Move the services in SQL first: deleting the category through the ORM
+    # would otherwise null the category of any service still in its collection.
+    await session.execute(
+        update(Service)
+        .where(Service.tenant_id == tenant.id, Service.category_id == category.id)
+        .values(category_id=target_id)
+        .execution_options(synchronize_session="fetch")
+    )
     await session.delete(category)
     await session.commit()
 
@@ -2353,6 +2362,8 @@ async def update_tenant_service(
         service.booking_payment_mode = payload.booking_payment_mode or None
     if getattr(payload, "booking_payment_value_cents", None) is not None:
         service.booking_payment_value_cents = payload.booking_payment_value_cents
+    elif getattr(payload, "clear_booking_payment_value", False):
+        service.booking_payment_value_cents = None
     if getattr(payload, "booking_payment_percent", None) is not None:
         service.booking_payment_percent = payload.booking_payment_percent
     if getattr(payload, "provider_selection_mode", None) is not None:

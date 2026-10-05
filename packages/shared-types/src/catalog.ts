@@ -59,6 +59,9 @@ export type ServiceSummary = AuditFields &
     bookingPaymentPercent?: number | null;
     providerSelectionMode?: string | null;
     featuredLabel?: CategoryFeaturedLabel | null;
+    slug?: string | null;
+    scarcityHint?: string | null;
+    metaDescription?: string | null;
   };
 
 export type CreateServiceRequest = {
@@ -105,6 +108,14 @@ export type UpdateServiceRequest = {
   imageUrl?: string | null;
   imageAltText?: string | null;
   clearImage?: boolean;
+  /** Clears a fixed amount so a partial payment uses the studio default deposit. */
+  clearBookingPaymentValue?: boolean;
+  slug?: string | null;
+  clearSlug?: boolean;
+  scarcityHint?: string | null;
+  clearScarcityHint?: boolean;
+  metaDescription?: string | null;
+  clearMetaDescription?: boolean;
 };
 
 export type ValueStackItem = {

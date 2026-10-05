@@ -42,3 +42,42 @@ def resolve_service_terms(service: Service, link: ProviderService | None) -> Ser
         deposit_cents=min(deposit_cents, price_cents),
         duration_minutes=duration_minutes,
     )
+
+
+# What a service collects when it's booked (Services › Online booking).
+BOOKING_PAYMENT_MODES = ("none", "full", "partial_flat", "partial_percent")
+
+
+def resolve_booking_deposit(
+    service: Service,
+    link: ProviderService | None,
+    total_price_cents: int,
+    default_deposit_cents: int,
+) -> int:
+    """Amount taken at booking for this provider, capped at what the visit costs.
+
+    `total_price_cents` is the resolved service price plus any add-ons. A
+    provider-specific deposit wins; otherwise the service's payment mode:
+    none -> 0, full -> the total, partial_flat -> the set amount (the studio
+    default deposit when left blank), partial_percent -> that share of the
+    total. Services saved before payment modes existed keep their deposit.
+    """
+    if link is not None and link.deposit_cents_override is not None:
+        amount = link.deposit_cents_override
+    else:
+        mode = service.booking_payment_mode
+        if mode == "none":
+            amount = 0
+        elif mode == "full":
+            amount = total_price_cents
+        elif mode == "partial_flat":
+            amount = (
+                service.booking_payment_value_cents
+                if service.booking_payment_value_cents is not None
+                else default_deposit_cents
+            )
+        elif mode == "partial_percent":
+            amount = round(total_price_cents * (service.booking_payment_percent or 0) / 100)
+        else:
+            amount = service.deposit_cents
+    return max(0, min(amount, total_price_cents))

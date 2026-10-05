@@ -40,7 +40,7 @@ from app.services.availability import list_availability
 from app.services.presenters import booking_draft_to_summary, booking_to_summary, tenant_to_summary
 from app.services.resource_availability import reserve_resources
 from app.services.service_add_ons import resolve_add_ons
-from app.services.service_terms import provider_service_link, resolve_service_terms
+from app.services.service_terms import provider_service_link, resolve_booking_deposit, resolve_service_terms
 from app.services.tenants import get_tenant_by_slug
 from app.services.timezones import resolve_zone
 
@@ -551,6 +551,11 @@ def _build_manage_booking_response(
     )
 
 
+def _default_deposit_cents(tenant: Tenant) -> int:
+    value = tenant.settings_json.get("defaultDepositCents", 0)
+    return value if isinstance(value, int) and value >= 0 else 0
+
+
 async def create_booking_draft(
     session: AsyncSession,
     tenant_slug: str,
@@ -602,7 +607,8 @@ async def create_booking_draft(
     )
 
     # Price, deposit and duration with this provider's overrides applied.
-    terms = resolve_service_terms(service, provider_service_link(provider, service.id))
+    provider_link = provider_service_link(provider, service.id)
+    terms = resolve_service_terms(service, provider_link)
 
     resolved_start_at = start_at
     resolved_end_at = start_at + timedelta(minutes=terms.duration_minutes + add_on_minutes)
@@ -688,7 +694,14 @@ async def create_booking_draft(
         ends_at=resolved_end_at,
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
         price_cents=terms.price_cents,
-        deposit_cents=terms.deposit_cents,
+        # Taken at booking per the service's payment mode, on the full visit
+        # (service plus add-ons).
+        deposit_cents=resolve_booking_deposit(
+            service,
+            provider_link,
+            terms.price_cents + sum(add_on.price_cents for add_on in add_ons),
+            _default_deposit_cents(tenant),
+        ),
         duration_minutes=terms.duration_minutes + add_on_minutes,
     )
     session.add(draft)

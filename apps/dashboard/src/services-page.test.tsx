@@ -448,6 +448,48 @@ describe("ServicesPage", () => {
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
   });
 
+  it("can delete a category and leave its services uncategorised", async () => {
+    mockLoaders();
+    const deleteSpy = vi.spyOn(platformApi, "deleteServiceCategory").mockResolvedValue(undefined);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brows")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Brows actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    const dialog = await screen.findByRole("dialog", { name: "Delete category" });
+    fireEvent.click(within(dialog).getByRole("radio", { name: "Leave them uncategorised" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete category" }));
+
+    await waitFor(() => expect(deleteSpy).toHaveBeenCalledWith("brow-beauty-lab", "cat-brows", { moveToCategoryId: undefined }));
+  });
+
+  it("opens the category editor from the category name", async () => {
+    mockLoaders();
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brows")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Brows" }));
+
+    expect(await screen.findByDisplayValue("Shape, tint, and define")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+  });
+
+  it("saves what's taken at booking from the Online booking tab", async () => {
+    mockLoaders();
+    const updateSpy = vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("tab", { name: "Online booking" }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Partial payment — %/ }));
+    fireEvent.change(screen.getByLabelText("Partial payment percentage"), { target: { value: "30" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(updateSpy.mock.calls[0][2]).toMatchObject({ bookingPaymentMode: "partial_percent", bookingPaymentPercent: 30 });
+  });
+
   it("denies access entirely when services.view is false", async () => {
     mockLoaders();
     render(<ServicesPage definition={definition} currentUser={readOnlyUser} />);
@@ -628,7 +670,8 @@ describe("ServicesPage", () => {
     );
     const dialog = screen.getByRole("dialog", { name: "Delete category" });
     expect(within(dialog).getByRole("heading", { name: "Delete category" })).toBeInTheDocument();
-    expect(within(dialog).getByText(/Services in this category will become uncategorized/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/nothing is deleted with the category/)).toBeInTheDocument();
+    expect(within(dialog).getByRole("radio", { name: "Move them to" })).toBeChecked();
   });
 
   it("deletes a category through the confirmation modal", async () => {
@@ -657,11 +700,13 @@ describe("ServicesPage", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Delete category" });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete category" }));
 
+    // Its services move to the next category by default.
     await waitFor(() => expect(deleteSpy).toHaveBeenCalledWith(
       "brow-beauty-lab",
       "cat-brows",
+      { moveToCategoryId: "cat-facials" },
     ));
 
     await waitFor(() =>

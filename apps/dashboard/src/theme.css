@@ -4332,6 +4332,7 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .cs-svc-setting + .cs-svc-setting { padding-top: 12px; border-top: 1px solid var(--cs-hairline); }
 .cs-svc-setting--stacked { flex-direction: column; align-items: stretch; gap: 10px; }
 .cs-svc-setting__text { display: flex; flex-direction: column; min-width: 0; }
+.cs-svc-setting__text .cs-svc-section__lead { margin: 4px 0 0; }
 .cs-svc-setting__title { font: 500 13px var(--cs-font); color: var(--cs-ink); }
 .cs-svc-radios { display: flex; flex-direction: column; gap: 8px; }
 .cs-svc-radio-opt { display: flex; align-items: center; gap: 8px; font: 500 13px var(--cs-font); color: var(--cs-ink); cursor: pointer; }
@@ -4528,6 +4529,74 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   cursor: pointer;
 }
 .cs-svc-add-category:hover { background: var(--cs-hover); color: var(--cs-ink); }
+
+/* Radio choice rows (payment taken at booking, category delete) */
+.cs-svc-choices { display: flex; flex-direction: column; gap: 8px; }
+.cs-svc-choice {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 50px;
+  padding: 8px 18px;
+  border-radius: var(--cs-r-16);
+  background: var(--cs-canvas);
+  cursor: pointer;
+}
+.cs-svc-choice.is-selected { background: var(--cs-peach); }
+.cs-svc-choice__radio {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border: 1.5px solid rgba(20, 17, 15, .35);
+  border-radius: 50%;
+  background: var(--cs-surface);
+  appearance: none;
+  cursor: pointer;
+}
+.cs-svc-choice__radio:checked { border: 5px solid var(--cs-ink); }
+.cs-svc-choice__radio:focus-visible { outline: 2px solid var(--cs-ink); outline-offset: 2px; }
+.cs-svc-choice__label { display: inline-flex; flex: 1; align-items: center; gap: 10px; min-width: 0; font: 500 13.5px var(--cs-font); color: var(--cs-secondary); }
+.cs-svc-choice.is-selected .cs-svc-choice__label { font-weight: 600; color: var(--cs-ink); }
+.cs-svc-choice__input,
+.cs-svc-choice__select {
+  width: 92px;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--cs-surface);
+  font: 600 13.5px var(--cs-font);
+  color: var(--cs-ink);
+}
+.cs-svc-choice__select { width: auto; min-width: 180px; margin-left: auto; }
+.cs-svc-choice__input:focus,
+.cs-svc-choice__select:focus { outline: 1.5px solid var(--cs-ink); outline-offset: 0; }
+.cs-svc-choice__extra { flex: none; font: 500 12px var(--cs-font); color: var(--cs-label); white-space: nowrap; }
+
+/* "Live on the storefront" */
+.cs-svc-live {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-radius: var(--cs-r-16);
+  background: var(--cs-mint);
+}
+.cs-svc-live--off { background: var(--cs-block); }
+.cs-svc-live__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cs-svc-live__title { font: 600 14px var(--cs-font); color: var(--cs-ink); }
+.cs-svc-live__url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 12px var(--cs-font); color: var(--cs-secondary); }
+.cs-svc-live__actions { display: inline-flex; flex: none; align-items: center; gap: 12px; }
+.cs-svc-live__preview { background: var(--cs-surface); text-decoration: none; }
+.cs-svc-fieldset--inline { gap: 22px; }
+
+/* Category names in the services rail open the category editor */
+button.cs-svc-rail__group-label { padding: 2px 6px 2px 0; border: 0; border-radius: 6px; background: none; cursor: pointer; text-align: left; }
+button.cs-svc-rail__group-label:hover { color: var(--cs-ink); }
+button.cs-svc-rail__group-label.is-selected { color: var(--cs-ink); text-decoration: underline; text-underline-offset: 3px; }
+button.cs-svc-rail__group-label:focus-visible { outline: 2px solid var(--cs-ink); outline-offset: 2px; }
 
 /* Featured-label badge (service cards and category labels). */
 .cs-svc-badge {
@@ -5780,43 +5849,66 @@ select.cs-svc-details__input {
 .cs-service-variant-row__input:focus-within { border-color: var(--cs-ink); }
 .cs-service-variant-row__reset { white-space: nowrap; font-size: 0.66rem; letter-spacing: 0.1em; }
 
-/* Category detail panel — scoped Hormozi merchandising fields */
-.cs-category-detail-panel fieldset {
-  border: 1px solid var(--cs-hairline);
-  border-radius: var(--cs-r-16);
-  padding: 0.75rem 0.9rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
+/* Category editor (Services page) */
+.cs-cat-swatch { flex: none; width: 18px; height: 18px; border-radius: 6px; }
+.cs-cat-landing { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: -8px 0 0; font: 500 12px var(--cs-font); color: var(--cs-label); }
+.cs-cat-landing a { color: var(--cs-ink); word-break: break-all; }
+.cs-cat-hero { display: flex; align-items: flex-start; gap: 18px; }
+.cs-cat-hero__thumb { flex: none; width: 120px; height: 92px; overflow: hidden; border-radius: var(--cs-r-16); background: var(--cs-grey); }
+.cs-cat-hero__thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cs-cat-hero__fields { display: flex; flex: 1; flex-direction: column; gap: 14px; min-width: 0; }
+.cs-cat-hero__label { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.cs-cat-quote { display: flex; align-items: center; gap: 18px; padding: 18px 20px; border-radius: var(--cs-r-16); background: var(--cs-canvas); }
+.cs-cat-quote__avatar {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 50%;
+  background: var(--cs-grey);
+  cursor: pointer;
 }
-.cs-category-detail-panel fieldset legend {
-  font-size: 0.8rem; font-weight: 600; color: var(--cs-label); padding: 0 0.3rem;
-  text-transform: uppercase; letter-spacing: 0.04em;
+.cs-cat-quote__avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cs-cat-quote__avatar:focus-visible { outline: 2px solid var(--cs-ink); outline-offset: 2px; }
+.cs-cat-quote__fields { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; }
+.cs-cat-quote__text,
+.cs-cat-quote__author { width: 100%; padding: 4px 6px; border: 0; border-radius: 8px; background: transparent; color: var(--cs-ink); resize: vertical; }
+.cs-cat-quote__text { font: italic 500 14px/1.45 var(--cs-font); color: var(--cs-secondary); }
+.cs-cat-quote__author { font: 600 13px var(--cs-font); }
+.cs-cat-quote__text:focus,
+.cs-cat-quote__author:focus { outline: 1.5px solid var(--cs-ink); background: var(--cs-surface); }
+/* Value stack / bonuses / FAQ editors inside the category editor card */
+.cs-cat-editor .cs-svc-card fieldset { display: flex; flex-direction: column; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.cs-cat-editor .cs-svc-card fieldset legend { float: left; width: 100%; padding: 0; font: 700 10px var(--cs-font); letter-spacing: .14em; text-transform: uppercase; color: var(--cs-label); }
+.cs-cat-editor .cs-cat-field-help { margin: 0; font: 500 11.5px var(--cs-font); color: var(--cs-label); }
+.cs-cat-editor .cs-cat-stack-editor,
+.cs-cat-editor .cs-cat-faq-editor { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.cs-cat-editor .cs-cat-stack-editor li { display: grid; grid-template-columns: minmax(0, 1fr) 9rem auto; gap: 8px; }
+.cs-cat-editor .cs-cat-faq-editor li { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "question remove" "answer remove"; gap: 6px 8px; }
+.cs-cat-editor .cs-cat-faq-editor li input { grid-area: question; }
+.cs-cat-editor .cs-cat-faq-editor li textarea { grid-area: answer; }
+.cs-cat-editor .cs-cat-faq-editor li button { grid-area: remove; align-self: flex-start; }
+.cs-cat-editor .cs-cat-stack-editor input,
+.cs-cat-editor .cs-cat-faq-editor input,
+.cs-cat-editor .cs-cat-faq-editor textarea {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--cs-r-12);
+  background: var(--cs-canvas);
+  font: 500 13px var(--cs-font);
+  color: var(--cs-ink);
 }
-.cs-category-detail-panel .cs-cat-field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
-.cs-category-detail-panel .cs-cat-field > span { font-weight: 500; }
-.cs-category-detail-panel .cs-cat-field input[type="text"],
-.cs-category-detail-panel .cs-cat-field input[type="url"],
-.cs-category-detail-panel .cs-cat-field select,
-.cs-category-detail-panel .cs-cat-field textarea {
-  padding: 0.4rem 0.55rem; border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-12); font: inherit; font-size: 0.85rem; background: var(--cs-surface); color: var(--cs-ink);
-}
-.cs-category-detail-panel .cs-cat-field-help { font-size: 0.75rem; color: var(--cs-label); margin: 0; }
-.cs-category-detail-panel .cs-cat-inline-link {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: var(--cs-label);
-  background: var(--cs-canvas); padding: 0.4rem 0.55rem; border-radius: var(--cs-r-12);
-}
-.cs-category-detail-panel .cs-cat-inline-link a { word-break: break-all; }
-.cs-category-detail-panel .cs-cat-copy-hint { font-size: 0.75rem; color: var(--cs-label); }
-.cs-category-detail-panel .cs-cat-toggle { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; }
-.cs-category-detail-panel .cs-cat-stack-editor,
-.cs-category-detail-panel .cs-cat-faq-editor { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.5rem; }
-.cs-category-detail-panel .cs-cat-stack-editor li { display: grid; grid-template-columns: minmax(0, 1fr) 8rem auto; gap: 0.5rem; }
-.cs-category-detail-panel .cs-cat-stack-editor input { padding: 0.35rem 0.5rem; border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-12); font-size: 0.85rem; }
-.cs-category-detail-panel .cs-cat-faq-editor li { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "question remove" "answer remove"; gap: 0.4rem 0.5rem; }
-.cs-category-detail-panel .cs-cat-faq-editor li input { grid-area: question; padding: 0.35rem 0.5rem; border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-12); font-size: 0.85rem; }
-.cs-category-detail-panel .cs-cat-faq-editor li textarea { grid-area: answer; padding: 0.35rem 0.5rem; border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-12); font: inherit; font-size: 0.85rem; }
-.cs-category-detail-panel .cs-cat-faq-editor li button { grid-area: remove; align-self: flex-start; }
+.cs-cat-editor .cs-cat-stack-editor input:focus,
+.cs-cat-editor .cs-cat-faq-editor input:focus,
+.cs-cat-editor .cs-cat-faq-editor textarea:focus { outline: 1.5px solid var(--cs-ink); }
+
+/* Delete category dialog */
+.cs-cat-delete { display: flex; flex-direction: column; gap: 16px; padding: 26px 28px; border-radius: var(--cs-r-card); }
+.cs-cat-delete__title { margin: 0; font: 700 17px var(--cs-font); letter-spacing: -.02em; color: var(--cs-ink); }
+.cs-cat-delete__lead { margin: 0; font: 500 13px/1.55 var(--cs-font); color: var(--cs-secondary); }
 
 /* ========================================================
    Calendar + forms misc — final legacy cluster
