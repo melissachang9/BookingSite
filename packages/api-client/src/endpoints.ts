@@ -97,6 +97,10 @@ import type {
   BookingFormRequirementList,
   BookingFormRequirementSummary,
   SendFormReminderResponse,
+  CreateServiceAddOnRequest,
+  ServiceAddOn,
+  ServiceAddOnListResponse,
+  UpdateServiceAddOnRequest,
 } from "@booking/shared-types";
 import type { ApiClient } from "./client";
 
@@ -193,6 +197,19 @@ export const createPlatformApi = (client: ApiClient) => ({
       `tenants/${tenantSlug}/services/${serviceId}/provider-variants`,
       body,
     ),
+  listServiceAddOns: (tenantSlug: string, serviceId: string) =>
+    client.get<ServiceAddOnListResponse>(`tenants/${tenantSlug}/services/${serviceId}/add-ons`),
+  listServiceAddOnsManaged: (tenantSlug: string, serviceId: string) =>
+    client.get<ServiceAddOnListResponse>(`tenants/${tenantSlug}/services/${serviceId}/add-ons/manage`),
+  createServiceAddOn: (tenantSlug: string, serviceId: string, body: CreateServiceAddOnRequest) =>
+    client.post<ServiceAddOn, CreateServiceAddOnRequest>(`tenants/${tenantSlug}/services/${serviceId}/add-ons`, body),
+  updateServiceAddOn: (tenantSlug: string, serviceId: string, addOnId: string, body: UpdateServiceAddOnRequest) =>
+    client.patch<ServiceAddOn, UpdateServiceAddOnRequest>(
+      `tenants/${tenantSlug}/services/${serviceId}/add-ons/${addOnId}`,
+      body,
+    ),
+  deleteServiceAddOn: (tenantSlug: string, serviceId: string, addOnId: string) =>
+    client.delete<void>(`tenants/${tenantSlug}/services/${serviceId}/add-ons/${addOnId}`),
   getServiceResources: (tenantSlug: string, serviceId: string) =>
     client.get<ServiceResourceListResponse>(
       `tenants/${tenantSlug}/services/${serviceId}/resources`,
@@ -328,6 +345,7 @@ export const createPlatformApi = (client: ApiClient) => ({
         locationId: query.locationId,
         date: query.date,
         windowDays: query.windowDays,
+        addOnIds: query.addOnIds,
       },
     }),
   createBookingDraft: (body: CreateBookingDraftRequest) =>
@@ -450,7 +468,7 @@ export const createPlatformApi = (client: ApiClient) => ({
   addBookingItem: (
     tenantSlug: string,
     bookingId: string,
-    body: { sourceServiceId?: string | null; name?: string; priceCents?: number; quantity?: number },
+    body: { sourceServiceId?: string | null; sourceAddOnId?: string | null; name?: string; priceCents?: number; quantity?: number },
   ) =>
     client.post<BookingSummary, typeof body>(
       `tenants/${tenantSlug}/bookings/${bookingId}/items`,

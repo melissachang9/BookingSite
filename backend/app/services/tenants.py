@@ -1100,9 +1100,16 @@ async def get_provider_earnings_summary(
     now = datetime.now(timezone.utc)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
+    # Revenue is what each booking was sold at (provider overrides included);
+    # older bookings without a price snapshot fall back to the service price.
     rows = (
         await session.execute(
-            select(Booking.service_id, Service.price_cents, Service.duration_minutes)
+            select(
+                Booking.service_id,
+                func.coalesce(Booking.price_cents, Service.price_cents),
+                Booking.starts_at,
+                Booking.ends_at,
+            )
             .join(Service, Service.id == Booking.service_id)
             .where(
                 Booking.tenant_id == tenant.id,
@@ -1125,7 +1132,8 @@ async def get_provider_earnings_summary(
     non_override_revenue_cents = 0
     non_override_minutes = 0
 
-    for service_id, price_cents, duration_minutes in rows:
+    for service_id, price_cents, starts_at, ends_at in rows:
+        duration_minutes = max(0, round((ends_at - starts_at).total_seconds() / 60))
         treatment_revenue_cents += price_cents
         override = overrides_by_service.get(service_id)
         if override is not None:
@@ -2664,6 +2672,12 @@ async def replace_service_resources(
         )
         if resource is None:
             raise api_exception(404, "not_found", f"Resource not found: {entry.resource_id}")
+        if resource.kind != "room" and entry.quantity > (resource.quantity or 1):
+            raise api_exception(
+                422,
+                "validation_error",
+                f"{resource.name} has {resource.quantity} unit(s); a booking can't use {entry.quantity}.",
+            )
         session.add(ServiceResource(
             tenant_id=tenant.id,
             service_id=service.id,

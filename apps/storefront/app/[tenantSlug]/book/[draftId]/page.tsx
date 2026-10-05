@@ -350,6 +350,18 @@ export default async function BookingDraftPage({ params, searchParams }: Booking
                 <dt>Price</dt>
                 <dd>{formatCurrency(draft.priceCents)}</dd>
               </div>
+              {(draft.addOns ?? []).map((item, index) => (
+                <div key={`${item.addOnId ?? item.name}-${index}`}>
+                  <dt>+ {item.name}</dt>
+                  <dd>{formatCurrency(item.priceCents)}</dd>
+                </div>
+              ))}
+              {(draft.addOnsTotalCents ?? 0) > 0 ? (
+                <div>
+                  <dt>Total</dt>
+                  <dd>{formatCurrency(draft.priceCents + (draft.addOnsTotalCents ?? 0))}</dd>
+                </div>
+              ) : null}
             </dl>
           </section>
 

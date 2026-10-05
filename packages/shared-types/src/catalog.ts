@@ -58,6 +58,7 @@ export type ServiceSummary = AuditFields &
     bookingPaymentValueCents?: number | null;
     bookingPaymentPercent?: number | null;
     providerSelectionMode?: string | null;
+    featuredLabel?: CategoryFeaturedLabel | null;
   };
 
 export type CreateServiceRequest = {
@@ -99,6 +100,11 @@ export type UpdateServiceRequest = {
   bookingPaymentValueCents?: number | null;
   bookingPaymentPercent?: number | null;
   providerSelectionMode?: string | null;
+  featuredLabel?: CategoryFeaturedLabel | null;
+  clearFeaturedLabel?: boolean;
+  imageUrl?: string | null;
+  imageAltText?: string | null;
+  clearImage?: boolean;
 };
 
 export type ValueStackItem = {
@@ -204,6 +210,40 @@ export type ProviderServiceVariantListResponse = {
 
 export type ReplaceProviderServiceVariantsRequest = {
   variants: ProviderServiceVariantEntry[];
+};
+
+export type ServiceAddOn = AuditFields &
+  TenantScoped & {
+    serviceId: UUID;
+    name: string;
+    description?: string | null;
+    priceCents: number;
+    /** Extra minutes the add-on adds to the appointment. */
+    durationMinutes: number;
+    isActive: boolean;
+    sortOrder: number;
+  };
+
+export type ServiceAddOnListResponse = {
+  items: ServiceAddOn[];
+};
+
+export type CreateServiceAddOnRequest = {
+  name: string;
+  description?: string | null;
+  priceCents: number;
+  durationMinutes?: number;
+  isActive?: boolean;
+};
+
+export type UpdateServiceAddOnRequest = {
+  name?: string;
+  description?: string | null;
+  clearDescription?: boolean;
+  priceCents?: number;
+  durationMinutes?: number;
+  isActive?: boolean;
+  sortOrder?: number;
 };
 
 export type ServiceResourceEntry = {

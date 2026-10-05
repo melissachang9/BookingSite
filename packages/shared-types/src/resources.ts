@@ -7,6 +7,8 @@ export type ResourceSummary = AuditFields &
     isActive: boolean;
     locationId?: UUID | null;
     notes?: string | null;
+    /** Units the studio owns (a room is one unit). */
+    quantity: number;
   };
 
 export type ResourceListResponse = {
@@ -18,6 +20,7 @@ export type CreateResourceRequest = {
   kind?: string;
   locationId?: string | null;
   notes?: string | null;
+  quantity?: number;
 };
 
 export type UpdateResourceRequest = {
@@ -26,4 +29,5 @@ export type UpdateResourceRequest = {
   isActive?: boolean;
   locationId?: string | null;
   notes?: string | null;
+  quantity?: number;
 };

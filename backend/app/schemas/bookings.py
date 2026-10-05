@@ -28,10 +28,12 @@ class BookingItemSummary(CamelModel):
     price_cents: int
     quantity: int
     source_service_id: str | None = None
+    source_add_on_id: str | None = None
 
 
 class AddBookingItemRequest(CamelModel):
     source_service_id: str | None = None
+    source_add_on_id: str | None = None
     name: str | None = Field(default=None, max_length=255)
     price_cents: int | None = Field(default=None, ge=0, le=1_000_000)
     quantity: int = Field(default=1, ge=1, le=99)
@@ -55,6 +57,9 @@ class BookingSummaryResponse(CamelModel):
     completed_at: datetime | None = None
     canceled_at: datetime | None = None
     notes: str | None = None
+    # Service price/deposit agreed at booking time (provider overrides applied).
+    price_cents: int
+    deposit_cents: int
     amount_paid_cents: int
     balance_due_cents: int
     tax_cents: int = 0

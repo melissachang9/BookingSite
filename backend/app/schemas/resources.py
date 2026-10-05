@@ -17,6 +17,7 @@ class ResourceSummaryResponse(CamelModel):
     is_active: bool
     location_id: str | None = None
     notes: str | None = None
+    quantity: int = 1  # units the studio owns
 
 
 class ResourceListResponse(CamelModel):
@@ -28,6 +29,7 @@ class CreateResourceRequest(CamelModel):
     kind: str = "room"
     location_id: str | None = None
     notes: str | None = None
+    quantity: int = Field(default=1, ge=1, le=100)
 
 
 class UpdateResourceRequest(CamelModel):
@@ -36,3 +38,4 @@ class UpdateResourceRequest(CamelModel):
     is_active: bool | None = None
     location_id: str | None = None
     notes: str | None = None
+    quantity: int | None = Field(default=None, ge=1, le=100)

@@ -571,11 +571,38 @@ async def _ensure_postgres_schema_compatibility() -> None:
             )
 
 
+# Columns added after their tables first shipped. create_all() only creates
+# missing tables, so existing Postgres databases get these via ALTER TABLE.
+_ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("providers", "compensation_product_flat_cents", "INTEGER"),
+    ("provider_services", "offered_location_ids", "JSON"),
+    ("bookings", "price_cents", "INTEGER"),
+    ("bookings", "deposit_cents", "INTEGER"),
+    ("resources", "quantity", "INTEGER NOT NULL DEFAULT 1"),
+    ("booking_items", "source_add_on_id", "VARCHAR(36)"),
+)
+
+
+async def _ensure_added_columns() -> None:
+    async with get_engine().begin() as connection:
+        for table, column, column_type in _ADDED_COLUMNS:
+            exists = await connection.scalar(
+                text(
+                    "SELECT 1 FROM information_schema.columns "
+                    "WHERE table_schema = 'public' AND table_name = :table AND column_name = :column"
+                ),
+                {"table": table, "column": column},
+            )
+            if not exists:
+                await connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}"))
+
+
 async def initialize_database() -> None:
     async with get_engine().begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     if get_engine().dialect.name == "postgresql":
         await _ensure_postgres_schema_compatibility()
+        await _ensure_added_columns()
 
 
 async def dispose_engine() -> None:

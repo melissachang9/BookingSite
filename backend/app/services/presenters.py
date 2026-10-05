@@ -5,7 +5,12 @@ from sqlalchemy import inspect as sa_inspect
 from app.core.security import create_customer_manage_token
 from app.db.models import Booking, BookingDraft, BookingDraftFormRequirement, BookingDraftIntakePlan, Customer, Location, Provider, Service, Tenant
 from app.schemas.bookings import BookingItemSummary, BookingPaymentSummary, BookingSummaryResponse
-from app.schemas.booking_drafts import BookingDraftSummaryResponse, CustomerSummaryResponse, IntakePlanResponse
+from app.schemas.booking_drafts import (
+    BookingDraftAddOnResponse,
+    BookingDraftSummaryResponse,
+    CustomerSummaryResponse,
+    IntakePlanResponse,
+)
 from app.schemas.forms import FormRequirementResponse
 from app.schemas.catalog import (
     LocationSummaryResponse,
@@ -44,8 +49,19 @@ def booking_items_total_cents(booking: Booking) -> int:
     return sum(item.price_cents * item.quantity for item in items)
 
 
+def booking_price_cents(booking: Booking) -> int:
+    """Service price agreed at booking time; older bookings without a snapshot
+    fall back to the service's current price."""
+    return booking.price_cents if booking.price_cents is not None else booking.service.price_cents
+
+
+def booking_deposit_cents(booking: Booking) -> int:
+    """Deposit agreed at booking time, with the same fallback as the price."""
+    return booking.deposit_cents if booking.deposit_cents is not None else booking.service.deposit_cents
+
+
 def booking_subtotal_cents(booking: Booking) -> int:
-    return booking.service.price_cents + booking_items_total_cents(booking)
+    return booking_price_cents(booking) + booking_items_total_cents(booking)
 
 
 def booking_tax_cents(booking: Booking) -> int:
@@ -353,6 +369,8 @@ def form_requirement_to_summary(requirement: BookingDraftFormRequirement) -> For
 
 def booking_draft_to_summary(draft: BookingDraft) -> BookingDraftSummaryResponse:
     tenant = draft.tenant if isinstance(draft.tenant, Tenant) else None
+    # Only read add-ons when eagerly loaded (no lazy loads in async code).
+    draft_add_ons = draft.add_ons if "add_ons" not in sa_inspect(draft).unloaded else []
     reminder_hours_before = 24
     if tenant is not None:
         raw_hours = tenant.settings_json.get("reminderHoursBefore", 24)
@@ -380,6 +398,16 @@ def booking_draft_to_summary(draft: BookingDraft) -> BookingDraftSummaryResponse
         customer=customer_to_summary(draft.customer) if draft.customer is not None else None,
         intake_plan=intake_plan_to_summary(draft.intake_plan, reminder_hours_before) if draft.intake_plan is not None else None,
         form_requirements=[form_requirement_to_summary(requirement) for requirement in draft.form_requirements],
+        add_ons=[
+            BookingDraftAddOnResponse(
+                add_on_id=add_on.add_on_id,
+                name=add_on.name,
+                price_cents=add_on.price_cents,
+                duration_minutes=add_on.duration_minutes,
+            )
+            for add_on in draft_add_ons
+        ],
+        add_ons_total_cents=sum(add_on.price_cents for add_on in draft_add_ons),
     )
 
 
@@ -427,6 +455,7 @@ def booking_to_summary(booking: Booking) -> BookingSummaryResponse:
             price_cents=item.price_cents,
             quantity=item.quantity,
             source_service_id=item.source_service_id,
+            source_add_on_id=item.source_add_on_id,
         )
         for item in sorted(booking_items, key=lambda i: i.created_at)
     ]
@@ -449,6 +478,8 @@ def booking_to_summary(booking: Booking) -> BookingSummaryResponse:
         completed_at=booking.completed_at,
         canceled_at=booking.canceled_at,
         notes=booking.notes,
+        price_cents=booking_price_cents(booking),
+        deposit_cents=booking_deposit_cents(booking),
         amount_paid_cents=amount_paid_cents,
         balance_due_cents=balance_due_cents,
         tax_cents=tax_cents,

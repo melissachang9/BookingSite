@@ -159,6 +159,9 @@ export function ResourcesPage({
                     <h4>{selectedResource.name}</h4>
                     <p className="cs-md-detail-panel__meta">
                       {KIND_LABELS[selectedResource.kind] ?? selectedResource.kind}
+                      {selectedResource.kind !== "room"
+                        ? ` · ${selectedResource.quantity} ${selectedResource.quantity === 1 ? "unit" : "units"}`
+                        : ""}
                       {" · "}
                       {selectedResource.isActive ? "Active" : "Inactive"}
                     </p>
@@ -252,6 +255,7 @@ function ResourceModal({
   const [name, setName] = useState(isEdit ? modal.resource.name : "");
   const [kind, setKind] = useState(isEdit ? modal.resource.kind : "room");
   const [notes, setNotes] = useState(isEdit ? (modal.resource.notes ?? "") : "");
+  const [quantity, setQuantity] = useState(String(isEdit ? modal.resource.quantity : 1));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -263,6 +267,12 @@ function ResourceModal({
       setError("Resource name is required.");
       return;
     }
+    // A room is always one unit; other kinds are pooled (e.g. 2 LED panels).
+    const units = kind === "room" ? 1 : Number(quantity);
+    if (!Number.isInteger(units) || units < 1 || units > 100) {
+      setError("Units owned must be a whole number from 1 to 100.");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -271,6 +281,7 @@ function ResourceModal({
           name: trimmedName,
           kind,
           notes: notes.trim() || null,
+          quantity: units,
         };
         await platformApi.updateResource(tenantSlug, modal.resource.id, body);
         await onSaved(`"${trimmedName}" updated.`);
@@ -279,6 +290,7 @@ function ResourceModal({
           name: trimmedName,
           kind,
           notes: notes.trim() || undefined,
+          quantity: units,
         };
         await platformApi.createResource(tenantSlug, body);
         await onSaved(`"${trimmedName}" created.`);
@@ -330,6 +342,21 @@ function ResourceModal({
               <option value="other">Other</option>
             </select>
           </label>
+          {kind !== "room" ? (
+            <label>
+              <span>Units owned</span>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={quantity}
+                onChange={(event) => setQuantity(event.target.value)}
+              />
+              <small className="cs-settings-form-help">
+                Bookings that need this stop once every unit is in use.
+              </small>
+            </label>
+          ) : null}
           <label>
             <span>Notes</span>
             <textarea

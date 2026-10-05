@@ -53,7 +53,7 @@ export default async function ManageBookingPage({ params, searchParams }: Manage
       manageBooking;
     const isCanceled = booking.status === "canceled";
     const hasPaidDeposit = booking.depositStatus === "paid";
-    const depositAmountLabel = formatCurrency(booking.service.depositCents);
+    const depositAmountLabel = formatCurrency(booking.depositCents ?? booking.service.depositCents);
     const paymentAmountLabel =
       booking.balanceDueCents > 0
         ? formatCurrency(booking.balanceDueCents)

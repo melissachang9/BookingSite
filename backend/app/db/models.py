@@ -179,6 +179,29 @@ class Service(Base, IdMixin, TimestampMixin):
     booking_drafts: Mapped[list[BookingDraft]] = relationship(back_populates="service")
     form_attachments: Mapped[list[ServiceFormAttachment]] = relationship(back_populates="service", cascade="all, delete-orphan")
     resource_links: Mapped[list["ServiceResource"]] = relationship(back_populates="service", cascade="all, delete-orphan")
+    add_ons: Mapped[list["ServiceAddOn"]] = relationship(
+        back_populates="service",
+        cascade="all, delete-orphan",
+        order_by="ServiceAddOn.sort_order",
+    )
+
+
+class ServiceAddOn(Base, IdMixin, TimestampMixin):
+    """An optional extra clients or staff can add to a service, e.g. LED therapy
+    for +$40 and +15 minutes."""
+
+    __tablename__ = "service_add_ons"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    service_id: Mapped[str] = mapped_column(String(36), ForeignKey("services.id"), index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+    service: Mapped[Service] = relationship(back_populates="add_ons")
 
 
 class ServiceCategory(Base, IdMixin, TimestampMixin):
@@ -334,6 +357,11 @@ class Booking(Base, IdMixin, TimestampMixin):
     payment_resolution: Mapped[str] = mapped_column(String(32), nullable=False)
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Price and deposit agreed when the booking was made (provider overrides
+    # resolved). Null only on bookings created before the snapshot existed,
+    # which fall back to the service's current values.
+    price_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    deposit_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     canceled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -368,6 +396,9 @@ class BookingItem(Base, IdMixin, TimestampMixin):
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
     booking_id: Mapped[str] = mapped_column(String(36), ForeignKey("bookings.id"), index=True, nullable=False)
     source_service_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("services.id"), nullable=True)
+    source_add_on_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("service_add_ons.id", ondelete="SET NULL"), nullable=True
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
@@ -468,6 +499,30 @@ class BookingDraft(Base, IdMixin, TimestampMixin):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    add_ons: Mapped[list["BookingDraftAddOn"]] = relationship(
+        back_populates="booking_draft",
+        cascade="all, delete-orphan",
+    )
+
+
+class BookingDraftAddOn(Base, IdMixin, TimestampMixin):
+    """An add-on chosen for a booking draft, with the price and time agreed
+    then. Becomes a booking line item when the draft is confirmed."""
+
+    __tablename__ = "booking_draft_add_ons"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    booking_draft_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("booking_drafts.id"), index=True, nullable=False
+    )
+    add_on_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("service_add_ons.id", ondelete="SET NULL"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    booking_draft: Mapped[BookingDraft] = relationship(back_populates="add_ons")
 
 
 class SlotHold(Base, IdMixin, TimestampMixin):
@@ -596,8 +651,31 @@ class Resource(Base, IdMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     location_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("locations.id"), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Units the studio owns (e.g. two LED panels). A room is one unit.
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
     service_links: Mapped[list[ServiceResource]] = relationship(back_populates="resource", cascade="all, delete-orphan")
+
+
+class ResourceAllocation(Base, IdMixin, TimestampMixin):
+    """Units of a room or piece of equipment reserved for one appointment.
+
+    Created with the booking draft (counted while its slot hold is active) and
+    linked to the booking on confirmation (counted while the booking is
+    confirmed or completed). The window includes setup and cleanup buffers.
+    """
+
+    __tablename__ = "resource_allocations"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    resource_id: Mapped[str] = mapped_column(String(36), ForeignKey("resources.id"), index=True, nullable=False)
+    booking_draft_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("booking_drafts.id"), index=True, nullable=True
+    )
+    booking_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("bookings.id"), index=True, nullable=True)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class AuditEvent(Base, IdMixin, TimestampMixin):

@@ -8,16 +8,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
-from app.db.models import Booking, BookingDraft, BookingItem, BookingPaymentEvent, Payment, PaymentEvent, Provider, Service, Tenant, User
+from app.db.models import Booking, BookingDraft, BookingItem, BookingPaymentEvent, Payment, PaymentEvent, Provider, ResourceAllocation, Service, ServiceAddOn, Tenant, User
 from app.schemas.bookings import AddBookingItemRequest, BookingListResponse, BookingSummaryResponse, CancelBookingRequest, PaginationMetaResponse, UpdateBookingRequest, UpdateBookingStatusRequest
 from app.schemas.payments import ApplyWalletCreditRequest, RecordManualPaymentRequest, RefundPaymentRequest
 from app.services.booking_drafts import _cancellation_policy_for_booking, _load_booking
 from app.services.payment_processor import charge_stripe_no_show_fee, refund_payment_via_processor
-from app.services.presenters import booking_balance_due_cents, booking_to_summary
+from app.services.presenters import booking_balance_due_cents, booking_price_cents, booking_to_summary
+from app.services.service_terms import provider_service_link, resolve_service_terms
 
 logger = logging.getLogger(__name__)
 from app.services.state_machine import guard_transition
 from app.services.wallet import record_wallet_transaction
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
 def _clean_notes(notes: str | None) -> str | None:
@@ -122,7 +127,7 @@ def _apply_payment_resolution(booking: Booking, payment_resolution: str) -> None
         booking.deposit_status = "follow_up"
         return
 
-    if booking.service.price_cents == 0 and payment_resolution == "collected":
+    if booking_price_cents(booking) == 0 and payment_resolution == "collected":
         booking.deposit_status = "not_required"
         return
 
@@ -282,6 +287,20 @@ async def add_booking_item(
         if price_cents is None:
             price_cents = service.price_cents
 
+    if payload.source_add_on_id is not None:
+        add_on = await session.scalar(
+            select(ServiceAddOn).where(
+                ServiceAddOn.id == payload.source_add_on_id,
+                ServiceAddOn.tenant_id == tenant.id,
+            )
+        )
+        if add_on is None:
+            raise api_exception(404, "not_found", "Add-on was not found.")
+        if not name:
+            name = add_on.name
+        if price_cents is None:
+            price_cents = add_on.price_cents
+
     if not name:
         raise api_exception(422, "validation_error", "An item name is required.")
     if price_cents is None or price_cents < 0:
@@ -291,6 +310,7 @@ async def add_booking_item(
         tenant_id=booking.tenant_id,
         booking_id=booking.id,
         source_service_id=payload.source_service_id,
+        source_add_on_id=payload.source_add_on_id,
         name=name[:255],
         price_cents=price_cents,
         quantity=payload.quantity,
@@ -819,11 +839,43 @@ async def update_booking(
 
     changed = False
     old_starts_at = booking.starts_at
+    old_price_cents = booking_price_cents(booking)
+
+    # A new service or provider must belong to this tenant.
+    new_service = booking.service
+    if payload.service_id is not None and payload.service_id != booking.service_id:
+        new_service = await session.scalar(
+            select(Service).where(Service.id == payload.service_id, Service.tenant_id == tenant.id)
+        )
+        if new_service is None:
+            raise api_exception(404, "not_found", "Service was not found for this tenant.")
+    new_provider = booking.provider
+    if payload.provider_id is not None and payload.provider_id != booking.provider_id:
+        new_provider = await session.scalar(
+            select(Provider)
+            .options(selectinload(Provider.service_links))
+            .where(Provider.id == payload.provider_id, Provider.tenant_id == tenant.id)
+        )
+        if new_provider is None:
+            raise api_exception(404, "not_found", "Provider was not found for this tenant.")
 
     if payload.starts_at is not None:
         duration = booking.ends_at - booking.starts_at
+        shift = _as_utc(payload.starts_at) - _as_utc(booking.starts_at)
         booking.starts_at = payload.starts_at
         booking.ends_at = payload.starts_at + duration
+        # The booking keeps its room/equipment reservation at the new time.
+        allocations = (
+            await session.scalars(
+                select(ResourceAllocation).where(
+                    ResourceAllocation.tenant_id == tenant.id,
+                    ResourceAllocation.booking_id == booking.id,
+                )
+            )
+        ).all()
+        for allocation in allocations:
+            allocation.starts_at = _as_utc(allocation.starts_at) + shift
+            allocation.ends_at = _as_utc(allocation.ends_at) + shift
         changed = True
 
     if payload.provider_id is not None:
@@ -833,6 +885,12 @@ async def update_booking(
     if payload.service_id is not None:
         booking.service_id = payload.service_id
         changed = True
+
+    # A different service or provider means a different price/deposit.
+    if new_service is not booking.service or new_provider is not booking.provider:
+        terms = resolve_service_terms(new_service, provider_service_link(new_provider, new_service.id))
+        booking.price_cents = terms.price_cents
+        booking.deposit_cents = terms.deposit_cents
 
     if payload.notes is not None:
         booking.notes = _clean_notes(payload.notes)
@@ -850,6 +908,7 @@ async def update_booking(
         notes=payload.notes,
         extra_payload={
             "previousStartsAt": old_starts_at.isoformat() if payload.starts_at is not None else None,
+            "previousPriceCents": old_price_cents if booking_price_cents(booking) != old_price_cents else None,
             "sendConfirmation": payload.send_confirmation,
         },
     )

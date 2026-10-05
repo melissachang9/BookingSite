@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -12,7 +12,9 @@ from app.core.security import decode_token
 from app.db.models import (
     Booking,
     BookingDraft,
+    BookingDraftAddOn,
     BookingDraftFormRequirement,
+    BookingItem,
     BookingDraftIntakePlan,
     BookingPaymentEvent,
     Customer,
@@ -21,6 +23,7 @@ from app.db.models import (
     Payment,
     PaymentEvent,
     Provider,
+    ResourceAllocation,
     Service,
     ServiceFormAttachment,
     ServiceLocation,
@@ -35,6 +38,9 @@ from app.services.wallet import record_wallet_transaction
 from app.schemas.booking_drafts import BookingDraftSummaryResponse, ConfirmWithPaymentRequest, CreateBookingDraftRequest, UpdateBookingDraftRequest
 from app.services.availability import list_availability
 from app.services.presenters import booking_draft_to_summary, booking_to_summary, tenant_to_summary
+from app.services.resource_availability import reserve_resources
+from app.services.service_add_ons import resolve_add_ons
+from app.services.service_terms import provider_service_link, resolve_service_terms
 from app.services.tenants import get_tenant_by_slug
 from app.services.timezones import resolve_zone
 
@@ -253,6 +259,7 @@ async def _load_booking_draft(
             selectinload(BookingDraft.hold),
             selectinload(BookingDraft.intake_plan),
             selectinload(BookingDraft.form_requirements).selectinload(BookingDraftFormRequirement.form_version),
+            selectinload(BookingDraft.add_ons),
         )
         .where(*filters)
     )
@@ -313,9 +320,42 @@ async def _promote_draft_to_booking(
         payment_resolution=payment_resolution,
         starts_at=draft.starts_at,
         ends_at=draft.ends_at,
+        price_cents=draft.price_cents,
+        deposit_cents=draft.deposit_cents,
     )
     session.add(booking)
     await session.flush()
+
+    # Chosen add-ons become line items, so totals, tax and balance include them.
+    draft_add_ons = (
+        await session.scalars(
+            select(BookingDraftAddOn).where(
+                BookingDraftAddOn.tenant_id == draft.tenant_id,
+                BookingDraftAddOn.booking_draft_id == draft.id,
+            )
+        )
+    ).all()
+    for add_on in draft_add_ons:
+        session.add(
+            BookingItem(
+                tenant_id=draft.tenant_id,
+                booking_id=booking.id,
+                source_add_on_id=add_on.add_on_id,
+                name=add_on.name,
+                price_cents=add_on.price_cents,
+                quantity=1,
+            )
+        )
+
+    # The draft's room/equipment reservation now belongs to the booking.
+    await session.execute(
+        update(ResourceAllocation)
+        .where(
+            ResourceAllocation.tenant_id == draft.tenant_id,
+            ResourceAllocation.booking_draft_id == draft.id,
+        )
+        .values(booking_id=booking.id)
+    )
 
     session.add(
         BookingPaymentEvent(
@@ -536,6 +576,9 @@ async def create_booking_draft(
     if provider is None:
         raise api_exception(404, "not_found", "Provider was not found for this tenant.")
 
+    add_ons = await resolve_add_ons(session, tenant.id, service.id, payload.add_on_ids)
+    add_on_minutes = sum(add_on.duration_minutes for add_on in add_ons)
+
     start_at = _ensure_aware(payload.starts_at)
     requested_date_text = await _location_date_text(session, payload.location_id, tenant, start_at)
     availability = await list_availability(
@@ -545,6 +588,7 @@ async def create_booking_draft(
         provider_id=payload.provider_id,
         location_id=payload.location_id,
         requested_date_text=requested_date_text,
+        add_on_ids=[add_on.id for add_on in add_ons],
     )
     matching_slot = next(
         (
@@ -557,8 +601,11 @@ async def create_booking_draft(
         None,
     )
 
+    # Price, deposit and duration with this provider's overrides applied.
+    terms = resolve_service_terms(service, provider_service_link(provider, service.id))
+
     resolved_start_at = start_at
-    resolved_end_at = start_at + timedelta(minutes=service.duration_minutes)
+    resolved_end_at = start_at + timedelta(minutes=terms.duration_minutes + add_on_minutes)
     resolved_location_id = payload.location_id
 
     if matching_slot is not None:
@@ -602,6 +649,19 @@ async def create_booking_draft(
     else:
         raise api_exception(409, "conflict", "The selected slot is no longer available.")
 
+    # Reserve a room and any equipment for the full buffered window. Staff
+    # overrides bend provider hours, not room/equipment capacity.
+    resource_picks = await reserve_resources(
+        session,
+        tenant.id,
+        service.id,
+        resolved_location_id,
+        resolved_start_at - timedelta(minutes=service.setup_buffer_minutes),
+        resolved_end_at + timedelta(minutes=service.cleanup_buffer_minutes),
+    )
+    if resource_picks is None:
+        raise api_exception(409, "conflict", "No room or equipment for this service is free at this time.")
+
     customer = None
     if payload.customer is not None:
         assign_owner = (
@@ -627,12 +687,37 @@ async def create_booking_draft(
         starts_at=resolved_start_at,
         ends_at=resolved_end_at,
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
-        price_cents=service.price_cents,
-        deposit_cents=service.deposit_cents,
-        duration_minutes=service.duration_minutes,
+        price_cents=terms.price_cents,
+        deposit_cents=terms.deposit_cents,
+        duration_minutes=terms.duration_minutes + add_on_minutes,
     )
     session.add(draft)
     await session.flush()
+
+    # Snapshot each add-on as chosen; later catalog edits don't change it.
+    for add_on in add_ons:
+        session.add(
+            BookingDraftAddOn(
+                tenant_id=tenant.id,
+                booking_draft_id=draft.id,
+                add_on_id=add_on.id,
+                name=add_on.name,
+                price_cents=add_on.price_cents,
+                duration_minutes=add_on.duration_minutes,
+            )
+        )
+
+    for resource_id, quantity in resource_picks:
+        session.add(
+            ResourceAllocation(
+                tenant_id=tenant.id,
+                resource_id=resource_id,
+                booking_draft_id=draft.id,
+                quantity=quantity,
+                starts_at=draft.starts_at - timedelta(minutes=service.setup_buffer_minutes),
+                ends_at=draft.ends_at + timedelta(minutes=service.cleanup_buffer_minutes),
+            )
+        )
 
     await session.execute(
         delete(SlotHold).where(
@@ -830,6 +915,7 @@ async def reschedule_manage_booking(
         provider_id=booking.provider_id,
         location_id=booking.location_id,
         requested_date_text=requested_date_text,
+        exclude_booking_id=booking.id,
     )
     matching_slot = next(
         (
@@ -844,7 +930,40 @@ async def reschedule_manage_booking(
     if matching_slot is None:
         raise api_exception(409, "conflict", "The selected time slot is no longer available.")
 
-    guard_transition("booking", booking.id, booking.status, "confirmed")
+    # Swap the booking's room/equipment reservation to the new time.
+    setup_buffer = timedelta(minutes=booking.service.setup_buffer_minutes)
+    cleanup_buffer = timedelta(minutes=booking.service.cleanup_buffer_minutes)
+    resource_picks = await reserve_resources(
+        session,
+        booking.tenant_id,
+        booking.service_id,
+        booking.location_id,
+        new_starts_at - setup_buffer,
+        new_ends_at + cleanup_buffer,
+        exclude_booking_id=booking.id,
+    )
+    if resource_picks is None:
+        raise api_exception(409, "conflict", "The selected time slot is no longer available.")
+    await session.execute(
+        delete(ResourceAllocation).where(
+            ResourceAllocation.tenant_id == booking.tenant_id,
+            ResourceAllocation.booking_id == booking.id,
+        )
+    )
+    for resource_id, quantity in resource_picks:
+        session.add(
+            ResourceAllocation(
+                tenant_id=booking.tenant_id,
+                resource_id=resource_id,
+                booking_id=booking.id,
+                quantity=quantity,
+                starts_at=new_starts_at - setup_buffer,
+                ends_at=new_ends_at + cleanup_buffer,
+            )
+        )
+
+    # Moving the time keeps the booking confirmed (checked above); it is not a
+    # lifecycle transition, so there is no state-machine guard here.
     old_starts_at = booking.starts_at
     booking.starts_at = new_starts_at
     booking.ends_at = new_ends_at

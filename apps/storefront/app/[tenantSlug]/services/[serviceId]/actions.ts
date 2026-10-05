@@ -22,6 +22,7 @@ export async function startBookingDraftAction(formData: FormData) {
   const returnTo = typeof returnToValue === "string" && returnToValue.startsWith(`/${tenantSlug}/`) ? returnToValue : `/${tenantSlug}/services/${serviceId}`;
   const locationIdValue = formData.get("locationId");
   const locationId = typeof locationIdValue === "string" && locationIdValue.length > 0 ? locationIdValue : undefined;
+  const addOnIds = formData.getAll("addOnId").filter((value): value is string => typeof value === "string" && value.length > 0);
 
   let draftId: string;
 
@@ -32,6 +33,7 @@ export async function startBookingDraftAction(formData: FormData) {
       providerId,
       startsAt,
       locationId,
+      addOnIds,
     });
 
     draftId = draft.id;

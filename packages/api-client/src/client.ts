@@ -12,7 +12,8 @@ export type RequestOptions = {
   body?: unknown;
   headers?: HeadersInit;
   signal?: AbortSignal;
-  query?: Record<string, string | number | boolean | undefined | null>;
+  /** Array values are sent as repeated parameters (`?id=a&id=b`). */
+  query?: Record<string, string | number | boolean | string[] | undefined | null>;
 };
 
 export class ApiClientError extends Error {
@@ -28,8 +29,8 @@ export class ApiClientError extends Error {
 }
 
 const isDefinedQueryValue = (
-  value: string | number | boolean | undefined | null,
-): value is string | number | boolean => value !== undefined && value !== null;
+  value: string | number | boolean | string[] | undefined | null,
+): value is string | number | boolean | string[] => value !== undefined && value !== null;
 
 const buildUrl = (
   baseUrl: string,
@@ -42,7 +43,9 @@ const buildUrl = (
 
   if (query) {
     for (const [key, value] of Object.entries(query)) {
-      if (isDefinedQueryValue(value)) {
+      if (Array.isArray(value)) {
+        for (const item of value) url.searchParams.append(key, item);
+      } else if (isDefinedQueryValue(value)) {
         url.searchParams.set(key, String(value));
       }
     }

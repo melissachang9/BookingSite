@@ -455,6 +455,7 @@ async def get_availability(
     location_id: str | None = Query(None, alias="locationId"),
     date: str = Query(...),
     window_days: int = Query(7, alias="windowDays", ge=1, le=62),
+    add_on_ids: list[str] | None = Query(None, alias="addOnIds"),
     session: AsyncSession = Depends(get_db_session),
 ) -> AvailabilityResponse:
     return await list_availability(
@@ -465,6 +466,7 @@ async def get_availability(
         location_id=location_id,
         requested_date_text=date,
         window_days=window_days,
+        add_on_ids=add_on_ids,
     )
 
 

@@ -113,6 +113,14 @@ function mockListEndpoints(overrides: Partial<{ users: any[]; providers: any[] }
     serviceId: "",
     variants: [],
   } as any);
+  vi.spyOn(platformApi, "getProviderWorkHours").mockResolvedValue({
+    providerId: "p1",
+    locationId: null,
+    regularHours: [],
+    dateOverrides: [],
+    summary: { hoursPerWeek: 0, workingDays: 0, upcomingOverridesCount: 0 },
+    warnings: [],
+  } as any);
 }
 
 afterEach(() => {
@@ -653,15 +661,61 @@ describe("StaffPage", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Services" }));
     await waitFor(() => screen.getByPlaceholderText(/Find a treatment/i));
 
-    expect(screen.getByText(/Brow Shaping/)).toBeInTheDocument();
-    expect(screen.getByText(/Facial/)).toBeInTheDocument();
+    // Scope to the services list; the menu summary below also names services.
+    const list = screen.getByRole("region", { name: /^Services/ });
+    expect(within(list).getByText(/Brow Shaping/)).toBeInTheDocument();
+    expect(within(list).getByText(/Facial/)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search services"), {
       target: { value: "fac" },
     });
 
-    expect(screen.queryByText(/Brow Shaping/)).not.toBeInTheDocument();
-    expect(screen.getByText(/Facial/)).toBeInTheDocument();
+    expect(within(list).queryByText(/Brow Shaping/)).not.toBeInTheDocument();
+    expect(within(list).getByText(/Facial/)).toBeInTheDocument();
+  });
+
+  it("flags a service that every shift on a weekday blocks", async () => {
+    mockListEndpoints();
+    vi.spyOn(platformApi, "getProviderWorkHours").mockResolvedValue({
+      providerId: "p1",
+      locationId: "loc1",
+      regularHours: [
+        { id: "s-mon", weekday: 0, locationId: "loc1", startTime: "09:00", endTime: "17:00", isActive: true, blockedServiceIds: null },
+        { id: "s-thu", weekday: 3, locationId: "loc1", startTime: "09:00", endTime: "17:00", isActive: true, blockedServiceIds: ["svc1"] },
+      ],
+      dateOverrides: [],
+      summary: { hoursPerWeek: 16, workingDays: 2, upcomingOverridesCount: 0 },
+      warnings: [],
+    } as any);
+
+    renderStaffPage(ownerUser);
+    await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("tab", { name: "Services" }));
+
+    expect(await screen.findByText("Blocked Thursdays")).toBeInTheDocument();
+    expect(screen.getByText(/the Thursday shift excludes it/)).toBeInTheDocument();
+  });
+
+  it("summarises overrides as they are typed", async () => {
+    mockListEndpoints();
+
+    renderStaffPage(ownerUser);
+    await waitFor(() => screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Riley Park/i }));
+    fireEvent.click(screen.getByRole("tab", { name: "Services" }));
+    await waitFor(() => screen.getByLabelText("Brow Shaping price"));
+
+    // Blank fields show the inherited base value as a placeholder.
+    expect(screen.getByLabelText("Brow Shaping price")).toHaveAttribute("placeholder", "$50");
+
+    fireEvent.change(screen.getByLabelText("Brow Shaping price"), { target: { value: "65" } });
+
+    const effect = screen.getByRole("region", { name: "Effect of overrides" });
+    expect(within(effect).getByText("Overridden fields").nextElementSibling).toHaveTextContent("1");
+    expect(within(effect).getByText(/Brow Shaping is \$15 above its base price of \$50/)).toBeInTheDocument();
+    const menu = screen.getByRole("region", { name: "Menu summary" });
+    expect(within(menu).getByText(/\$65 · 30 min/)).toBeInTheDocument();
   });
 
   it("bulk Select all adds all visible services to the provider", async () => {

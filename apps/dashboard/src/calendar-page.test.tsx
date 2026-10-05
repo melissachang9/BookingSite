@@ -750,6 +750,97 @@ describe("CalendarPage", () => {
     }
   });
 
+  describe("add-ons on a calendar booking", () => {
+    const opening = {
+      startAt: "2026-05-27T19:00:00.000Z",
+      endAt: "2026-05-27T20:00:00.000Z",
+      providerId: "provider-1",
+      providerName: "Jordan Rivera",
+      locationId: "location-1",
+    } satisfies SlotAvailability;
+    const ledAddOn = {
+      id: "addon-1", tenantId: "tenant-1", serviceId: "service-1", createdAt: "", updatedAt: "",
+      name: "LED therapy", description: null, priceCents: 4000, durationMinutes: 15, isActive: true, sortOrder: 0,
+    };
+
+    // Books the 12:00 slot with LED therapy; `fitsWithAddOns` decides whether the
+    // longer visit still fits the provider's hours.
+    async function bookWithAddOn(fitsWithAddOns: boolean, confirmAnswer: boolean) {
+      const api = createApi([baseBooking], { openingsByDate: { "2026-05-27": [opening] } });
+      api.listServiceAddOns = vi.fn().mockResolvedValue({ items: [ledAddOn] });
+      api.getAvailability = vi.fn(async (request) => {
+        const slots = request.addOnIds?.length && !fitsWithAddOns ? [] : [opening];
+        return { days: [{ date: request.date, slotCount: slots.length }], slots };
+      });
+      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(confirmAnswer);
+
+      render(
+        <CalendarPage
+          definition={{ eyebrow: "Calendar-first booking", description: "Calendar" }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+      expect(await screen.findByText("24 – 30 May")).toBeInTheDocument();
+      fireEvent.click(await screen.findByLabelText("Wed schedule track"));
+      const dialog = await screen.findByRole("dialog", { name: "Calendar slot actions" });
+
+      fireEvent.click(await within(dialog).findByRole("checkbox", { name: /LED therapy/ }));
+      expect(within(dialog).getByText("1 hr 15 min")).toBeInTheDocument();
+
+      fireEvent.change(within(dialog).getByPlaceholderText("Search clients — type a name"), { target: { value: "Tay" } });
+      fireEvent.click(await within(dialog).findByRole("button", { name: /Taylor Guest/ }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "Book & send confirmation" }));
+      return { api, confirmSpy };
+    }
+
+    it("prompts when add-ons run past the provider's hours and books with an override", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+      try {
+        const { api, confirmSpy } = await bookWithAddOn(false, true);
+        await vi.waitFor(() => {
+          expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining("With add-ons"));
+          expect(api.createBookingDraft).toHaveBeenCalledWith(
+            expect.objectContaining({ overrideAvailability: true, addOnIds: ["addon-1"] }),
+          );
+        });
+        confirmSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("does not book when the override prompt is declined", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+      try {
+        const { api, confirmSpy } = await bookWithAddOn(false, false);
+        await vi.waitFor(() => expect(confirmSpy).toHaveBeenCalled());
+        expect(api.createBookingDraft).not.toHaveBeenCalled();
+        confirmSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("books without a prompt when the add-ons still fit", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+      try {
+        const { api, confirmSpy } = await bookWithAddOn(true, true);
+        await vi.waitFor(() => {
+          expect(api.createBookingDraft).toHaveBeenCalledWith(expect.objectContaining({ addOnIds: ["addon-1"] }));
+        });
+        expect(confirmSpy).not.toHaveBeenCalled();
+        expect(api.createBookingDraft).not.toHaveBeenCalledWith(expect.objectContaining({ overrideAvailability: true }));
+        confirmSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   it("updates appointment duration from appointment type and books the edited start time", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));

@@ -10,8 +10,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
-from app.db.models import Booking, Location, Provider, ProviderSchedule, ProviderTimeOff, Service, SlotHold
+from app.db.models import (
+    Booking,
+    BookingDraft,
+    Location,
+    Provider,
+    ProviderSchedule,
+    ProviderTimeOff,
+    Service,
+    SlotHold,
+)
 from app.schemas.availability import AvailabilityDayResponse, AvailabilityResponse, SlotAvailabilityResponse
+from app.services.resource_availability import load_requirements, load_usage, pick_resources
+from app.services.service_add_ons import resolve_add_ons
+from app.services.service_terms import ServiceTerms, provider_service_link, resolve_service_terms
 from app.services.tenants import get_tenant_by_slug
 from app.services.timezones import resolve_zone
 
@@ -20,6 +32,7 @@ from app.services.timezones import resolve_zone
 class ProviderContext:
     provider: Provider
     location_ids: list[str]
+    terms: ServiceTerms  # price/deposit/duration with this provider's overrides
 
 
 def _ensure_aware(value: datetime) -> datetime:
@@ -114,7 +127,13 @@ async def _load_providers(
             and (offered_location_ids is None or link.location_id in offered_location_ids)
         ]
         if provider_location_ids:
-            resolved_contexts.append(ProviderContext(provider=provider, location_ids=provider_location_ids))
+            resolved_contexts.append(
+                ProviderContext(
+                    provider=provider,
+                    location_ids=provider_location_ids,
+                    terms=resolve_service_terms(service, service_link),
+                )
+            )
     return resolved_contexts
 
 
@@ -126,9 +145,16 @@ async def list_availability(
     location_id: str | None,
     requested_date_text: str,
     window_days: int = 7,
+    *,
+    exclude_booking_id: str | None = None,
+    add_on_ids: list[str] | None = None,
 ) -> AvailabilityResponse:
+    """Bookable slots for a service. `exclude_booking_id` ignores one booking's
+    own time and resources, so it can be moved to an overlapping slot.
+    `add_on_ids` lengthens each slot by the chosen add-ons' extra minutes."""
     tenant = await get_tenant_by_slug(session, tenant_slug)
     service = await _load_service(session, tenant.id, service_id)
+    add_on_minutes = sum(add_on.duration_minutes for add_on in await resolve_add_ons(session, tenant.id, service.id, add_on_ids))
     provider_contexts = await _load_providers(session, tenant.id, service, provider_id, location_id)
     if not provider_contexts:
         # Return empty availability instead of 404 so the calendar renders
@@ -173,10 +199,8 @@ async def list_availability(
     resolved_window_days = max(1, min(window_days, int(settings["maxAdvanceBookingDays"])))
     min_start = datetime.now(timezone.utc) + timedelta(minutes=int(settings["minLeadTimeMinutes"]))
     max_start = datetime.now(timezone.utc) + timedelta(days=int(settings["maxAdvanceBookingDays"]))
-    duration = timedelta(minutes=service.duration_minutes)
     setup_buffer = timedelta(minutes=service.setup_buffer_minutes)
     cleanup_buffer = timedelta(minutes=service.cleanup_buffer_minutes)
-    total_block = duration + setup_buffer + cleanup_buffer
     # Widen the DB query window by a day on each side so rows are never missed
     # when a location's timezone differs from the business default.
     window_start = (
@@ -197,9 +221,19 @@ async def list_availability(
             )
         )
     ).all()
-    holds = (
-        await session.scalars(
-            select(SlotHold).where(
+    # Existing appointments occupy their provider for the full buffered window.
+    hold_rows = (
+        await session.execute(
+            select(
+                SlotHold.provider_id,
+                SlotHold.starts_at,
+                SlotHold.ends_at,
+                Service.setup_buffer_minutes,
+                Service.cleanup_buffer_minutes,
+            )
+            .join(BookingDraft, BookingDraft.id == SlotHold.booking_draft_id)
+            .join(Service, Service.id == BookingDraft.service_id)
+            .where(
                 SlotHold.tenant_id == tenant.id,
                 SlotHold.provider_id.in_(provider_ids),
                 SlotHold.expires_at > datetime.now(timezone.utc),
@@ -208,14 +242,23 @@ async def list_availability(
             )
         )
     ).all()
-    bookings = (
-        await session.scalars(
-            select(Booking).where(
+    booking_rows = (
+        await session.execute(
+            select(
+                Booking.provider_id,
+                Booking.starts_at,
+                Booking.ends_at,
+                Service.setup_buffer_minutes,
+                Service.cleanup_buffer_minutes,
+            )
+            .join(Service, Service.id == Booking.service_id)
+            .where(
                 Booking.tenant_id == tenant.id,
                 Booking.provider_id.in_(provider_ids),
                 Booking.status.in_(("confirmed", "completed")),
                 Booking.starts_at < window_end,
                 Booking.ends_at > window_start,
+                *([Booking.id != exclude_booking_id] if exclude_booking_id else []),
             )
         )
     ).all()
@@ -235,14 +278,31 @@ async def list_availability(
     for schedule in schedules:
         schedule_map[(schedule.provider_id, schedule.location_id, schedule.weekday)].append(schedule)
 
-    blocked_map: dict[str, list[tuple[datetime, datetime]]] = defaultdict(list)
+    # Keyed by (provider_id, location_id); a None location blocks the provider
+    # at every location.
+    blocked_map: dict[tuple[str, str | None], list[tuple[datetime, datetime]]] = defaultdict(list)
     # Per-service blocked map for time off entries that only block specific services
     # Keyed by (provider_id, location_id) for location isolation
     service_blocked_map: dict[tuple[str, str | None], dict[str, list[tuple[datetime, datetime]]]] = defaultdict(lambda: defaultdict(list))
-    for hold in holds:
-        blocked_map[hold.provider_id].append((_ensure_aware(hold.starts_at), _ensure_aware(hold.ends_at)))
-    for booking in bookings:
-        blocked_map[booking.provider_id].append((_ensure_aware(booking.starts_at), _ensure_aware(booking.ends_at)))
+    # A provider can't be in two places, so holds and bookings block everywhere.
+    for row in [*hold_rows, *booking_rows]:
+        blocked_map[(row.provider_id, None)].append(
+            (
+                _ensure_aware(row.starts_at) - timedelta(minutes=row.setup_buffer_minutes),
+                _ensure_aware(row.ends_at) + timedelta(minutes=row.cleanup_buffer_minutes),
+            )
+        )
+
+    # Rooms and equipment the service needs, and what's already reserved.
+    resource_requirements = await load_requirements(session, tenant.id, service.id)
+    resource_usage = await load_usage(
+        session,
+        tenant.id,
+        [req.resource_id for req in resource_requirements],
+        window_start,
+        window_end,
+        exclude_booking_id=exclude_booking_id,
+    )
     # Build date-specific custom hours map: (provider_id, location_id, date) -> (start_time, end_time)
     custom_hours_map: dict[tuple[str, str | None, date], tuple[time, time]] = {}
     for time_off in time_off_rows:
@@ -296,6 +356,8 @@ async def list_availability(
         else:
             business_window = None
         for context in provider_contexts:
+            duration = timedelta(minutes=context.terms.duration_minutes + add_on_minutes)
+            total_block = duration + setup_buffer + cleanup_buffer
             for resolved_location_id in context.location_ids:
                 day_schedules = schedule_map.get(
                     (context.provider.id, resolved_location_id, current_date.weekday()),
@@ -358,6 +420,11 @@ async def list_availability(
                         if schedule.blocked_service_ids and service.id in schedule.blocked_service_ids:
                             cursor += _SLOT_GRANULARITY
                             continue
+                        if resource_requirements and pick_resources(
+                            resource_requirements, resource_usage, resolved_location_id, block_start, block_end
+                        ) is None:
+                            cursor += _SLOT_GRANULARITY
+                            continue
                         response = SlotAvailabilityResponse(
                             start_at=slot_start,
                             end_at=slot_end,
@@ -365,6 +432,7 @@ async def list_availability(
                             provider_name=context.provider.name,
                             location_id=resolved_location_id,
                             is_next_available=False,
+                            price_cents=context.terms.price_cents,
                         )
                         day_slots.append(response)
                         if earliest_slot is None or response.start_at < earliest_slot.start_at:

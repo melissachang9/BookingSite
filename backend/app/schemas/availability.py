@@ -12,6 +12,8 @@ class SlotAvailabilityResponse(CamelModel):
     provider_name: str
     location_id: str | None = None
     is_next_available: bool | None = None
+    # Price with this provider (their override, else the service price).
+    price_cents: int | None = None
 
 
 class AvailabilityDayResponse(CamelModel):

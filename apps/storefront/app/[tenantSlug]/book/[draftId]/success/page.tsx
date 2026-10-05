@@ -48,7 +48,7 @@ export default async function BookingSuccessPage({ params, searchParams }: Booki
         throw error;
       }
       const paymentSummaryValue =
-        booking.depositStatus === "not_required" ? "Not required" : formatCurrency(booking.service.depositCents);
+        booking.depositStatus === "not_required" ? "Not required" : formatCurrency(booking.depositCents ?? booking.service.depositCents);
       const paymentSummaryDetail =
         booking.depositStatus === "not_required"
           ? "No payment was required to confirm this appointment."

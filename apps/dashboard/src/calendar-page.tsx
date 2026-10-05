@@ -27,6 +27,8 @@ import type {
   RecordManualPaymentRequest,
   SendFormReminderResponse,
   ServiceCategoryListResponse,
+  ServiceAddOn,
+  ServiceAddOnListResponse,
   ServiceListResponse,
   ServiceSummary,
   SlotAvailability,
@@ -218,6 +220,8 @@ export type CalendarPageApi = {
   lookupCustomers: (query: CustomerLookupQuery) => Promise<CustomerLookupResponse>;
   getAvailability: (request: AvailabilityRequest) => Promise<AvailabilityResponse>;
   createBookingDraft: (body: CreateBookingDraftRequest) => Promise<BookingDraftSummary>;
+  /** Optional so older test doubles still type-check; without it no add-ons are offered. */
+  listServiceAddOns?: (tenantSlug: string, serviceId: string) => Promise<ServiceAddOnListResponse>;
   createOrUpdateCustomer: (body: { name: string; email?: string; phone?: string }) => Promise<{ customerId: string }>;
   listBookingFormResponses: (tenantSlug: string, bookingId: string) => Promise<BookingFormResponseList>;
   listBookingFormRequirements: (tenantSlug: string, bookingId: string) => Promise<BookingFormRequirementList>;
@@ -236,7 +240,7 @@ export type CalendarPageApi = {
   addBookingItem: (
     tenantSlug: string,
     bookingId: string,
-    body: { sourceServiceId?: string | null; name?: string; priceCents?: number; quantity?: number },
+    body: { sourceServiceId?: string | null; sourceAddOnId?: string | null; name?: string; priceCents?: number; quantity?: number },
   ) => Promise<BookingSummary>;
   removeBookingItem: (tenantSlug: string, bookingId: string, itemId: string) => Promise<BookingSummary>;
   createCheckoutSession: (body: CreateCheckoutSessionRequest) => Promise<CreateCheckoutSessionResponse>;
@@ -645,13 +649,14 @@ function createCalendarAppointment(booking: BookingSummary): CalendarAppointment
     serviceDescription: booking.service.description ?? null,
     status: booking.status,
     paymentResolution: booking.paymentResolution,
-    priceCents: booking.service.priceCents,
-    depositCents: booking.service.depositCents,
+    // What this booking was sold at (provider overrides), not today's base price.
+    priceCents: booking.priceCents ?? booking.service.priceCents,
+    depositCents: booking.depositCents ?? booking.service.depositCents,
     amountPaidCents: booking.amountPaidCents,
     balanceDueCents: booking.balanceDueCents,
     taxCents: booking.taxCents ?? 0,
     walletBalanceCents: booking.walletBalanceCents ?? 0,
-    durationMinutes: booking.service.durationMinutes,
+    durationMinutes: Math.round((Date.parse(booking.endsAt) - Date.parse(booking.startsAt)) / 60000),
     notes: booking.notes ?? null,
     payments: booking.payments ?? [],
     items: booking.items ?? [],
@@ -847,6 +852,8 @@ export function CalendarPage({
   const [availMenuOpen, setAvailMenuOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<PendingCalendarSlot | null>(null);
   const [selectedSlotServiceId, setSelectedSlotServiceId] = useState<string | null>(null);
+  const [slotAddOns, setSlotAddOns] = useState<ServiceAddOn[]>([]);
+  const [selectedSlotAddOnIds, setSelectedSlotAddOnIds] = useState<string[]>([]);
   const [selectedSlotNotes, setSelectedSlotNotes] = useState("");
   const [selectedSlotBlockedServiceIds, setSelectedSlotBlockedServiceIds] = useState<string[]>([]);
   const [selectedSlotCustomer, setSelectedSlotCustomer] = useState<SlotCustomerForm>({
@@ -1637,8 +1644,41 @@ export function CalendarPage({
   const handleSelectSlotService = (serviceId: string) => {
     const service = selectedSlotServiceOptions.find((option) => option.id === serviceId);
     setSelectedSlotServiceId(serviceId);
+    setSelectedSlotAddOnIds([]);
     if (service) {
       setSelectedSlot((current) => (current === null ? current : { ...current, endAt: addMinutesToTenantIso(current.startAt, service.durationMinutes) }));
+    }
+    setDraftCreationState({ kind: "idle" });
+  };
+
+  // Add-ons on offer for the chosen treatment.
+  useEffect(() => {
+    setSelectedSlotAddOnIds([]);
+    if (selectedSlotServiceId === null || !api.listServiceAddOns) {
+      setSlotAddOns([]);
+      return;
+    }
+    let cancelled = false;
+    api.listServiceAddOns(tenantSlug, selectedSlotServiceId)
+      .then((resp) => { if (!cancelled) setSlotAddOns(resp.items); })
+      .catch(() => { if (!cancelled) setSlotAddOns([]); });
+    return () => { cancelled = true; };
+  }, [api, tenantSlug, selectedSlotServiceId]);
+
+  // Picking an add-on lengthens the appointment by its extra minutes.
+  const handleToggleSlotAddOn = (addOnId: string) => {
+    const next = selectedSlotAddOnIds.includes(addOnId)
+      ? selectedSlotAddOnIds.filter((id) => id !== addOnId)
+      : [...selectedSlotAddOnIds, addOnId];
+    setSelectedSlotAddOnIds(next);
+    const service = selectedSlotServiceOptions.find((option) => option.id === selectedSlotServiceId);
+    if (service) {
+      const extraMinutes = slotAddOns
+        .filter((addOn) => next.includes(addOn.id))
+        .reduce((sum, addOn) => sum + addOn.durationMinutes, 0);
+      setSelectedSlot((current) =>
+        current === null ? current : { ...current, endAt: addMinutesToTenantIso(current.startAt, service.durationMinutes + extraMinutes) },
+      );
     }
     setDraftCreationState({ kind: "idle" });
   };
@@ -1877,16 +1917,40 @@ export function CalendarPage({
       return;
     }
 
-    const isAvailable = isSlotWithinAvailability(selectedSlot.openings, selectedSlot.providerId, selectedSlotServiceId, selectedSlot.startAt);
-    if (!isAvailable) {
-      const serviceName = selectedSlotServiceOptions.find((service) => service.id === selectedSlotServiceId)?.name ?? "this appointment type";
-      const providerName = selectedSlot.providerName ?? "This provider";
-      const confirmed = window.confirm(
-        `${providerName} is not usually available for ${serviceName} at this time — it falls outside their normal working hours. Book this appointment anyway?`,
-      );
-      if (!confirmed) {
-        return;
+    const serviceName = selectedSlotServiceOptions.find((service) => service.id === selectedSlotServiceId)?.name ?? "this appointment type";
+    const providerName = selectedSlot.providerName ?? "This provider";
+    let isAvailable = isSlotWithinAvailability(selectedSlot.openings, selectedSlot.providerId, selectedSlotServiceId, selectedSlot.startAt);
+    let overrideMessage = `${providerName} is not usually available for ${serviceName} at this time — it falls outside their normal working hours. Book this appointment anyway?`;
+
+    // Add-ons lengthen the visit, so recheck the provider's hours with the full
+    // length. If it no longer fits, staff can still confirm and book it anyway.
+    if (isAvailable && selectedSlotAddOnIds.length > 0) {
+      const providerId = selectedSlot.providerId;
+      const startMs = new Date(selectedSlot.startAt).getTime();
+      try {
+        const withAddOns = await api.getAvailability({
+          tenantSlug,
+          serviceId: selectedSlotServiceId,
+          providerId,
+          locationId: selectedSlot.locationId,
+          date: selectedSlot.date,
+          windowDays: 1,
+          addOnIds: selectedSlotAddOnIds,
+        });
+        isAvailable = withAddOns.slots.some(
+          (slot) => slot.providerId === providerId && new Date(slot.startAt).getTime() === startMs,
+        );
+      } catch {
+        isAvailable = false;
       }
+      if (!isAvailable) {
+        const endsAt = timeFormatter.format(new Date(selectedSlot.endAt));
+        overrideMessage = `With add-ons, ${serviceName} runs until ${endsAt} — past ${providerName}'s normal working hours. Book this appointment anyway?`;
+      }
+    }
+
+    if (!isAvailable && !window.confirm(overrideMessage)) {
+      return;
     }
 
     setDraftCreationState({ kind: "submitting" });
@@ -1901,6 +1965,7 @@ export function CalendarPage({
         customer,
         bookingMethod: "staff_entered",
         ...(isAvailable ? {} : { overrideAvailability: true }),
+        ...(selectedSlotAddOnIds.length > 0 ? { addOnIds: selectedSlotAddOnIds } : {}),
       });
 
       setDraftCreationState({ kind: "success", draftId: draft.id });
@@ -2399,6 +2464,9 @@ export function CalendarPage({
           onNotesChange={setSelectedSlotNotes}
           onBookAppointment={() => void handleCreateDraftFromSlot()}
           onAddTimeBlock={handleAddTimeBlockFromSlot}
+          addOnOptions={slotAddOns}
+          selectedAddOnIds={selectedSlotAddOnIds}
+          onToggleAddOn={handleToggleSlotAddOn}
         />,
         document.body,
       )}
@@ -3383,6 +3451,9 @@ type SlotActionDrawerProps = {
   onNotesChange: (notes: string) => void;
   onBookAppointment: () => void;
   onAddTimeBlock: () => void;
+  addOnOptions: ServiceAddOn[];
+  selectedAddOnIds: string[];
+  onToggleAddOn: (addOnId: string) => void;
 };
 
 function SlotActionDrawer({
@@ -3411,6 +3482,9 @@ function SlotActionDrawer({
   onNotesChange,
   onBookAppointment,
   onAddTimeBlock,
+  addOnOptions,
+  selectedAddOnIds,
+  onToggleAddOn,
 }: SlotActionDrawerProps): ReactElement | null {
   const slotKey = selectedSlot
     ? `${selectedSlot.date}|${selectedSlot.providerId ?? ""}|${selectedSlot.startAt}`
@@ -3485,7 +3559,12 @@ function SlotActionDrawer({
   const isAppointmentMode = mode === "appointment";
   const hasProvider = selectedSlot.providerId !== null;
   const selectedService = serviceOptions.find((service) => service.id === selectedServiceId) ?? null;
-  const appointmentEndAt = selectedService ? addMinutesToTenantIso(selectedSlot.startAt, selectedService.durationMinutes) : selectedSlot.endAt;
+  const chosenAddOns = addOnOptions.filter((addOn) => selectedAddOnIds.includes(addOn.id));
+  const addOnMinutes = chosenAddOns.reduce((sum, addOn) => sum + addOn.durationMinutes, 0);
+  const addOnPriceCents = chosenAddOns.reduce((sum, addOn) => sum + addOn.priceCents, 0);
+  const appointmentEndAt = selectedService
+    ? addMinutesToTenantIso(selectedSlot.startAt, selectedService.durationMinutes + addOnMinutes)
+    : selectedSlot.endAt;
   const blockEndAt = addMinutesToTenantIso(selectedSlot.startAt, blockDurationMinutes);
   const hasRequiredCustomer = Boolean(customer.firstName.trim() && customer.lastName.trim() && customer.email.trim() && customer.phone.trim());
   const isSlotAvailableForService = isSlotWithinAvailability(selectedSlot.openings, selectedSlot.providerId, selectedServiceId, selectedSlot.startAt);
@@ -3724,7 +3803,7 @@ function SlotActionDrawer({
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 12 }}>
                   <div className="cs-stat">
                     <div className="cs-stat__label">Duration</div>
-                    <div className="cs-stat__value">{selectedService ? formatDuration(selectedService.durationMinutes) : "—"}</div>
+                    <div className="cs-stat__value">{selectedService ? formatDuration(selectedService.durationMinutes + addOnMinutes) : "—"}</div>
                   </div>
                   <div className="cs-stat">
                     <div className="cs-stat__label">Ends</div>
@@ -3732,9 +3811,30 @@ function SlotActionDrawer({
                   </div>
                   <div className="cs-stat">
                     <div className="cs-stat__label">Price</div>
-                    <div className="cs-stat__value">{selectedService ? formatPriceCents(selectedService.priceCents) : "—"}</div>
+                    <div className="cs-stat__value">{selectedService ? formatPriceCents(selectedService.priceCents + addOnPriceCents) : "—"}</div>
                   </div>
                 </div>
+
+                {selectedService && addOnOptions.length > 0 ? (
+                  <div className="cs-slot-addons" role="group" aria-label="Add-ons">
+                    <div className="cs-section__label">Add-ons</div>
+                    <div className="cs-slot-addons__list">
+                      {addOnOptions.map((addOn) => {
+                        const checked = selectedAddOnIds.includes(addOn.id);
+                        return (
+                          <label key={addOn.id} className={`cs-slot-addon${checked ? " is-selected" : ""}`}>
+                            <input type="checkbox" className="cs-check" checked={checked} onChange={() => onToggleAddOn(addOn.id)} />
+                            <span className="cs-slot-addon__name">{addOn.name}</span>
+                            <span className="cs-slot-addon__terms">
+                              +{formatPriceCents(addOn.priceCents)}
+                              {addOn.durationMinutes > 0 ? ` · +${addOn.durationMinutes} min` : ""}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               {/* Notes for the team */}
@@ -5173,6 +5273,15 @@ function CheckoutPanel({
   const [adjustedSubtotal, setAdjustedSubtotal] = useState(appointment.priceCents);
   // Extra services/products added to this sale — persisted on the booking.
   const [showAddItemMenu, setShowAddItemMenu] = useState(false);
+  const [checkoutAddOns, setCheckoutAddOns] = useState<ServiceAddOn[]>([]);
+  useEffect(() => {
+    if (!api.listServiceAddOns) return;
+    let cancelled = false;
+    api.listServiceAddOns(tenantSlug, appointment.serviceId)
+      .then((resp) => { if (!cancelled) setCheckoutAddOns(resp.items); })
+      .catch(() => { if (!cancelled) setCheckoutAddOns([]); });
+    return () => { cancelled = true; };
+  }, [api, tenantSlug, appointment.serviceId]);
   const [itemBusy, setItemBusy] = useState(false);
   const addedItems = (appointment.items ?? []).map((i) => ({
     id: i.id,
@@ -5358,6 +5467,21 @@ function CheckoutPanel({
     setErrorMessage("");
     try {
       await api.addBookingItem(tenantSlug, appointment.id, { sourceServiceId: service.id });
+      onPaymentRecorded();
+    } catch (error) {
+      setState("error");
+      setErrorMessage(error instanceof Error ? error.message : "Failed to add item.");
+    } finally {
+      setItemBusy(false);
+    }
+  };
+
+  const handleAddAddOn = async (addOn: ServiceAddOn) => {
+    setShowAddItemMenu(false);
+    setItemBusy(true);
+    setErrorMessage("");
+    try {
+      await api.addBookingItem(tenantSlug, appointment.id, { sourceAddOnId: addOn.id });
       onPaymentRecorded();
     } catch (error) {
       setState("error");
@@ -5664,6 +5788,25 @@ function CheckoutPanel({
               </button>
               {showAddItemMenu ? (
                 <div className="cs-checkout-panel__add-item-menu" role="listbox">
+                  {checkoutAddOns.length > 0 ? (
+                    <>
+                      <div className="cs-checkout-panel__add-item-group">Add-ons for this treatment</div>
+                      {checkoutAddOns.map((addOn) => (
+                        <button
+                          key={addOn.id}
+                          type="button"
+                          role="option"
+                          aria-selected={false}
+                          className="cs-checkout-panel__add-item-option"
+                          onClick={() => void handleAddAddOn(addOn)}
+                        >
+                          <span>{addOn.name}</span>
+                          <span className="cs-checkout-panel__add-item-option-price">{formatMoney(addOn.priceCents)}</span>
+                        </button>
+                      ))}
+                      <div className="cs-checkout-panel__add-item-group">Services</div>
+                    </>
+                  ) : null}
                   {services.filter((s) => s.isActive).length === 0 ? (
                     <div className="cs-checkout-panel__add-item-empty">No services available to add.</div>
                   ) : (

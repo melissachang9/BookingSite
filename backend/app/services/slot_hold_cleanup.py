@@ -11,9 +11,9 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from sqlalchemy import delete
+from sqlalchemy import delete, exists, select
 
-from app.db.models import SlotHold
+from app.db.models import ResourceAllocation, SlotHold
 from app.db.session import get_session_maker
 
 logger = logging.getLogger(__name__)
@@ -28,6 +28,16 @@ async def cleanup_expired_slot_holds() -> int:
 
         result = await session.execute(
             delete(SlotHold).where(SlotHold.expires_at <= datetime.now(timezone.utc))
+        )
+        # Room/equipment reservations of drafts that never became bookings and
+        # no longer have a hold. Idempotent: a repeat sweep deletes nothing.
+        await session.execute(
+            delete(ResourceAllocation).where(
+                ResourceAllocation.booking_id.is_(None),
+                ~exists(
+                    select(SlotHold.id).where(SlotHold.booking_draft_id == ResourceAllocation.booking_draft_id)
+                ),
+            )
         )
         await session.commit()
         count = result.rowcount

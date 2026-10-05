@@ -1673,6 +1673,72 @@ button:disabled {
   font-weight: 900;
 }
 
+/* Optional add-ons chosen before picking a time (they lengthen the slot). */
+.appointment-addons {
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1rem, 3vw, 1.6rem);
+  border-radius: var(--sf-radius-sm);
+  background: var(--sf-canvas-raised);
+  border: 1px solid var(--sf-border);
+}
+
+.appointment-addons__form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.appointment-addons__list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.appointment-addon {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.8rem 1rem;
+  border-radius: 16px;
+  background: var(--sf-ivory);
+  border: 1px solid var(--sf-border);
+  cursor: pointer;
+}
+
+.appointment-addon:has(input:checked) {
+  border-color: var(--sf-border-strong);
+  background: var(--sf-sage-soft);
+}
+
+.appointment-addon input {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0;
+  accent-color: var(--sf-wine);
+}
+
+.appointment-addon__text {
+  display: grid;
+  flex: 1;
+  gap: 0.15rem;
+  min-width: 0;
+  color: var(--sf-ink);
+}
+
+.appointment-addon__text small {
+  color: var(--sf-muted);
+}
+
+.appointment-addon__terms {
+  flex: none;
+  color: var(--sf-ink-soft);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.appointment-addons__update {
+  justify-self: start;
+}
+
 .appointment-scheduler {
   display: grid;
   grid-template-columns: minmax(320px, 0.48fr) minmax(0, 1fr);

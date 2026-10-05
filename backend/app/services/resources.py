@@ -43,6 +43,7 @@ async def create_tenant_resource(
         kind=payload.kind,
         location_id=payload.location_id,
         notes=payload.notes.strip() if payload.notes else None,
+        quantity=payload.quantity,
     )
     session.add(resource)
     await session.commit()
@@ -75,6 +76,8 @@ async def update_tenant_resource(
         resource.location_id = payload.location_id
     if payload.notes is not None:
         resource.notes = payload.notes.strip() if payload.notes else None
+    if payload.quantity is not None:
+        resource.quantity = payload.quantity
 
     await session.commit()
     return _resource_to_summary(resource)
@@ -91,4 +94,5 @@ def _resource_to_summary(resource: Resource) -> ResourceSummaryResponse:
         is_active=resource.is_active,
         location_id=resource.location_id,
         notes=resource.notes,
+        quantity=resource.quantity,
     )

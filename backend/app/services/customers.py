@@ -10,7 +10,13 @@ from app.core.http import api_exception
 from app.db.models import Booking, Customer, Payment, Tenant
 from app.schemas.customers import CustomerBookingEntry, CustomerListResponse, CustomerLookupResponse, CustomerPaymentEntry, CustomerProfileResponse, UpdateCustomerRequest, UpsertCustomerRequest, UpsertCustomerResponse
 from app.schemas.bookings import PaginationMetaResponse
-from app.services.presenters import booking_amount_paid_cents, booking_balance_due_cents, customer_to_summary
+from app.services.presenters import (
+    booking_amount_paid_cents,
+    booking_balance_due_cents,
+    booking_deposit_cents,
+    booking_price_cents,
+    customer_to_summary,
+)
 from app.services.tenants import get_tenant_by_slug
 
 
@@ -26,8 +32,8 @@ def _build_customer_profile(customer: Customer, bookings: list[Booking]) -> Cust
             status=booking.status,
             starts_at=booking.starts_at,
             ends_at=booking.ends_at,
-            price_cents=booking.service.price_cents,
-            deposit_cents=booking.service.deposit_cents,
+            price_cents=booking_price_cents(booking),
+            deposit_cents=booking_deposit_cents(booking),
             amount_paid_cents=booking_amount_paid_cents(booking),
             balance_due_cents=booking_balance_due_cents(booking),
         )

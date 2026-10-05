@@ -15,6 +15,7 @@ const ownerUser: AuthenticatedUser = {
   permissions: [
     { key: "services.view", allowed: true },
     { key: "services.manage", allowed: true },
+    { key: "settings.manage", allowed: true },
   ],
 };
 
@@ -155,6 +156,7 @@ const baseServices: any[] = [
 function mockLoaders(overrides: {
   services?: any[];
   categories?: any[];
+  forms?: any[];
 } = {}) {
   vi.spyOn(platformApi, "getTenantBySlug").mockResolvedValue(baseTenant);
   vi.spyOn(platformApi, "listServices").mockResolvedValue({
@@ -171,6 +173,9 @@ function mockLoaders(overrides: {
   } as any);
   vi.spyOn(platformApi, "getServiceProviderVariants").mockResolvedValue({
     variants: [],
+  } as any);
+  vi.spyOn(platformApi, "listForms").mockResolvedValue({
+    items: overrides.forms ?? [],
   } as any);
 }
 
@@ -232,10 +237,11 @@ describe("ServicesPage", () => {
       expect(screen.getByText("Facials")).toBeInTheDocument(),
     );
 
-    // Facials has no subheadline or featuredLabel
-    expect(screen.queryByText("Most popular")).toBeNull();
-    expect(screen.queryByText("New")).toBeNull();
-    expect(screen.queryByText("Limited")).toBeNull();
+    // Facials has no subheadline or featuredLabel (scoped to badges: "New" is
+    // also the add-service button's label).
+    expect(screen.queryByText("Most popular", { selector: ".cs-svc-badge" })).toBeNull();
+    expect(screen.queryByText("New", { selector: ".cs-svc-badge" })).toBeNull();
+    expect(screen.queryByText("Limited", { selector: ".cs-svc-badge" })).toBeNull();
   });
 
   it("shows all services grouped under their categories", async () => {
@@ -346,6 +352,100 @@ describe("ServicesPage", () => {
     expect(screen.queryByRole("button", { name: /\+ Add service/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Duplicate" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+  });
+
+  it("saves a featured label from the Details tab", async () => {
+    mockLoaders();
+    const updateSpy = vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("button", { name: "Most popular" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(updateSpy.mock.calls[0][2]).toMatchObject({ featuredLabel: "most_popular" });
+  });
+
+  it("requires a client-facing form for the service on save", async () => {
+    mockLoaders({
+      forms: [
+        { id: "form-intake", name: "General skin intake", scope: "customer", isActive: true, customerPromptTiming: "pre_visit", appliesToAllServices: false, serviceIds: ["svc-facial"] },
+        { id: "form-notes", name: "Provider notes", scope: "internal", isActive: true, appliesToAllServices: false, serviceIds: [] },
+      ],
+    });
+    vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+    const formSpy = vi.spyOn(platformApi, "updateForm").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    // Internal forms never show up as client requirements.
+    await waitFor(() => expect(screen.getByText("General skin intake")).toBeInTheDocument());
+    expect(screen.queryByText("Provider notes")).toBeNull();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /General skin intake/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(formSpy).toHaveBeenCalledWith(
+      "brow-beauty-lab",
+      "form-intake",
+      { serviceIds: ["svc-facial", "svc-shape"] },
+    ));
+  });
+
+  it("adds an add-on from the Add-ons tab", async () => {
+    mockLoaders();
+    vi.spyOn(platformApi, "listServiceAddOnsManaged").mockResolvedValue({ items: [] } as any);
+    const createSpy = vi.spyOn(platformApi, "createServiceAddOn").mockResolvedValue({
+      id: "addon-1", tenantId: "tenant-1", serviceId: "svc-shape", createdAt: "", updatedAt: "",
+      name: "Brow lamination", description: null, priceCents: 4000, durationMinutes: 15, isActive: true, sortOrder: 0,
+    } as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("tab", { name: "Add-ons" }));
+    fireEvent.click(await screen.findByRole("button", { name: "+ Add add-on" }));
+
+    const form = screen.getByRole("group", { name: "New add-on" });
+    fireEvent.change(within(form).getByPlaceholderText("e.g. LED therapy"), { target: { value: "Brow lamination" } });
+    fireEvent.change(within(form).getByPlaceholderText("0.00"), { target: { value: "40" } });
+    fireEvent.change(within(form).getByDisplayValue("0"), { target: { value: "15" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Add add-on" }));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledWith("brow-beauty-lab", "svc-shape", {
+      name: "Brow lamination", priceCents: 4000, durationMinutes: 15, description: null,
+    }));
+    expect(await screen.findByText("Brow lamination")).toBeInTheDocument();
+  });
+
+  it("adds equipment inline from the Resources tab and ticks it", async () => {
+    mockLoaders();
+    vi.spyOn(platformApi, "listResources").mockResolvedValue({ items: [] } as any);
+    vi.spyOn(platformApi, "getServiceResources").mockResolvedValue({ serviceId: "svc-shape", resources: [] } as any);
+    const createSpy = vi.spyOn(platformApi, "createResource").mockResolvedValue({
+      id: "res-1", tenantId: "tenant-1", createdAt: "", updatedAt: "",
+      name: "LED panel", kind: "equipment", isActive: true, locationId: null, notes: null, quantity: 2,
+    } as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("tab", { name: "Resources" }));
+    fireEvent.click(await screen.findByRole("button", { name: "+ Add equipment" }));
+
+    const form = screen.getByRole("group", { name: "New equipment" });
+    fireEvent.change(within(form).getByPlaceholderText("e.g. LED panel"), { target: { value: "LED panel" } });
+    fireEvent.change(within(form).getByDisplayValue("1"), { target: { value: "2" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Add equipment" }));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledWith("brow-beauty-lab", expect.objectContaining({
+      name: "LED panel", kind: "equipment", quantity: 2,
+    })));
+    expect(await screen.findByRole("checkbox", { name: "Toggle LED panel" })).toBeChecked();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
   });
 
   it("denies access entirely when services.view is false", async () => {
@@ -461,9 +561,9 @@ describe("ServicesPage", () => {
       expect(screen.getByText("Brows")).toBeInTheDocument(),
     );
 
-    // Rename button is in the category group header
-    const renameButtons = screen.getAllByRole("button", { name: "Rename" });
-    fireEvent.click(renameButtons[0]);
+    // Rename lives in the category's "···" menu
+    fireEvent.click(screen.getByRole("button", { name: "Brows actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
 
     await waitFor(() =>
       expect(screen.getByRole("dialog", { name: "Rename category" })).toBeInTheDocument(),
@@ -489,8 +589,8 @@ describe("ServicesPage", () => {
       expect(screen.getByText("Brows")).toBeInTheDocument(),
     );
 
-    const renameButtons = screen.getAllByRole("button", { name: "Rename" });
-    fireEvent.click(renameButtons[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Brows actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
 
     await waitFor(() =>
       expect(screen.getByRole("dialog", { name: "Rename category" })).toBeInTheDocument(),
@@ -520,8 +620,8 @@ describe("ServicesPage", () => {
       expect(screen.getByText("Brows")).toBeInTheDocument(),
     );
 
-    const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
-    fireEvent.click(deleteButtons[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Brows actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
 
     await waitFor(() =>
       expect(screen.getByRole("dialog", { name: "Delete category" })).toBeInTheDocument(),
@@ -549,8 +649,8 @@ describe("ServicesPage", () => {
       expect(screen.getByText("Brows")).toBeInTheDocument(),
     );
 
-    const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
-    fireEvent.click(deleteButtons[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Brows actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
 
     await waitFor(() =>
       expect(screen.getByRole("dialog", { name: "Delete category" })).toBeInTheDocument(),

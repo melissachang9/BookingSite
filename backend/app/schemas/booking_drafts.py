@@ -64,6 +64,7 @@ class CreateBookingDraftRequest(CamelModel):
     customer: CustomerInput | None = None
     booking_method: str | None = "public_online"
     override_availability: bool = False
+    add_on_ids: list[str] = Field(default_factory=list, max_length=20)
 
 
 class UpdateBookingDraftRequest(CamelModel):
@@ -76,6 +77,13 @@ class ConfirmWithPaymentRequest(CamelModel):
     payment_method_type: str = "card"
     amount_cents: int
     notes: str | None = None
+
+
+class BookingDraftAddOnResponse(CamelModel):
+    add_on_id: str | None = None
+    name: str
+    price_cents: int
+    duration_minutes: int
 
 
 class BookingDraftSummaryResponse(CamelModel):
@@ -100,3 +108,7 @@ class BookingDraftSummaryResponse(CamelModel):
     customer: CustomerSummaryResponse | None = None
     intake_plan: IntakePlanResponse | None = None
     form_requirements: list[FormRequirementResponse]
+    # Add-ons chosen for this booking: their minutes are included in
+    # duration_minutes, their prices are added on top of price_cents.
+    add_ons: list[BookingDraftAddOnResponse] = Field(default_factory=list)
+    add_ons_total_cents: int = 0

@@ -5,6 +5,7 @@ import type { SlotAvailability } from "@booking/shared-types";
 import { startBookingDraftAction } from "../actions";
 import { storefrontApi, isApiClientError, isApiNotFoundError } from "../../../../lib/storefront-api";
 import {
+  formatCurrency,
   isoDateForTimeZone,
   isoDateFromValueInTimeZone,
   pathWithQuery,
@@ -13,7 +14,17 @@ import {
 
 type AvailabilityPageProps = {
   params: Promise<{ tenantSlug: string; serviceId: string }>;
-  searchParams: Promise<{ providerId?: string; locationId?: string; screening?: string; date?: string; month?: string; error?: string }>;
+  searchParams: Promise<{
+    providerId?: string;
+    locationId?: string;
+    screening?: string;
+    date?: string;
+    month?: string;
+    error?: string;
+    // Chosen add-ons: `addOns=a,b` in links, `addOn=a&addOn=b` from the picker form.
+    addOns?: string;
+    addOn?: string | string[];
+  }>;
 };
 
 type MonthCell = {
@@ -114,7 +125,7 @@ const groupSlotsByDaypart = (slots: SlotAvailability[], timeZone: string): SlotG
 
 export default async function AvailabilityPage({ params, searchParams }: AvailabilityPageProps) {
   const { tenantSlug, serviceId } = await params;
-  const { providerId, locationId, screening, date, month, error } = await searchParams;
+  const { providerId, locationId, screening, date, month, error, addOns, addOn } = await searchParams;
 
   try {
     const [tenant, serviceResponse, locationResponse] = await Promise.all([
@@ -136,9 +147,18 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
       notFound();
     }
 
-    const providerResponse = await storefrontApi.listServiceProviders(tenantSlug, service.id, {
-      locationId: selectedLocation?.id,
-    });
+    const [providerResponse, addOnResponse] = await Promise.all([
+      storefrontApi.listServiceProviders(tenantSlug, service.id, { locationId: selectedLocation?.id }),
+      storefrontApi.listServiceAddOns(tenantSlug, service.id),
+    ]);
+    const availableAddOns = addOnResponse.items;
+    const requestedAddOnIds = [
+      ...(addOns ? addOns.split(",") : []),
+      ...(Array.isArray(addOn) ? addOn : addOn ? [addOn] : []),
+    ];
+    // Only add-ons this service offers; anything else in the URL is ignored.
+    const selectedAddOns = availableAddOns.filter((item) => requestedAddOnIds.includes(item.id));
+    const selectedAddOnIds = selectedAddOns.map((item) => item.id);
     const selectedProvider = providerId
       ? providerResponse.providers.find((provider) => provider.id === providerId)
       : undefined;
@@ -157,6 +177,7 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
       locationId: selectedLocation?.id,
       date: monthStart,
       windowDays: monthDays,
+      addOnIds: selectedAddOnIds,
     });
     const firstAvailableDate = monthlyAvailability.days.find((day) => day.slotCount > 0)?.date;
     const selectedDate = date ?? firstAvailableDate ?? monthStart;
@@ -167,6 +188,7 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
       locationId: selectedLocation?.id,
       date: selectedDate,
       windowDays: 1,
+      addOnIds: selectedAddOnIds,
     });
     const nextAvailabilitySearch = await storefrontApi.getAvailability({
       tenantSlug,
@@ -175,9 +197,15 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
       locationId: selectedLocation?.id,
       date: addDays(selectedDate, selectedAvailability.slots.length > 0 ? 1 : 0),
       windowDays: 62,
+      addOnIds: selectedAddOnIds,
     });
     const availabilityPath = `/${tenantSlug}/services/${slugify(service.name)}/availability`;
-    const baseQuery = { locationId: selectedLocation?.id, screening, providerId };
+    const baseQuery = {
+      locationId: selectedLocation?.id,
+      screening,
+      providerId,
+      addOns: selectedAddOnIds.length > 0 ? selectedAddOnIds.join(",") : undefined,
+    };
     const returnTo = pathWithQuery(availabilityPath, { ...baseQuery, month: activeMonth, date: selectedDate });
     const dayMap = new Map(monthlyAvailability.days.map((day) => [day.date, day.slotCount]));
     const monthCells: MonthCell[] = Array.from({ length: monthDays }, (_, index) => {
@@ -214,8 +242,40 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
             <span>{selectedProvider?.name ?? "Any Provider"}</span>
             <span>{selectedLocation?.name ?? "Any Location"}</span>
             <span>{service.name}</span>
+            {selectedAddOns.map((item) => <span key={item.id}>+ {item.name}</span>)}
           </div>
         </section>
+
+        {availableAddOns.length > 0 ? (
+          <section className="appointment-addons" aria-labelledby="appointment-addons-title">
+            <div className="appointment-panel-header">
+              <h3 id="appointment-addons-title">Add to your appointment</h3>
+            </div>
+            <form method="get" action={availabilityPath} className="appointment-addons__form">
+              {selectedLocation ? <input type="hidden" name="locationId" value={selectedLocation.id} /> : null}
+              {screening ? <input type="hidden" name="screening" value={screening} /> : null}
+              {providerId ? <input type="hidden" name="providerId" value={providerId} /> : null}
+              <input type="hidden" name="month" value={activeMonth} />
+              <input type="hidden" name="date" value={selectedDate} />
+              <div className="appointment-addons__list">
+                {availableAddOns.map((item) => (
+                  <label key={item.id} className="appointment-addon">
+                    <input type="checkbox" name="addOn" value={item.id} defaultChecked={selectedAddOnIds.includes(item.id)} />
+                    <span className="appointment-addon__text">
+                      <strong>{item.name}</strong>
+                      {item.description ? <small>{item.description}</small> : null}
+                    </span>
+                    <span className="appointment-addon__terms">
+                      +{formatCurrency(item.priceCents)}
+                      {item.durationMinutes > 0 ? ` · +${item.durationMinutes} min` : ""}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <button type="submit" className="ghost-link appointment-addons__update">Update times</button>
+            </form>
+          </section>
+        ) : null}
 
         {error === "slot-unavailable" ? (
           <section className="status-banner" aria-live="polite">
@@ -304,6 +364,7 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
                             <input type="hidden" name="startsAt" value={slot.startAt} />
                             <input type="hidden" name="locationId" value={slot.locationId ?? ""} />
                             <input type="hidden" name="returnTo" value={returnTo} />
+                            {selectedAddOnIds.map((id) => <input key={id} type="hidden" name="addOnId" value={id} />)}
                             <button type="submit" className="slot-button appointment-slot-button" data-provider-name={slot.providerName}>
                               <span>{timeTitle(slot.startAt, tenant.timezone)}</span>
                               <strong>{slot.providerName}</strong>

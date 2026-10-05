@@ -46,6 +46,8 @@ export type SlotAvailability = {
   providerName: string;
   locationId?: UUID;
   isNextAvailable?: boolean;
+  /** Price with this provider (their override, else the service price). */
+  priceCents?: number | null;
 };
 
 export type AvailabilityDay = {
@@ -60,6 +62,8 @@ export type AvailabilityRequest = {
   locationId?: UUID;
   date: string;
   windowDays?: number;
+  /** Chosen add-ons; each lengthens the slot by its extra minutes. */
+  addOnIds?: UUID[];
 };
 
 export type AvailabilityResponse = {
@@ -87,7 +91,17 @@ export type BookingDraftSummary = AuditFields &
     customer?: CustomerSummary | null;
     intakePlan?: BookingDraftIntakePlan | null;
     formRequirements: FormRequirement[];
+    /** Chosen add-ons: minutes are in durationMinutes, prices are on top of priceCents. */
+    addOns?: BookingDraftAddOn[];
+    addOnsTotalCents?: number;
   };
+
+export type BookingDraftAddOn = {
+  addOnId?: UUID | null;
+  name: string;
+  priceCents: number;
+  durationMinutes: number;
+};
 
 export type BookingSummary = AuditFields &
   TenantScoped & {
@@ -104,6 +118,9 @@ export type BookingSummary = AuditFields &
     completedAt?: ISODateString | null;
     canceledAt?: ISODateString | null;
     notes?: string | null;
+    /** Service price/deposit agreed at booking time (provider overrides applied). */
+    priceCents?: number;
+    depositCents?: number;
     amountPaidCents: number;
     balanceDueCents: number;
     taxCents: number;
@@ -123,6 +140,7 @@ export type BookingItemSummary = {
   priceCents: number;
   quantity: number;
   sourceServiceId?: string | null;
+  sourceAddOnId?: string | null;
 };
 
 export type BookingPaymentSummary = {
@@ -186,6 +204,7 @@ export type CreateBookingDraftRequest = {
   };
   bookingMethod?: BookingMethod;
   overrideAvailability?: boolean;
+  addOnIds?: UUID[];
 };
 
 export type UpdateBookingDraftRequest = {

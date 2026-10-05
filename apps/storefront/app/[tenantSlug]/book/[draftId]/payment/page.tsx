@@ -63,7 +63,12 @@ export default async function BookingPaymentPage({ params, searchParams }: Booki
                 <article className="summary-card">
                   <span>Service</span>
                   <strong>{draft.service.name}</strong>
-                  <p>{formatCurrency(draft.priceCents)} total service value</p>
+                  <p>
+                    {formatCurrency(draft.priceCents + (draft.addOnsTotalCents ?? 0))} total service value
+                    {(draft.addOns ?? []).length > 0
+                      ? ` (includes ${(draft.addOns ?? []).map((item) => item.name).join(", ")})`
+                      : ""}
+                  </p>
                 </article>
                 <article className="summary-card">
                   <span>Deposit</span>

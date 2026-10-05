@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import type {
   AuthenticatedUser,
@@ -27,6 +27,9 @@ import type {
   UserPermissionsResponse,
 } from "@booking/shared-types";
 
+import { categoryColor } from "./category-colors";
+import { formatMoneyShort } from "./format-money";
+import { uploadImageFile } from "./upload-image";
 import { apiBaseUrl, ensureActiveStoredSession, platformApi } from "./platform-api";
 
 type RouteDefinitionLike = {
@@ -75,14 +78,6 @@ const DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
 });
 
-// Soft category marker colors, assigned by group order on the Services tab.
-const CATEGORY_DOT_COLORS = [
-  "var(--cs-mint)",
-  "var(--cs-lilac)",
-  "var(--cs-blue)",
-  "var(--cs-peach)",
-  "var(--cs-pink)",
-];
 
 function readErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message;
@@ -106,33 +101,6 @@ function avatarColorFor(id: string): string {
   let hash = 0;
   for (let i = 0; i < id.length; i += 1) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
   return AVATAR_PLACEHOLDER_COLORS[hash % AVATAR_PLACEHOLDER_COLORS.length]!;
-}
-
-async function uploadAvatarFile(tenantSlug: string, file: File): Promise<string> {
-  const body = new FormData();
-  body.append("file", file);
-  body.append("tenant_id", tenantSlug);
-  const response = await fetch(`${apiBaseUrl}/forms/upload`, {
-    method: "POST",
-    body,
-  });
-  if (!response.ok) {
-    let detail = "Unable to upload photo.";
-    try {
-      const data = (await response.json()) as { detail?: string };
-      if (typeof data.detail === "string" && data.detail.trim()) {
-        detail = data.detail;
-      }
-    } catch {
-      /* ignore */
-    }
-    throw new Error(detail);
-  }
-  const data = (await response.json()) as { url?: string };
-  if (!data.url) {
-    throw new Error("Upload did not return a URL.");
-  }
-  return data.url;
 }
 
 export function CropModal({
@@ -405,7 +373,7 @@ function AvatarUploader({
     setUploading(true);
     try {
       const croppedFile = new File([blob], "avatar.png", { type: "image/png" });
-      const url = await uploadAvatarFile(tenantSlug, croppedFile);
+      const { url } = await uploadImageFile(tenantSlug, croppedFile);
       onChange(url);
     } catch (err) {
       setError(readErrorMessage(err, "Unable to upload photo."));
@@ -1116,7 +1084,7 @@ function DetailsTab({
                 className="cs-dt-input cs-dt-textarea"
                 value={providerForm.bio}
                 onChange={(event) => setProviderForm({ ...providerForm, bio: event.target.value })}
-                placeholder="A short cs-client-facing bio…"
+                placeholder="A short client-facing bio…"
                 rows={3}
               />
             </div>
@@ -1170,7 +1138,7 @@ function DetailsTab({
             </div>
             <div className="cs-dt-field">
               <span className="cs-dt-label">Bookable online</span>
-              <label className="cs-settings-toggle cs-dt-toggle-row">
+              <label className="cs-dt-toggle-row">
                 <input
                   type="checkbox"
                   checked={provider.isBookableOnline}
@@ -1189,7 +1157,7 @@ function DetailsTab({
         <div className="cs-dt-row">
           <div className="cs-dt-field">
             <span className="cs-dt-label">Can sign in</span>
-            <label className="cs-settings-toggle cs-dt-toggle-row">
+            <label className="cs-dt-toggle-row">
               <input
                 type="checkbox"
                 checked={form.isActive}
@@ -1338,6 +1306,7 @@ function ServicesTab({
   const [error, setError] = useState<string | null>(null);
   const [locationQuery, setLocationQuery] = useState("");
   const [serviceQuery, setServiceQuery] = useState("");
+  const idPrefix = useId();
 
   // Per-service overrides (duration, price, commission)
   const [serviceOverrides, setServiceOverrides] = useState<
@@ -1388,6 +1357,27 @@ function ServicesTab({
     setIsActive(provider.isActive);
   }, [provider]);
 
+  // Regular weekly shifts per location, used only to flag services that a
+  // shift blocks. Advisory: if a load fails the tab simply shows no badges.
+  const [shiftsByLocation, setShiftsByLocation] = useState<Record<string, ProviderScheduleEntry[]>>({});
+  useEffect(() => {
+    let cancelled = false;
+    const loadShifts = async () => {
+      const next: Record<string, ProviderScheduleEntry[]> = {};
+      for (const locId of provider.locationIds) {
+        try {
+          const resp = await platformApi.getProviderWorkHours(tenantSlug, provider.id, locId);
+          next[locId] = resp.regularHours;
+        } catch {
+          // ignore — badges are informational only
+        }
+      }
+      if (!cancelled) setShiftsByLocation(next);
+    };
+    loadShifts();
+    return () => { cancelled = true; };
+  }, [tenantSlug, provider.id, provider.locationIds.join(",")]);
+
   const toggle = (list: string[], id: string): string[] =>
     list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
 
@@ -1406,11 +1396,51 @@ function ServicesTab({
     return locations.filter((loc) => loc.name.toLowerCase().includes(q));
   }, [locations, locationQuery]);
 
-  const filteredServices = useMemo(() => {
-    const q = serviceQuery.trim().toLowerCase();
-    if (!q) return services;
-    return services.filter((svc) => svc.name.toLowerCase().includes(q));
-  }, [services, serviceQuery]);
+  // Services grouped by category in configured order; anything without a known
+  // category lands in a trailing "Uncategorized" group.
+  const categoryGroups = useMemo(() => {
+    const byCategory = new Map<string, ServiceSummary[]>();
+    const uncategorized: ServiceSummary[] = [];
+    const knownIds = new Set(categories.map((cat) => cat.id));
+    for (const svc of services) {
+      if (svc.categoryId && knownIds.has(svc.categoryId)) {
+        if (!byCategory.has(svc.categoryId)) byCategory.set(svc.categoryId, []);
+        byCategory.get(svc.categoryId)!.push(svc);
+      } else {
+        uncategorized.push(svc);
+      }
+    }
+    const groups: Array<{ id: string | null; name: string; color: string; services: ServiceSummary[] }> = [];
+    const sorted = [...categories].sort((a, b) => a.sortOrder - b.sortOrder);
+    sorted.forEach((cat, index) => {
+      const list = byCategory.get(cat.id);
+      if (list) groups.push({ id: cat.id, name: cat.name, color: categoryColor(index), services: list });
+    });
+    if (uncategorized.length > 0) {
+      groups.push({ id: null, name: "Uncategorized", color: categoryColor(sorted.length), services: uncategorized });
+    }
+    return groups;
+  }, [services, categories]);
+
+  // Weekdays on which every shift (at the locations offering the service)
+  // blocks it — mirrors availability, so clients can't book it those days.
+  const blockedWeekdays = useMemo(() => {
+    const result: Record<string, number[]> = {};
+    for (const svcId of serviceIds) {
+      const offeredAt = (serviceLocations[svcId] ?? locationIds).filter((locId) => shiftsByLocation[locId]);
+      const days: number[] = [];
+      for (let weekday = 0; weekday < 7; weekday++) {
+        const dayShifts = offeredAt.flatMap((locId) =>
+          shiftsByLocation[locId].filter((shift) => shift.isActive && shift.weekday === weekday),
+        );
+        if (dayShifts.length > 0 && dayShifts.every((shift) => shift.blockedServiceIds?.includes(svcId))) {
+          days.push(weekday);
+        }
+      }
+      if (days.length > 0) result[svcId] = days;
+    }
+    return result;
+  }, [serviceIds, serviceLocations, locationIds, shiftsByLocation]);
 
   const selectAll = (ids: string[], setter: (next: string[]) => void, filtered: { id: string }[]) => {
     const next = new Set(ids);
@@ -1516,365 +1546,485 @@ function ServicesTab({
     }
   };
 
-  return (
-    <form className="cs-md-form cs-svc-tab" onSubmit={submit}>
-      <fieldset className="cs-staff-fieldset">
-        <legend>
-          Locations <span className="cs-staff-fieldset-count">{locationIds.length} of {locations.length}</span>
-        </legend>
-        {locations.length === 0 ? (
-          <p className="cs-settings-form-help">No locations configured.</p>
-        ) : (
-          <>
-            <div className="cs-staff-list-toolbar">
-              <input
-                type="search"
-                className="cs-staff-list-search"
-                placeholder="Search locations…"
-                value={locationQuery}
-                onChange={(event) => setLocationQuery(event.target.value)}
-                aria-label="Search locations"
-              />
-              <button
-                type="button"
-                className="cs-btn cs-btn--ghost cs-btn--sm"
-                onClick={() => selectAll(locationIds, setLocationIds, filteredLocations)}
-                disabled={filteredLocations.length === 0}
-              >
-                Select all{locationQuery ? " shown" : ""}
-              </button>
-              <button
-                type="button"
-                className="cs-btn cs-btn--ghost cs-btn--sm"
-                onClick={() => clearFiltered(locationIds, setLocationIds, filteredLocations)}
-                disabled={filteredLocations.length === 0}
-              >
-                Clear{locationQuery ? " shown" : ""}
-              </button>
-            </div>
-            {filteredLocations.length === 0 ? (
-              <p className="cs-settings-form-help">No locations match that search.</p>
-            ) : (
-              <div className="cs-staff-checkbox-grid">
-                {filteredLocations.map((loc) => (
-                  <label
-                    key={loc.id}
-                    className={`cs-settings-toggle cs-staff-pickable${loc.isActive ? "" : " is-inactive"}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={locationIds.includes(loc.id)}
-                      onChange={() => setLocationIds(toggle(locationIds, loc.id))}
-                    />
-                    <span>
-                      <strong>{loc.name}</strong>
-                      <span className="cs-staff-pickable-meta">
-                        {loc.timeZone}
-                        {loc.isActive ? "" : " · Inactive"}
-                      </span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </fieldset>
+  const emptyOverride = { durationMinutes: "", priceCents: "", depositCents: "", flatCents: "", basisPoints: "" };
+  // Commission a service inherits when it has no override: the provider's
+  // service-percent rate from the Compensation tab (payroll falls back to it).
+  const inheritedPercent =
+    provider.compensationMode === "service_percent" && provider.compensationServicePercentBp
+      ? provider.compensationServicePercentBp / 100
+      : null;
 
-      <fieldset className="cs-staff-fieldset cs-staff-services-fieldset">
-        <legend>
-          Services <span className="cs-staff-fieldset-count">{serviceIds.length} of {services.length}</span>
-        </legend>
-        {services.length === 0 ? (
-          <p className="cs-settings-form-help">No services configured.</p>
-        ) : (
-          <>
-            <div className="cs-staff-list-toolbar">
+  const query = serviceQuery.trim().toLowerCase();
+  const matchesQuery = (svc: ServiceSummary) => !query || svc.name.toLowerCase().includes(query);
+  const offeredGroups = categoryGroups
+    .map((group) => ({
+      ...group,
+      services: group.services.filter((svc) => serviceIds.includes(svc.id) && matchesQuery(svc)),
+    }))
+    .filter((group) => group.services.length > 0);
+  const notOffered = categoryGroups
+    .flatMap((group) => group.services)
+    .filter((svc) => !serviceIds.includes(svc.id) && matchesQuery(svc));
+  const menuServices = categoryGroups.flatMap((group) => group.services).filter((svc) => serviceIds.includes(svc.id));
+
+  // Parsed override (cents or minutes), or null when blank/unparseable.
+  const overrideAmount = (raw: string | undefined, scale: number): number | null => {
+    if (!raw || raw.trim() === "") return null;
+    const value = Number(raw);
+    return Number.isFinite(value) ? Math.round(value * scale) : null;
+  };
+  const overriddenFieldCount = serviceIds.reduce((count, svcId) => {
+    const ov = serviceOverrides[svcId];
+    if (!ov) return count;
+    const fields = [ov.priceCents, ov.durationMinutes, ov.depositCents, ov.flatCents || ov.basisPoints];
+    return count + fields.filter((value) => value.trim() !== "").length;
+  }, 0);
+  // The largest price difference from base, surfaced as a callout.
+  const largestPriceDelta = menuServices.reduce<{ svc: ServiceSummary; delta: number } | null>((best, svc) => {
+    const price = overrideAmount(serviceOverrides[svc.id]?.priceCents, 100);
+    if (price == null || price === svc.priceCents) return best;
+    const delta = price - svc.priceCents;
+    return best && Math.abs(best.delta) >= Math.abs(delta) ? best : { svc, delta };
+  }, null);
+
+  const blockedLabel = (days: number[]) =>
+    days.length === 1
+      ? `Blocked ${WEEKDAY_LABELS[days[0]]}s`
+      : `Blocked ${days.map((day) => BUSINESS_HOURS_DAY_ABBR[day]).join(", ")}`;
+
+  const renderServiceRow = (svc: ServiceSummary) => {
+    const isAssigned = serviceIds.includes(svc.id);
+    const ov = serviceOverrides[svc.id] || emptyOverride;
+    const treatment = (
+      <label className="cs-override-table__lead">
+        <input
+          type="checkbox"
+          className="cs-check"
+          aria-label={`Toggle ${svc.name}`}
+          checked={isAssigned}
+          onChange={() => setServiceIds(toggle(serviceIds, svc.id))}
+        />
+        <span className="cs-override-table__lead-text">
+          <span className="cs-override-table__name">{svc.name}</span>
+          <span className="cs-override-table__meta">
+            {svc.isActive ? `${svc.durationMinutes} min base` : "Hidden from the storefront"}
+          </span>
+        </span>
+      </label>
+    );
+
+    if (!isAssigned) {
+      return (
+        <div key={svc.id} className="cs-override-table__row cs-override-table__row--off">
+          {treatment}
+          <p className="cs-override-table__note">
+            {svc.isActive
+              ? "Tick to add to this provider's menu"
+              : "Ticking it won't publish the service — it stays hidden until it's turned on in Services"}
+          </p>
+        </div>
+      );
+    }
+
+    const blockedDays = blockedWeekdays[svc.id];
+    const commissionMode: "flat" | "percent" =
+      commissionModeOverride[svc.id] ??
+      (ov.basisPoints ? "percent" : ov.flatCents ? "flat" : inheritedPercent != null ? "percent" : "flat");
+    const patch = (partial: Partial<typeof ov>) => {
+      setServiceOverrides((prev) => ({
+        ...prev,
+        [svc.id]: { ...(prev[svc.id] || emptyOverride), ...partial },
+      }));
+    };
+    const selectOnFocus = (event: React.FocusEvent<HTMLInputElement>) => event.target.select();
+    const keepSelection = (event: React.MouseEvent<HTMLInputElement>) => event.preventDefault();
+
+    return (
+      <div
+        key={svc.id}
+        className={`cs-override-table__row${blockedDays ? " cs-override-table__row--blocked" : ""}`}
+      >
+        {treatment}
+
+        <div className="cs-override-table__cell cs-override-table__cell--prefix" data-label="Price">
+          <input
+            className="cs-override-table__field"
+            type="text" inputMode="decimal"
+            placeholder={formatMoneyShort(svc.priceCents)}
+            value={ov.priceCents}
+            onFocus={selectOnFocus}
+            onMouseUp={keepSelection}
+            onChange={(e) => patch({ priceCents: e.target.value })}
+            aria-label={`${svc.name} price`}
+          />
+          <span className="cs-override-table__affix" aria-hidden="true">$</span>
+        </div>
+
+        <div className="cs-override-table__cell cs-override-table__cell--suffix" data-label="Duration">
+          <input
+            className="cs-override-table__field"
+            type="text" inputMode="numeric"
+            placeholder={`${svc.durationMinutes} min`}
+            value={ov.durationMinutes}
+            onFocus={selectOnFocus}
+            onMouseUp={keepSelection}
+            onChange={(e) => patch({ durationMinutes: e.target.value })}
+            aria-label={`${svc.name} duration`}
+          />
+          {/* --chars lets CSS place the unit right after the typed digits. */}
+          <span
+            className="cs-override-table__affix"
+            aria-hidden="true"
+            style={{ "--chars": ov.durationMinutes.length } as React.CSSProperties}
+          >
+            min
+          </span>
+        </div>
+
+        <div className="cs-override-table__cell cs-override-table__cell--prefix" data-label="Deposit">
+          <input
+            className="cs-override-table__field"
+            type="text" inputMode="decimal"
+            placeholder={formatMoneyShort(svc.depositCents)}
+            value={ov.depositCents}
+            onFocus={selectOnFocus}
+            onMouseUp={keepSelection}
+            onChange={(e) => patch({ depositCents: e.target.value })}
+            aria-label={`${svc.name} deposit`}
+          />
+          <span className="cs-override-table__affix" aria-hidden="true">$</span>
+        </div>
+
+        <div className="cs-override-table__commission" data-label="Commission">
+          <div className="cs-override-table__mode" role="group" aria-label="Commission type">
+            <button
+              type="button"
+              className={`cs-override-table__mode-btn${commissionMode === "percent" ? " is-active" : ""}`}
+              aria-pressed={commissionMode === "percent"}
+              title="Percent of the service price"
+              onClick={() => {
+                setCommissionModeOverride((prev) => ({ ...prev, [svc.id]: "percent" }));
+                if (commissionMode === "percent") return;
+                patch({ flatCents: "" });
+              }}
+            >
+              %
+            </button>
+            <button
+              type="button"
+              className={`cs-override-table__mode-btn${commissionMode === "flat" ? " is-active" : ""}`}
+              aria-pressed={commissionMode === "flat"}
+              title="Flat amount per service"
+              onClick={() => {
+                setCommissionModeOverride((prev) => ({ ...prev, [svc.id]: "flat" }));
+                if (commissionMode === "flat") return;
+                patch({ basisPoints: "" });
+              }}
+            >
+              $
+            </button>
+          </div>
+          {commissionMode === "flat" ? (
+            <input
+              className="cs-override-table__field"
+              type="text" inputMode="decimal"
+              placeholder="0.00"
+              value={ov.flatCents}
+              onFocus={(e) => { patch({ flatCents: "" }); e.target.select(); }}
+              onMouseUp={keepSelection}
+              onChange={(e) => patch({ flatCents: e.target.value, basisPoints: "" })}
+              aria-label={`${svc.name} commission flat`}
+            />
+          ) : (
+            <input
+              className="cs-override-table__field"
+              type="text" inputMode="decimal"
+              placeholder={inheritedPercent != null ? String(inheritedPercent) : "0"}
+              value={ov.basisPoints}
+              onFocus={(e) => { patch({ basisPoints: "" }); e.target.select(); }}
+              onMouseUp={keepSelection}
+              onChange={(e) => patch({ flatCents: "", basisPoints: e.target.value })}
+              aria-label={`${svc.name} commission percent`}
+            />
+          )}
+        </div>
+
+        {blockedDays ? (
+          <div className="cs-override-table__foot">
+            <span className="cs-override-table__badge">{blockedLabel(blockedDays)}</span>
+            <span className="cs-override-table__note">
+              {blockedDays.length === 1
+                ? `Ticked, but the ${WEEKDAY_LABELS[blockedDays[0]]} shift excludes it — clients can't book it that day`
+                : "Ticked, but those shifts exclude it — clients can't book it on those days"}
+            </span>
+          </div>
+        ) : null}
+
+        {locationIds.length > 1 ? (
+          <div className="cs-override-table__foot" role="group" aria-label={`${svc.name} locations`}>
+            <span className="cs-override-table__foot-label">Offered at</span>
+            {locationIds.map((locId) => {
+              const loc = locations.find((l) => l.id === locId);
+              if (!loc) return null;
+              const offered = serviceLocations[svc.id] ?? locationIds;
+              return (
+                <label key={locId} className="cs-override-table__chip">
+                  <input
+                    type="checkbox"
+                    checked={offered.includes(locId)}
+                    onChange={() => toggleServiceLocation(svc.id, locId)}
+                  />
+                  <span>{loc.name}</span>
+                </label>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
+  return (
+    <form className="cs-md-form cs-staff-svc" onSubmit={submit}>
+      <section className="cs-staff-svc__card" aria-labelledby={`${idPrefix}-services`}>
+        <header className="cs-staff-svc__head">
+          <h3 id={`${idPrefix}-services`} className="cs-staff-svc__title">
+            Services <span className="cs-staff-svc__count">{serviceIds.length} of {services.length}</span>
+          </h3>
+          {services.length > 0 ? (
+            <label className="cs-staff-svc__search">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
               <input
                 type="search"
-                className="cs-staff-list-search"
                 placeholder="Find a treatment…"
                 value={serviceQuery}
                 onChange={(event) => setServiceQuery(event.target.value)}
                 aria-label="Search services"
               />
+            </label>
+          ) : null}
+        </header>
+
+        {services.length === 0 ? (
+          <p className="cs-staff-svc__empty">No services configured.</p>
+        ) : !overridesLoaded ? (
+          <p className="cs-staff-svc__empty">Loading…</p>
+        ) : offeredGroups.length === 0 && notOffered.length === 0 ? (
+          <p className="cs-staff-svc__empty">No services match that search.</p>
+        ) : (
+          <div className="cs-override-table">
+            <div className="cs-override-table__columns" aria-hidden="true">
+              <span>Treatment</span>
+              <span>Price</span>
+              <span>Duration</span>
+              <span>Deposit</span>
+              <span>Commission</span>
             </div>
-            {filteredServices.length === 0 ? (
-              <p className="cs-settings-form-help">No services match that search.</p>
-            ) : !overridesLoaded ? (
-              <p className="cs-settings-form-help">Loading…</p>
-            ) : (
-              (() => {
-                // Group filtered services by categoryId. Categories with services this
-                // staff can be assigned to are ordered by sortOrder; "Uncategorized" last.
-                const servicesByCategory = new Map<string | null, ServiceSummary[]>();
-                for (const svc of filteredServices) {
-                  const key = svc.categoryId ?? null;
-                  if (!servicesByCategory.has(key)) servicesByCategory.set(key, []);
-                  servicesByCategory.get(key)!.push(svc);
-                }
-                const groups: Array<{ id: string | null; name: string; services: ServiceSummary[] }> = [];
-                for (const cat of [...categories].sort((a, b) => a.sortOrder - b.sortOrder)) {
-                  const list = servicesByCategory.get(cat.id);
-                  if (list && list.length > 0) {
-                    groups.push({ id: cat.id, name: cat.name, services: list });
-                  }
-                }
-                const uncategorized = servicesByCategory.get(null);
-                if (uncategorized && uncategorized.length > 0) {
-                  groups.push({ id: null, name: "Uncategorized", services: uncategorized });
-                }
-                const providerBookingSlug = provider.bookingSlug ?? provider.id;
-                return (
-                  <div className="cs-staff-services-groups">
-                    <div className="cs-svc-staff-theader" aria-hidden="true">
-                      <span />
-                      <span>Price</span>
-                      <span>Duration</span>
-                      <span>Deposit</span>
-                      <span>Commission</span>
-                    </div>
-                    {groups.map((group, groupIndex) => {
-                      const groupIds = group.services.map((s) => s.id);
-                      const allEnabled = groupIds.every((id) => serviceIds.includes(id));
-                      const noneEnabled = groupIds.every((id) => !serviceIds.includes(id));
-                      const performed = group.services.filter((s) => serviceIds.includes(s.id));
-                      const notOffered = group.services.filter((s) => !serviceIds.includes(s.id));
-                      return (
-                        <section key={group.id ?? "uncategorized"} className="cs-staff-services-group">
-                          <header className="cs-staff-services-group__header">
-                            <h4 className="cs-staff-services-group__title">
-                              <span
-                                className="cs-staff-services-group__dot"
-                                style={{ background: CATEGORY_DOT_COLORS[groupIndex % CATEGORY_DOT_COLORS.length] }}
-                                aria-hidden="true"
-                              />
-                              {group.name}
-                            </h4>
-                            <button
-                              type="button"
-                              className="cs-svc-text-btn"
-                              onClick={() => {
-                                if (allEnabled) {
-                                  setServiceIds(serviceIds.filter((id) => !groupIds.includes(id)));
-                                } else {
-                                  const next = new Set(serviceIds);
-                                  for (const id of groupIds) next.add(id);
-                                  setServiceIds(Array.from(next));
-                                }
-                              }}
-                            >
-                              {allEnabled ? "Disable all" : noneEnabled ? "Enable all" : "Enable all"}
-                            </button>
-                          </header>
 
-                          {[...performed, ...notOffered].map((svc) => {
-                            const isAssigned = serviceIds.includes(svc.id);
-                            const showNotOfferedHeader = !isAssigned && svc.id === notOffered[0]?.id;
-                            const ov = serviceOverrides[svc.id] || { durationMinutes: "", priceCents: "", depositCents: "", flatCents: "", basisPoints: "" };
-                            const commissionMode: "flat" | "percent" =
-                              commissionModeOverride[svc.id] ?? (ov.basisPoints ? "percent" : "flat");
-                            // Auto-enable the service if the operator starts editing any override
-                            // so the value they type will actually persist on save.
-                            const ensureAssigned = () => {
-                              if (!serviceIds.includes(svc.id)) setServiceIds([...serviceIds, svc.id]);
-                            };
-                            const patch = (partial: Partial<typeof ov>) => {
-                              ensureAssigned();
-                              setServiceOverrides((prev) => ({
-                                ...prev,
-                                [svc.id]: { ...(prev[svc.id] || { durationMinutes: "", priceCents: "", depositCents: "", flatCents: "", basisPoints: "" }), ...partial },
-                              }));
-                            };
-                            return (
-                              <React.Fragment key={svc.id}>
-                                {showNotOfferedHeader ? (
-                                  <p className="cs-svc-staff-notoffered__label">Not offered</p>
-                                ) : null}
-                              <div
-                                className={`cs-svc-staff-trow${isAssigned ? "" : " cs-svc-staff-trow--off"}`}
-                              >
-                                <div className="cs-svc-staff-trow__provider">
-                                  <input
-                                    type="checkbox"
-                                    className="cs-svc-staff-checkbox"
-                                    aria-label={`Toggle ${svc.name}`}
-                                    checked={isAssigned}
-                                    onChange={() => setServiceIds(toggle(serviceIds, svc.id))}
-                                  />
-                                  <span>
-                                    <span className="cs-svc-provider-card__name">{svc.name}</span>
-                                    {svc.description ? (
-                                      <span className="cs-svc-staff-subtitle">{svc.description}</span>
-                                    ) : null}
-                                  </span>
-                                </div>
-                              
-                                <div className="cs-svc-staff-trow__cell">
-                                  <input
-                                    className="cs-svc-input cs-svc-provider-row__input"
-                                    type="text" inputMode="decimal"
-                                    placeholder={`$${(svc.priceCents / 100).toFixed(2)}`}
-                                    value={ov.priceCents}
-                                    onFocus={(e) => { ensureAssigned(); e.target.select(); }}
-                                    onMouseUp={(e) => e.preventDefault()}
-                                    onChange={(e) => patch({ priceCents: e.target.value })}
-                                    aria-label={`${svc.name} price`}
-                                  />
-                                </div>
+            {offeredGroups.map((group) => {
+              const groupIds = group.services.map((svc) => svc.id);
+              return (
+                <section key={group.id ?? "uncategorized"} className="cs-override-table__group" aria-label={group.name}>
+                  <header className="cs-override-table__group-head">
+                    <h4 className="cs-override-table__group-title">
+                      <span className="cs-override-table__dot" style={{ background: group.color }} aria-hidden="true" />
+                      {group.name}
+                    </h4>
+                    <button
+                      type="button"
+                      className="cs-link-btn"
+                      onClick={() => setServiceIds(serviceIds.filter((id) => !groupIds.includes(id)))}
+                    >
+                      Disable all
+                    </button>
+                  </header>
+                  {group.services.map(renderServiceRow)}
+                </section>
+              );
+            })}
 
-                                <div className="cs-svc-staff-trow__cell">
-                                  <input
-                                    className="cs-svc-input cs-svc-provider-row__input"
-                                    type="text" inputMode="numeric"
-                                    placeholder={`${svc.durationMinutes} min`}
-                                    value={ov.durationMinutes}
-                                    onFocus={(e) => { ensureAssigned(); e.target.select(); }}
-                                    onMouseUp={(e) => e.preventDefault()}
-                                    onChange={(e) => patch({ durationMinutes: e.target.value })}
-                                    aria-label={`${svc.name} duration`}
-                                  />
-                                </div>
-
-                                <div className="cs-svc-staff-trow__cell">
-                                  <input
-                                    className="cs-svc-input cs-svc-provider-row__input"
-                                    type="text" inputMode="decimal"
-                                    placeholder={`$${(svc.depositCents / 100).toFixed(2)}`}
-                                    value={ov.depositCents}
-                                    onFocus={(e) => { ensureAssigned(); e.target.select(); }}
-                                    onMouseUp={(e) => e.preventDefault()}
-                                    onChange={(e) => patch({ depositCents: e.target.value })}
-                                    aria-label={`${svc.name} deposit`}
-                                  />
-                                </div>
-
-                                <div className="cs-svc-staff-trow__cell cs-svc-staff-trow__commission">
-                                  <div className="cs-svc-commission-toggle" role="group" aria-label="Commission type">
-                                    <button type="button"
-                                      className={`cs-svc-commission-toggle__option${commissionMode === "flat" ? " is-active" : ""}`}
-                                      onClick={() => {
-                                        ensureAssigned();
-                                        setCommissionModeOverride((prev) => ({ ...prev, [svc.id]: "flat" }));
-                                        if (commissionMode === "flat") return;
-                                        patch({ basisPoints: "" });
-                                      }}>
-                                      $
-                                    </button>
-                                    <button type="button"
-                                      className={`cs-svc-commission-toggle__option${commissionMode === "percent" ? " is-active" : ""}`}
-                                      onClick={() => {
-                                        ensureAssigned();
-                                        setCommissionModeOverride((prev) => ({ ...prev, [svc.id]: "percent" }));
-                                        if (commissionMode === "percent") return;
-                                        patch({ flatCents: "" });
-                                      }}>
-                                      %
-                                    </button>
-                                  </div>
-                                  {commissionMode === "flat" ? (
-                                    <input
-                                      className="cs-svc-input cs-svc-provider-row__input"
-                                      type="text" inputMode="decimal"
-                                      placeholder="0.00"
-                                      value={ov.flatCents}
-                                      onFocus={(e) => { ensureAssigned(); patch({ flatCents: "" }); e.target.select(); }}
-                                      onMouseUp={(e) => e.preventDefault()}
-                                      onChange={(e) => patch({ flatCents: e.target.value, basisPoints: "" })}
-                                      aria-label={`${svc.name} commission flat`}
-                                    />
-                                  ) : (
-                                    <input
-                                      className="cs-svc-input cs-svc-provider-row__input"
-                                      type="text" inputMode="decimal"
-                                      placeholder="0"
-                                      value={ov.basisPoints}
-                                      onFocus={(e) => { ensureAssigned(); patch({ basisPoints: "" }); e.target.select(); }}
-                                      onMouseUp={(e) => e.preventDefault()}
-                                      onChange={(e) => patch({ flatCents: "", basisPoints: e.target.value })}
-                                      aria-label={`${svc.name} commission percent`}
-                                    />
-                                  )}
-                                </div>
-                              </div>
-                              {isAssigned && locationIds.length > 1 ? (
-                                <div className="cs-svc-staff-locrow">
-                                  <span className="cs-svc-staff-locrow__label">Offered at</span>
-                                  {locationIds.map((locId) => {
-                                    const loc = locations.find((l) => l.id === locId);
-                                    if (!loc) return null;
-                                    const offered = serviceLocations[svc.id] ?? locationIds;
-                                    return (
-                                      <label key={locId} className="cs-svc-staff-locchip">
-                                        <input
-                                          type="checkbox"
-                                          checked={offered.includes(locId)}
-                                          onChange={() => toggleServiceLocation(svc.id, locId)}
-                                        />
-                                        <span>{loc.name}</span>
-                                      </label>
-                                    );
-                                  })}
-                                </div>
-                              ) : null}
-                              </React.Fragment>
-                            );
-                          })}
-                        </section>
-                      );
-                    })}
-                  </div>
-                );
-              })()
-            )}
-          </>
-        )}
-      </fieldset>
-
-      <fieldset className="cs-staff-fieldset">
-        <legend>Online booking</legend>
-        <label className="cs-settings-toggle cs-dt-toggle-row">
-          <input
-            type="checkbox"
-            checked={isBookableOnline}
-            onChange={(event) => setIsBookableOnline(event.target.checked)}
-          />
-          <span>Bookable online (shows on storefront)</span>
-        </label>
-        {isBookableOnline && provider.bookingUrl ? (
-          <div className="cs-svc-booking-link">
-            <span className="cs-svc-booking-link__url">{provider.bookingUrl}</span>
-            <div className="cs-svc-booking-link__actions">
-              <button
-                type="button"
-                className="cs-btn cs-btn--ghost cs-btn--sm"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(provider.bookingUrl!);
-                    setLinkCopied(true);
-                    setTimeout(() => setLinkCopied(false), 2000);
-                  } catch {
-                    // ignore
-                  }
-                }}
-              >
-                {linkCopied ? "Copied!" : "Copy"}
-              </button>
-              <a className="cs-btn cs-btn--ghost cs-btn--sm" href={provider.bookingUrl} target="_blank" rel="noreferrer">
-                Open
-              </a>
-            </div>
+            {notOffered.length > 0 ? (
+              <section className="cs-override-table__group cs-override-table__group--off" aria-label="Not offered">
+                <header className="cs-override-table__group-head">
+                  <h4 className="cs-override-table__group-title">
+                    <span className="cs-override-table__dot" style={{ background: "var(--cs-grey)" }} aria-hidden="true" />
+                    Not offered
+                  </h4>
+                  <button
+                    type="button"
+                    className="cs-link-btn"
+                    onClick={() => setServiceIds([...serviceIds, ...notOffered.map((svc) => svc.id)])}
+                  >
+                    Enable all
+                  </button>
+                </header>
+                {notOffered.map(renderServiceRow)}
+              </section>
+            ) : null}
           </div>
-        ) : null}
-        <label className="cs-settings-toggle cs-dt-toggle-row">
-          <input
-            type="checkbox"
-            checked={isActive}
-            onChange={(event) => setIsActive(event.target.checked)}
-          />
-          <span>Active provider</span>
-        </label>
-      </fieldset>
+        )}
+      </section>
+
+      <div className="cs-staff-svc__pair">
+        <section className="cs-staff-svc__panel" aria-labelledby={`${idPrefix}-menu`}>
+          <h4 id={`${idPrefix}-menu`} className="cs-staff-svc__eyebrow">Menu summary</h4>
+          {!isBookableOnline ? (
+            <p className="cs-staff-svc__empty">Not bookable online, so this menu is hidden from the storefront.</p>
+          ) : null}
+          {menuServices.length === 0 ? (
+            <p className="cs-staff-svc__empty">No services ticked yet.</p>
+          ) : (
+            <ul className="cs-staff-svc__menu">
+              {menuServices.map((svc) => {
+                const ov = serviceOverrides[svc.id];
+                const price = overrideAmount(ov?.priceCents, 100) ?? svc.priceCents;
+                const minutes = overrideAmount(ov?.durationMinutes, 1) ?? svc.durationMinutes;
+                const blockedDays = blockedWeekdays[svc.id];
+                return (
+                  <li key={svc.id} className="cs-staff-svc__menu-item">
+                    <span className="cs-staff-svc__menu-name">{svc.name}</span>
+                    <span className="cs-staff-svc__menu-meta">
+                      {formatMoneyShort(price)} · {minutes} min
+                      {blockedDays ? ` · not ${blockedDays.map((day) => BUSINESS_HOURS_DAY_ABBR[day]).join(", ")}` : ""}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+
+        <section className="cs-staff-svc__panel" aria-labelledby={`${idPrefix}-effect`}>
+          <h4 id={`${idPrefix}-effect`} className="cs-staff-svc__eyebrow">Effect of overrides</h4>
+          <dl className="cs-staff-svc__stats">
+            <div className="cs-staff-svc__stat">
+              <dt>Services offered</dt>
+              <dd>{serviceIds.length}</dd>
+            </div>
+            <div className="cs-staff-svc__stat">
+              <dt>Overridden fields</dt>
+              <dd>{overriddenFieldCount}</dd>
+            </div>
+          </dl>
+          {largestPriceDelta ? (
+            <p className="cs-staff-svc__callout">
+              {largestPriceDelta.svc.name} is {formatMoneyShort(Math.abs(largestPriceDelta.delta))}{" "}
+              {largestPriceDelta.delta > 0 ? "above" : "below"} its base price of{" "}
+              {formatMoneyShort(largestPriceDelta.svc.priceCents)}.
+            </p>
+          ) : null}
+        </section>
+      </div>
+
+      <div className="cs-staff-svc__pair">
+        <fieldset className="cs-staff-svc__card">
+          <legend className="cs-staff-svc__title">
+            Locations <span className="cs-staff-svc__count">{locationIds.length} of {locations.length}</span>
+          </legend>
+          {locations.length === 0 ? (
+            <p className="cs-staff-svc__empty">No locations configured.</p>
+          ) : (
+            <>
+              <div className="cs-staff-svc__toolbar">
+                <label className="cs-staff-svc__search">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
+                  <input
+                    type="search"
+                    placeholder="Search locations…"
+                    value={locationQuery}
+                    onChange={(event) => setLocationQuery(event.target.value)}
+                    aria-label="Search locations"
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="cs-link-btn"
+                  onClick={() => selectAll(locationIds, setLocationIds, filteredLocations)}
+                  disabled={filteredLocations.length === 0}
+                >
+                  Select all{locationQuery ? " shown" : ""}
+                </button>
+                <button
+                  type="button"
+                  className="cs-link-btn"
+                  onClick={() => clearFiltered(locationIds, setLocationIds, filteredLocations)}
+                  disabled={filteredLocations.length === 0}
+                >
+                  Clear{locationQuery ? " shown" : ""}
+                </button>
+              </div>
+              {filteredLocations.length === 0 ? (
+                <p className="cs-staff-svc__empty">No locations match that search.</p>
+              ) : (
+                <div className="cs-staff-svc__locations">
+                  {filteredLocations.map((loc) => (
+                    <label key={loc.id} className="cs-staff-svc__location">
+                      <input
+                        type="checkbox"
+                        className="cs-check"
+                        checked={locationIds.includes(loc.id)}
+                        onChange={() => setLocationIds(toggle(locationIds, loc.id))}
+                      />
+                      <span className="cs-staff-svc__location-text">
+                        <span className="cs-staff-svc__location-name">{loc.name}</span>
+                        <span className="cs-staff-svc__location-meta">
+                          {loc.timeZone}
+                          {loc.isActive ? "" : " · Inactive"}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </fieldset>
+
+        <fieldset className="cs-staff-svc__card">
+          <legend className="cs-staff-svc__title">Online booking</legend>
+          <label className="cs-dt-toggle-row">
+            <input
+              type="checkbox"
+              checked={isBookableOnline}
+              onChange={(event) => setIsBookableOnline(event.target.checked)}
+            />
+            <span>Bookable online (shows on storefront)</span>
+          </label>
+          {isBookableOnline && provider.bookingUrl ? (
+            <div className="cs-staff-svc__link">
+              <span className="cs-staff-svc__link-url">{provider.bookingUrl}</span>
+              <div className="cs-staff-svc__link-actions">
+                <button
+                  type="button"
+                  className="cs-btn cs-btn--ghost cs-btn--sm"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(provider.bookingUrl!);
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 2000);
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                >
+                  {linkCopied ? "Copied!" : "Copy"}
+                </button>
+                <a className="cs-btn cs-btn--ghost cs-btn--sm" href={provider.bookingUrl} target="_blank" rel="noreferrer">
+                  Open
+                </a>
+              </div>
+            </div>
+          ) : null}
+          <label className="cs-dt-toggle-row">
+            <input
+              type="checkbox"
+              checked={isActive}
+              onChange={(event) => setIsActive(event.target.checked)}
+            />
+            <span>Active provider</span>
+          </label>
+        </fieldset>
+      </div>
 
       {error ? (
         <p role="alert" className="cs-settings-error">
@@ -1909,6 +2059,7 @@ function formatDurationMinutes(minutes: number): string {
 function formatPriceCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
+
 
 const WEEKDAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 

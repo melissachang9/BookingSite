@@ -61,7 +61,7 @@ export default async function ManageBookingPaymentPage({ params, searchParams }:
                 <article className="summary-card">
                   <span>Service</span>
                   <strong>{booking.service.name}</strong>
-                  <p>{formatCurrency(booking.service.priceCents)} service subtotal</p>
+                  <p>{formatCurrency(booking.priceCents ?? booking.service.priceCents)} service subtotal</p>
                 </article>
                 <article className="summary-card">
                   <span>Collected so far</span>
