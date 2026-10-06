@@ -535,4 +535,25 @@ export default async function BookingDraftPage({ params, searchParams }: Booking
               </button>
             )}
           </div>
-        </secti
+        </section>
+      </main>
+    );
+  } catch (error) {
+    if (isApiNotFoundError(error)) {
+      notFound();
+    }
+
+    const tenantName = titleFromSlug(tenantSlug);
+    const detail = isApiClientError(error) ? error.message : "The booking draft could not be loaded.";
+
+    return (
+      <main className="page-stack">
+        <section className="state-panel">
+          <p className="store-eyebrow">Booking unavailable</p>
+          <h2>{tenantName}</h2>
+          <p>{detail}</p>
+        </section>
+      </main>
+    );
+  }
+}
