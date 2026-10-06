@@ -28,10 +28,29 @@ type SaveState =
   | { kind: "success"; message: string }
   | { kind: "error"; message: string };
 
+type SettingsGroup =
+  | "Business setup"
+  | "Marketing"
+  | "Calendar & appointments"
+  | "Notifications"
+  | "Payments & checkout"
+  | "Advanced";
+
+// Each group has its own pastel, shared by its label in the nav and the pill
+// on every section card in that group.
+const GROUP_TONES: Record<SettingsGroup, "mint" | "pink" | "peach" | "lilac" | "blue" | "grey"> = {
+  "Business setup": "mint",
+  Marketing: "pink",
+  "Calendar & appointments": "peach",
+  Notifications: "lilac",
+  "Payments & checkout": "blue",
+  Advanced: "grey",
+};
+
 type SectionDefinition = {
   id: string;
   title: string;
-  eyebrow: string;
+  eyebrow: SettingsGroup;
   description: string;
   status: "available" | "planned";
   plannedPhase?: string;
@@ -187,7 +206,7 @@ export function SettingsPage({
   }, []);
 
   const groupedSections = useMemo(() => {
-    const groups = new Map<string, SectionDefinition[]>();
+    const groups = new Map<SettingsGroup, SectionDefinition[]>();
     for (const section of SECTION_DEFINITIONS) {
       const list = groups.get(section.eyebrow) ?? [];
       list.push(section);
@@ -197,31 +216,34 @@ export function SettingsPage({
   }, []);
 
   return (
-    <main className="cs-page-stack">
+    <main className="cs-page-stack cs-settings-page">
       <div className="cs-settings-layout">
         <nav className="cs-settings-nav" aria-label="Settings sections">
-          {groupedSections.map(([groupTitle, sections]) => (
-            <div key={groupTitle} className="cs-settings-group">
-              <p className="cs-settings-group__title">{groupTitle}</p>
-              <ul>
-                {sections.map((section) => (
-                  <li key={section.id}>
-                    <a
-                      href={`#${section.id}`}
-                      className={`cs-settings-link${activeSection === section.id ? " cs-settings-link--active" : ""}`}
-                      onClick={() => setActiveSection(section.id)}
-                    >
-                      {section.title}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+          <div className="cs-settings-nav__inner">
+            {groupedSections.map(([groupTitle, sections]) => (
+              <div key={groupTitle} className={`cs-settings-group cs-settings-tone--${GROUP_TONES[groupTitle]}`}>
+                <p className="cs-settings-group__title">{groupTitle}</p>
+                <ul>
+                  {sections.map((section) => (
+                    <li key={section.id}>
+                      <a
+                        href={`#${section.id}`}
+                        className={`cs-settings-link${activeSection === section.id ? " cs-settings-link--active" : ""}`}
+                        onClick={() => setActiveSection(section.id)}
+                      >
+                        {section.title}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         </nav>
 
         <div className="cs-settings-content">
-          {SECTION_DEFINITIONS.map((section) => (
+          {/* Same order as the nav, so scrolling follows the list on the left. */}
+          {groupedSections.flatMap(([, sections]) => sections).map((section) => (
             <SettingsSection key={section.id} section={section}>
               {section.id === "calendar" ? (
                 <CalendarDisplaySection
@@ -327,7 +349,7 @@ function SettingsSection({
   children: ReactNode;
 }) {
   return (
-    <section id={section.id} className="cs-settings-section">
+    <section id={section.id} className={`cs-settings-section cs-settings-tone--${GROUP_TONES[section.eyebrow]}`}>
       <header className="cs-settings-section__header">
         <p className="cs-settings-eyebrow">{section.eyebrow}</p>
         <h4>{section.title}</h4>
@@ -550,18 +572,18 @@ function BusinessPoliciesSection({
           />
           <small>Hours before the appointment when the cancellation policy applies. 0 means no window.</small>
         </label>
-        <label className="cs-field">
+        <div className="cs-field">
           <span>Refund inside window</span>
-          <label className="cs-check-row">
+          <label className="cs-switch-row">
             <input
               type="checkbox"
               checked={refundInsideWindow}
               onChange={(event) => setRefundInsideWindow(event.target.checked)}
               disabled={!canManageSettings || saveState.kind === "submitting"}
             />
-            Refund deposit even when canceling inside the window
+            <span>Refund deposit even when canceling inside the window</span>
           </label>
-        </label>
+        </div>
       </div>
 
       <p className="cs-kicker">Booking rules</p>
@@ -638,18 +660,18 @@ function BusinessPoliciesSection({
           />
           <small>Sales tax percentage applied to service subtotal.</small>
         </label>
-        <label className="cs-field">
+        <div className="cs-field">
           <span>Auto-charge no-show fee</span>
-          <label className="cs-check-row">
+          <label className="cs-switch-row">
             <input
               type="checkbox"
               checked={autoChargeNoShowFee}
               onChange={(event) => setAutoChargeNoShowFee(event.target.checked)}
               disabled={!canManageSettings || saveState.kind === "submitting"}
             />
-            Automatically charge the no-show fee when marking a booking as no-show
+            <span>Automatically charge the no-show fee when marking a booking as no-show</span>
           </label>
-        </label>
+        </div>
       </div>
 
       {saveState.kind === "success" ? <p role="status" className="cs-status">{saveState.message}</p> : null}
@@ -1085,19 +1107,38 @@ function TimeField({
   ariaLabel: string;
 }) {
   if (format === "24h") {
+    // Selects rather than <input type="time">, which follows the OS locale and
+    // shows AM/PM on US machines even in 24-hour mode.
+    const [hourText, minuteText] = value.split(":");
     return (
-      <input
-        type="time"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        disabled={disabled}
-        aria-label={ariaLabel}
-      />
+      <span className="cs-bh-time">
+        <select
+          value={hourText}
+          onChange={(event) => onChange(`${event.target.value}:${minuteText}`)}
+          disabled={disabled}
+          aria-label={`${ariaLabel} hour`}
+        >
+          {Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0")).map((h) => (
+            <option key={h} value={h}>{h}</option>
+          ))}
+        </select>
+        <span className="cs-bh-time__colon" aria-hidden="true">:</span>
+        <select
+          value={minuteText}
+          onChange={(event) => onChange(`${hourText}:${event.target.value}`)}
+          disabled={disabled}
+          aria-label={`${ariaLabel} minute`}
+        >
+          {Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0")).map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
+      </span>
     );
   }
   const { hour, minute, period } = to12h(value);
   return (
-    <span className="cs-bh-time12">
+    <span className="cs-bh-time">
       <select
         value={hour}
         onChange={(event) => onChange(from12h(Number(event.target.value), minute, period))}
@@ -1108,7 +1149,7 @@ function TimeField({
           <option key={h} value={h}>{h}</option>
         ))}
       </select>
-      <span className="cs-bh-time12__colon" aria-hidden="true">:</span>
+      <span className="cs-bh-time__colon" aria-hidden="true">:</span>
       <select
         value={minute}
         onChange={(event) => onChange(from12h(hour, Number(event.target.value), period))}
@@ -1214,19 +1255,17 @@ function BusinessHoursSection({
 
   return (
     <form className="cs-form" onSubmit={handleSubmit}>
-      <label className="cs-check-row">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(event) => setEnabled(event.target.checked)}
-          disabled={!canManageSettings || saveState.kind === "submitting"}
-        />
-        <span>Set business hours</span>
-      </label>
-      {!enabled ? (
-        <p className="cs-settings-help">Availability follows each provider&rsquo;s schedule.</p>
-      ) : (
-        <div className="cs-bh-grid">
+      <div className="cs-bh-head">
+        <label className="cs-switch-row">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(event) => setEnabled(event.target.checked)}
+            disabled={!canManageSettings || saveState.kind === "submitting"}
+          />
+          <span>Set business hours</span>
+        </label>
+        {enabled ? (
           <div className="cs-bh-format">
             <span className="cs-bh-format__label">Time format</span>
             <div className="cs-seg" role="group" aria-label="Time format">
@@ -1246,10 +1285,16 @@ function BusinessHoursSection({
               </button>
             </div>
           </div>
+        ) : null}
+      </div>
+      {!enabled ? (
+        <p className="cs-settings-help">Availability follows each provider&rsquo;s schedule.</p>
+      ) : (
+        <div className="cs-bh-grid">
           {BUSINESS_HOURS_WEEKDAY_KEYS.map((key) => {
             const day = week[key];
             return (
-              <div key={key} className="cs-bh-row">
+              <div key={key} className={`cs-bh-row${day.closed ? " cs-bh-row--closed" : ""}`}>
                 <span className="cs-bh-row__label">{WEEKDAY_LABELS[key]}</span>
                 <label className="cs-bh-row__field">
                   <span className="cs-visually-hidden">{WEEKDAY_LABELS[key]} open</span>
@@ -1288,7 +1333,7 @@ function BusinessHoursSection({
         </div>
       )}
 
-      <label className={`cs-settings-toggle${!enabled ? " cs-settings-toggle--disabled" : ""}`}>
+      <label className={`cs-switch-row${!enabled ? " cs-switch-row--disabled" : ""}`}>
         <input
           type="checkbox"
           checked={restrict}
@@ -2408,7 +2453,7 @@ function CustomEmailSection({
         ) : null}
       </div>
 
-      <div className="cs-settings-section">
+      <div className="cs-settings-subpanel">
         <h5>DNS records</h5>
         {dnsError ? <p role="alert" className="cs-error">{dnsError}</p> : null}
         {dnsDomain === null || records.length === 0 ? (
@@ -2657,6 +2702,7 @@ function PaymentMethodsSection({
       <div className="cs-payment-methods-add">
         <input
           type="text"
+          aria-label="New payment method"
           placeholder="Method label (e.g. Venmo, Zelle)"
           value={newLabel}
           onChange={(e) => setNewLabel(e.target.value)}

@@ -23,6 +23,7 @@
   --cs-hover-2:    #EDE9E6;
   --cs-hairline:   rgba(20, 17, 15, .07);
   --cs-hairline-2: rgba(20, 17, 15, .05);
+  --cs-input-border: rgba(20, 17, 15, .1);
   --cs-gridline:   rgba(20, 17, 15, .06);
   --cs-scrim:      rgba(20, 17, 15, .32);
 
@@ -3837,78 +3838,112 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   padding: 4px 0;
 }
 
+/* The settings page runs edge to edge under the top bar: a section nav column
+   on the left, section cards on the right. Negative margins undo .cs-main's
+   padding. */
+.cs-settings-page {
+  flex: 1;
+  gap: 0;
+  margin: 0 -18px -18px;
+  padding: 0;
+  border-top: 1px solid var(--cs-hairline);
+}
 .cs-settings-layout {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 28px;
-  align-items: start;
-}
-@media (max-width: 880px) {
-  .cs-settings-layout { grid-template-columns: 1fr; }
+  flex: 1;
+  grid-template-columns: 240px minmax(0, 1fr);
 }
 
-.cs-settings-nav {
+.cs-settings-nav { min-width: 0; border-right: 1px solid var(--cs-hairline); }
+.cs-settings-nav__inner {
   position: sticky;
-  top: 20px;
-  align-self: start;
-  max-height: calc(100vh - 2rem);
-  overflow-y: auto;
+  top: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  /* Left padding must cover the links' -12px margin: overflow-y:auto also clips
-     horizontally, so without it the left edge of each pill gets cut off. */
-  padding: 4px 14px 4px 12px;
-  border-right: 1px solid var(--cs-hairline);
+  gap: 22px;
+  max-height: 100vh;
+  overflow-y: auto;
+  padding: 28px 16px;
 }
-@media (max-width: 880px) {
-  .cs-settings-nav { position: static; border-right: 0; border-bottom: 1px solid var(--cs-hairline); padding-bottom: 14px; max-height: none; }
-}
-.cs-settings-group { display: flex; flex-direction: column; gap: 4px; }
+/* One pastel per settings group: the group's label in the nav and the pill on
+   each of its section cards read --cs-settings-tone. */
+.cs-settings-tone--mint  { --cs-settings-tone: var(--cs-mint); }
+.cs-settings-tone--pink  { --cs-settings-tone: var(--cs-pink); }
+.cs-settings-tone--peach { --cs-settings-tone: var(--cs-peach); }
+.cs-settings-tone--lilac { --cs-settings-tone: var(--cs-lilac); }
+.cs-settings-tone--blue  { --cs-settings-tone: var(--cs-blue); }
+.cs-settings-tone--grey  { --cs-settings-tone: var(--cs-grey); }
+
+.cs-settings-group { display: flex; flex-direction: column; gap: 6px; }
 .cs-settings-group__title {
-  margin: 0 0 2px;
+  align-self: flex-start;
+  margin: 0 0 2px 2px;
+  padding: 4px 10px;
+  border-radius: var(--cs-r-pill);
+  background: var(--cs-settings-tone, var(--cs-grey));
   font: 700 10px var(--cs-font);
-  letter-spacing: 0.1em;
+  letter-spacing: .1em;
   text-transform: uppercase;
-  color: var(--cs-label);
+  white-space: nowrap;
+  color: var(--cs-ink);
 }
-.cs-settings-group ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.cs-settings-group ul { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .cs-settings-link {
   display: block;
-  padding: 6px 12px;
-  margin: 0 -12px 0 -12px;
-  border: 0;
-  border-radius: var(--cs-r-12);
-  background: transparent;
+  padding: 7px 12px;
+  border-radius: var(--cs-r-8);
   font: 500 13px var(--cs-font);
-  color: var(--cs-ink);
+  color: var(--cs-secondary);
   text-decoration: none;
-  text-align: left;
-  cursor: pointer;
 }
-.cs-settings-link:hover { background: var(--cs-hover); color: var(--cs-ink); }
-.cs-settings-link--active { background: var(--cs-peach); font-weight: 600; color: var(--cs-ink); }
+.cs-settings-link:hover,
+.cs-settings-link--active { background: var(--cs-ink); color: var(--cs-surface); }
+.cs-settings-link--active { font-weight: 600; }
+.cs-settings-link:focus-visible { outline: 2px solid var(--cs-ink); outline-offset: 1px; }
 
-.cs-settings-content { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+@media (max-width: 880px) {
+  .cs-settings-layout { grid-template-columns: 1fr; }
+  .cs-settings-nav { border-right: 0; border-bottom: 1px solid var(--cs-hairline); }
+  .cs-settings-nav__inner { position: static; max-height: none; padding: 20px 16px; }
+}
+
+.cs-settings-content { display: flex; flex-direction: column; gap: 24px; min-width: 0; padding: 28px 32px 40px; }
+@media (max-width: 640px) {
+  .cs-settings-content { padding: 20px 16px 32px; }
+}
 
 .cs-settings-section {
+  padding: 28px 30px 30px;
+  border-radius: var(--cs-r-card);
   background: var(--cs-surface);
-  border: 1px solid var(--cs-hairline);
-  border-radius: var(--cs-r-inner);
-  padding: 18px 20px;
   scroll-margin-top: 20px;
 }
-.cs-settings-section__header { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
-.cs-settings-section__header h4 { margin: 0; font: 700 15px var(--cs-font); color: var(--cs-ink); }
+.cs-settings-section__header { display: flex; flex-direction: column; align-items: flex-start; margin-bottom: 20px; }
 .cs-settings-eyebrow {
-  margin: 0;
-  font: 700 11px var(--cs-font);
-  letter-spacing: 0.1em;
+  margin: 0 0 10px;
+  padding: 4px 10px;
+  border-radius: var(--cs-r-pill);
+  background: var(--cs-settings-tone, var(--cs-grey));
+  font: 700 10px var(--cs-font);
+  letter-spacing: .1em;
   text-transform: uppercase;
-  color: var(--cs-label);
+  color: var(--cs-ink);
 }
-.cs-settings-help { margin: 0; font: 500 12.5px/1.55 var(--cs-font); color: var(--cs-secondary); }
+.cs-settings-section__header h4 { margin: 0; font: 700 18px var(--cs-font); letter-spacing: -.02em; color: var(--cs-ink); }
+.cs-settings-section__header .cs-settings-help { margin-top: 4px; }
+.cs-settings-help { margin: 0; font: 500 12px/1.55 var(--cs-font); color: var(--cs-secondary); }
 .cs-settings-section__body { display: flex; flex-direction: column; gap: 14px; }
+
+/* A tinted box for a group of controls inside a section card. */
+.cs-settings-subpanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+  border-radius: var(--cs-r-16);
+  background: var(--cs-canvas);
+}
+.cs-settings-subpanel h5 { margin: 0; font: 700 13px var(--cs-font); color: var(--cs-ink); }
 
 .cs-settings-placeholder {
   padding: 16px;
@@ -3920,57 +3955,126 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 }
 .cs-settings-placeholder p { margin: 0; }
 
-.cs-form { display: flex; flex-direction: column; gap: 14px; }
-.cs-form-row { display: flex; gap: 14px; flex-wrap: wrap; }
+.cs-form { display: flex; flex-direction: column; gap: 18px; }
+.cs-form-row { display: flex; flex-wrap: wrap; gap: 16px; }
 .cs-form-row > * { flex: 1 1 180px; min-width: 0; }
+/* Sub-headings inside a long form start a new block. */
+.cs-form > .cs-kicker { margin: 0; }
+.cs-form > .cs-kicker:not(:first-child) { padding-top: 18px; border-top: 1px solid var(--cs-hairline); }
 
-.cs-field { display: flex; flex-direction: column; gap: 6px; }
-.cs-field > span,
-.cs-field__label { font: 600 12px var(--cs-font); color: var(--cs-label); }
-.cs-field input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
-.cs-field select,
-.cs-field textarea {
+.cs-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.cs-field > span:first-child { font: 700 10px var(--cs-font); letter-spacing: .1em; text-transform: uppercase; color: var(--cs-label); }
+/* :where keeps these at class-level specificity so containers can retint them. */
+.cs-field :where(input:not([type="checkbox"], [type="radio"], [type="color"], [type="file"]), select, textarea),
+.cs-payment-methods-add input {
   width: 100%;
-  padding: 10px 14px;
-  border: 0;
-  border-radius: var(--cs-r-pill);
-  background: var(--cs-canvas);
+  min-width: 0;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--cs-input-border);
+  border-radius: var(--cs-r-12);
+  background-color: var(--cs-canvas);
   font: 500 13px var(--cs-font);
   color: var(--cs-ink);
   outline: none;
-  box-sizing: border-box;
 }
-.cs-field input:focus,
-.cs-field select:focus,
-.cs-field textarea:focus { background: var(--cs-surface); box-shadow: inset 0 0 0 1px rgba(20,17,15,.12); }
-.cs-field input:disabled, .cs-field select:disabled, .cs-field textarea:disabled { color: var(--cs-label); }
-
-.cs-field-help { margin: 2px 0 0; font: 500 11px/1.5 var(--cs-font); color: var(--cs-label); }
+.cs-field :where(textarea) { height: auto; padding: 10px 14px; line-height: 1.5; resize: vertical; }
+.cs-field :where(select) {
+  padding-right: 36px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2314110F' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 11px;
+}
+.cs-field :where(input, select, textarea):focus,
+.cs-payment-methods-add input:focus { border-color: var(--cs-ink); }
+.cs-field :where(input, select, textarea):disabled,
+.cs-payment-methods-add input:disabled { color: var(--cs-label); }
+.cs-field small,
+.cs-field-help { margin: 0; font: 500 11.5px/1.5 var(--cs-font); color: var(--cs-label); }
 
 .cs-fieldset {
-  border: 1px solid var(--cs-hairline);
-  border-radius: var(--cs-r-12);
-  padding: 14px 16px;
-  background: var(--cs-surface);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 18px 20px;
+  border: 0;
+  border-radius: var(--cs-r-16);
+  background: var(--cs-canvas);
 }
-.cs-fieldset legend { font: 700 13px var(--cs-font); color: var(--cs-ink); padding: 0 6px; }
+/* Floated so the legend sits inside the box like a heading, not on its edge. */
+.cs-fieldset legend { float: left; width: 100%; margin: 0; padding: 0; font: 700 13px var(--cs-font); color: var(--cs-ink); }
 .cs-fieldset-help { margin: 0; font: 500 12px var(--cs-font); color: var(--cs-secondary); }
+/* Controls on a tinted box sit on white. */
+.cs-fieldset .cs-field :is(input:not([type="checkbox"], [type="file"]), select, textarea),
+.cs-locations-list__item .cs-field :is(input:not([type="checkbox"], [type="file"]), select, textarea) { background-color: var(--cs-surface); }
+.cs-field input[type="file"] { font: 500 12px var(--cs-font); color: var(--cs-label); }
+.cs-field input[type="file"]::file-selector-button {
+  margin-right: 10px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: var(--cs-r-pill);
+  background: var(--cs-hover-2);
+  font: 600 12px var(--cs-font);
+  color: var(--cs-ink);
+  cursor: pointer;
+}
 
-.cs-check-row { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font: 500 13px var(--cs-font); color: var(--cs-ink); user-select: none; }
-.cs-check-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--cs-ink); cursor: pointer; }
-.cs-check-row--disabled { color: var(--cs-label); }
-
-.cs-toggle-field { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; }
-.cs-toggle-field input[type="checkbox"] { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--cs-ink); }
-.cs-toggle-field span { display: flex; flex-direction: column; gap: 2px; font: 500 13px var(--cs-font); color: var(--cs-ink); }
-.cs-toggle-field small { font: 500 11px var(--cs-font); color: var(--cs-label); }
-.cs-toggle-field--disabled { opacity: .5; pointer-events: none; }
+/* Checkboxes drawn as switches: .cs-switch-row is a one-line label,
+   .cs-toggle-field adds a bold title and helper text. */
+.cs-switch-row { display: inline-flex; align-items: center; gap: 12px; font: 500 13px var(--cs-font); color: var(--cs-ink); cursor: pointer; }
+.cs-switch-row--disabled { color: var(--cs-label); cursor: default; }
+.cs-toggle-field { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
+.cs-toggle-field > span { display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
+.cs-toggle-field strong { font: 600 13px var(--cs-font); color: var(--cs-ink); }
+.cs-toggle-field small { font: 500 11.5px/1.5 var(--cs-font); color: var(--cs-label); }
+.cs-toggle-field--disabled { pointer-events: none; }
+.cs-toggle-field--disabled strong { color: var(--cs-label); }
+.cs-switch-row input[type="checkbox"],
+.cs-toggle-field input[type="checkbox"] {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 23px;
+  margin: 0;
+  border-radius: var(--cs-r-pill);
+  background: var(--cs-hover-2);
+  cursor: pointer;
+  appearance: none;
+  transition: background .15s ease;
+}
+.cs-switch-row input[type="checkbox"]::before,
+.cs-toggle-field input[type="checkbox"]::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: var(--cs-surface);
+  transition: transform .15s ease;
+}
+.cs-switch-row input[type="checkbox"]:checked,
+.cs-toggle-field input[type="checkbox"]:checked { background: var(--cs-ink); }
+.cs-switch-row input[type="checkbox"]:checked::before,
+.cs-toggle-field input[type="checkbox"]:checked::before { transform: translateX(17px); }
+.cs-switch-row input[type="checkbox"]:disabled,
+.cs-toggle-field input[type="checkbox"]:disabled { background: var(--cs-grey); cursor: not-allowed; }
+.cs-switch-row input[type="checkbox"]:checked:disabled,
+.cs-toggle-field input[type="checkbox"]:checked:disabled { background: var(--cs-label); }
+.cs-switch-row input[type="checkbox"]:focus-visible,
+.cs-toggle-field input[type="checkbox"]:focus-visible { outline: 2px solid var(--cs-ink); outline-offset: 2px; }
 
 .cs-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
 .cs-permission-note { margin: 0; font: 500 12px var(--cs-font); color: var(--cs-label); }
+/* Settings: the save button sits on the right, any note to its left. */
+.cs-settings-section .cs-actions { justify-content: flex-end; margin-top: 2px; }
+.cs-settings-section .cs-actions .cs-permission-note { order: -1; margin-right: auto; }
+.cs-settings-section .cs-btn--sm { height: 36px; padding: 0 20px; font-size: 12px; }
 
 .cs-status { margin: 0; font: 600 12.5px var(--cs-font); color: var(--cs-ok-text); }
 .cs-error { margin: 0; font: 600 12.5px var(--cs-font); color: var(--cs-risk-text); }
@@ -3986,43 +4090,79 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .cs-table tbody tr:last-child td { border-bottom: 0; }
 
 /* Business hours */
-.cs-bh-grid { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
-.cs-bh-row { display: grid; grid-template-columns: 110px auto 12px auto 1fr; align-items: center; gap: 10px; }
-.cs-bh-row__label { font: 600 13px var(--cs-font); color: var(--cs-ink); }
-.cs-bh-row__field input[type="time"] {
-  padding: 7px 10px; border: 0; border-radius: var(--cs-r-pill); background: var(--cs-canvas);
-  font: 500 12px var(--cs-font); color: var(--cs-ink); outline: none;
-}
-.cs-bh-row__field input[type="time"]:focus { background: var(--cs-surface); box-shadow: inset 0 0 0 1px rgba(20,17,15,.12); }
-.cs-bh-row__closed { display: inline-flex; align-items: center; gap: 6px; justify-self: end; font: 500 12px var(--cs-font); color: var(--cs-label); }
+.cs-bh-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .cs-bh-format { display: flex; align-items: center; gap: 10px; }
-.cs-bh-format__label { font: 600 12px var(--cs-font); color: var(--cs-label); }
-.cs-bh-time12 { display: flex; align-items: center; gap: 6px; }
-.cs-bh-time12__colon { color: var(--cs-label); }
+.cs-bh-format__label { font: 700 10px var(--cs-font); letter-spacing: .1em; text-transform: uppercase; color: var(--cs-label); }
+.cs-bh-format .cs-seg > button { flex: none; padding: 6px 12px; font-size: 11px; white-space: nowrap; }
+.cs-bh-grid { display: flex; flex-direction: column; padding: 8px 20px; border-radius: var(--cs-r-16); background: var(--cs-canvas); }
+.cs-bh-row { display: grid; grid-template-columns: 140px auto 14px auto 1fr; align-items: center; gap: 10px; min-height: 52px; }
+.cs-bh-row > [aria-hidden="true"] { text-align: center; color: var(--cs-label); }
+.cs-bh-row__label { font: 600 13px var(--cs-font); color: var(--cs-ink); }
+/* One time box holding hour/minute (and AM/PM in 12-hour) selects. */
+.cs-bh-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--cs-input-border);
+  border-radius: var(--cs-r-8);
+  background: var(--cs-surface);
+  font: 500 13px var(--cs-font);
+  color: var(--cs-ink);
+}
+.cs-bh-time select {
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: center;
+  cursor: pointer;
+  appearance: none;
+  outline: none;
+}
+.cs-bh-time select:focus-visible { background: var(--cs-hover-2); }
+.cs-bh-time__colon { color: var(--cs-label); }
+.cs-bh-time:focus-within { border-color: var(--cs-ink); }
+.cs-bh-time:has(select:disabled) { background: var(--cs-grey); color: var(--cs-label); }
+.cs-bh-time select:disabled { cursor: default; }
+.cs-bh-row__closed { display: inline-flex; align-items: center; gap: 8px; justify-self: end; font: 500 12px var(--cs-font); color: var(--cs-label); cursor: pointer; }
+.cs-bh-row__closed input { width: 15px; height: 15px; margin: 0; accent-color: var(--cs-ink); cursor: pointer; }
+@media (max-width: 640px) {
+  .cs-bh-grid { padding: 8px 14px; }
+  .cs-bh-row { grid-template-columns: auto 14px auto 1fr; padding: 8px 0; }
+  .cs-bh-row__label { grid-column: 1 / -1; }
+}
 
 /* Locations */
 .cs-locations-section { display: flex; flex-direction: column; gap: 14px; }
 .cs-locations-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.cs-locations-list__item { background: var(--cs-surface); border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-12); padding: 12px 16px; }
-.cs-locations-list__row { display: flex; gap: 14px; justify-content: space-between; align-items: flex-start; }
-.cs-locations-list__actions { display: flex; gap: 8px; flex: none; }
+.cs-locations-list__item { padding: 16px 20px; border-radius: var(--cs-r-16); background: var(--cs-canvas); }
+.cs-locations-list__row { display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; align-items: flex-start; }
+.cs-locations-list__row strong { font: 700 14px var(--cs-font); color: var(--cs-ink); }
+.cs-locations-list__row .cs-settings-help { margin-top: 2px; }
+.cs-locations-list__actions { display: flex; gap: 4px; flex: none; }
 .cs-locations-default-tag { color: var(--cs-label); font: 500 11px var(--cs-font); }
 
 /* Branding */
-.cs-branding-section .cs-field-help { color: var(--cs-label); font-size: 11px; margin-top: 4px; }
-.cs-branding-color-field .cs-branding-color-input { display: flex; gap: 8px; align-items: center; }
-.cs-branding-color-input input[type="color"] { width: 40px; height: 34px; padding: 0; border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-12); background: transparent; cursor: pointer; }
-.cs-branding-color-input input[type="text"] { flex: 1; padding: 8px 12px; border: 0; border-radius: var(--cs-r-pill); background: var(--cs-canvas); font: 500 12px var(--cs-font); color: var(--cs-ink); outline: none; }
+.cs-branding-color-input { display: flex; gap: 8px; align-items: center; }
+.cs-branding-color-input input[type="color"] { flex: none; width: 40px; height: 40px; padding: 3px; border: 1px solid var(--cs-input-border); border-radius: var(--cs-r-12); background: var(--cs-surface); cursor: pointer; }
 
 /* Marketing image */
 .cs-marketing-upload { display: flex; flex-direction: column; gap: 10px; }
-.cs-marketing-upload__preview { background: var(--cs-canvas); border-radius: var(--cs-r-12); padding: 10px; }
-.cs-marketing-upload__controls { display: flex; gap: 8px; align-items: center; }
+.cs-marketing-upload__preview { background: var(--cs-surface); border-radius: var(--cs-r-12); padding: 10px; }
+.cs-marketing-upload__controls { display: flex; gap: 8px; align-items: center; font: 500 12px var(--cs-font); color: var(--cs-label); }
 
 /* Payment methods */
-.cs-payment-methods-list { display: flex; flex-direction: column; gap: 8px; }
-.cs-payment-method-row { display: flex; align-items: center; gap: 10px; background: var(--cs-surface); border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-12); padding: 10px 14px; }
-.cs-payment-methods-add { margin-top: 10px; }
+.cs-payment-methods-list ul { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.cs-payment-methods-list .cs-empty { padding: 14px 18px; border-radius: var(--cs-r-12); background: var(--cs-canvas); text-align: left; }
+.cs-payment-method-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 10px 10px 18px; border-radius: var(--cs-r-12); background: var(--cs-canvas); font: 600 13px var(--cs-font); color: var(--cs-ink); }
+.cs-payment-methods-add { display: flex; align-items: center; gap: 8px; }
+.cs-payment-methods-add input { max-width: 360px; }
+.cs-payment-methods-add .cs-btn { height: 40px; padding: 0 18px; background: var(--cs-hover); }
+.cs-payment-methods-add .cs-btn:hover:not(:disabled) { background: var(--cs-hover-2); }
 
 /* Payroll */
 .cs-payroll-section { display: flex; flex-direction: column; gap: 10px; }
