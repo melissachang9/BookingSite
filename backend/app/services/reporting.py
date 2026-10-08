@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Booking, Payment
 from app.schemas.reporting import DashboardReportResponse
 from app.services.tenants import get_tenant_by_slug
+from app.services.timezones import resolve_zone
 
 
 async def get_dashboard_report(
@@ -38,7 +39,9 @@ async def get_dashboard_report(
     ) or 0
 
     # Completed this month
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    # "This month" starts at local midnight on the 1st in the tenant's timezone.
+    local_now = now.astimezone(resolve_zone(tenant.timezone))
+    month_start = local_now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
     completed_this_month = await session.scalar(
         select(func.count(Booking.id)).where(
             Booking.tenant_id == tenant.id,

@@ -117,6 +117,14 @@ export type BookingSummary = AuditFields &
     endsAt: ISODateString;
     completedAt?: ISODateString | null;
     canceledAt?: ISODateString | null;
+    sourceChannel?: string | null;
+    canceledBy?: "staff" | "customer" | "system" | null;
+    cancelReason?: string | null;
+    noShowAt?: ISODateString | null;
+    rescheduleCount?: number;
+    rescheduledFromStartsAt?: ISODateString | null;
+    checkedInAt?: ISODateString | null;
+    serviceStartedAt?: ISODateString | null;
     notes?: string | null;
     /** Service price/deposit agreed at booking time (provider overrides applied). */
     priceCents?: number;
@@ -247,4 +255,7 @@ export type UpdateBookingRequest = {
   serviceId?: string;
   notes?: string;
   sendConfirmation?: boolean;
+};
+export type BookingProgressRequest = {
+  action: "check_in" | "start_service";
 };

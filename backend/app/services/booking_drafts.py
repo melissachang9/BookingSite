@@ -298,6 +298,15 @@ async def _load_booking(
     return booking
 
 
+def _booking_source_channel(draft: BookingDraft) -> str:
+    """Channel a booking came through, for reporting: staff_entered, referral, or online."""
+    if draft.booking_method == "staff_entered":
+        return "staff_entered"
+    if draft.customer is not None and draft.customer.referred_by:
+        return "referral"
+    return "online"
+
+
 async def _promote_draft_to_booking(
     session: AsyncSession,
     draft: BookingDraft,
@@ -322,6 +331,7 @@ async def _promote_draft_to_booking(
         ends_at=draft.ends_at,
         price_cents=draft.price_cents,
         deposit_cents=draft.deposit_cents,
+        source_channel=_booking_source_channel(draft),
     )
     session.add(booking)
     await session.flush()
@@ -820,6 +830,8 @@ async def cancel_manage_booking(
     guard_transition("booking", booking.id, booking.status, "canceled")
     booking.status = "canceled"
     booking.canceled_at = datetime.now(timezone.utc)
+    booking.canceled_by = "customer"
+    booking.cancel_reason = reason
 
     if refundable:
         for payment in deposit_payments:
@@ -978,6 +990,9 @@ async def reschedule_manage_booking(
     # Moving the time keeps the booking confirmed (checked above); it is not a
     # lifecycle transition, so there is no state-machine guard here.
     old_starts_at = booking.starts_at
+    if booking.rescheduled_from_starts_at is None:
+        booking.rescheduled_from_starts_at = old_starts_at
+    booking.reschedule_count = (booking.reschedule_count or 0) + 1
     booking.starts_at = new_starts_at
     booking.ends_at = new_ends_at
 

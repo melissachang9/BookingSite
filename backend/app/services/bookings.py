@@ -9,11 +9,11 @@ from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
 from app.db.models import Booking, BookingDraft, BookingItem, BookingPaymentEvent, Payment, PaymentEvent, Provider, ResourceAllocation, Service, ServiceAddOn, Tenant, User
-from app.schemas.bookings import AddBookingItemRequest, BookingListResponse, BookingSummaryResponse, CancelBookingRequest, PaginationMetaResponse, UpdateBookingRequest, UpdateBookingStatusRequest
+from app.schemas.bookings import AddBookingItemRequest, BookingListResponse, BookingProgressRequest, BookingSummaryResponse, CancelBookingRequest, PaginationMetaResponse, UpdateBookingRequest, UpdateBookingStatusRequest
 from app.schemas.payments import ApplyWalletCreditRequest, RecordManualPaymentRequest, RefundPaymentRequest
 from app.services.booking_drafts import _cancellation_policy_for_booking, _load_booking
 from app.services.payment_processor import charge_stripe_no_show_fee, refund_payment_via_processor
-from app.services.presenters import booking_balance_due_cents, booking_price_cents, booking_to_summary
+from app.services.presenters import booking_balance_due_cents, booking_price_cents, booking_tax_cents, booking_to_summary
 from app.services.service_terms import provider_service_link, resolve_service_terms
 
 logger = logging.getLogger(__name__)
@@ -701,6 +701,7 @@ async def update_booking_status(
         guard_transition("booking", booking.id, booking.status, "completed")
         booking.status = "completed"
         booking.completed_at = datetime.now(timezone.utc)
+        booking.tax_cents = booking_tax_cents(booking)
         booking.notes = notes
         _apply_payment_resolution(booking, payment_resolution)
         _append_booking_event(
@@ -742,6 +743,7 @@ async def update_booking_status(
 
     guard_transition("booking", booking.id, booking.status, "no_show")
     booking.status = "no_show"
+    booking.no_show_at = datetime.now(timezone.utc)
     booking.notes = notes
     _append_booking_event(
         session,
@@ -810,6 +812,38 @@ async def update_booking_status(
     updated_booking = await _load_booking(session, reload_booking_id, tenant_id)
     return booking_to_summary(updated_booking)
 
+async def record_booking_progress(
+    session: AsyncSession,
+    tenant_slug: str,
+    booking_id: str,
+    payload: BookingProgressRequest,
+    actor: User,
+) -> BookingSummaryResponse:
+    """Stamp client arrival / service start on a confirmed booking (first stamp wins)."""
+    tenant = await _load_tenant(session, tenant_slug)
+    tenant_id = tenant.id
+    booking = await _load_booking(session, booking_id, tenant_id)
+    if booking.status != "confirmed":
+        raise api_exception(409, "conflict", "Only confirmed bookings can be checked in or started.")
+
+    now = datetime.now(timezone.utc)
+    if payload.action == "check_in":
+        if booking.checked_in_at is None:
+            booking.checked_in_at = now
+            _append_booking_event(session, booking, event_kind="booking_checked_in", actor=actor)
+    else:
+        if booking.checked_in_at is None:
+            booking.checked_in_at = now
+        if booking.service_started_at is None:
+            booking.service_started_at = now
+            _append_booking_event(session, booking, event_kind="service_started", actor=actor)
+
+    reload_id = booking.id
+    await session.commit()
+    session.expire_all()
+    return booking_to_summary(await _load_booking(session, reload_id, tenant_id))
+
+
 async def update_booking(
     session: AsyncSession,
     tenant_slug: str,
@@ -862,6 +896,10 @@ async def update_booking(
     if payload.starts_at is not None:
         duration = booking.ends_at - booking.starts_at
         shift = _as_utc(payload.starts_at) - _as_utc(booking.starts_at)
+        if _as_utc(payload.starts_at) != _as_utc(booking.starts_at):
+            if booking.rescheduled_from_starts_at is None:
+                booking.rescheduled_from_starts_at = booking.starts_at
+            booking.reschedule_count = (booking.reschedule_count or 0) + 1
         booking.starts_at = payload.starts_at
         booking.ends_at = payload.starts_at + duration
         # The booking keeps its room/equipment reservation at the new time.
@@ -951,6 +989,8 @@ async def cancel_booking(
     guard_transition("booking", booking.id, booking.status, "canceled")
     booking.status = "canceled"
     booking.canceled_at = datetime.now(timezone.utc)
+    booking.canceled_by = "staff"
+    booking.cancel_reason = reason
 
     if refundable:
         for payment in deposit_payments:

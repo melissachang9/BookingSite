@@ -128,8 +128,33 @@ export const createApiClient = (options: ApiClientOptions) => {
     return payload as TResponse;
   };
 
+  /** GET a non-JSON body (e.g. a CSV export) with the same auth/refresh handling. */
+  const requestText = async (path: string, requestOptions?: Omit<RequestOptions, "body" | "method">) => {
+    const run = async () =>
+      fetch(buildUrl(options.baseUrl, path, requestOptions?.query), {
+        method: "GET",
+        headers: await buildHeaders(options, { ...requestOptions, headers: { ...requestOptions?.headers, Accept: "text/csv" } }),
+        signal: requestOptions?.signal,
+      });
+    let response = await run();
+    if (response.status === 401 && options.refreshAccessToken !== undefined) {
+      const refreshed = await options.refreshAccessToken();
+      if (refreshed) response = await run();
+    }
+    if (!response.ok) {
+      const payload = await parseJsonSafely<ErrorResponse>(response);
+      throw new ApiClientError(
+        payload?.error?.message ?? `Request failed with status ${response.status}`,
+        response.status,
+        payload,
+      );
+    }
+    return response.text();
+  };
+
   return {
     request,
+    getText: requestText,
     get: <TResponse>(path: string, requestOptions?: Omit<RequestOptions, "body" | "method">) =>
       request<TResponse>(path, { ...requestOptions, method: "GET" }),
     post: <TResponse, TBody>(path: string, body: TBody, requestOptions?: Omit<RequestOptions, "body" | "method">) =>

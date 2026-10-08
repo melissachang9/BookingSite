@@ -65,6 +65,10 @@ def booking_subtotal_cents(booking: Booking) -> int:
 
 
 def booking_tax_cents(booking: Booking) -> int:
+    # Completed bookings carry the tax actually charged, so later tax-rate
+    # changes don't rewrite history. Open bookings derive it from the live rate.
+    if booking.tax_cents is not None and booking.status == "completed":
+        return booking.tax_cents
     return round(booking_subtotal_cents(booking) * (_tenant_tax_rate_percent(booking.tenant) / 100))
 
 
@@ -478,6 +482,14 @@ def booking_to_summary(booking: Booking) -> BookingSummaryResponse:
         ends_at=booking.ends_at,
         completed_at=booking.completed_at,
         canceled_at=booking.canceled_at,
+        source_channel=booking.source_channel,
+        canceled_by=booking.canceled_by,
+        cancel_reason=booking.cancel_reason,
+        no_show_at=booking.no_show_at,
+        reschedule_count=booking.reschedule_count or 0,
+        rescheduled_from_starts_at=booking.rescheduled_from_starts_at,
+        checked_in_at=booking.checked_in_at,
+        service_started_at=booking.service_started_at,
         notes=booking.notes,
         price_cents=booking_price_cents(booking),
         deposit_cents=booking_deposit_cents(booking),

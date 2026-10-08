@@ -10,6 +10,7 @@ import type {
   BookingFormResponseEntry,
   BookingFormResponseList,
   BookingListQuery,
+  BookingProgressRequest,
   BookingListResponse,
   BookingPaymentSummary,
   BookingItemSummary,
@@ -211,6 +212,11 @@ export type CalendarPageDefinition = {
 };
 
 export type CalendarPageApi = {
+  recordBookingProgress?: (
+    tenantSlug: string,
+    bookingId: string,
+    body: BookingProgressRequest,
+  ) => Promise<BookingSummary>;
   listBookings: (tenantSlug: string, query?: BookingListQuery) => Promise<BookingListResponse>;
   listServices: (tenantSlug: string) => Promise<ServiceListResponse>;
   getBooking: (tenantSlug: string, bookingId: string) => Promise<BookingSummary>;
@@ -898,6 +904,7 @@ export function CalendarPage({
   const [intakeStatusByBookingId, setIntakeStatusByBookingId] = useState<Record<string, IntakeStatus>>({});
   const [formReminderState, setFormReminderState] = useState<FormReminderState>({ kind: "idle" });
   const [checkedInBookingIds, setCheckedInBookingIds] = useState<Set<string>>(new Set());
+  const [checkInError, setCheckInError] = useState<string | null>(null);
 
   // Read ?bookingId= from the URL once and resolve its date for focusing.
   useEffect(() => {
@@ -1132,6 +1139,11 @@ export function CalendarPage({
           }
         }
         setProviderTimeOffs(allTimeOffs);
+
+        const alreadyCheckedIn = bookingsResult.value.items.filter((b) => b.checkedInAt).map((b) => b.id);
+        if (alreadyCheckedIn.length > 0) {
+          setCheckedInBookingIds((current) => new Set([...current, ...alreadyCheckedIn]));
+        }
 
         for (const booking of bookingsResult.value.items) {
           const date = getTenantDate(booking.startsAt);
@@ -1474,16 +1486,23 @@ export function CalendarPage({
     setSelectedSlot(null);
   };
 
-  const handleToggleCheckIn = (appointmentId: string) => {
-    setCheckedInBookingIds((current) => {
-      const next = new Set(current);
-      if (next.has(appointmentId)) {
+  // Check-in is recorded on the booking (it feeds the wait-time report) and, like
+  // other audited events, cannot be undone from the calendar.
+  const handleToggleCheckIn = async (appointmentId: string) => {
+    if (checkedInBookingIds.has(appointmentId)) return;
+    setCheckInError(null);
+    setCheckedInBookingIds((current) => new Set(current).add(appointmentId));
+    if (!api.recordBookingProgress) return;
+    try {
+      await api.recordBookingProgress(tenantSlug, appointmentId, { action: "check_in" });
+    } catch (error) {
+      setCheckedInBookingIds((current) => {
+        const next = new Set(current);
         next.delete(appointmentId);
-      } else {
-        next.add(appointmentId);
-      }
-      return next;
-    });
+        return next;
+      });
+      setCheckInError(error instanceof Error ? error.message : "Unable to record check-in.");
+    }
   };
 
   const handleSelectWeekProvider = (providerId: string | null) => {
@@ -2479,7 +2498,8 @@ export function CalendarPage({
           formReminderState={formReminderState}
           onSendFormReminder={handleSendFormReminder}
           checkedIn={selectedAppointment ? checkedInBookingIds.has(selectedAppointment.id) : false}
-          onToggleCheckIn={selectedAppointment ? () => handleToggleCheckIn(selectedAppointment.id) : undefined}
+          checkInError={checkInError}
+          onToggleCheckIn={selectedAppointment ? () => void handleToggleCheckIn(selectedAppointment.id) : undefined}
           services={calendarState.kind === "ready" ? calendarState.services : []}
           providers={calendarState.kind === "ready" ? calendarState.providers : []}
           categoryNameById={calendarState.kind === "ready" ? calendarState.categoryNameById : undefined}
@@ -4312,6 +4332,7 @@ type AppointmentDetailsDrawerProps = {
   formReminderState: FormReminderState;
   onSendFormReminder?: (appointment: SelectedCalendarAppointment) => void;
   checkedIn?: boolean;
+  checkInError?: string | null;
   onToggleCheckIn?: () => void;
   services: ServiceSummary[];
   providers: CalendarProviderOption[];
@@ -4342,6 +4363,7 @@ function AppointmentDetailsDrawer({
   formReminderState,
   onSendFormReminder,
   checkedIn = false,
+  checkInError = null,
   onToggleCheckIn,
   services,
   providers,
@@ -4887,10 +4909,12 @@ function AppointmentDetailsDrawer({
                   className={`cs-btn cs-btn--sm${checkedIn ? " cs-btn--checked" : ""}`}
                   onClick={onToggleCheckIn}
                   aria-pressed={checkedIn}
+                  disabled={checkedIn}
                 >
                   {checkedIn ? "Checked in" : "Check in"}
                 </button>
               ) : null}
+              {checkInError ? <p role="alert" className="cs-settings-error">{checkInError}</p> : null}
             </div>
           </div>
           {rescheduleSaveState === "error" ? <p role="alert" className="cs-settings-error">{rescheduleErrorMessage}</p> : null}

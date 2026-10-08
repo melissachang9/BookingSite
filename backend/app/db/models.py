@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, time
 from typing import Any, Optional
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text, Time, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, Time, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, IdMixin, TimestampMixin
@@ -346,6 +346,11 @@ class ProviderTimeOff(Base, IdMixin, TimestampMixin):
 
 class Booking(Base, IdMixin, TimestampMixin):
     __tablename__ = "bookings"
+    __table_args__ = (
+        Index("ix_bookings_tenant_starts_at", "tenant_id", "starts_at"),
+        Index("ix_bookings_tenant_status_completed_at", "tenant_id", "status", "completed_at"),
+        Index("ix_bookings_tenant_provider_starts_at", "tenant_id", "provider_id", "starts_at"),
+    )
 
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
     customer_id: Mapped[str] = mapped_column(String(36), ForeignKey("customers.id"), index=True, nullable=False)
@@ -366,6 +371,17 @@ class Booking(Base, IdMixin, TimestampMixin):
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     canceled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Reporting/attribution facts (null on bookings that predate tracking).
+    source_channel: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    canceled_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)  # staff | customer | system
+    cancel_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    no_show_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    rescheduled_from_starts_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    reschedule_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    checked_in_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    service_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Tax charged, snapshotted at completion so later rate changes don't rewrite history.
+    tax_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     last_form_reminder_sent_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -422,7 +438,11 @@ class BookingPaymentEvent(Base, IdMixin, TimestampMixin):
 
 class Payment(Base, IdMixin, TimestampMixin):
     __tablename__ = "payments"
-    __table_args__ = (UniqueConstraint("checkout_session_id", name="uq_payment_checkout_session"),)
+    __table_args__ = (
+        UniqueConstraint("checkout_session_id", name="uq_payment_checkout_session"),
+        Index("ix_payments_tenant_status_created_at", "tenant_id", "status", "created_at"),
+        Index("ix_payments_booking_id", "booking_id"),
+    )
 
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
     booking_draft_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("booking_drafts.id"), nullable=True)
@@ -449,6 +469,7 @@ class Payment(Base, IdMixin, TimestampMixin):
 
 class PaymentEvent(Base, IdMixin, TimestampMixin):
     __tablename__ = "payment_events"
+    __table_args__ = (Index("ix_payment_events_tenant_kind_occurred_at", "tenant_id", "kind", "occurred_at"),)
 
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
     payment_id: Mapped[str] = mapped_column(String(36), ForeignKey("payments.id"), index=True, nullable=False)

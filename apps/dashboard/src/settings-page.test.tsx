@@ -112,6 +112,17 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("link", { name: "Marketing" })).toHaveAttribute("href", "#branding");
     expect(screen.getByRole("link", { name: "Calendar Display" })).toHaveAttribute("href", "#calendar");
     expect(screen.getByRole("link", { name: "Wallet & Membership" })).toHaveAttribute("href", "#wallet-membership");
+    expect(screen.getByRole("link", { name: "Reports" })).toHaveAttribute("href", "#reports");
+  });
+
+  it("explains missing report access without fetching report data", () => {
+    const sales = vi.spyOn(platformApi, "getSalesReport");
+    render(
+      <SettingsPage definition={definition} currentUser={ownerUser} tenant={tenant} onTenantUpdated={() => {}} />,
+    );
+
+    expect(screen.getByText("You do not have permission to view reports.")).toBeInTheDocument();
+    expect(sales).not.toHaveBeenCalled();
   });
 
   it("renders placeholders for planned sections and the live Calendar form", () => {

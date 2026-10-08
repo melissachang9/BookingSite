@@ -267,6 +267,61 @@ describe("CalendarPage", () => {
     }
   });
 
+  it("records check-in on the booking and shows it as checked in", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const api = createApi([baseBooking]);
+      const recordProgress = vi.fn().mockResolvedValue({ ...baseBooking, checkedInAt: "2026-05-26T19:00:00.000Z" });
+      api.recordBookingProgress = recordProgress;
+
+      render(
+        <CalendarPage
+          definition={{ eyebrow: "Calendar-first booking", description: "Calendar." }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
+      const dialog = await screen.findByRole("dialog", { name: "Appointment details" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Check in" }));
+
+      await waitFor(() => expect(recordProgress).toHaveBeenCalledWith("brow-beauty-lab", baseBooking.id, { action: "check_in" }));
+      expect(within(dialog).getByRole("button", { name: "Checked in" })).toBeDisabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reverts the check-in and shows an error when it cannot be saved", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const api = createApi([baseBooking]);
+      api.recordBookingProgress = vi.fn().mockRejectedValue(new Error("Check-in failed"));
+
+      render(
+        <CalendarPage
+          definition={{ eyebrow: "Calendar-first booking", description: "Calendar." }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
+      const dialog = await screen.findByRole("dialog", { name: "Appointment details" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Check in" }));
+
+      expect(await within(dialog).findByText("Check-in failed")).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: "Check in" })).toBeEnabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("cancels time editing when clicking outside the time editor", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));

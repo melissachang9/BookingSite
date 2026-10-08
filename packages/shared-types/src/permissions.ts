@@ -23,7 +23,10 @@ export type PermissionKey =
   | "locations.manage"
   | "settings.view"
   | "settings.manage"
-  | "users.manage";
+  | "users.manage"
+  | "reports.view"
+  | "reports.financial"
+  | "reports.export";
 
 export type PermissionGrant = {
   key: PermissionKey;

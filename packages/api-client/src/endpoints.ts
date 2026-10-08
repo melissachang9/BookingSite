@@ -5,6 +5,7 @@ import type {
   BookingDraftSummary,
   BookingFormResponseList,
   BookingListQuery,
+  BookingProgressRequest,
   BookingListResponse,
   BookingSummary,
   CancelBookingRequest,
@@ -24,7 +25,13 @@ import type {
   CreateResourceRequest,
   CustomerListResponse,
   CustomerProfileResponse,
+  AppointmentsReport,
+  ClientsReport,
   DashboardReport,
+  ReportCompareMode,
+  ReportQuery,
+  SalesReport,
+  TeamReport,
   DepositPaymentFollowUpListResponse,
   FormListResponse,
   FormSummaryResponse,
@@ -104,6 +111,14 @@ import type {
 } from "@booking/shared-types";
 import type { ApiClient } from "./client";
 
+const reportQuery = (query: ReportQuery) => ({
+  from: query.from,
+  to: query.to,
+  groupBy: query.groupBy,
+  locationId: query.locationId,
+  providerId: query.providerId,
+});
+
 export const createPlatformApi = (client: ApiClient) => ({
   getApiRoot: () => client.get<ApiRootResponse>(""),
   getHealth: () => client.get<HealthResponse>("health/live"),
@@ -114,6 +129,16 @@ export const createPlatformApi = (client: ApiClient) => ({
   createTenant: (body: CreateTenantRequest) => client.post<CreateTenantResponse, CreateTenantRequest>("tenants", body),
   getTenantBySlug: (tenantSlug: string) => client.get<TenantSummary>(`tenants/${tenantSlug}`),
   getDashboardReport: (tenantSlug: string) => client.get<DashboardReport>(`tenants/${tenantSlug}/report`),
+  getSalesReport: (tenantSlug: string, query: ReportQuery, compare?: ReportCompareMode) =>
+    client.get<SalesReport>(`tenants/${tenantSlug}/reports/sales`, { query: { ...reportQuery(query), compare } }),
+  getTeamReport: (tenantSlug: string, query: ReportQuery) =>
+    client.get<TeamReport>(`tenants/${tenantSlug}/reports/team`, { query: reportQuery(query) }),
+  getClientsReport: (tenantSlug: string, query: ReportQuery) =>
+    client.get<ClientsReport>(`tenants/${tenantSlug}/reports/clients`, { query: reportQuery(query) }),
+  getAppointmentsReport: (tenantSlug: string, query: ReportQuery) =>
+    client.get<AppointmentsReport>(`tenants/${tenantSlug}/reports/appointments`, { query: reportQuery(query) }),
+  exportReportCsv: (tenantSlug: string, kind: "sales" | "team" | "clients" | "appointments", query: ReportQuery) =>
+    client.getText(`tenants/${tenantSlug}/reports/${kind}`, { query: { ...reportQuery(query), format: "csv" } }),
   updateTenantSettings: (tenantSlug: string, body: UpdateTenantSettingsRequest) =>
     client.patch<TenantSummary, UpdateTenantSettingsRequest>(`tenants/${tenantSlug}/settings`, body),
   updateTenantBusiness: (tenantSlug: string, body: UpdateTenantBusinessRequest) =>
@@ -450,6 +475,8 @@ export const createPlatformApi = (client: ApiClient) => ({
     }),
   createOrUpdateCustomer: (body: UpsertCustomerRequest) =>
     client.post<{ customerId: string }, UpsertCustomerRequest>("customers", body),
+  recordBookingProgress: (tenantSlug: string, bookingId: string, body: BookingProgressRequest) =>
+    client.post<BookingSummary, BookingProgressRequest>(`tenants/${tenantSlug}/bookings/${bookingId}/progress`, body),
   listBookings: (tenantSlug: string, query: BookingListQuery = {}) =>
     client.get<BookingListResponse>(`tenants/${tenantSlug}/bookings`, {
       query: {

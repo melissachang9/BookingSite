@@ -62,6 +62,7 @@ from app.schemas.catalog import (
     WorkHoursSummary,
     CopyDayRequest,
 )
+from app.services.compensation import CompletedService, compute_service_payout
 from app.services.presenters import location_to_summary, provider_to_summary, service_to_summary, tenant_to_summary
 
 
@@ -1069,23 +1070,6 @@ async def update_provider_compensation(
     return provider_to_summary(provider, tenant)
 
 
-def _sliding_scale_percent_bp(tiers: list[dict], revenue_cents: int) -> int:
-    """Pick the bracket percentage for a given month's revenue. Tiers are
-    evaluated in ascending `up_to_amount_cents` order; revenue above every
-    threshold falls into the last (highest) tier."""
-    if not tiers:
-        return 0
-    ordered = sorted(tiers, key=lambda t: t.get("up_to_amount_cents") or t.get("upToAmountCents") or 0)
-    for tier in ordered:
-        up_to = tier.get("up_to_amount_cents")
-        if up_to is None:
-            up_to = tier.get("upToAmountCents", 0)
-        if revenue_cents <= up_to:
-            return tier.get("percent_bp") or tier.get("percentBp") or 0
-    last = ordered[-1]
-    return last.get("percent_bp") or last.get("percentBp") or 0
-
-
 async def get_provider_earnings_summary(
     session: AsyncSession, tenant_slug: str, provider_id: str
 ) -> ProviderEarningsSummaryResponse:
@@ -1120,49 +1104,20 @@ async def get_provider_earnings_summary(
         )
     ).all()
 
-    overrides_by_service = {
-        link.service_id: link
-        for link in provider.service_links
-        if link.commission_basis_points is not None or link.commission_flat_cents is not None
-    }
-
-    treatment_revenue_cents = 0
-    override_bookings_count = 0
-    override_payout_cents = 0
-    non_override_revenue_cents = 0
-    non_override_minutes = 0
-
-    for service_id, price_cents, starts_at, ends_at in rows:
-        duration_minutes = max(0, round((ends_at - starts_at).total_seconds() / 60))
-        treatment_revenue_cents += price_cents
-        override = overrides_by_service.get(service_id)
-        if override is not None:
-            override_bookings_count += 1
-            if override.commission_basis_points is not None:
-                override_payout_cents += round(price_cents * override.commission_basis_points / 10_000)
-            elif override.commission_flat_cents is not None:
-                override_payout_cents += override.commission_flat_cents
-        else:
-            non_override_revenue_cents += price_cents
-            non_override_minutes += duration_minutes
-
-    mode = provider.compensation_mode
-    non_override_payout_cents = 0
-    if mode == "service_percent" and provider.compensation_service_percent_bp:
-        non_override_payout_cents = round(
-            non_override_revenue_cents * provider.compensation_service_percent_bp / 10_000
-        )
-    elif mode == "sliding_scale":
-        percent_bp = _sliding_scale_percent_bp(provider.compensation_sliding_scale or [], non_override_revenue_cents)
-        non_override_payout_cents = round(non_override_revenue_cents * percent_bp / 10_000)
-    elif mode == "flat_per_booking" and provider.compensation_flat_cents:
-        non_override_bookings_count = len(rows) - override_bookings_count
-        non_override_payout_cents = provider.compensation_flat_cents * non_override_bookings_count
-    elif mode == "hourly" and provider.compensation_hourly_cents:
-        hours = non_override_minutes / 60
-        non_override_payout_cents = round(hours * provider.compensation_hourly_cents)
-
-    service_payout_cents = override_payout_cents + non_override_payout_cents
+    result = compute_service_payout(
+        provider,
+        [
+            CompletedService(
+                service_id=service_id,
+                price_cents=price_cents,
+                minutes=max(0, round((ends_at - starts_at).total_seconds() / 60)),
+            )
+            for service_id, price_cents, starts_at, ends_at in rows
+        ],
+    )
+    treatment_revenue_cents = result.treatment_revenue_cents
+    override_bookings_count = result.override_bookings_count
+    service_payout_cents = result.service_payout_cents
 
     return ProviderEarningsSummaryResponse(
         month_label=now.strftime("%B"),

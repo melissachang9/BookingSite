@@ -56,6 +56,14 @@ class BookingSummaryResponse(CamelModel):
     ends_at: datetime
     completed_at: datetime | None = None
     canceled_at: datetime | None = None
+    source_channel: str | None = None
+    canceled_by: str | None = None
+    cancel_reason: str | None = None
+    no_show_at: datetime | None = None
+    reschedule_count: int = 0
+    rescheduled_from_starts_at: datetime | None = None
+    checked_in_at: datetime | None = None
+    service_started_at: datetime | None = None
     notes: str | None = None
     # Service price/deposit agreed at booking time (provider overrides applied).
     price_cents: int
@@ -112,6 +120,12 @@ class UpdateBookingStatusRequest(CamelModel):
     payment_resolution: Literal["collected", "follow_up", "waived"] | None = None
     discount_cents: int = Field(default=0, ge=0)
     discount_type: Literal["percent", "amount"] | None = None
+
+
+class BookingProgressRequest(CamelModel):
+    """Stamp when the client arrived or when the service actually began."""
+
+    action: Literal["check_in", "start_service"]
 
 
 class UpdateBookingRequest(CamelModel):

@@ -7,6 +7,7 @@ from app.api.routes.customers import router as customers_router
 from app.api.routes.forms import router as forms_router
 from app.api.routes.health import router as health_router
 from app.api.routes.payments import router as payments_router
+from app.api.routes.reports import router as reports_router
 from app.api.routes.resources import router as resources_router
 from app.api.routes.service_add_ons import router as service_add_ons_router
 from app.api.routes.tenants import router as tenants_router
@@ -35,6 +36,7 @@ api_router.include_router(booking_drafts_router)
 api_router.include_router(customers_router)
 api_router.include_router(forms_router)
 api_router.include_router(payments_router)
+api_router.include_router(reports_router)
 api_router.include_router(resources_router)
 api_router.include_router(service_add_ons_router)
 api_router.include_router(health_router)

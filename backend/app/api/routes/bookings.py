@@ -17,6 +17,7 @@ from app.schemas.bookings import (
     CustomerManageBookingResponse,
     RescheduleManageBookingRequest,
     UpdateBookingRequest,
+    BookingProgressRequest,
     UpdateBookingStatusRequest,
 )
 from app.schemas.forms import (
@@ -37,7 +38,7 @@ from app.services.booking_forms import (
     send_booking_form_reminder,
     submit_booking_form_requirement_by_token,
 )
-from app.services.bookings import add_booking_item, apply_wallet_credit, cancel_booking, list_bookings, record_manual_payment, refund_payment, remove_booking_item, update_booking, update_booking_status
+from app.services.bookings import record_booking_progress, add_booking_item, apply_wallet_credit, cancel_booking, list_bookings, record_manual_payment, refund_payment, remove_booking_item, update_booking, update_booking_status
 
 
 router = APIRouter(tags=["bookings"])
@@ -228,6 +229,21 @@ async def update_booking_status_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingSummaryResponse:
     return await update_booking_status(session, tenant_slug, booking_id, payload, current_user)
+
+
+@router.post(
+    "/tenants/{tenant_slug}/bookings/{booking_id}/progress",
+    response_model=BookingSummaryResponse,
+    summary="Record client check-in or the start of the service",
+)
+async def record_booking_progress_route(
+    tenant_slug: str,
+    booking_id: str,
+    payload: BookingProgressRequest,
+    current_user: User = Depends(require_tenant_permission("bookings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> BookingSummaryResponse:
+    return await record_booking_progress(session, tenant_slug, booking_id, payload, current_user)
 
 
 @router.patch(

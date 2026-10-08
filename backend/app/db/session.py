@@ -581,6 +581,25 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("resources", "quantity", "INTEGER NOT NULL DEFAULT 1"),
     ("booking_items", "source_add_on_id", "VARCHAR(36)"),
     ("customers", "birthday", "DATE"),
+    ("bookings", "source_channel", "VARCHAR(32)"),
+    ("bookings", "canceled_by", "VARCHAR(16)"),
+    ("bookings", "cancel_reason", "TEXT"),
+    ("bookings", "no_show_at", "TIMESTAMP WITH TIME ZONE"),
+    ("bookings", "rescheduled_from_starts_at", "TIMESTAMP WITH TIME ZONE"),
+    ("bookings", "reschedule_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("bookings", "checked_in_at", "TIMESTAMP WITH TIME ZONE"),
+    ("bookings", "service_started_at", "TIMESTAMP WITH TIME ZONE"),
+    ("bookings", "tax_cents", "INTEGER"),
+)
+
+# Reporting indexes for databases created before they were declared on the models.
+_ADDED_INDEXES: tuple[str, ...] = (
+    "CREATE INDEX IF NOT EXISTS ix_bookings_tenant_starts_at ON bookings (tenant_id, starts_at)",
+    "CREATE INDEX IF NOT EXISTS ix_bookings_tenant_status_completed_at ON bookings (tenant_id, status, completed_at)",
+    "CREATE INDEX IF NOT EXISTS ix_bookings_tenant_provider_starts_at ON bookings (tenant_id, provider_id, starts_at)",
+    "CREATE INDEX IF NOT EXISTS ix_payments_tenant_status_created_at ON payments (tenant_id, status, created_at)",
+    "CREATE INDEX IF NOT EXISTS ix_payments_booking_id ON payments (booking_id)",
+    "CREATE INDEX IF NOT EXISTS ix_payment_events_tenant_kind_occurred_at ON payment_events (tenant_id, kind, occurred_at)",
 )
 
 
@@ -596,6 +615,8 @@ async def _ensure_added_columns() -> None:
             )
             if not exists:
                 await connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}"))
+        for statement in _ADDED_INDEXES:
+            await connection.execute(text(statement))
 
 
 async def initialize_database() -> None:
