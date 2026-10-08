@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
   AuthenticatedUser,
   CreateFormRequest,
@@ -14,6 +14,7 @@ import type {
   UpdateFormRequest,
 } from "@booking/shared-types";
 
+import { categoryColor } from "./category-colors";
 import { platformApi } from "./platform-api";
 
 type RouteDefinitionLike = {
@@ -39,12 +40,6 @@ type BuilderModal =
 const SCOPE_LABELS: Record<string, string> = {
   customer: "Customer-facing",
   internal: "Internal",
-};
-
-const TIMING_LABELS: Record<string, string> = {
-  pre_booking: "Required to confirm",
-  pre_visit: "Complete before appointment",
-  post_visit: "Complete after appointment",
 };
 
 const FIELD_TYPE_LABELS: Record<FormFieldType, string> = {
@@ -162,6 +157,7 @@ export function FormsPage({
 
   const selectedForm = forms.find((f) => f.id === selectedFormId) ?? null;
   const groupedForms = groupFormsByCategory(forms);
+  const categorySuggestions = groupedForms.map((group) => group.category).filter((name) => name !== "Uncategorized");
   const categoryFilterOptions = [CATEGORY_FILTER_ALL, ...groupedForms.map((group) => group.category)];
   const filteredForms =
     categoryFilter === CATEGORY_FILTER_ALL
@@ -189,8 +185,10 @@ export function FormsPage({
     return <main className="cs-page-stack"><div className="cs-banner cs-banner--error" role="alert">{loadState.message}</div></main>;
   }
 
+  const visibleForm = selectedForm;
+
   return (
-    <main className="cs-page-stack">
+    <main className="cs-page-stack fm-page">
       {status ? (
         <div className="cs-banner" role="status">
           {status}
@@ -199,175 +197,104 @@ export function FormsPage({
       ) : null}
 
       {builder.kind !== "none" ? (
-        <>
-          <section className="cs-md-shell">
-            <div className="cs-md-grid">
-              <aside className="cs-md-rail" aria-label="Form list">
-                <div className="cs-md-rail__header">
-                  <h4>Forms</h4>
-                  {canManage ? (
-                    <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setBuilder({ kind: "add" })}>
-                      + Build form
-                    </button>
-                  ) : null}
-                </div>
-                <label style={{ display: "grid", gap: "0.35rem", marginBottom: "0.75rem" }}>
-                  <span className="cs-staff-list-empty" style={{ margin: 0, fontSize: "0.72rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-                    Category filter
-                  </span>
-                  <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-                    {categoryFilterOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option === CATEGORY_FILTER_ALL ? "All categories" : option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {forms.length === 0 ? (
-                  <p className="cs-empty">No forms yet. Click "Build form" to create one.</p>
-                ) : groupedFilteredForms.length === 0 ? (
-                  <p className="cs-empty">No forms in this category.</p>
-                ) : (
-                  <ul className="cs-md-list">
-                    {groupedFilteredForms.map((group) => (
-                      <li key={group.category}>
-                        <p className="cs-staff-list-empty" style={{ margin: "0.6rem 0 0.35rem", fontSize: "0.72rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-                          <strong style={{ color: "var(--cs-ink)" }}>{group.category}</strong>
-                          <span style={{ marginLeft: "0.35rem" }}>({group.items.length})</span>
-                        </p>
-                        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-                          {group.items.map((form) => (
-                            <li key={form.id}>
-                              <button
-                                type="button"
-                                className={`cs-md-list__item${selectedFormId === form.id ? " is-active" : ""}`}
-                                onClick={() => setSelectedFormId(form.id)}
-                              >
-                                <span className="cs-staff-avatar cs-staff-avatar--initials" aria-hidden>
-                                  {form.name.charAt(0)}
-                                </span>
-                                <span className="cs-md-list__meta">
-                                  <span className="cs-md-list__name">{form.name}</span>
-                                  <span className="cs-md-list__role">
-                                    {form.schema?.fields.length ?? 0} field{(form.schema?.fields.length ?? 0) !== 1 ? "s" : ""}
-                                    {!form.isActive ? " · Inactive" : ""}
-                                  </span>
-                                </span>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </aside>
-              <div className="cs-md-detail">
-                <FormBuilderEditor
-                  tenantSlug={tenantSlug}
-                  builder={builder}
-                  onClose={() => setBuilder({ kind: "none" })}
-                  onSaved={async (msg) => {
-                    await loadForms();
-                    setStatus(msg);
-                  }}
-                  onStatus={setStatus}
-                />
-              </div>
-            </div>
-          </section>
-        </>
+        <FormBuilderEditor
+          key={builder.kind === "edit" ? `${builder.form.id}-${builder.initialStep ?? "details"}` : "new"}
+          tenantSlug={tenantSlug}
+          builder={builder}
+          onClose={() => setBuilder({ kind: "none" })}
+          categorySuggestions={categorySuggestions}
+          onSaved={async (msg, savedFormId) => {
+            if (savedFormId) setSelectedFormId(savedFormId);
+            await loadForms();
+            setStatus(msg);
+          }}
+          onStatus={setStatus}
+        />
       ) : (
-        <>
-          <section className="cs-md-shell">
-            <div className="cs-md-grid">
-              <aside className="cs-md-rail" aria-label="Form list">
-                <div className="cs-md-rail__header">
-                  <h4>Forms</h4>
-                  {canManage ? (
-                    <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setBuilder({ kind: "add" })}>
-                      + Build form
-                    </button>
-                  ) : null}
-                </div>
-                <label style={{ display: "grid", gap: "0.35rem", marginBottom: "0.75rem" }}>
-                  <span className="cs-staff-list-empty" style={{ margin: 0, fontSize: "0.72rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-                    Category filter
-                  </span>
-                  <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-                    {categoryFilterOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option === CATEGORY_FILTER_ALL ? "All categories" : option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {forms.length === 0 ? (
-                  <p className="cs-empty">No forms yet. Click "Build form" to create one.</p>
-                ) : groupedFilteredForms.length === 0 ? (
-                  <p className="cs-empty">No forms in this category.</p>
-                ) : (
-                  <ul className="cs-md-list">
-                    {groupedFilteredForms.map((group) => (
-                      <li key={group.category}>
-                        <p className="cs-staff-list-empty" style={{ margin: "0.6rem 0 0.35rem", fontSize: "0.72rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-                          <strong style={{ color: "var(--cs-ink)" }}>{group.category}</strong>
-                          <span style={{ marginLeft: "0.35rem" }}>({group.items.length})</span>
-                        </p>
-                        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-                          {group.items.map((form) => (
-                            <li key={form.id}>
-                              <button
-                                type="button"
-                                className={`cs-md-list__item${selectedFormId === form.id ? " is-active" : ""}`}
-                                onClick={() => setSelectedFormId(form.id)}
-                              >
-                                <span className="cs-staff-avatar cs-staff-avatar--initials" aria-hidden>
-                                  {form.name.charAt(0)}
-                                </span>
-                                <span className="cs-md-list__meta">
-                                  <span className="cs-md-list__name">{form.name}</span>
-                                  <span className="cs-md-list__role">
-                                    {form.schema?.fields.length ?? 0} field{(form.schema?.fields.length ?? 0) !== 1 ? "s" : ""}
-                                    {!form.isActive ? " · Inactive" : ""}
-                                  </span>
-                                </span>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </aside>
-
-              <div className="cs-md-detail">
-                {selectedForm ? (
-                  <FormDetail
-                    form={selectedForm}
-                    tenantSlug={tenantSlug}
-                    canManage={canManage}
-                    activeTab={activeTab}
-                    onTabChange={setActiveTab}
-                    onEdit={() => setBuilder({ kind: "edit", form: selectedForm, initialStep: "fields" })}
-                    onPreview={() => setBuilder({ kind: "edit", form: selectedForm, initialStep: "preview" })}
-                    onToggleActive={() => handleToggleActive(selectedForm)}
-                    onFormPatched={handleFormPatched}
-                    onStatus={setStatus}
-                    onDelete={() => {
-                      if (window.confirm(`Delete "${selectedForm.name}"? This cannot be undone.`)) {
-                        handleDeleteForm(selectedForm);
-                      }
-                    }}
-                  />
-                ) : (
-                  <p className="cs-settings-form-help">Select a form to view details, or click "Build form" to create one.</p>
-                )}
-              </div>
+        <section className="fm-shell">
+          <aside className="fm-rail" aria-label="Form list">
+            <div className="fm-rail__head">
+              <h2 className="fm-rail__title">Forms</h2>
+              {canManage ? (
+                <button type="button" className="fm-btn fm-btn--primary fm-btn--build" onClick={() => setBuilder({ kind: "add" })}>
+                  Build form <span className="fm-btn__plus" aria-hidden="true">+</span>
+                </button>
+              ) : null}
             </div>
-          </section>
-        </>
+            <label className="fm-rail__filter">
+              <span className="fm-eyebrow">Category filter</span>
+              <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+                {categoryFilterOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option === CATEGORY_FILTER_ALL ? "All categories" : option}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {forms.length === 0 ? (
+              <p className="cs-empty">No forms yet. Click "Build form" to create one.</p>
+            ) : groupedFilteredForms.length === 0 ? (
+              <p className="cs-empty">No forms in this category.</p>
+            ) : (
+              <div className="fm-rail__groups">
+                {groupedFilteredForms.map((group) => (
+                  <section key={group.category} className="fm-group">
+                    <h3 className="fm-eyebrow fm-group__label">
+                      {group.category} ({group.items.length})
+                    </h3>
+                    <ul className="fm-group__list">
+                      {group.items.map((form) => {
+                        const fieldCount = form.schema?.fields.length ?? 0;
+                        return (
+                          <li key={form.id}>
+                            <button
+                              type="button"
+                              className={`fm-item${selectedFormId === form.id ? " is-active" : ""}${!form.isActive ? " is-inactive" : ""}`}
+                              onClick={() => setSelectedFormId(form.id)}
+                            >
+                              <span className="fm-item__avatar" aria-hidden="true">{form.name.charAt(0).toUpperCase()}</span>
+                              <span className="fm-item__meta">
+                                <span className="fm-item__name">{form.name}</span>
+                                <span className="fm-item__sub">
+                                  {fieldCount} field{fieldCount !== 1 ? "s" : ""}
+                                  {form.scope === "internal" ? " · staff" : ""}
+                                  {!form.isActive ? " · Inactive" : ""}
+                                </span>
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+            )}
+          </aside>
+
+          <div className="fm-detail">
+            {visibleForm ? (
+              <FormDetail
+                form={visibleForm}
+                categorySuggestions={categorySuggestions}
+                tenantSlug={tenantSlug}
+                canManage={canManage}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                onToggleActive={() => handleToggleActive(visibleForm)}
+                onFormPatched={handleFormPatched}
+                onStatus={setStatus}
+                onDelete={() => {
+                  if (window.confirm(`Delete "${visibleForm.name}"? This cannot be undone.`)) {
+                    handleDeleteForm(visibleForm);
+                  }
+                }}
+              />
+            ) : (
+              <p className="fm-empty">Select a form to view details, or click "Build form" to create one.</p>
+            )}
+          </div>
+        </section>
       )}
     </main>
   );
@@ -403,17 +330,452 @@ export function FormsPage({
 }
 
 // ===========================================================================
-// Form Detail (tabbed view matching staff/services pattern)
+// Shared: tab strip, option cards, question cards
+// ===========================================================================
+
+function TabStrip({
+  label,
+  tabs,
+  active,
+  onChange,
+}: {
+  label: string;
+  tabs: Array<{ key: string; label: string; disabled?: boolean; muted?: boolean }>;
+  active: string;
+  onChange: (key: string) => void;
+}) {
+  return (
+    <nav className="fm-tabs" role="tablist" aria-label={label}>
+      {tabs.map((tab) => (
+        <button
+          key={tab.key}
+          type="button"
+          role="tab"
+          aria-selected={active === tab.key}
+          disabled={tab.disabled}
+          className={`fm-tab${active === tab.key ? " is-active" : ""}${tab.muted ? " is-muted" : ""}`}
+          onClick={() => onChange(tab.key)}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function OptionCard({
+  name,
+  checked,
+  onSelect,
+  disabled,
+  title,
+  description,
+}: {
+  name: string;
+  checked: boolean;
+  onSelect: () => void;
+  disabled?: boolean;
+  title: string;
+  description: string;
+}) {
+  return (
+    <label className={`fm-option${checked ? " is-selected" : ""}${disabled ? " is-disabled" : ""}`}>
+      <input type="radio" name={name} checked={checked} onChange={onSelect} disabled={disabled} />
+      <span className="fm-option__dot" aria-hidden="true" />
+      <span className="fm-option__text">
+        <strong>{title}</strong>
+        <small>{description}</small>
+      </span>
+    </label>
+  );
+}
+
+function QuestionCard({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="fm-question">
+      <h3 className="fm-question__title">{title}</h3>
+      <div className="fm-question__body">{children}</div>
+    </section>
+  );
+}
+
+function Switch({
+  checked,
+  onChange,
+  disabled,
+  label,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  disabled?: boolean;
+  label: string;
+}) {
+  return (
+    <label className={`cs-switch${checked ? "" : " cs-switch--off"}`} aria-label={label}>
+      <input
+        type="checkbox"
+        className="cs-switch__input"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+    </label>
+  );
+}
+
+// ===========================================================================
+// Details questions (shared by the detail view and the builder)
+// ===========================================================================
+
+type DetailsValue = {
+  scope: FormScope;
+  timing: CustomerPromptTiming | "";
+  reviewRequired: boolean;
+  serviceIds: string[];
+  category: string;
+};
+
+function DetailsQuestions({
+  value,
+  onChange,
+  disabled,
+  services,
+  categories,
+  servicesLoaded,
+  idPrefix,
+}: {
+  value: DetailsValue;
+  onChange: (patch: Partial<DetailsValue>) => void;
+  disabled?: boolean;
+  services: ServiceSummary[];
+  categories: ServiceCategorySummary[];
+  servicesLoaded: boolean;
+  idPrefix: string;
+}) {
+  const [specific, setSpecific] = useState(value.serviceIds.length > 0);
+  const [showAll, setShowAll] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  useEffect(() => {
+    if (value.serviceIds.length > 0) setSpecific(true);
+  }, [value.serviceIds.length]);
+
+  const categoryIndex = useMemo(() => new Map(categories.map((cat, index) => [cat.id, index])), [categories]);
+  const selectedServices = services.filter((svc) => value.serviceIds.includes(svc.id));
+  const visibleSelected = showAll ? selectedServices : selectedServices.slice(0, 4);
+  const hiddenCount = selectedServices.length - visibleSelected.length;
+  const tintFor = (svc: ServiceSummary) =>
+    categoryColor(svc.categoryId ? categoryIndex.get(svc.categoryId) ?? categories.length : categories.length);
+
+  const removeService = (id: string) => onChange({ serviceIds: value.serviceIds.filter((sid) => sid !== id) });
+  const unselected = services.filter((svc) => !value.serviceIds.includes(svc.id));
+
+  return (
+    <div className="fm-questions">
+      <QuestionCard title="Who fills out this form?">
+        <OptionCard
+          name={`${idPrefix}-scope`}
+          checked={value.scope === "customer"}
+          onSelect={() => onChange({ scope: "customer" })}
+          disabled={disabled}
+          title="Clients who book an appointment"
+          description="A link will be included in reminders and other automated messages"
+        />
+        <OptionCard
+          name={`${idPrefix}-scope`}
+          checked={value.scope === "internal"}
+          onSelect={() => onChange({ scope: "internal" })}
+          disabled={disabled}
+          title="Staff members"
+          description="For internal forms related to an appointment"
+        />
+      </QuestionCard>
+
+      <QuestionCard title="How often do clients need to fill it out?">
+        <OptionCard
+          name={`${idPrefix}-timing`}
+          checked={value.timing === "pre_booking"}
+          onSelect={() => onChange({ timing: "pre_booking" })}
+          disabled={disabled}
+          title="Every time they book an appointment"
+          description="Clients will be asked to submit the form every time they book"
+        />
+        <OptionCard
+          name={`${idPrefix}-timing`}
+          checked={value.timing === ""}
+          onSelect={() => onChange({ timing: "" })}
+          disabled={disabled}
+          title="Only once for each client"
+          description="Once the form has been submitted, clients will not be asked again"
+        />
+        <div className="fm-timing-extra" role="group" aria-label="Other timing">
+          <span className="fm-eyebrow">Or ask</span>
+          {([
+            ["pre_visit", "Before the appointment"],
+            ["post_visit", "After the appointment"],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              className={`fm-chip fm-chip--toggle${value.timing === key ? " is-on" : ""}`}
+              aria-pressed={value.timing === key}
+              disabled={disabled}
+              onClick={() => onChange({ timing: value.timing === key ? "" : key })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </QuestionCard>
+
+      <QuestionCard title="Which appointments is it for?">
+        <OptionCard
+          name={`${idPrefix}-services`}
+          checked={!specific}
+          onSelect={() => { setSpecific(false); onChange({ serviceIds: [] }); }}
+          disabled={disabled}
+          title="For all appointments"
+          description="Regardless of which services were booked"
+        />
+        <OptionCard
+          name={`${idPrefix}-services`}
+          checked={specific}
+          onSelect={() => setSpecific(true)}
+          disabled={disabled}
+          title="Only for appointments with specific services"
+          description="Select the services this form needs to be filled out for"
+        />
+        {specific ? (
+          !servicesLoaded ? (
+            <p className="fm-help">Loading services…</p>
+          ) : (
+            <div className="fm-services">
+              {categories.length > 0 ? (
+                <div className="fm-services__cats">
+                  <span className="fm-eyebrow">All services in category</span>
+                  <div className="fm-chiprow">
+                    {categories.map((cat) => {
+                      const catServices = services.filter((svc) => svc.categoryId === cat.id);
+                      if (catServices.length === 0) return null;
+                      const allSelected = catServices.every((svc) => value.serviceIds.includes(svc.id));
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          disabled={disabled}
+                          className={`fm-chip fm-chip--toggle${allSelected ? " is-on" : ""}`}
+                          aria-pressed={allSelected}
+                          onClick={() => {
+                            const ids = catServices.map((svc) => svc.id);
+                            onChange({
+                              serviceIds: allSelected
+                                ? value.serviceIds.filter((sid) => !ids.includes(sid))
+                                : [...new Set([...value.serviceIds, ...ids])],
+                            });
+                          }}
+                        >
+                          {allSelected ? "✓" : "+"} {cat.name} ({catServices.length})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              {selectedServices.length === 0 ? (
+                <p className="fm-help">No services selected yet.</p>
+              ) : (
+                <ul className="fm-services__list">
+                  {visibleSelected.map((svc) => (
+                    <li key={svc.id} className="fm-service" style={{ background: tintFor(svc) }}>
+                      <span>{svc.name}</span>
+                      <button type="button" className="fm-icon-btn" aria-label={`Remove ${svc.name}`} disabled={disabled} onClick={() => removeService(svc.id)}>✕</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {hiddenCount > 0 ? (
+                <button type="button" className="fm-link fm-link--muted" onClick={() => setShowAll(true)}>
+                  + {hiddenCount} more selected
+                </button>
+              ) : null}
+              {!disabled && unselected.length > 0 ? (
+                <button type="button" className="fm-link" onClick={() => setPickerOpen((open) => !open)} aria-expanded={pickerOpen}>
+                  + Add a service
+                </button>
+              ) : null}
+              {pickerOpen && !disabled ? (
+                <ul className="fm-picker">
+                  {unselected.map((svc) => (
+                    <li key={svc.id}>
+                      <button
+                        type="button"
+                        className="fm-picker__row"
+                        onClick={() => onChange({ serviceIds: [...value.serviceIds, svc.id] })}
+                      >
+                        + {svc.name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          )
+        ) : null}
+      </QuestionCard>
+
+      <QuestionCard title="Does this form require review?">
+        <OptionCard
+          name={`${idPrefix}-review`}
+          checked={!value.reviewRequired}
+          onSelect={() => onChange({ reviewRequired: false })}
+          disabled={disabled}
+          title="No review needed"
+          description="Most common, for forms that don't need additional review"
+        />
+        <OptionCard
+          name={`${idPrefix}-review`}
+          checked={value.reviewRequired}
+          onSelect={() => onChange({ reviewRequired: true })}
+          disabled={disabled}
+          title="Review required"
+          description="For forms that need to be reviewed by certain staff members"
+        />
+      </QuestionCard>
+    </div>
+  );
+}
+
+function CategoryField({
+  value,
+  onChange,
+  suggestions,
+  disabled,
+  listId,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  suggestions: string[];
+  disabled?: boolean;
+  listId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [typing, setTyping] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const query = value.trim().toLowerCase();
+  const matches = suggestions.filter((name) => name.toLowerCase().includes(query));
+  const options = typing ? matches : suggestions;
+  const isNew = query !== "" && !suggestions.some((name) => name.toLowerCase() === query);
+
+  return (
+    <div className="fm-field" ref={rootRef}>
+      <label className="fm-field__label" htmlFor={`${listId}-input`}>Category</label>
+      <div className="fm-combo">
+        <input
+          id={`${listId}-input`}
+          role="combobox"
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          autoComplete="off"
+          value={value}
+          onChange={(event) => { onChange(event.target.value); setTyping(true); setOpen(true); }}
+          onFocus={() => { setTyping(false); setOpen(true); }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setOpen(false);
+            if (event.key === "ArrowDown") setOpen(true);
+          }}
+          placeholder="Choose or type a category"
+          disabled={disabled}
+        />
+        <button
+          type="button"
+          className="fm-combo__toggle"
+          aria-label={open ? "Hide categories" : "Show categories"}
+          tabIndex={-1}
+          disabled={disabled}
+          onClick={() => { setTyping(false); setOpen((current) => !current); }}
+        >
+          ▾
+        </button>
+        {open && !disabled ? (
+          <ul className="fm-combo__menu" id={listId} role="listbox">
+            {options.map((name) => (
+              <li key={name} role="option" aria-selected={name === value}>
+                <button
+                  type="button"
+                  className={`fm-combo__option${name === value ? " is-selected" : ""}`}
+                  onClick={() => { onChange(name); setOpen(false); }}
+                >
+                  {name}
+                </button>
+              </li>
+            ))}
+            {isNew ? (
+              <li role="option" aria-selected="false">
+                <button type="button" className="fm-combo__option fm-combo__option--new" onClick={() => setOpen(false)}>
+                  Use new category “{value.trim()}”
+                </button>
+              </li>
+            ) : null}
+            {options.length === 0 && !isNew ? <li className="fm-combo__empty">No categories yet — type to add one.</li> : null}
+          </ul>
+        ) : null}
+      </div>
+      <small className="fm-field__hint">Pick an existing category or type a new one, e.g. XERF, Injectables, Pre-care</small>
+    </div>
+  );
+}
+
+function useServiceCatalog(tenantSlug: string) {
+  const [services, setServices] = useState<ServiceSummary[]>([]);
+  const [categories, setCategories] = useState<ServiceCategorySummary[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      platformApi.listServices(tenantSlug),
+      platformApi.listServiceCategories(tenantSlug).catch(() => ({ categories: [] as ServiceCategorySummary[] })),
+    ])
+      .then(([serviceResp, catResp]) => {
+        if (cancelled) return;
+        setServices(serviceResp.services.filter((svc) => svc.isActive));
+        setCategories(catResp.categories);
+        setLoaded(true);
+      })
+      .catch(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantSlug]);
+
+  return { services, categories, loaded };
+}
+
+// ===========================================================================
+// Form detail (selected form)
 // ===========================================================================
 
 function FormDetail({
   form,
   tenantSlug,
+  categorySuggestions,
   canManage,
   activeTab,
   onTabChange,
-  onEdit,
-  onPreview,
   onToggleActive,
   onDelete,
   onFormPatched,
@@ -421,51 +783,24 @@ function FormDetail({
 }: {
   form: FormSummaryResponse;
   tenantSlug: string;
+  categorySuggestions: string[];
   canManage: boolean;
   activeTab: FormTabKey;
   onTabChange: (tab: FormTabKey) => void;
-  onEdit: () => void;
-  onPreview: () => void;
   onToggleActive: () => void;
   onDelete: () => void;
   onFormPatched: (form: FormSummaryResponse) => void;
   onStatus: (message: string | null) => void;
 }) {
-  const [category, setCategory] = useState(form.category ?? "");
-  const [scope, setScope] = useState<FormScope>(form.scope);
-  const [timing, setTiming] = useState<CustomerPromptTiming | "">(form.customerPromptTiming ?? "");
-  const [reviewRequired, setReviewRequired] = useState(form.reviewRequired ?? false);
-  const [saving, setSaving] = useState<string | null>(null);
-  const [serviceIds, setServiceIds] = useState<string[]>(form.serviceIds ?? []);
-  const [allServices, setAllServices] = useState<ServiceSummary[]>([]);
-  const [allCategories, setAllCategories] = useState<ServiceCategorySummary[]>([]);
-  const [servicesLoaded, setServicesLoaded] = useState(false);
-  const [showServicePicker, setShowServicePicker] = useState(false);
-  const [editingFieldIndex, setEditingFieldIndex] = useState<number | null>(null);
+  const [details, setDetails] = useState<DetailsValue>(() => detailsFromForm(form));
   const [localFields, setLocalFields] = useState<FormField[]>(form.schema?.fields ?? []);
-  const [showFieldPalette, setShowFieldPalette] = useState(false);
   const [tabSaving, setTabSaving] = useState(false);
+  const { services, categories, loaded } = useServiceCatalog(tenantSlug);
 
   useEffect(() => {
-    setCategory(form.category ?? "");
-    setScope(form.scope);
-    setTiming(form.customerPromptTiming ?? "");
-    setReviewRequired(form.reviewRequired ?? false);
-    setServiceIds(form.serviceIds ?? []);
-    setEditingFieldIndex(null);
+    setDetails(detailsFromForm(form));
     setLocalFields(form.schema?.fields ?? []);
   }, [form]);
-
-  useEffect(() => {
-    Promise.all([
-      platformApi.listServices(tenantSlug),
-      platformApi.listServiceCategories(tenantSlug).catch(() => ({ categories: [] })),
-    ]).then(([serviceResp, catResp]) => {
-      setAllServices(serviceResp.services.filter((s) => s.isActive));
-      setAllCategories(catResp.categories);
-      setServicesLoaded(true);
-    }).catch(() => setServicesLoaded(true));
-  }, [tenantSlug]);
 
   const saveCurrentTab = async (tab: FormTabKey) => {
     if (!canManage || tabSaving) return;
@@ -473,14 +808,13 @@ function FormDetail({
     onStatus(null);
     try {
       let body: UpdateFormRequest;
-
       if (tab === "details") {
         body = {
-          category: category.trim() || null,
-          scope,
-          customerPromptTiming: timing || null,
-          reviewRequired,
-          serviceIds,
+          category: details.category.trim() || null,
+          scope: details.scope,
+          customerPromptTiming: details.timing || null,
+          reviewRequired: details.reviewRequired,
+          serviceIds: details.serviceIds,
         };
       } else {
         const schema: FormSchema = {
@@ -490,12 +824,8 @@ function FormDetail({
         };
         body = { schema };
       }
-
       const updated = await platformApi.updateForm(tenantSlug, form.id, body);
       onFormPatched(updated);
-      if (tab === "details") {
-        setCategory(updated.category ?? "");
-      }
       onStatus(
         tab === "details"
           ? `Saved details for "${updated.name}".`
@@ -517,449 +847,111 @@ function FormDetail({
     { key: "advanced", label: "Advanced" },
   ];
 
+  const saveLabel = activeTab === "details" ? "Save details" : activeTab === "fields" ? "Save fields" : "Save form";
+
   return (
-    <div className="cs-md-detail__inner">
-      <header className="cs-md-detail__header">
-        <div>
-          <p className="cs-eyebrow">Form</p>
-          <h4>{form.name}</h4>
+    <div className="fm-detail__inner">
+      <header className="fm-head">
+        <div className="fm-head__titles">
+          <p className="fm-eyebrow">Form</p>
+          <h2 className="fm-head__title">{form.name}</h2>
+          <div className="fm-chiprow">
+            {form.category ? <span className="fm-chip fm-chip--category">{form.category}</span> : null}
+            <span className="fm-chip">{SCOPE_LABELS[form.scope] ?? form.scope}</span>
+            {form.currentVersionNumber ? <span className="fm-chip">Version {form.currentVersionNumber}</span> : null}
+          </div>
         </div>
         {canManage ? (
-          <div className="cs-md-detail__actions">
-            <label className={`cs-switch${!form.isActive ? " cs-switch--off" : ""}`} style={{ marginRight: "0.5rem" }} aria-label="Active toggle">
-              <input
-                type="checkbox"
-                checked={form.isActive}
-                onChange={onToggleActive}
-                style={{ position: "absolute", opacity: 0, width: 0, height: 0 }}
-              />
+          <div className="fm-head__actions">
+            <label className="fm-toggle-label">
+              <Switch checked={form.isActive} onChange={onToggleActive} label="Active toggle" />
+              <span>{form.isActive ? "Enabled" : "Disabled"}</span>
             </label>
-            <span style={{ fontSize: "0.8rem", color: form.isActive ? "var(--cs-ink)" : "var(--cs-label)", marginRight: "0.75rem" }}>
-              {form.isActive ? "Enabled" : "Disabled"}
-            </span>
-            <button type="button" className="cs-btn cs-btn--danger cs-btn--sm" onClick={onDelete}>Delete</button>
+            <button type="button" className="fm-btn fm-btn--soft" onClick={onDelete}>Delete</button>
           </div>
         ) : null}
       </header>
 
-      <nav className="cs-md-tabs" role="tablist" aria-label="Form sections">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab.key}
-            className={`cs-md-tab${activeTab === tab.key ? " is-active" : ""}`}
-            onClick={() => onTabChange(tab.key)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </nav>
+      <TabStrip label="Form sections" tabs={tabs} active={activeTab} onChange={(key) => onTabChange(key as FormTabKey)} />
 
-      {activeTab === "details" ? (
-        <div className="cs-md-form">
-          <div className="cs-form-editor__card">
-            <h4>Form category</h4>
-            <label>
-              <span>Category</span>
-              <input
-                value={category}
-                onChange={(event) => setCategory(event.target.value)}
-                placeholder="e.g. XERF, Injectables, Pre-care"
-                disabled={!canManage || tabSaving}
-              />
-            </label>
-          </div>
+      <div className="fm-panel">
+        {activeTab === "details" ? (
+          <section className="fm-card fm-basics fm-basics--single">
+            <CategoryField
+              value={details.category}
+              onChange={(category) => setDetails((current) => ({ ...current, category }))}
+              suggestions={categorySuggestions}
+              disabled={!canManage || tabSaving}
+              listId={`fm-cats-${form.id}`}
+            />
+          </section>
+        ) : null}
 
-          {/* Who fills out this form? */}
-          <div className="cs-form-editor__card">
-            <h4>Who fills out this form?</h4>
-            <div className="cs-form-editor__radio-group">
-              <label className="cs-settings-toggle">
-                <input
-                  type="radio" name="detail-scope" checked={scope === "customer"}
-                  onChange={() => { setScope("customer"); }}
-                  disabled={!canManage || tabSaving}
-                />
-                <span>
-                  <strong>Clients who book an appointment</strong>
-                  <small>A link will be included in reminders and other automated messages</small>
-                </span>
-              </label>
-              <label className="cs-settings-toggle">
-                <input
-                  type="radio" name="detail-scope" checked={scope === "internal"}
-                  onChange={() => { setScope("internal"); }}
-                  disabled={!canManage || tabSaving}
-                />
-                <span>
-                  <strong>Staff members</strong>
-                  <small>For internal forms related to an appointment</small>
-                </span>
-              </label>
-            </div>
-          </div>
+        {activeTab === "details" ? (
+          <DetailsQuestions
+            value={details}
+            onChange={(patch) => setDetails((current) => ({ ...current, ...patch }))}
+            disabled={!canManage || tabSaving}
+            services={services}
+            categories={categories}
+            servicesLoaded={loaded}
+            idPrefix={`detail-${form.id}`}
+          />
+        ) : null}
 
-          {/* How often? */}
-          <div className="cs-form-editor__card">
-            <h4>How often do clients need to fill it out?</h4>
-            <div className="cs-form-editor__radio-group">
-              <label className="cs-settings-toggle">
-                <input
-                  type="radio" name="detail-timing" checked={timing === "pre_booking"}
-                  onChange={() => { setTiming("pre_booking"); }}
-                  disabled={!canManage || tabSaving}
-                />
-                <span>
-                  <strong>Every time they book an appointment</strong>
-                  <small>Clients will be asked to submit the form every time they book</small>
-                </span>
-              </label>
-              <label className="cs-settings-toggle">
-                <input
-                  type="radio" name="detail-timing" checked={timing === ""}
-                  onChange={() => { setTiming(""); }}
-                  disabled={!canManage || tabSaving}
-                />
-                <span>
-                  <strong>Only once for each client</strong>
-                  <small>Once the form has been submitted, clients will not be asked again</small>
-                </span>
-              </label>
-            </div>
-          </div>
-
-          {/* Which appointments? */}
-          <div className="cs-form-editor__card">
-            <h4>Which appointments is it for?</h4>
-            <div className="cs-form-editor__radio-group">
-              <label className="cs-settings-toggle">
-                <input
-                  type="radio" name="detail-services" checked={serviceIds.length === 0}
-                  onChange={() => { setServiceIds([]); }}
-                  disabled={!canManage || tabSaving}
-                />
-                <span>
-                  <strong>For all appointments</strong>
-                  <small>Regardless of which services were booked</small>
-                </span>
-              </label>
-              <label className="cs-settings-toggle">
-                <input
-                  type="radio" name="detail-services" checked={serviceIds.length > 0}
-                  onChange={() => {}}
-                  disabled={!canManage || tabSaving}
-                />
-                <span>
-                  <strong>Only for appointments with specific services</strong>
-                  <small>Select the services this form needs to be filled out for</small>
-                </span>
-              </label>
-            </div>
-
-            {serviceIds.length > 0 && servicesLoaded ? (
-              <div style={{ marginTop: "0.75rem" }}>
-                {/* Selected services */}
-                {serviceIds.length > 0 ? (
-                  <div className="cs-form-editor__service-selected" style={{ marginBottom: "0.5rem" }}>
-                    {allServices.filter((s) => serviceIds.includes(s.id)).map((svc) => (
-                      <div key={svc.id} className="cs-form-editor__service-row">
-                        <span>{svc.name}</span>
-                        <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => {
-                          const next = serviceIds.filter((id) => id !== svc.id);
-                          setServiceIds(next);
-                        }}>✕</button>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-
-                {/* All services in category */}
-                {allCategories.length > 0 ? (
-                  <div className="cs-form-editor__category-actions" style={{ marginBottom: "0.5rem" }}>
-                    <span className="cs-form-editor__category-label">All services in category</span>
-                    {allCategories.map((cat) => {
-                      const catServices = allServices.filter((s) => s.categoryId === cat.id);
-                      if (catServices.length === 0) return null;
-                      const allSelected = catServices.every((s) => serviceIds.includes(s.id));
-                      return (
-                        <button
-                          key={cat.id}
-                          type="button"
-                          className={`cs-btn cs-btn--ghost cs-btn--sm${allSelected ? " cs-btn--checked" : ""}`}
-                          onClick={() => {
-                            const catIds = catServices.map((s) => s.id);
-                            const next = allSelected
-                              ? serviceIds.filter((id) => !catIds.includes(id))
-                              : [...new Set([...serviceIds, ...catIds])];
-                            setServiceIds(next);
-                          }}
-                        >
-                          {allSelected ? "✓" : "+"} {cat.name} ({catServices.length})
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-
-                {/* Add a service button */}
-                <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setShowServicePicker(true)}>
-                  + Add a service
-                </button>
-              </div>
-            ) : null}
-          </div>
-
-          {/* Service picker modal */}
-          {showServicePicker ? (
-            <div className="cs-modal" role="dialog" aria-label="Add services">
-              <div className="cs-modal__panel" style={{ maxWidth: "min(520px, 100%)" }}>
-                <div className="cs-modal__header">
-                  <h4>Add services</h4>
-                  <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setShowServicePicker(false)}>Done</button>
-                </div>
-                <div className="cs-modal__form">
-                  {allServices.filter((s) => !serviceIds.includes(s.id)).length === 0 ? (
-                    <p className="cs-settings-form-help">All services are already selected.</p>
-                  ) : (
-                    <div className="cs-form-editor__service-list">
-                      {allServices.filter((s) => !serviceIds.includes(s.id)).map((svc) => (
-                        <label key={svc.id} className="cs-settings-toggle" style={{ padding: "0.4rem 0" }}>
-                          <input
-                            type="checkbox"
-                            onChange={() => {
-                              const next = [...serviceIds, svc.id];
-                              setServiceIds(next);
-                            }}
-                          />
-                          <span>
-                            <strong>{svc.name}</strong>
-                            {svc.description ? <small>{svc.description}</small> : null}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          {/* Review? */}
-          <div className="cs-form-editor__card">
-            <h4>Does this form require review?</h4>
-            <div className="cs-form-editor__radio-group">
-              <label className="cs-settings-toggle">
-                <input
-                  type="radio" name="detail-review" checked={!reviewRequired}
-                  onChange={() => { setReviewRequired(false); }}
-                  disabled={!canManage || tabSaving}
-                />
-                <span>
-                  <strong>No review needed</strong>
-                  <small>Most common, for forms that don't need additional review</small>
-                </span>
-              </label>
-              <label className="cs-settings-toggle">
-                <input
-                  type="radio" name="detail-review" checked={reviewRequired}
-                  onChange={() => { setReviewRequired(true); }}
-                  disabled={!canManage || tabSaving}
-                />
-                <span>
-                  <strong>Review required</strong>
-                  <small>For forms that need to be reviewed by certain staff members</small>
-                </span>
-              </label>
-            </div>
-          </div>
-
-          {canManage ? (
-            <div className="cs-form-editor__save-bar">
-              <button
-                type="button"
-                className="cs-btn cs-btn--primary cs-btn--sm"
-                disabled={tabSaving}
-                onClick={() => { void saveCurrentTab("details"); }}
-              >
-                {tabSaving ? "Saving..." : "Save details"}
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {activeTab === "fields" ? (
-        <div className="cs-md-form">
-          {form.schema ? (
-            <>
-              {form.schema.description ? (
-                <p className="cs-settings-form-help" style={{ marginBottom: "0.75rem" }}>{form.schema.description}</p>
-              ) : null}
-              {localFields.length === 0 ? (
-                <p className="cs-empty">No fields defined yet.</p>
-              ) : (
-                <ul className="cs-form-field-preview-list">
-                  {localFields.map((field, index) => (
-                    <li key={field.id}>
-                      {editingFieldIndex === index ? (
-                        <div className="cs-form-editor__field-card is-expanded" style={{ marginBottom: "0.5rem" }}>
-                          <div className="cs-form-editor__field-card-header">
-                            <span className="cs-form-editor__field-card-icon" aria-hidden="true">
-                              {FIELD_TYPE_ICONS[field.type] ?? "?"}
-                            </span>
-                            <span className="cs-form-editor__field-card-type">{FIELD_TYPE_LABELS[field.type]}</span>
-                            <div className="cs-form-editor__field-card-menu">
-                              <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setEditingFieldIndex(null)}>Done</button>
-                            </div>
-                          </div>
-                          <FieldInlineEditor
-                            field={field}
-                            onUpdate={(patch) => {
-                              const newFields = localFields.map((f, i) => i === index ? { ...f, ...patch } : f);
-                              setLocalFields(newFields);
-                              if (canManage) {
-                                const schema = { title: form.name, description: form.schema?.description, fields: newFields };
-                                platformApi.updateForm(form.tenantId, form.id, { schema } as UpdateFormRequest).catch(() => {});
-                              }
-                            }}
-                          />
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          className="cs-form-field-preview-item"
-                          onClick={() => { if (canManage) setEditingFieldIndex(index); }}
-                          style={{ width: "100%", textAlign: "left", cursor: canManage ? "pointer" : "default", background: "none", border: "none", font: "inherit" }}
-                        >
-                          <span className="cs-form-field-preview-type">{field.type.replace(/_/g, " ")}</span>
-                          <span className="cs-form-field-preview-label">{field.label}{field.required ? " *" : ""}</span>
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {canManage ? (
-                <div style={{ marginTop: "0.75rem" }}>
-                  <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setShowFieldPalette(true)}>
-                    + Add a field
-                  </button>
-                </div>
-              ) : null}
-            </>
+        {activeTab === "fields" ? (
+          form.schema ? (
+            <FieldsEditor fields={localFields} setFields={setLocalFields} canEdit={canManage} />
           ) : (
-            <p className="cs-empty">No schema defined.</p>
-          )}
+            <p className="fm-empty">No schema defined.</p>
+          )
+        ) : null}
 
-          {canManage ? (
-            <div className="cs-form-editor__save-bar">
-              <button
-                type="button"
-                className="cs-btn cs-btn--primary cs-btn--sm"
-                disabled={tabSaving}
-                onClick={() => { void saveCurrentTab("fields"); }}
-              >
-                {tabSaving ? "Saving..." : "Save fields"}
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+        {activeTab === "preview" ? (
+          <FormPreviewCard name={form.name} description={form.schema?.description ?? ""} fields={localFields} />
+        ) : null}
 
-      {showFieldPalette ? (
-        <FieldPaletteModal
-          onSelect={(type) => {
-            const newField: FormField = {
-              id: generateFieldId(),
-              type,
-              label: "",
-              required: false,
-            };
-            if (type === "select" || type === "multi_select") {
-              newField.options = [];
-            }
-            const newFields = [...localFields, newField];
-            setLocalFields(newFields);
-            setEditingFieldIndex(newFields.length - 1);
-            setShowFieldPalette(false);
-            const schema = { title: form.name, description: form.schema?.description, fields: newFields };
-            platformApi.updateForm(form.tenantId, form.id, { schema } as UpdateFormRequest).catch(() => {});
-          }}
-          onClose={() => setShowFieldPalette(false)}
-        />
-      ) : null}
+        {activeTab === "advanced" ? <p className="fm-empty">Advanced settings coming soon.</p> : null}
+      </div>
 
-      {activeTab === "preview" ? (
-        <div className="cs-md-form">
-          <div className="cs-form-preview">
-            <h4 className="cs-form-preview__title">{form.name || "Untitled form"}</h4>
-            {form.schema?.description ? <p className="cs-form-preview__desc">{form.schema.description}</p> : null}
-            {localFields.length > 0 ? (
-              <div className="cs-form-preview__fields">
-                {localFields.map((field) => (
-                  <div key={field.id} className="cs-form-preview__field">
-                    <FieldPreview field={field} />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="cs-settings-form-help">No fields defined yet.</p>
-            )}
-          </div>
-
-          {canManage ? (
-            <div className="cs-form-editor__save-bar">
-              <button
-                type="button"
-                className="cs-btn cs-btn--primary cs-btn--sm"
-                disabled={tabSaving}
-                onClick={() => { void saveCurrentTab("preview"); }}
-              >
-                {tabSaving ? "Saving..." : "Save form"}
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {activeTab === "advanced" ? (
-        <div className="cs-md-form">
-          <p className="cs-settings-form-help">Advanced settings coming soon.</p>
-          {canManage ? (
-            <div className="cs-form-editor__save-bar">
-              <button
-                type="button"
-                className="cs-btn cs-btn--primary cs-btn--sm"
-                disabled={tabSaving}
-                onClick={() => { void saveCurrentTab("advanced"); }}
-              >
-                {tabSaving ? "Saving..." : "Save form"}
-              </button>
-            </div>
-          ) : null}
+      {canManage && activeTab !== "advanced" ? (
+        <div className="fm-actions">
+          <button type="button" className="fm-btn fm-btn--primary" disabled={tabSaving} onClick={() => { void saveCurrentTab(activeTab); }}>
+            {tabSaving ? "Saving..." : saveLabel}
+          </button>
         </div>
       ) : null}
     </div>
   );
 }
 
+function detailsFromForm(form: FormSummaryResponse): DetailsValue {
+  return {
+    scope: form.scope,
+    timing: form.customerPromptTiming ?? "",
+    reviewRequired: form.reviewRequired ?? false,
+    serviceIds: form.serviceIds ?? [],
+    category: form.category ?? "",
+  };
+}
+
 // ===========================================================================
-// Form Builder Editor (full-page, step-nav)
+// Form builder (full page: new form / edit form)
 // ===========================================================================
 
 function FormBuilderEditor({
   tenantSlug,
   builder,
+  categorySuggestions,
   onClose,
   onSaved,
   onStatus,
 }: {
   tenantSlug: string;
   builder: BuilderModal;
+  categorySuggestions: string[];
   onClose: () => void;
-  onSaved: (msg: string) => Promise<void>;
+  onSaved: (msg: string, savedFormId?: string) => Promise<void>;
   onStatus: (msg: string) => void;
 }) {
   const isEdit = builder.kind === "edit";
@@ -967,35 +959,18 @@ function FormBuilderEditor({
   const [formId, setFormId] = useState<string | null>(existingForm?.id ?? null);
 
   const [name, setName] = useState(existingForm?.name ?? "");
-  const [category, setCategory] = useState(existingForm?.category ?? "");
-  const [scope, setScope] = useState<FormScope>(existingForm?.scope ?? "customer");
-  const [timing, setTiming] = useState<CustomerPromptTiming | "">(existingForm?.customerPromptTiming ?? "");
-  const [reviewRequired, setReviewRequired] = useState(existingForm?.reviewRequired ?? false);
   const [description, setDescription] = useState(existingForm?.schema?.description ?? "");
-  const [fields, setFields] = useState<FormField[]>(existingForm?.schema?.fields ?? []);
-  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(existingForm?.serviceIds ?? []);
-  const [serviceMode, setServiceMode] = useState<"all" | "specific">(
-    existingForm?.serviceIds && existingForm.serviceIds.length > 0 ? "specific" : "all",
+  const [details, setDetails] = useState<DetailsValue>(() =>
+    existingForm
+      ? detailsFromForm(existingForm)
+      : { scope: "customer", timing: "", reviewRequired: false, serviceIds: [], category: "" },
   );
-  const [services, setServices] = useState<ServiceSummary[]>([]);
-  const [categories, setCategories] = useState<ServiceCategorySummary[]>([]);
-  const [servicesLoaded, setServicesLoaded] = useState(false);
-  const [selectKey, setSelectKey] = useState(0); // force re-mount after selection
+  const [fields, setFields] = useState<FormField[]>(existingForm?.schema?.fields ?? []);
+  const { services, categories, loaded } = useServiceCatalog(tenantSlug);
 
   const [step, setStep] = useState<EditorStep>(isEdit ? (builder.initialStep ?? "details") : "details");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    Promise.all([
-      platformApi.listServices(tenantSlug),
-      platformApi.listServiceCategories(tenantSlug).catch(() => ({ categories: [] })),
-    ]).then(([serviceResp, catResp]) => {
-      setServices(serviceResp.services.filter((s) => s.isActive));
-      setCategories(catResp.categories);
-      setServicesLoaded(true);
-    }).catch(() => setServicesLoaded(true));
-  }, [tenantSlug]);
 
   const saveForm = async (msg: string) => {
     setError(null);
@@ -1013,28 +988,33 @@ function FormBuilderEditor({
       if (formId) {
         const body: UpdateFormRequest = {
           name: trimmedName,
-          category: category.trim() || null,
-          scope,
-          customerPromptTiming: timing || null,
-          reviewRequired,
+          category: details.category.trim() || null,
+          scope: details.scope,
+          customerPromptTiming: details.timing || null,
+          reviewRequired: details.reviewRequired,
           schema,
-          serviceIds: selectedServiceIds,
+          serviceIds: details.serviceIds,
         };
         await platformApi.updateForm(tenantSlug, formId, body);
+        await onSaved(msg, formId);
+        onClose();
+        return;
       } else {
         const body: CreateFormRequest = {
           name: trimmedName,
-          category: category.trim() || null,
-          scope,
-          customerPromptTiming: timing || undefined,
-          reviewRequired,
+          category: details.category.trim() || null,
+          scope: details.scope,
+          customerPromptTiming: details.timing || undefined,
+          reviewRequired: details.reviewRequired,
           schema,
-          serviceIds: selectedServiceIds,
+          serviceIds: details.serviceIds,
         };
         const created = await platformApi.createForm(tenantSlug, body);
         setFormId(created.id);
+        await onSaved(msg, created.id);
+        setStep("fields");
+        return;
       }
-      await onSaved(msg);
     } catch (err) {
       onStatus(readErrorMessage(err, "Unable to save form."));
     } finally {
@@ -1042,12 +1022,7 @@ function FormBuilderEditor({
     }
   };
 
-  const saveLabel =
-    step === "details"
-      ? "Save details"
-      : step === "fields"
-        ? "Save fields"
-        : "Save form";
+  const saveLabel = step === "details" ? "Save details" : step === "fields" ? "Save fields" : "Save form";
 
   const saveMessage =
     formId
@@ -1058,456 +1033,251 @@ function FormBuilderEditor({
           : `"${name.trim()}" updated.`
       : `"${name.trim()}" created.`;
 
-  const steps: Array<{ key: EditorStep; label: string; disabled: boolean }> = [
-    { key: "details", label: "Details", disabled: false },
-    { key: "fields", label: "Form Fields", disabled: !formId },
-    { key: "preview", label: "Preview", disabled: false },
-    { key: "advanced", label: "Advanced", disabled: true },
+  const steps = [
+    { key: "details", label: "1 · Details" },
+    { key: "fields", label: formId ? "2 · Form Fields" : "2 · Form Fields — create form first", disabled: !formId },
+    { key: "preview", label: "3 · Preview" },
+    { key: "advanced", label: "Advanced — coming soon", disabled: true, muted: true },
   ];
 
   return (
-    <div className="cs-md-detail__inner">
-      <header className="cs-md-detail__header">
-        <div>
-          <p className="cs-eyebrow">{isEdit ? "Edit form" : "New form"}</p>
-          <h4>{name.trim() || "Untitled form"}</h4>
+    <div className="fm-builder">
+      <header className="fm-head">
+        <div className="fm-head__titles">
+          <p className="fm-eyebrow">{isEdit ? "Edit form" : "New form"}</p>
+          <h2 className="fm-head__title">{name.trim() || "Untitled form"}</h2>
         </div>
-        <div className="cs-md-detail__actions">
-          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>Cancel</button>
+        <div className="fm-head__actions">
+          <button type="button" className="fm-btn fm-btn--soft" onClick={onClose}>{formId ? "Close" : "Cancel"}</button>
         </div>
       </header>
 
-      <nav className="cs-md-tabs" role="tablist" aria-label="Form editor sections">
-        {steps.map((s) => (
-          <button
-            key={s.key}
-            type="button"
-            role="tab"
-            aria-selected={step === s.key}
-            disabled={s.disabled}
-            className={`cs-md-tab${step === s.key ? " is-active" : ""}`}
-            onClick={() => setStep(s.key)}
-          >
-            {s.label}
-          </button>
-        ))}
-      </nav>
+      <TabStrip label="Form editor sections" tabs={steps} active={step} onChange={(key) => setStep(key as EditorStep)} />
 
-      <div className="cs-md-form">
+      <div className="fm-panel">
         {step === "details" ? (
-          <DetailsStep
-            name={name} setName={setName}
-            category={category} setCategory={setCategory}
-            description={description} setDescription={setDescription}
-            scope={scope} setScope={setScope}
-            timing={timing} setTiming={setTiming}
-            reviewRequired={reviewRequired} setReviewRequired={setReviewRequired}
-            services={services} categories={categories} servicesLoaded={servicesLoaded}
-            selectedServiceIds={selectedServiceIds} setSelectedServiceIds={setSelectedServiceIds}
-            serviceMode={serviceMode} setServiceMode={setServiceMode}
-            selectKey={selectKey} setSelectKey={setSelectKey}
-          />
+          <>
+            <section className="fm-card fm-basics">
+              <label className="fm-field">
+                <span className="fm-field__label">Form name <em>— required</em></span>
+                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Health History, Consent Form" autoFocus />
+              </label>
+              <CategoryField
+                value={details.category}
+                onChange={(category) => setDetails((d) => ({ ...d, category }))}
+                suggestions={categorySuggestions}
+                listId="fm-cats-builder"
+              />
+              <label className="fm-field fm-basics__description">
+                <span className="fm-field__label">Description <em>— shown to the client at the top of the form</em></span>
+                <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Instructions shown at the top of the form" />
+              </label>
+            </section>
+            <DetailsQuestions
+              value={details}
+              onChange={(patch) => setDetails((current) => ({ ...current, ...patch }))}
+              services={services}
+              categories={categories}
+              servicesLoaded={loaded}
+              idPrefix="builder"
+            />
+          </>
         ) : null}
 
-        {step === "fields" ? (
-          <FormFieldsStep
-            fields={fields} setFields={setFields}
-          />
-        ) : null}
+        {step === "fields" ? <FieldsEditor fields={fields} setFields={setFields} canEdit /> : null}
 
+        {step === "preview" ? <FormPreviewCard name={name} description={description} fields={fields} /> : null}
+
+        {error ? <div className="cs-banner cs-banner--error" role="alert">{error}</div> : null}
+      </div>
+
+      <div className="fm-actions">
         {step === "preview" ? (
-          <PreviewStep
-            name={name} description={description} fields={fields}
-          />
-        ) : null}
-
-        {step === "advanced" ? (
-          <div className="cs-form-editor__card">
-            <h4>Advanced</h4>
-            <p className="cs-settings-form-help">Advanced settings coming soon.</p>
-          </div>
-        ) : null}
-
-        {error ? <div className="cs-banner cs-banner--error" style={{ marginTop: "1rem" }}>{error}</div> : null}
-
-        <div className="cs-form-editor__save-bar">
-          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setStep("preview")}>
+          <button type="button" className="fm-btn fm-btn--soft" onClick={() => setStep("fields")} disabled={!formId}>
+            Back to fields
+          </button>
+        ) : (
+          <button type="button" className="fm-btn fm-btn--soft" onClick={() => setStep("preview")}>
             Preview
           </button>
-          <button
-            type="button"
-            className="cs-btn cs-btn--primary cs-btn--sm"
-            disabled={saving || !name.trim()}
-            onClick={() => saveForm(saveMessage)}
-          >
-            {saving ? "Saving..." : formId ? saveLabel : "Create form"}
-          </button>
-        </div>
+        )}
+        <button
+          type="button"
+          className="fm-btn fm-btn--primary"
+          disabled={saving || !name.trim()}
+          onClick={() => saveForm(saveMessage)}
+        >
+          {saving ? "Saving..." : formId ? saveLabel : "Create form"}
+        </button>
       </div>
     </div>
   );
 }
 
 // ===========================================================================
-// Details Step — question cards
+// Fields editor (list + inline editing + "Add a field" panel)
 // ===========================================================================
 
-function DetailsStep({
-  name, setName,
-  category, setCategory,
-  description, setDescription,
-  scope, setScope,
-  timing, setTiming,
-  reviewRequired, setReviewRequired,
-  services, categories, servicesLoaded,
-  selectedServiceIds, setSelectedServiceIds,
-  serviceMode, setServiceMode,
-  selectKey, setSelectKey,
+const QUESTION_TYPES: FormFieldType[] = [
+  "short_text", "long_text", "select", "multi_select", "checkbox", "yes_no", "date", "number", "file_upload", "signature",
+];
+const LAYOUT_TYPES: FormFieldType[] = ["section", "static_text"];
+
+function FieldsEditor({
+  fields,
+  setFields,
+  canEdit,
 }: {
-  name: string; setName: (v: string) => void;
-  category: string; setCategory: (v: string) => void;
-  description: string; setDescription: (v: string) => void;
-  scope: FormScope; setScope: (v: FormScope) => void;
-  timing: CustomerPromptTiming | ""; setTiming: (v: CustomerPromptTiming | "") => void;
-  reviewRequired: boolean; setReviewRequired: (v: boolean) => void;
-  services: ServiceSummary[]; categories: ServiceCategorySummary[]; servicesLoaded: boolean;
-  selectedServiceIds: string[]; setSelectedServiceIds: (v: string[]) => void;
-  serviceMode: "all" | "specific"; setServiceMode: (v: "all" | "specific") => void;
-  selectKey: number; setSelectKey: (v: number) => void;
+  fields: FormField[];
+  setFields: (next: FormField[]) => void;
+  canEdit: boolean;
 }) {
-  // Group services by category
-  const categoryMap = new Map<string | null, ServiceSummary[]>();
-  for (const svc of services) {
-    const key = svc.categoryId ?? null;
-    const list = categoryMap.get(key) ?? [];
-    list.push(svc);
-    categoryMap.set(key, list);
-  }
-  const uncategorized = categoryMap.get(null) ?? [];
-  categoryMap.delete(null);
-
-  const handleAddService = (id: string) => {
-    setSelectedServiceIds([...selectedServiceIds, id]);
-    setSelectKey(selectKey + 1);
-  };
-
-  const handleAddAllInCategory = (catId: string) => {
-    const ids = (categoryMap.get(catId) ?? []).map((s) => s.id);
-    setSelectedServiceIds([...new Set([...selectedServiceIds, ...ids])]);
-    setSelectKey(selectKey + 1);
-  };
-  return (
-    <div className="cs-form-editor__cards">
-
-      {/* Name & Description */}
-      <div className="cs-form-editor__card">
-        <h4>Name &amp; description</h4>
-        <label>
-          <span>Form name</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Health History, Consent Form" autoFocus />
-        </label>
-        <label>
-          <span>Description</span>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Instructions shown at the top of the form" />
-        </label>
-        <label>
-          <span>Category</span>
-          <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. XERF, Injectables, Wellness" />
-        </label>
-      </div>
-
-      {/* Scope */}
-      <div className="cs-form-editor__card">
-        <h4>Who fills out this form?</h4>
-        <div className="cs-form-editor__radio-group">
-          <label className="cs-settings-toggle">
-            <input type="radio" name="scope" checked={scope === "customer"} onChange={() => setScope("customer")} />
-            <span>Clients who book an appointment</span>
-          </label>
-          <label className="cs-settings-toggle">
-            <input type="radio" name="scope" checked={scope === "internal"} onChange={() => setScope("internal")} />
-            <span>Staff members</span>
-          </label>
-        </div>
-      </div>
-
-      {/* Timing */}
-      <div className="cs-form-editor__card">
-        <h4>When should clients fill this out?</h4>
-        <div className="cs-form-editor__radio-group">
-          <label className="cs-settings-toggle">
-            <input type="radio" name="timing" checked={timing === "pre_booking"} onChange={() => setTiming("pre_booking")} />
-            <span>Before booking (required to confirm)</span>
-          </label>
-          <label className="cs-settings-toggle">
-            <input type="radio" name="timing" checked={timing === "pre_visit"} onChange={() => setTiming("pre_visit")} />
-            <span>Before the appointment</span>
-          </label>
-          <label className="cs-settings-toggle">
-            <input type="radio" name="timing" checked={timing === "post_visit"} onChange={() => setTiming("post_visit")} />
-            <span>After the appointment</span>
-          </label>
-          <label className="cs-settings-toggle">
-            <input type="radio" name="timing" checked={timing === ""} onChange={() => setTiming("")} />
-            <span>No specific timing</span>
-          </label>
-        </div>
-      </div>
-
-      {/* Services */}
-      {servicesLoaded && services.length > 0 ? (
-        <div className="cs-form-editor__card">
-          <h4>Which appointments is it for?</h4>
-          <div className="cs-form-editor__radio-group">
-            <label className="cs-settings-toggle">
-              <input type="radio" name="services" checked={serviceMode === "all"} onChange={() => { setServiceMode("all"); setSelectedServiceIds([]); }} />
-              <span>For all appointments</span>
-            </label>
-            <label className="cs-settings-toggle">
-              <input type="radio" name="services" checked={serviceMode === "specific"} onChange={() => setServiceMode("specific")} />
-              <span>Only for appointments with specific services</span>
-            </label>
-          </div>
-          {serviceMode === "specific" ? (
-            <div className="cs-form-editor__service-list">
-              {selectedServiceIds.length > 0 ? (
-                <div className="cs-form-editor__service-selected">
-                  {services.filter((s) => selectedServiceIds.includes(s.id)).map((svc) => (
-                    <div key={svc.id} className="cs-form-editor__service-row">
-                      <span>{svc.name}</span>
-                      <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setSelectedServiceIds(selectedServiceIds.filter((id: string) => id !== svc.id))}>
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="cs-settings-form-help">No services selected yet. Add one below.</p>
-              )}
-
-              {services.filter((s) => !selectedServiceIds.includes(s.id)).length > 0 ? (
-                <label>
-                  <span>Add a service</span>
-                  <select
-                    key={selectKey}
-                    defaultValue=""
-                    onChange={(e) => {
-                      if (e.target.value) handleAddService(e.target.value);
-                    }}
-                  >
-                    <option value="" disabled>Select…</option>
-                    {services.filter((s) => !selectedServiceIds.includes(s.id)).map((svc) => (
-                      <option key={svc.id} value={svc.id}>{svc.name}</option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-
-              {categories.length > 0 ? (
-                <div className="cs-form-editor__category-actions">
-                  <span className="cs-form-editor__category-label">Add all services in a category</span>
-                  {categories.map((cat) => {
-                    const catServices = (categoryMap.get(cat.id) ?? []).filter((s) => !selectedServiceIds.includes(s.id));
-                    if (catServices.length === 0) return null;
-                    return (
-                      <button
-                        key={cat.id}
-                        type="button"
-                        className="cs-btn cs-btn--ghost cs-btn--sm"
-                        onClick={() => handleAddAllInCategory(cat.id)}
-                      >
-                        + All in {cat.name} ({catServices.length})
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {/* Review */}
-      <div className="cs-form-editor__card">
-        <h4>Does this form require review?</h4>
-        <div className="cs-form-editor__radio-group">
-          <label className="cs-settings-toggle">
-            <input type="radio" name="review" checked={!reviewRequired} onChange={() => setReviewRequired(false)} />
-            <span>No review needed</span>
-          </label>
-          <label className="cs-settings-toggle">
-            <input type="radio" name="review" checked={reviewRequired} onChange={() => setReviewRequired(true)} />
-            <span>Review required</span>
-          </label>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ===========================================================================
-// Form Fields Step
-// ===========================================================================
-
-function FormFieldsStep({
-  fields, setFields,
-}: {
-  fields: FormField[]; setFields: (v: FormField[]) => void;
-}) {
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
-  const handleAddField = (type: FormFieldType) => {
-    const newField: FormField = {
-      id: generateFieldId(),
-      type,
-      label: "",
-      required: false,
-    };
-    if (type === "select" || type === "multi_select") {
-      newField.options = [];
-    }
+  const addField = (type: FormFieldType) => {
+    const newField: FormField = { id: generateFieldId(), type, label: "", required: false };
+    if (type === "select" || type === "multi_select") newField.options = [];
     setFields([...fields, newField]);
+    setEditingId(newField.id);
     setPaletteOpen(false);
   };
 
-  const handleUpdateField = (index: number, patch: Partial<FormField>) => {
-    setFields(fields.map((f, i) => (i === index ? { ...f, ...patch } : f)));
+  const updateField = (id: string, patch: Partial<FormField>) =>
+    setFields(fields.map((field) => (field.id === id ? { ...field, ...patch } : field)));
+
+  const removeField = (id: string) => {
+    setFields(fields.filter((field) => field.id !== id));
+    setEditingId(null);
   };
 
-  const handleRemoveField = (index: number) => {
-    setFields(fields.filter((_, i) => i !== index));
+  const duplicateField = (id: string) => {
+    const index = fields.findIndex((field) => field.id === id);
+    if (index < 0) return;
+    const copy: FormField = {
+      ...fields[index]!,
+      id: generateFieldId(),
+      options: fields[index]!.options?.map((option) => ({ ...option })),
+    };
+    setFields([...fields.slice(0, index + 1), copy, ...fields.slice(index + 1)]);
+    setEditingId(copy.id);
   };
 
-  const handleMoveField = (index: number, direction: -1 | 1) => {
-    const newIndex = index + direction;
-    if (newIndex < 0 || newIndex >= fields.length) return;
+  const moveField = (id: string, direction: -1 | 1) => {
+    const index = fields.findIndex((field) => field.id === id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= fields.length) return;
     const next = [...fields];
-    [next[index], next[newIndex]] = [next[newIndex], next[index]];
+    [next[index], next[target]] = [next[target]!, next[index]!];
     setFields(next);
   };
 
   return (
-    <div className="cs-form-editor__cards">
-
-      <div className="cs-form-editor__card">
-        <h4>Form fields</h4>
-
+    <div className={`fm-fields${paletteOpen ? " has-palette" : ""}`}>
+      <div className="fm-fields__main">
         {fields.length === 0 ? (
-          <p className="cs-settings-form-help">No fields yet. Add your first field below.</p>
+          <p className="fm-empty">No fields yet. Add your first field below.</p>
         ) : (
-          <ul className="cs-form-editor__field-list">
-            {fields.map((field, index) => (
-              <li key={field.id}>
-                <div className="cs-form-editor__field-card is-expanded">
-                  <div className="cs-form-editor__field-card-header">
-                    <span className="cs-form-editor__field-card-icon" aria-hidden="true">
-                      {FIELD_TYPE_ICONS[field.type] ?? "?"}
-                    </span>
-                    <span className="cs-form-editor__field-card-type">{FIELD_TYPE_LABELS[field.type]}</span>
-                    <div className="cs-form-editor__field-card-menu">
-                      <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" disabled={index === 0} onClick={() => handleMoveField(index, -1)}>↑</button>
-                      <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" disabled={index === fields.length - 1} onClick={() => handleMoveField(index, 1)}>↓</button>
-                      <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => handleRemoveField(index)}>✕</button>
-                    </div>
-                  </div>
-                  <FieldInlineEditor
+          <ul className="fm-fieldlist">
+            {fields.map((field, index) =>
+              editingId === field.id && canEdit ? (
+                <li key={field.id} className="fm-fieldcard is-editing">
+                  <FieldEditor
                     field={field}
-                    onUpdate={(patch) => handleUpdateField(index, patch)}
+                    index={index}
+                    total={fields.length}
+                    onUpdate={(patch) => updateField(field.id, patch)}
+                    onDone={() => setEditingId(null)}
+                    onDuplicate={() => duplicateField(field.id)}
+                    onRemove={() => removeField(field.id)}
+                    onMove={(direction) => moveField(field.id, direction)}
                   />
-                </div>
-              </li>
-            ))}
+                </li>
+              ) : (
+                <li key={field.id}>
+                  <button
+                    type="button"
+                    className="fm-fieldrow"
+                    disabled={!canEdit}
+                    onClick={() => setEditingId(field.id)}
+                  >
+                    <span className="fm-typechip">{FIELD_TYPE_LABELS[field.type]}</span>
+                    <span className="fm-fieldrow__label">{field.label || <em>Untitled</em>}</span>
+                    {field.required ? <span className="fm-fieldrow__req">Required</span> : null}
+                  </button>
+                </li>
+              ),
+            )}
           </ul>
         )}
-
-        <div style={{ marginTop: "0.75rem" }}>
-          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setPaletteOpen(true)}>
+        {canEdit ? (
+          <button type="button" className="fm-addfield" onClick={() => setPaletteOpen(true)}>
             + Add a field
           </button>
-        </div>
+        ) : null}
       </div>
 
       {paletteOpen ? (
-        <FieldPaletteModal
-          onSelect={handleAddField}
-          onClose={() => setPaletteOpen(false)}
-        />
+        <aside className="fm-palette" aria-label="Add a field">
+          <header className="fm-palette__head">
+            <h3>Add a field</h3>
+            <button type="button" className="fm-icon-btn" aria-label="Close" onClick={() => setPaletteOpen(false)}>✕</button>
+          </header>
+          <p className="fm-eyebrow">Questions</p>
+          <div className="fm-palette__grid">
+            {QUESTION_TYPES.map((type) => (
+              <button key={type} type="button" className="fm-palette__item" onClick={() => addField(type)}>
+                {FIELD_TYPE_LABELS[type]}
+              </button>
+            ))}
+          </div>
+          <p className="fm-eyebrow">Layout</p>
+          <div className="fm-palette__grid">
+            {LAYOUT_TYPES.map((type) => (
+              <button key={type} type="button" className="fm-palette__item" onClick={() => addField(type)}>
+                {FIELD_TYPE_LABELS[type]}
+              </button>
+            ))}
+          </div>
+        </aside>
       ) : null}
     </div>
   );
 }
 
-// ===========================================================================
-// Field Palette Modal
-// ===========================================================================
-
-const FIELD_TYPE_ICONS: Partial<Record<FormFieldType, string>> = {
-  short_text: "Aa",
-  long_text: "¶",
-  select: "☰",
-  multi_select: "☑",
-  checkbox: "✓",
-  yes_no: "⇄",
-  date: "📅",
-  number: "#",
-  file_upload: "↑",
-  signature: "✎",
-  section: "§",
-  static_text: "¶",
-};
-
-function FieldPaletteModal({
-  onSelect,
-  onClose,
-}: {
-  onSelect: (type: FormFieldType) => void;
-  onClose: () => void;
-}) {
-  return (
-    <div className="cs-modal" role="dialog" aria-label="Add a field">
-      <div className="cs-modal__panel" style={{ maxWidth: "min(480px, 100%)" }}>
-        <div className="cs-modal__header">
-          <h4>Add a field</h4>
-          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>Cancel</button>
-        </div>
-        <div className="cs-modal__form">
-          <div className="cs-field-palette">
-            {(Object.keys(FIELD_TYPE_LABELS) as FormFieldType[]).map((type) => (
-              <button
-                key={type}
-                type="button"
-                className="cs-field-palette__item"
-                onClick={() => onSelect(type)}
-              >
-                <span className="cs-field-palette__icon" aria-hidden="true">{FIELD_TYPE_ICONS[type] ?? "?"}</span>
-                <span className="cs-field-palette__label">{FIELD_TYPE_LABELS[type]}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ===========================================================================
-// Field Inline Editor (expanded inside a field card)
-// ===========================================================================
-
-function FieldInlineEditor({
+function FieldEditor({
   field,
+  index,
+  total,
   onUpdate,
+  onDone,
+  onDuplicate,
+  onRemove,
+  onMove,
 }: {
   field: FormField;
+  index: number;
+  total: number;
   onUpdate: (patch: Partial<FormField>) => void;
+  onDone: () => void;
+  onDuplicate: () => void;
+  onRemove: () => void;
+  onMove: (direction: -1 | 1) => void;
 }) {
   const isLayout = field.type === "section" || field.type === "static_text";
   const hasOptions = field.type === "select" || field.type === "multi_select";
+  const hasPlaceholder = field.type === "short_text" || field.type === "long_text" || field.type === "select" || field.type === "number";
 
   return (
-    <div className="cs-form-editor__field-editor">
-      <label>
-        <span>Label</span>
+    <div className="fm-editor">
+      <div className="fm-editor__head">
+        <span className="fm-typechip fm-typechip--solid">{FIELD_TYPE_LABELS[field.type]}</span>
+        <span className="fm-editor__pos">Editing field {index + 1} of {total}</span>
+        <button type="button" className="fm-btn fm-btn--soft fm-btn--sm" onClick={onDone}>Done</button>
+      </div>
+
+      <label className="fm-field">
+        <span className="fm-field__label">{isLayout ? "Heading" : "Question label"}</span>
         <input
           value={field.label}
           onChange={(e) => onUpdate({ label: e.target.value })}
@@ -1515,9 +1285,9 @@ function FieldInlineEditor({
         />
       </label>
 
-      {field.type === "static_text" || field.type === "section" ? (
-        <label>
-          <span>Content</span>
+      {isLayout ? (
+        <label className="fm-field">
+          <span className="fm-field__label">Content</span>
           <textarea
             value={field.content ?? ""}
             onChange={(e) => onUpdate({ content: e.target.value })}
@@ -1525,68 +1295,88 @@ function FieldInlineEditor({
             placeholder={field.type === "section" ? "Optional description below the heading" : "Static text content"}
           />
         </label>
-      ) : null}
+      ) : (
+        <label className="fm-field">
+          <span className="fm-field__label">Help text</span>
+          <input
+            value={field.helpText ?? ""}
+            onChange={(e) => onUpdate({ helpText: e.target.value || undefined })}
+            placeholder="Optional hint"
+          />
+        </label>
+      )}
 
-      {!isLayout ? (
-        <div className="cs-form-editor__field-row">
-          <label className="cs-settings-toggle">
-            <input type="checkbox" checked={field.required ?? false} onChange={(e) => onUpdate({ required: e.target.checked })} />
-            <span>Required</span>
-          </label>
-          <label style={{ flex: 1 }}>
-            <span>Help text</span>
-            <input
-              value={field.helpText ?? ""}
-              onChange={(e) => onUpdate({ helpText: e.target.value || undefined })}
-              placeholder="Optional hint"
-            />
-          </label>
-          {field.type === "short_text" || field.type === "long_text" || field.type === "select" || field.type === "number" ? (
-            <label style={{ flex: 1 }}>
-              <span>Placeholder</span>
-              <input
-                value={field.placeholder ?? ""}
-                onChange={(e) => onUpdate({ placeholder: e.target.value || undefined })}
-                placeholder="Placeholder text"
-              />
-            </label>
-          ) : null}
-        </div>
+      {hasPlaceholder ? (
+        <label className="fm-field">
+          <span className="fm-field__label">Placeholder</span>
+          <input
+            value={field.placeholder ?? ""}
+            onChange={(e) => onUpdate({ placeholder: e.target.value || undefined })}
+            placeholder="Placeholder text"
+          />
+        </label>
       ) : null}
 
       {hasOptions ? (
-        <div className="cs-form-editor__field-options">
-          <span className="cs-form-editor__field-options-label">Options</span>
-          {(field.options ?? []).map((opt, optIdx) => (
-            <div key={optIdx} className="cs-form-editor__field-option-row">
-              <input
-                value={opt.label}
-                onChange={(e) => {
-                  const next = [...(field.options ?? [])];
-                  next[optIdx] = { ...next[optIdx], label: e.target.value, value: e.target.value.toLowerCase().replace(/\s+/g, "_") };
-                  onUpdate({ options: next });
-                }}
-                placeholder="Option label"
-              />
-              <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => {
-                onUpdate({ options: (field.options ?? []).filter((_, i) => i !== optIdx) });
-              }}>✕</button>
-            </div>
-          ))}
-          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => {
-            onUpdate({ options: [...(field.options ?? []), { label: "", value: "" }] });
-          }}>+ Add option</button>
+        <div className="fm-field">
+          <span className="fm-field__label">Options</span>
+          <ul className="fm-options">
+            {(field.options ?? []).map((opt, optIdx) => (
+              <li key={optIdx} className="fm-options__row">
+                <input
+                  value={opt.label}
+                  onChange={(e) => {
+                    const next = [...(field.options ?? [])];
+                    next[optIdx] = { ...next[optIdx]!, label: e.target.value, value: e.target.value.toLowerCase().replace(/\s+/g, "_") };
+                    onUpdate({ options: next });
+                  }}
+                  placeholder="Option label"
+                  aria-label={`Option ${optIdx + 1}`}
+                />
+                <button
+                  type="button"
+                  className="fm-icon-btn"
+                  aria-label={`Remove option ${optIdx + 1}`}
+                  onClick={() => onUpdate({ options: (field.options ?? []).filter((_, i) => i !== optIdx) })}
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            className="fm-link"
+            onClick={() => onUpdate({ options: [...(field.options ?? []), { label: "", value: "" }] })}
+          >
+            + Add option
+          </button>
         </div>
       ) : null}
+
+      <footer className="fm-editor__foot">
+        {!isLayout ? (
+          <label className="fm-toggle-label">
+            <Switch checked={field.required ?? false} onChange={(next) => onUpdate({ required: next })} label="Required" />
+            <span>Required</span>
+          </label>
+        ) : <span />}
+        <div className="fm-editor__links">
+          <button type="button" className="fm-link" disabled={index === 0} onClick={() => onMove(-1)}>Move up</button>
+          <button type="button" className="fm-link" disabled={index === total - 1} onClick={() => onMove(1)}>Move down</button>
+          <button type="button" className="fm-link" onClick={onDuplicate}>Duplicate</button>
+          <button type="button" className="fm-link" onClick={onRemove}>Remove field</button>
+        </div>
+      </footer>
     </div>
   );
 }
 
 // ===========================================================================
-// Preview Step
+// Preview
 // ===========================================================================
 
-function PreviewStep({
+function FormPreviewCard({
   name,
   description,
   fields,
@@ -1596,82 +1386,60 @@ function PreviewStep({
   fields: FormField[];
 }) {
   return (
-    <div className="cs-form-editor__cards">
-      <div className="cs-form-editor__card">
-        <h4>Preview</h4>
-        <p className="cs-settings-form-help">This is how the form will appear to the person filling it out.</p>
-
-        <div className="cs-form-preview">
-          <h4 className="cs-form-preview__title">{name || "Untitled form"}</h4>
-          {description ? <p className="cs-form-preview__desc">{description}</p> : null}
-
-          {fields.length === 0 ? (
-            <p className="cs-settings-form-help">No fields defined yet.</p>
-          ) : (
-            <div className="cs-form-preview__fields">
-              {fields.map((field) => (
-                <div key={field.id} className="cs-form-preview__field">
-                  <FieldPreview field={field} />
-                </div>
-              ))}
+    <article className="fm-preview">
+      <h3 className="fm-preview__title">{name || "Untitled form"}</h3>
+      {description ? <p className="fm-preview__desc">{description}</p> : null}
+      {fields.length === 0 ? (
+        <p className="fm-help">No fields defined yet.</p>
+      ) : (
+        <div className="fm-preview__fields">
+          {fields.map((field) => (
+            <div key={field.id} className="fm-preview__field">
+              <FieldPreview field={field} />
             </div>
-          )}
+          ))}
         </div>
-      </div>
-    </div>
+      )}
+      <button type="button" className="fm-preview__submit" disabled>Submit — disabled in preview</button>
+    </article>
   );
 }
 
 function FieldPreview({ field }: { field: FormField }) {
   const label = (
-    <span className="cs-form-preview__label">
+    <span className="fm-preview__label">
       {field.label || FIELD_TYPE_LABELS[field.type]}
-      {field.required ? <span className="cs-form-preview__required"> *</span> : null}
+      {field.required ? <span className="fm-preview__req"> Required</span> : null}
     </span>
   );
-
-  const help = field.helpText ? (
-    <span className="cs-form-preview__help">{field.helpText}</span>
-  ) : null;
+  const help = field.helpText ? <span className="fm-preview__help">{field.helpText}</span> : null;
 
   switch (field.type) {
     case "section":
       return (
-        <div className="cs-form-preview__section">
-          <h5>{field.label || "Section"}</h5>
+        <div className="fm-preview__section">
+          <h4>{field.label || "Section"}</h4>
           {field.content ? <p>{field.content}</p> : null}
         </div>
       );
-
     case "static_text":
       return (
-        <div className="cs-form-preview__static">
-          {field.label ? <h5>{field.label}</h5> : null}
+        <div className="fm-preview__static">
+          {field.label ? <h4>{field.label}</h4> : null}
           <p>{field.content || "Static text content"}</p>
         </div>
       );
-
-    case "short_text":
-      return (
-        <label className="cs-form-preview__input-label">
-          {label}
-          {help}
-          <input type="text" disabled placeholder={field.placeholder || "Short answer"} />
-        </label>
-      );
-
     case "long_text":
       return (
-        <label className="cs-form-preview__input-label">
+        <label className="fm-preview__group">
           {label}
           {help}
-          <textarea disabled rows={3} placeholder={field.placeholder || "Long answer"} />
+          <textarea disabled rows={3} placeholder={field.placeholder || ""} />
         </label>
       );
-
     case "select":
       return (
-        <label className="cs-form-preview__input-label">
+        <label className="fm-preview__group">
           {label}
           {help}
           <select disabled>
@@ -1682,17 +1450,16 @@ function FieldPreview({ field }: { field: FormField }) {
           </select>
         </label>
       );
-
     case "multi_select":
       return (
-        <fieldset className="cs-form-preview__check-group">
-          <legend>{field.label || "Multi select"}{field.required ? " *" : ""}</legend>
+        <fieldset className="fm-preview__group">
+          <legend>{label}</legend>
           {help}
           {(field.options ?? []).length === 0 ? (
-            <p className="cs-settings-form-help">No options defined.</p>
+            <p className="fm-help">No options defined.</p>
           ) : (
             (field.options ?? []).map((opt, i) => (
-              <label key={i} className="cs-settings-toggle" style={{ fontWeight: 400 }}>
+              <label key={i} className="fm-preview__check">
                 <input type="checkbox" disabled />
                 <span>{opt.label || `Option ${i + 1}`}</span>
               </label>
@@ -1700,70 +1467,59 @@ function FieldPreview({ field }: { field: FormField }) {
           )}
         </fieldset>
       );
-
     case "checkbox":
       return (
-        <label className="cs-settings-toggle" style={{ fontWeight: 400 }}>
+        <label className="fm-preview__check">
           <input type="checkbox" disabled />
-          <span>{field.label || "Checkbox"}{field.required ? " *" : ""}</span>
+          <span>{field.label || "Checkbox"}{field.required ? " (Required)" : ""}</span>
         </label>
       );
-
     case "yes_no":
       return (
-        <fieldset className="cs-form-preview__radio-group">
-          <legend>{field.label || "Yes / No"}{field.required ? " *" : ""}</legend>
+        <fieldset className="fm-preview__group">
+          <legend>{label}</legend>
           {help}
-          <label className="cs-settings-toggle" style={{ fontWeight: 400 }}>
-            <input type="radio" name={field.id} disabled />
-            <span>Yes</span>
-          </label>
-          <label className="cs-settings-toggle" style={{ fontWeight: 400 }}>
-            <input type="radio" name={field.id} disabled />
-            <span>No</span>
-          </label>
+          <div className="fm-preview__pills">
+            <span className="fm-preview__pill">Yes</span>
+            <span className="fm-preview__pill">No</span>
+          </div>
         </fieldset>
       );
-
     case "date":
       return (
-        <label className="cs-form-preview__input-label">
+        <label className="fm-preview__group">
           {label}
           {help}
           <input type="date" disabled />
         </label>
       );
-
     case "number":
       return (
-        <label className="cs-form-preview__input-label">
+        <label className="fm-preview__group">
           {label}
           {help}
           <input type="number" disabled placeholder={field.placeholder || "0"} />
         </label>
       );
-
     case "file_upload":
       return (
-        <label className="cs-form-preview__input-label">
+        <label className="fm-preview__group">
           {label}
           {help}
           <input type="file" disabled />
         </label>
       );
-
     case "signature":
       return (
-        <div className="cs-form-preview__signature">
+        <div className="fm-preview__group">
           {label}
           {help}
-          <div className="cs-form-preview__signature-pad">Signature pad</div>
+          <div className="fm-preview__sign">Sign here</div>
         </div>
       );
-
     default:
       return (
-        <label className="cs-form-preview__input-label">
+        <label className="fm-preview__group">
           {label}
           {help}
           <input type="text" disabled placeholder={field.placeholder || ""} />

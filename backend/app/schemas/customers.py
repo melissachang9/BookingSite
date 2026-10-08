@@ -64,6 +64,7 @@ class UpdateCustomerRequest(CamelModel):
     address_city: str | None = None
     address_state: str | None = None
     address_zip: str | None = None
+    birthday: str | None = None  # ISO date (YYYY-MM-DD); empty string clears
     blocked_from_online_booking: bool | None = None
 
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import Field
@@ -50,6 +50,7 @@ class CustomerSummaryResponse(CamelModel):
     address_city: str | None = None
     address_state: str | None = None
     address_zip: str | None = None
+    birthday: date | None = None
     blocked_from_online_booking: bool = False
     stripe_customer_id: str | None = None
     wallet_balance_cents: int = 0

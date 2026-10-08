@@ -12,6 +12,7 @@ import type {
 
 import { platformApi } from "./platform-api";
 import { FormResponseViewer } from "./form-response-viewer";
+import { ContactIcon, buildContactRows, memberMonthsSince } from "./client-profile-parts";
 
 type RouteDefinitionLike = {
   title: string;
@@ -106,16 +107,6 @@ function monthLabel(value: string): string {
 function dayNumber(value: string): string {
   return new Intl.DateTimeFormat("en-US", { day: "2-digit" }).format(
     new Date(value),
-  );
-}
-
-function memberMonths(createdAt: string): number {
-  const created = new Date(createdAt);
-  const now = new Date();
-  return Math.max(
-    1,
-    (now.getFullYear() - created.getFullYear()) * 12 +
-      (now.getMonth() - created.getMonth()),
   );
 }
 
@@ -324,11 +315,16 @@ export function CustomersPage({
         <ClientProfileHeader
           customer={selectedCustomer}
           profileState={profileState}
-          onEdit={() => setShowEditInfo(true)}
         />
 
         <ClientStatCards customer={selectedCustomer} profileState={profileState} />
 
+        <ClientInfoRow
+          customer={selectedCustomer}
+          onEdit={() => setShowEditInfo(true)}
+        />
+
+        <div className="cs-client-card cs-client-card--tabs">
         <div className="cs-client-detail-page__tabs" role="tablist">
           {(
             [
@@ -377,6 +373,7 @@ export function CustomersPage({
             />
           )}
         </section>
+        </div>
 
         {showEditInfo ? (
           <>
@@ -473,21 +470,10 @@ export function CustomersPage({
 function ClientProfileHeader({
   customer,
   profileState,
-  onEdit,
 }: {
   customer: CustomerSummary;
   profileState: ProfileState;
-  onEdit: () => void;
 }) {
-  const addressLine = [
-    customer.addressStreet,
-    customer.addressCity,
-    customer.addressState,
-    customer.addressZip,
-  ]
-    .filter(Boolean)
-    .join(", ");
-
   return (
     <header className="cs-client-profile-header">
       <span className="cs-client-profile-header__avatar" aria-hidden="true">
@@ -496,32 +482,13 @@ function ClientProfileHeader({
       <div className="cs-client-profile-header__info">
         <h2 className="cs-client-profile-header__name">{customer.name}</h2>
         <p className="cs-client-profile-header__contact">
-          {[
-            customer.email,
-            customer.phone,
-            `member ${memberMonths(customer.createdAt)} months`,
-          ]
-            .filter(Boolean)
-            .join("  ·  ")}
+          member {memberMonthsSince(customer.createdAt)} months
         </p>
-        {addressLine ? (
-          <p className="cs-client-profile-header__address">{addressLine}</p>
-        ) : null}
         <div className="cs-client-profile-header__tags">
           {customer.stripeCustomerId ? (
-            <span
-              className="cs-client-tag cs-client-tag--mint"
-              title="Card details are stored by the payment processor. Showing card brand/last4/expiry is a future phase."
-            >
-              Card on file · details coming soon
-            </span>
+            <span className="cs-client-tag cs-client-tag--mint">Card on file</span>
           ) : (
-            <span
-              className="cs-client-tag cs-client-tag--muted"
-              title="Storing client card details is a future phase."
-            >
-              No card on file
-            </span>
+            <span className="cs-client-tag cs-client-tag--muted">No card on file</span>
           )}
           {profileState.kind === "ready" &&
           profileState.profile.outstandingBalanceCents > 0 ? (
@@ -541,15 +508,65 @@ function ClientProfileHeader({
         <a className="cs-client-profile-header__cta" href="/calendar">
           Book from calendar
         </a>
-        <button
-          type="button"
-          className="cs-client-profile-header__edit"
-          onClick={onEdit}
-        >
-          Edit client info
-        </button>
       </div>
     </header>
+  );
+}
+
+function ClientInfoRow({
+  customer,
+  onEdit,
+}: {
+  customer: CustomerSummary;
+  onEdit: () => void;
+}) {
+  const rows = buildContactRows(customer, { includeBirthday: true });
+  return (
+    <div className="cs-client-info-row">
+      <section className="cs-client-card" aria-label="Contact details">
+        <header className="cs-client-card__head">
+          <h3 className="cs-client-card__title">Contact details</h3>
+          <button type="button" className="cs-client-card__action" onClick={onEdit}>
+            Edit
+          </button>
+        </header>
+        <dl className="cs-client-contact-grid">
+          {rows.map((row) => (
+            <div key={row.kind} className="cs-client-contact-grid__row">
+              <dt>
+                <ContactIcon kind={row.kind} />
+                <span>{row.label}</span>
+              </dt>
+              <dd className={row.value ? undefined : "is-empty"}>
+                {row.value || "Not added"}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+      <section className="cs-client-card" aria-label="Cards on file">
+        <header className="cs-client-card__head">
+          <h3 className="cs-client-card__title">Cards on file</h3>
+        </header>
+        <div className="cs-client-cardrow">
+          <span className="cs-client-cardrow__brand">CARD</span>
+          <span className="cs-client-cardrow__body">
+            <strong>
+              {customer.stripeCustomerId ? "Saved with payment provider" : "No card on file"}
+            </strong>
+            <span>
+              {customer.stripeCustomerId
+                ? "Brand, last four and expiry aren't synced yet."
+                : "A card is saved at the first online payment."}
+            </span>
+          </span>
+        </div>
+        <p className="cs-client-card__foot">
+          Card details are stored by the payment provider — only the last four
+          digits will be shown here.
+        </p>
+      </section>
+    </div>
   );
 }
 
@@ -863,6 +880,7 @@ function ClientEditForm({
     addressCity: customer.addressCity ?? "",
     addressState: customer.addressState ?? "",
     addressZip: customer.addressZip ?? "",
+    birthday: customer.birthday ?? "",
   });
   const [saveState, setSaveState] = useState<
     "idle" | "submitting" | "error"
@@ -882,10 +900,11 @@ function ClientEditForm({
         name: draft.name.trim(),
         email: draft.email.trim(),
         phone: draft.phone.trim(),
-        addressStreet: draft.addressStreet.trim() || undefined,
-        addressCity: draft.addressCity.trim() || undefined,
-        addressState: draft.addressState.trim() || undefined,
-        addressZip: draft.addressZip.trim() || undefined,
+        addressStreet: draft.addressStreet.trim(),
+        addressCity: draft.addressCity.trim(),
+        addressState: draft.addressState.trim(),
+        addressZip: draft.addressZip.trim(),
+        birthday: draft.birthday,
       };
       await platformApi.updateCustomer(tenantSlug, customer.id, body);
       setSaveState("idle");
@@ -975,6 +994,17 @@ function ClientEditForm({
           />
         </label>
       </div>
+      <label className="cs-client-edit-form__field">
+        <span>Birthday</span>
+        <input
+          type="date"
+          value={draft.birthday}
+          max={new Date().toISOString().slice(0, 10)}
+          onChange={(e) => setDraft((d) => ({ ...d, birthday: e.target.value }))}
+          disabled={saveState === "submitting"}
+          autoComplete="bday"
+        />
+      </label>
       <div className="cs-customer-notes-editor__actions">
         <button
           type="button"

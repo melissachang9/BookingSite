@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +21,19 @@ from app.services.tenants import get_tenant_by_slug
 
 
 _OWNERSHIP_BYPASS_ROLES = frozenset({"owner", "manager"})
+
+
+def _parse_birthday(raw: str) -> date | None:
+    value = raw.strip()
+    if not value:
+        return None
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError:
+        raise api_exception(422, "invalid_birthday", "Birthday must be a date in YYYY-MM-DD format.")
+    if parsed > date.today():
+        raise api_exception(422, "invalid_birthday", "Birthday cannot be in the future.")
+    return parsed
 
 
 def _build_customer_profile(customer: Customer, bookings: list[Booking]) -> CustomerProfileResponse:
@@ -235,6 +248,8 @@ async def update_customer(
         customer.address_state = payload.address_state.strip() or None
     if payload.address_zip is not None:
         customer.address_zip = payload.address_zip.strip() or None
+    if payload.birthday is not None:
+        customer.birthday = _parse_birthday(payload.birthday)
     if payload.blocked_from_online_booking is not None:
         customer.blocked_from_online_booking = payload.blocked_from_online_booking
     if payload.wallet_adjustment_cents is not None and payload.wallet_adjustment_cents != 0:

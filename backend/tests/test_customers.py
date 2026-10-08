@@ -244,3 +244,36 @@ def test_list_customer_form_responses_requires_authentication(client) -> None:
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "unauthorized"
+
+def test_update_customer_birthday_and_address(client, demo_credentials) -> None:
+    _seed_lookup_customers()
+    headers = _auth_headers(client, demo_credentials)
+    customer_id = client.get(
+        "/api/v1/customers", params={"search": "taylor"}, headers=headers
+    ).json()["items"][0]["id"]
+    url = f"/api/v1/tenants/brow-beauty-lab/customers/{customer_id}"
+
+    response = client.patch(
+        url,
+        json={"birthday": "1991-03-14", "addressStreet": "22 Brunswick St", "addressCity": "Fitzroy"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["customer"]["birthday"] == "1991-03-14"
+    assert response.json()["customer"]["addressStreet"] == "22 Brunswick St"
+
+    cleared = client.patch(url, json={"birthday": ""}, headers=headers)
+    assert cleared.status_code == 200
+    assert cleared.json()["customer"]["birthday"] is None
+
+
+def test_update_customer_rejects_invalid_birthday(client, demo_credentials) -> None:
+    _seed_lookup_customers()
+    headers = _auth_headers(client, demo_credentials)
+    customer_id = client.get(
+        "/api/v1/customers", params={"search": "taylor"}, headers=headers
+    ).json()["items"][0]["id"]
+    url = f"/api/v1/tenants/brow-beauty-lab/customers/{customer_id}"
+
+    assert client.patch(url, json={"birthday": "not-a-date"}, headers=headers).status_code == 422
+    assert client.patch(url, json={"birthday": "2999-01-01"}, headers=headers).status_code == 422

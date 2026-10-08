@@ -1,5 +1,6 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactElement } from "react";
 import { createPortal } from "react-dom";
+import { ContactIcon, buildContactRows, memberMonthsSince } from "./client-profile-parts";
 import type {
   AvailabilityRequest,
   AvailabilityResponse,
@@ -4536,11 +4537,20 @@ function AppointmentDetailsDrawer({
   // "Profile" from the appointment details view. Replaces the old overlay modal.
   if (drawerView === "profile") {
     const p = clientCardProfile;
-    const clientSince = p?.customer?.createdAt
-      ? `Client since ${new Date(p.customer.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })}`
+    const profileCustomer = p?.customer ?? null;
+    const memberLine = profileCustomer?.createdAt
+      ? `member ${memberMonthsSince(profileCustomer.createdAt)} months`
       : null;
-    const contactLine = [selectedAppointment.customerEmail, selectedAppointment.customerPhone].filter(Boolean);
+    const contactRows = buildContactRows({
+      phone: profileCustomer?.phone ?? selectedAppointment.customerPhone,
+      email: profileCustomer?.email ?? selectedAppointment.customerEmail,
+      addressStreet: profileCustomer?.addressStreet,
+      addressCity: profileCustomer?.addressCity,
+      addressState: profileCustomer?.addressState,
+      addressZip: profileCustomer?.addressZip,
+    });
     const balanceDue = p?.outstandingBalanceCents ?? selectedAppointment.balanceDueCents ?? 0;
+    const staffNote = profileCustomer?.notes ?? selectedAppointment.customerNotes;
     const recentVisits = (p?.bookings ?? [])
       .slice()
       .sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime())
@@ -4569,38 +4579,54 @@ function AppointmentDetailsDrawer({
             </div>
 
             <div className="cs-profile-drawer__intro">
-              <span className="cs-avatar cs-avatar--xl" aria-hidden="true">{getInitials(selectedAppointment.customerName)}</span>
-              <div>
+              <span className="cs-avatar cs-avatar--xl cs-avatar--square" aria-hidden="true">{getInitials(selectedAppointment.customerName)}</span>
+              <div className="cs-profile-drawer__identity">
                 <h3 className="cs-profile-drawer__name">{selectedAppointment.customerName}</h3>
-                {clientSince ? <p className="cs-profile-drawer__meta">{clientSince}</p> : null}
+                {memberLine ? <p className="cs-profile-drawer__meta">{memberLine}</p> : null}
               </div>
               <a className="cs-profile-drawer__open" href={`/customers?customerId=${selectedAppointment.customerId}`}>Full profile →</a>
             </div>
 
+            <div className="cs-profile-block cs-profile-block--card">
+              <p className="cs-profile-block__label">Contact details</p>
+              <ul className="cs-contact-list">
+                {contactRows.map((row) => (
+                  <li key={row.kind} className="cs-contact-list__row">
+                    <ContactIcon kind={row.kind} />
+                    <span className={`cs-contact-list__value${row.value ? "" : " is-empty"}`}>
+                      {row.value || "Not added"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
             <div className="cs-profile-drawer__metrics">
-              <div className="cs-metric cs-metric--due">
+              <div className="cs-metric cs-metric--mint">
+                <span className="cs-metric__label">Visits</span>
+                <span className="cs-metric__value">{p === null ? "–" : p.bookings.length}</span>
+              </div>
+              <div className="cs-metric cs-metric--blue">
+                <span className="cs-metric__label">Wallet</span>
+                <span className="cs-metric__value">{formatMoney(selectedAppointment.walletBalanceCents ?? profileCustomer?.walletBalanceCents ?? 0)}</span>
+              </div>
+              <div className="cs-metric cs-metric--lilac">
+                <span className="cs-metric__label">Lifetime</span>
+                <span className="cs-metric__value">{p === null ? "–" : formatMoney(p.lifetimeSpendCents)}</span>
+              </div>
+            </div>
+
+            {balanceDue > 0 ? (
+              <div className="cs-metric cs-metric--due cs-metric--row">
                 <span className="cs-metric__label">Balance due</span>
                 <span className="cs-metric__value">{formatMoney(balanceDue)}</span>
               </div>
-              <div className="cs-metric">
-                <span className="cs-metric__label">Lifetime spend</span>
-                <span className="cs-metric__value">{formatMoney(p?.lifetimeSpendCents ?? 0)}</span>
-              </div>
-            </div>
+            ) : null}
 
-            <div className="cs-profile-block">
-              <p className="cs-profile-block__label">Contact</p>
-              {contactLine.length > 0 ? (
-                <p className="cs-profile-block__value">{contactLine.join("\n")}</p>
-              ) : (
-                <p className="cs-profile-block__value cs-profile-block__value--muted">No contact on file</p>
-              )}
-            </div>
-
-            {selectedAppointment.customerNotes ? (
-              <div className="cs-profile-block">
+            {staffNote ? (
+              <div className="cs-profile-block cs-profile-block--note">
                 <p className="cs-profile-block__label">Note for staff</p>
-                <p className="cs-profile-block__value">{selectedAppointment.customerNotes}</p>
+                <p className="cs-profile-block__value">{staffNote}</p>
               </div>
             ) : null}
 

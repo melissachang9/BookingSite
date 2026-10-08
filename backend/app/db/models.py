@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import date, datetime, time
 from typing import Any, Optional
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, Time, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text, Time, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, IdMixin, TimestampMixin
@@ -80,6 +80,7 @@ class Customer(Base, IdMixin, TimestampMixin):
     address_city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     address_state: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     address_zip: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    birthday: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     blocked_from_online_booking: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
 
     tenant: Mapped[Tenant] = relationship(back_populates="customers")

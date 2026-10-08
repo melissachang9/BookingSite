@@ -17,6 +17,8 @@ export type CustomerSummary = AuditFields &
     addressCity?: string | null;
     addressState?: string | null;
     addressZip?: string | null;
+    /** ISO date (YYYY-MM-DD). */
+    birthday?: string | null;
     blockedFromOnlineBooking?: boolean;
     stripeCustomerId?: string | null;
     walletBalanceCents?: number;
@@ -80,6 +82,8 @@ export type UpdateCustomerRequest = {
   addressCity?: string | null;
   addressState?: string | null;
   addressZip?: string | null;
+  /** ISO date (YYYY-MM-DD); empty string clears. */
+  birthday?: string;
   blockedFromOnlineBooking?: boolean;
 };
 

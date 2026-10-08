@@ -580,6 +580,7 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("bookings", "deposit_cents", "INTEGER"),
     ("resources", "quantity", "INTEGER NOT NULL DEFAULT 1"),
     ("booking_items", "source_add_on_id", "VARCHAR(36)"),
+    ("customers", "birthday", "DATE"),
 )
 
 
