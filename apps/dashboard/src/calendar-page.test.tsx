@@ -267,6 +267,131 @@ describe("CalendarPage", () => {
     }
   });
 
+  it("filters the calendar strictly to the chosen staff member", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const otherProvider = { ...baseBooking.provider, id: "provider-2", name: "Ava Brooks" };
+      const api = createApi(
+        [
+          baseBooking,
+          createBooking({
+            id: "booking-2",
+            providerId: "provider-2",
+            provider: otherProvider,
+            customer: { ...baseBooking.customer, id: "customer-2", name: "Morgan Ellis" },
+            customerId: "customer-2",
+            startsAt: "2026-05-27T19:00:00.000Z",
+            endsAt: "2026-05-27T20:00:00.000Z",
+          }),
+        ],
+        { providersByServiceId: { "service-1": [baseBooking.provider, otherProvider] } },
+      );
+
+      render(
+        <CalendarPage
+          definition={{ eyebrow: "Calendar-first booking", description: "Calendar." }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      expect(await screen.findByRole("button", { name: /Taylor Guest booked/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Morgan Ellis booked/i })).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Staff filter" }));
+      fireEvent.click(await screen.findByRole("menuitemradio", { name: /Ava Brooks/ }));
+
+      // The menu closes, the filter reads as the chosen person, and only their bookings remain.
+      expect(screen.getByRole("button", { name: "Staff filter" })).toHaveTextContent("Ava Brooks");
+      expect(screen.getByRole("button", { name: /Morgan Ellis booked/i })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Taylor Guest booked/i })).not.toBeInTheDocument();
+      expect(screen.getByText(/1 appointments this week/)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Staff filter" }));
+      fireEvent.click(await screen.findByRole("menuitemradio", { name: /All staff/ }));
+      expect(await screen.findByRole("button", { name: /Taylor Guest booked/i })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("filters appointments by service and combines with the staff filter", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const browService = { ...baseBooking.service, id: "service-2", name: "Brow Shape and Tint" };
+      const otherProvider = { ...baseBooking.provider, id: "provider-2", name: "Ava Brooks" };
+      const api = createApi(
+        [
+          baseBooking, // Taylor Guest, Signature Facial, Jordan
+          createBooking({
+            id: "booking-2",
+            serviceId: "service-2",
+            service: browService,
+            customerId: "customer-2",
+            customer: { ...baseBooking.customer, id: "customer-2", name: "Morgan Ellis" },
+            startsAt: "2026-05-27T19:00:00.000Z",
+            endsAt: "2026-05-27T20:00:00.000Z",
+          }), // Morgan Ellis, Brow Shape and Tint, Jordan
+          createBooking({
+            id: "booking-3",
+            providerId: "provider-2",
+            provider: otherProvider,
+            customerId: "customer-3",
+            customer: { ...baseBooking.customer, id: "customer-3", name: "Casey Lin" },
+            startsAt: "2026-05-27T21:00:00.000Z",
+            endsAt: "2026-05-27T22:00:00.000Z",
+          }), // Casey Lin, Signature Facial, Ava
+        ],
+        {
+          services: [baseBooking.service, browService],
+          providersByServiceId: {
+            "service-1": [baseBooking.provider, otherProvider],
+            "service-2": [baseBooking.provider],
+          },
+        },
+      );
+
+      render(
+        <CalendarPage
+          definition={{ eyebrow: "Calendar-first booking", description: "Calendar." }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+
+      expect(await screen.findByRole("button", { name: /Taylor Guest booked/i })).toBeInTheDocument();
+      expect(screen.getByText(/3 appointments this week/)).toBeInTheDocument();
+
+      // Service filter: only that appointment type remains.
+      fireEvent.click(screen.getByRole("button", { name: "Service filter" }));
+      fireEvent.click(await screen.findByRole("menuitemradio", { name: /Brow Shape and Tint/ }));
+      expect(await screen.findByRole("button", { name: /Morgan Ellis booked/i })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Taylor Guest booked/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Casey Lin booked/i })).not.toBeInTheDocument();
+      expect(screen.getByText(/1 appointments this week/)).toBeInTheDocument();
+
+      // Both filters together: Signature Facial for Ava only.
+      fireEvent.click(screen.getByRole("button", { name: "Service filter" }));
+      fireEvent.click(await screen.findByRole("menuitemradio", { name: /Signature Facial/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Staff filter" }));
+      fireEvent.click(await screen.findByRole("menuitemradio", { name: /Ava Brooks/ }));
+      expect(await screen.findByRole("button", { name: /Casey Lin booked/i })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Taylor Guest booked/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Morgan Ellis booked/i })).not.toBeInTheDocument();
+
+      // Clearing the service filter restores that person's other appointment types.
+      fireEvent.click(screen.getByRole("button", { name: "Service filter" }));
+      fireEvent.click(await screen.findByRole("menuitemradio", { name: /Any service/ }));
+      expect(await screen.findByRole("button", { name: /Casey Lin booked/i })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("records check-in on the booking and shows it as checked in", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
@@ -585,7 +710,7 @@ describe("CalendarPage", () => {
 
       expect(await screen.findByText("24 – 30 May")).toBeInTheDocument();
 
-      expect(await screen.findByLabelText("Availability for")).toHaveAttribute("aria-expanded", "false");
+      expect(await screen.findByLabelText("Service filter")).toHaveAttribute("aria-expanded", "false");
 
       expect(screen.queryByRole("button", { name: /Start booking/i })).not.toBeInTheDocument();
       expect(screen.queryByText(/Create draft from selected opening/i)).not.toBeInTheDocument();

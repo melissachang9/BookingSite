@@ -948,7 +948,7 @@ export function CalendarPage({
     if (!contextMenuOpen) return;
     const handler = (e: Event) => {
       const target = e.target as HTMLElement;
-      if (!target.closest(".context")) setContextMenuOpen(false);
+      if (!target.closest(".cs-context")) setContextMenuOpen(false);
     };
     document.addEventListener("click", handler, true);
     return () => document.removeEventListener("click", handler, true);
@@ -1375,17 +1375,24 @@ export function CalendarPage({
     };
   }, []);
 
+  // The service filter narrows the appointments shown (and, via selectedServiceId,
+  // the open slots offered); everything downstream — boards, counts, staff
+  // menu — reads these filtered days.
   const viewDays = useMemo(() => {
     if (calendarState.kind !== "ready") {
       return [];
     }
+    const forService = (day: CalendarDay): CalendarDay =>
+      selectedServiceId === null
+        ? day
+        : { ...day, appointments: day.appointments.filter((appointment) => appointment.serviceId === selectedServiceId) };
 
     const weekStartDay = weekStartsOn ?? 0;
 
     if (viewMode === "day") {
       // Find or create a single day entry
       const existing = calendarState.days.find((day) => day.date === focusedDate);
-      if (existing) return [existing];
+      if (existing) return [forService(existing)];
       return [{ date: focusedDate, label: getDateLabel(focusedDate), appointments: [], openings: [] }];
     }
 
@@ -1402,10 +1409,10 @@ export function CalendarPage({
       d.setUTCDate(weekStart.getUTCDate() + i);
       const dateStr = toIsoDate(d);
       const existing = calendarState.days.find((day) => day.date === dateStr);
-      result.push(existing ?? { date: dateStr, label: getDateLabel(dateStr), appointments: [], openings: [] });
+      result.push(existing ? forService(existing) : { date: dateStr, label: getDateLabel(dateStr), appointments: [], openings: [] });
     }
     return result;
-  }, [calendarState, focusedDate, viewMode, weekStartsOn]);
+  }, [calendarState, focusedDate, selectedServiceId, viewMode, weekStartsOn]);
 
   const visibleDateRangeLabel = useMemo(() => {
     if (viewDays.length === 0) {
@@ -1423,14 +1430,22 @@ export function CalendarPage({
     if (calendarState.kind !== "ready") {
       return { appointmentCount: 0, openSlotCount: 0 };
     }
-    const appointmentCount = viewDays.reduce((sum, day) => sum + day.appointments.length, 0);
-    const openSlotCount = viewDays.reduce((sum, day) => sum + day.openings.length, 0);
+    const matchesProvider = (providerId: string) =>
+      selectedWeekProviderId === null || providerId === selectedWeekProviderId;
+    const appointmentCount = viewDays.reduce(
+      (sum, day) => sum + day.appointments.filter((a) => matchesProvider(a.providerId)).length,
+      0,
+    );
+    const openSlotCount = viewDays.reduce(
+      (sum, day) => sum + day.openings.filter((o) => matchesProvider(o.providerId)).length,
+      0,
+    );
     return { appointmentCount, openSlotCount };
-  }, [calendarState, viewDays]);
+  }, [calendarState, viewDays, selectedWeekProviderId]);
 
   const weekProviderOptions = useMemo(
-    () => (viewMode === "week" && calendarState.kind === "ready" ? mergeProviderOptions(calendarState.providers, getProviderOptions(viewDays)) : []),
-    [calendarState, viewDays, viewMode],
+    () => (calendarState.kind === "ready" ? mergeProviderOptions(calendarState.providers, getProviderOptions(viewDays)) : []),
+    [calendarState, viewDays],
   );
   const allKnownProviderOptions = useMemo(
     () => (calendarState.kind === "ready" ? mergeProviderOptions(calendarState.providers, getProviderOptions(viewDays)) : []),
@@ -2249,9 +2264,9 @@ export function CalendarPage({
                   className="cs-select"
                   onClick={() => setAvailMenuOpen((prev) => !prev)}
                   aria-expanded={availMenuOpen}
-                  aria-label="Availability for"
+                  aria-label="Service filter"
                 >
-                  <span className="cs-select__label">Availability for</span>
+                  <span className="cs-select__label">Service</span>
                   <span className="cs-select__value">
                     {selectedServiceId
                       ? calendarState.services.find((s) => s.id === selectedServiceId)?.name ?? "Any service"
@@ -2271,7 +2286,7 @@ export function CalendarPage({
                       minWidth: 280,
                     }}
                   >
-                    <div className="cs-menu__label">Availability for</div>
+                    <div className="cs-menu__label">Show appointments and openings for</div>
                     <button
                       type="button"
                       className={`cs-menu__item${!selectedServiceId ? " cs-menu__item--selected" : ""}`}
@@ -2308,7 +2323,7 @@ export function CalendarPage({
               </div>
             ) : null}
 
-            {viewMode === "week" && weekProviderOptions.length > 0 ? (
+            {weekProviderOptions.length > 0 ? (
               <div className="cs-context" style={{ position: "relative" }}>
                 <button
                   type="button"
@@ -3035,6 +3050,7 @@ function CalendarBoard({
           }
 
           const columns: ScheduleColumn[] = Array.from(providerColumns.values())
+            .filter((column) => selectedWeekProviderId === null || column.providerId === selectedWeekProviderId)
             .sort((left, right) => left.heading.localeCompare(right.heading))
             .map((column) => ({
               key: column.key,
