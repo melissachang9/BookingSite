@@ -6271,6 +6271,9 @@ select:disabled {
   flex-direction: column;
   gap: 4px;
 }
+/* Buttons are disabled while a change is in flight; keep them at full strength
+   so the cards don't visibly grey out and flash. */
+.cs-treatment-card button:disabled { opacity: 1; cursor: progress; }
 .cs-treatment-card__kicker {
   font: 600 10px var(--cs-font);
   letter-spacing: .14em;

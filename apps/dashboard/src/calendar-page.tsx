@@ -4456,6 +4456,47 @@ function AppointmentDetailsDrawer({
 
   const [clientCardTab, setClientCardTab] = useState<"history" | "forms" | "photos" | "notes" | "messages">("history");
   const [clientCardProfile, setClientCardProfile] = useState<CustomerProfileResponse | null>(null);
+  const [treatmentMode, setTreatmentMode] = useState<"none" | "change" | "add" | "change-item">("none");
+  const [changingItemId, setChangingItemId] = useState<string | null>(null);
+  // While the calendar reloads (after adding/removing an item) the services and
+  // categories props are briefly empty; keep the last known values so the
+  // service-family colours don't flash to the default tint.
+  const lastServicesRef = useRef<ServiceSummary[]>([]);
+  const cardColorCacheRef = useRef<Map<string, string>>(new Map());
+  const lastCategoryNamesRef = useRef<Record<string, string> | undefined>(undefined);
+  const [treatmentBusy, setTreatmentBusy] = useState(false);
+  const [treatmentError, setTreatmentError] = useState("");
+  const [treatmentAddOns, setTreatmentAddOns] = useState<ServiceAddOn[]>([]);
+  useEffect(() => {
+    if (!api?.listServiceAddOns || !selectedAppointment) return;
+    let cancelled = false;
+    api.listServiceAddOns(tenantSlug, selectedAppointment.serviceId)
+      .then((resp) => { if (!cancelled) setTreatmentAddOns(resp.items.filter((a) => a.isActive)); })
+      .catch(() => { if (!cancelled) setTreatmentAddOns([]); });
+    return () => { cancelled = true; };
+  }, [api, tenantSlug, selectedAppointment?.serviceId]);
+  useEffect(() => {
+    if (treatmentMode === "none") return;
+    const handlePointerDown = (event: Event) => {
+      const target = event.target as Element | null;
+      if (target && target.closest(".cs-treatment-menu-wrap")) return;
+      setTreatmentMode("none");
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [treatmentMode]);
+  const runTreatmentAction = async (action: () => Promise<void>, fallback: string) => {
+    setTreatmentBusy(true);
+    setTreatmentError("");
+    try {
+      await action();
+      setTreatmentMode("none");
+    } catch (err) {
+      setTreatmentError(err instanceof Error ? err.message : fallback);
+    } finally {
+      setTreatmentBusy(false);
+    }
+  };
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileDraft, setProfileDraft] = useState({
     name: "", email: "", phone: "", addressStreet: "", addressCity: "", addressState: "", addressZip: "", birthday: "",
@@ -4554,14 +4595,90 @@ function AppointmentDetailsDrawer({
   const isConfirmed = selectedAppointment.status === "confirmed";
   const isCompleted = selectedAppointment.status === "completed";
   const isNoShow = selectedAppointment.status === "no_show";
+  const renderAddPickerOptions = (
+    onPickAddOn: (addOn: ServiceAddOn) => void,
+    onPickService: (svc: ServiceSummary) => void,
+  ) => (
+    <>
+      {treatmentAddOns.length > 0 ? (
+        <>
+          <div className="cs-checkout-panel__add-item-group">Add-ons for this treatment</div>
+          {treatmentAddOns.map((addOn) => (
+            <button
+              key={`addon-${addOn.id}`}
+              type="button"
+              role="option"
+              aria-selected={false}
+              className="cs-checkout-panel__add-item-option"
+              disabled={treatmentBusy || !api}
+              onClick={() => onPickAddOn(addOn)}
+            >
+              <span>{addOn.name}</span>
+              <span className="cs-checkout-panel__add-item-option-price">{formatMoney(addOn.priceCents)}</span>
+            </button>
+          ))}
+          <div className="cs-checkout-panel__add-item-group">Services</div>
+        </>
+      ) : null}
+      {services.filter((svc) => svc.isActive).length === 0 ? (
+        <div className="cs-checkout-panel__add-item-empty">No services available to add.</div>
+      ) : (
+        services
+          .filter((svc) => svc.isActive)
+          .map((svc) => (
+            <button
+              key={`svc-${svc.id}`}
+              type="button"
+              role="option"
+              aria-selected={false}
+              className="cs-checkout-panel__add-item-option"
+              disabled={treatmentBusy || !api}
+              onClick={() => onPickService(svc)}
+            >
+              <span>{svc.name}</span>
+              <span className="cs-checkout-panel__add-item-option-price">{formatMoney(svc.priceCents)}</span>
+            </button>
+          ))
+      )}
+    </>
+  );
+  const treatmentCloseStyle = { border: 0, cursor: "pointer", width: 32, height: 32, borderRadius: "50%", background: "var(--cs-surface)", color: "var(--cs-ink)", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 } as const;
+  const formatTreatmentMeta = (priceCents: number, minutes: number | null) =>
+    [formatMoney(priceCents), minutes ? `${minutes} min` : null].filter(Boolean).join(" · ");
+  const mainTreatmentMinutes =
+    (services.length > 0 ? services : lastServicesRef.current).find((svc) => svc.id === selectedAppointment.serviceId)?.durationMinutes
+    ?? null;
+  const itemMinutes = (item: BookingItemSummary): number | null => {
+    const perUnit = item.sourceAddOnId
+      ? treatmentAddOns.find((a) => a.id === item.sourceAddOnId)?.durationMinutes
+      : item.sourceServiceId
+        ? (services.length > 0 ? services : lastServicesRef.current).find((svc) => svc.id === item.sourceServiceId)?.durationMinutes
+        : undefined;
+    return perUnit != null ? perUnit * item.quantity : null;
+  };
+  const canModifyTreatment = !isCompleted && !isNoShow && selectedAppointment.status !== "canceled";
   const showFooter = isConfirmed || isCompleted || isNoShow;
   // Service-family swatch (same palette as the calendar chips) so the drawer
   // and checkout tint match the colour the booking shows on the calendar.
-  const drawerServiceForFamily = services.find((s) => s.id === selectedAppointment.serviceId);
+  if (services.length > 0) lastServicesRef.current = services;
+  if (categoryNameById && Object.keys(categoryNameById).length > 0) lastCategoryNamesRef.current = categoryNameById;
+  const drawerServiceForFamily = (services.length > 0 ? services : lastServicesRef.current).find((s) => s.id === selectedAppointment.serviceId);
   const drawerCategoryForFamily = drawerServiceForFamily?.categoryId
-    ? categoryNameById?.[drawerServiceForFamily.categoryId] ?? null
+    ? (categoryNameById && Object.keys(categoryNameById).length > 0 ? categoryNameById : lastCategoryNamesRef.current)?.[drawerServiceForFamily.categoryId] ?? null
     : null;
-  const drawerFamilyColor = swatchForService(selectedAppointment.serviceName, drawerCategoryForFamily);
+  // Resolve each card colour once real catalog data is available and then keep
+  // it, so a reload (cancel, add/remove item) can't briefly re-tint the cards.
+  const stableCardColor = (key: string, compute: () => string): string => {
+    const cached = cardColorCacheRef.current.get(key);
+    if (cached) return cached;
+    const color = compute();
+    if (services.length > 0 || lastServicesRef.current.length > 0) cardColorCacheRef.current.set(key, color);
+    return color;
+  };
+  const drawerFamilyColor = stableCardColor(
+    `main:${selectedAppointment.serviceId}:${selectedAppointment.serviceName}`,
+    () => swatchForService(selectedAppointment.serviceName, drawerCategoryForFamily),
+  );
   if (drawerView === "checkout" && api) {
     return (
       <>
@@ -4977,9 +5094,174 @@ function AppointmentDetailsDrawer({
 
           {/* Treatment card — tinted with the service family colour */}
           <div className="cs-treatment-card" style={{ background: familyBg }}>
-            <div className="cs-treatment-card__kicker">Treatment</div>
-            <div className="cs-treatment-card__name">{selectedAppointment.serviceName}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+                <div className="cs-treatment-card__kicker">Treatment</div>
+                <div className="cs-treatment-card__name">{selectedAppointment.serviceName}</div>
+                <div className="cs-treatment-card__meta" style={{ font: "500 13px var(--cs-font)", color: "rgba(20, 17, 15, .6)" }}>
+                  {formatTreatmentMeta(selectedAppointment.priceCents, mainTreatmentMinutes)}
+                </div>
+              </div>
+              {canModifyTreatment ? (
+                <div className="cs-checkout-panel__add-item-wrap cs-treatment-menu-wrap">
+                  <button
+                    type="button"
+                    aria-haspopup="listbox"
+                    aria-expanded={treatmentMode === "change"}
+                    disabled={treatmentBusy}
+                    onClick={() => { setTreatmentError(""); setTreatmentMode(treatmentMode === "change" ? "none" : "change"); }}
+                    className="cs-btn cs-btn--sm"
+                  >
+                    {treatmentBusy && treatmentMode === "change" ? "Updating…" : "Change"}
+                  </button>
+                  {treatmentMode === "change" ? (
+                    <div className="cs-checkout-panel__add-item-menu" role="listbox" style={{ left: "auto", right: 0, minWidth: 260 }}>
+                      {services.filter((svc) => svc.isActive && svc.id !== selectedAppointment.serviceId).length === 0 ? (
+                        <div className="cs-checkout-panel__add-item-empty">No other services available.</div>
+                      ) : (
+                        services
+                          .filter((svc) => svc.isActive && svc.id !== selectedAppointment.serviceId)
+                          .map((svc) => (
+                            <button
+                              key={svc.id}
+                              type="button"
+                              role="option"
+                              aria-selected={false}
+                              className="cs-checkout-panel__add-item-option"
+                              disabled={treatmentBusy || !onUpdate}
+                              onClick={() => runTreatmentAction(
+                                () => onUpdate!(selectedAppointment, { serviceId: svc.id }),
+                                "Unable to change appointment type.",
+                              )}
+                            >
+                              <span>{svc.name}</span>
+                              <span className="cs-checkout-panel__add-item-option-price">{svc.durationMinutes} min · {formatMoney(svc.priceCents)}</span>
+                            </button>
+                          ))
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {canModifyTreatment && onCancel ? (
+                <button
+                  type="button"
+                  aria-label="Cancel appointment"
+                  title="Cancel appointment"
+                  disabled={treatmentBusy}
+                  style={treatmentCloseStyle}
+                  onClick={() => {
+                    if (window.confirm(`Cancel ${selectedAppointment.customerName}'s ${selectedAppointment.serviceName} appointment?`)) {
+                      void onCancel(selectedAppointment);
+                    }
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none" /></svg>
+                </button>
+              ) : null}
+            </div>
           </div>
+          {(selectedAppointment.items ?? []).map((item) => (
+            <div
+              key={item.id}
+              className="cs-treatment-card"
+              style={{ background: stableCardColor(`item:${item.id}:${item.name}`, () => swatchForService(item.name)), flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }}
+            >
+              <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+                <div className="cs-treatment-card__kicker">Added</div>
+                <div className="cs-treatment-card__name" style={{ fontSize: 16 }}>
+                  {item.name}{item.quantity > 1 ? ` ×${item.quantity}` : ""}
+                </div>
+                <div className="cs-treatment-card__meta" style={{ font: "500 13px var(--cs-font)", color: "rgba(20, 17, 15, .6)" }}>
+                  {formatTreatmentMeta(item.priceCents * item.quantity, itemMinutes(item))}
+                </div>
+              </div>
+              <div style={{ flex: 1 }} />
+              {canModifyTreatment ? (
+                <>
+                  <div className="cs-checkout-panel__add-item-wrap cs-treatment-menu-wrap">
+                    <button
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded={treatmentMode === "change-item" && changingItemId === item.id}
+                      disabled={treatmentBusy}
+                      className="cs-btn cs-btn--sm"
+                      onClick={() => {
+                        setTreatmentError("");
+                        if (treatmentMode === "change-item" && changingItemId === item.id) {
+                          setTreatmentMode("none");
+                        } else {
+                          setChangingItemId(item.id);
+                          setTreatmentMode("change-item");
+                        }
+                      }}
+                    >
+                      Change
+                    </button>
+                    {treatmentMode === "change-item" && changingItemId === item.id ? (
+                      <div className="cs-checkout-panel__add-item-menu" role="listbox" style={{ left: "auto", right: 0, minWidth: 260 }}>
+                        {renderAddPickerOptions(
+                          (addOn) => void runTreatmentAction(async () => {
+                            await api!.addBookingItem(tenantSlug, selectedAppointment.id, { sourceAddOnId: addOn.id });
+                            await api!.removeBookingItem(tenantSlug, selectedAppointment.id, item.id);
+                            onPaymentRecorded?.();
+                          }, "Unable to change item."),
+                          (svc) => void runTreatmentAction(async () => {
+                            await api!.addBookingItem(tenantSlug, selectedAppointment.id, { sourceServiceId: svc.id });
+                            await api!.removeBookingItem(tenantSlug, selectedAppointment.id, item.id);
+                            onPaymentRecorded?.();
+                          }, "Unable to change item."),
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${item.name}`}
+                    title="Remove"
+                    disabled={treatmentBusy || !api}
+                    style={treatmentCloseStyle}
+                    onClick={() => void runTreatmentAction(async () => {
+                      await api!.removeBookingItem(tenantSlug, selectedAppointment.id, item.id);
+                      onPaymentRecorded?.();
+                    }, "Unable to remove item.")}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none" /></svg>
+                  </button>
+                </>
+              ) : null}
+            </div>
+          ))}
+          {canModifyTreatment ? (
+            <div className="cs-checkout-panel__add-item-wrap cs-treatment-menu-wrap">
+              <button
+                type="button"
+                className="cs-checkout-panel__add-item"
+                style={{ marginTop: 0, opacity: 1 }}
+                aria-haspopup="listbox"
+                aria-expanded={treatmentMode === "add"}
+                disabled={treatmentBusy}
+                onClick={() => { setTreatmentError(""); setTreatmentMode(treatmentMode === "add" ? "none" : "add"); }}
+              >
+                {treatmentBusy && treatmentMode === "add" ? "Updating…" : "+ Add service"}
+              </button>
+              {treatmentMode === "add" ? (
+                <div className="cs-checkout-panel__add-item-menu" role="listbox">
+                  {renderAddPickerOptions(
+                    (addOn) => void runTreatmentAction(async () => {
+                      await api!.addBookingItem(tenantSlug, selectedAppointment.id, { sourceAddOnId: addOn.id });
+                      onPaymentRecorded?.();
+                    }, "Unable to add add-on."),
+                    (svc) => void runTreatmentAction(async () => {
+                      await api!.addBookingItem(tenantSlug, selectedAppointment.id, { sourceServiceId: svc.id });
+                      onPaymentRecorded?.();
+                    }, "Unable to add service."),
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {treatmentError ? <p role="alert" className="cs-settings-error">{treatmentError}</p> : null}
 
           {/* Today / time card with actions */}
           <div className="cs-panel cs-when-card">
