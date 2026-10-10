@@ -36,6 +36,7 @@ import type {
   SlotAvailability,
   UpdateBookingRequest,
   UpdateBookingStatusRequest,
+  UpdateCustomerRequest,
 } from "@booking/shared-types";
 
 import { FormResponseViewer } from "./form-response-viewer";
@@ -255,8 +256,19 @@ export type CalendarPageApi = {
   updateCustomer: (
     tenantSlug: string,
     customerId: string,
-    body: { notes?: string; name?: string; email?: string; phone?: string },
+    body: UpdateCustomerRequest,
   ) => Promise<unknown>;
+};
+
+type ClientProfileEdit = {
+  name: string;
+  email: string;
+  phone: string;
+  addressStreet?: string;
+  addressCity?: string;
+  addressState?: string;
+  addressZip?: string;
+  birthday?: string;
 };
 
 type CalendarPageProps = {
@@ -2161,7 +2173,7 @@ export function CalendarPage({
 
   const handleUpdateCustomerContact = async (
     appointment: SelectedCalendarAppointment,
-    contact: { name: string; email: string; phone: string },
+    contact: ClientProfileEdit,
   ) => {
     await api.updateCustomer(tenantSlug, appointment.customerId, contact);
     setCalendarState((current) => {
@@ -4362,7 +4374,7 @@ type AppointmentDetailsDrawerProps = {
   onUpdateCustomerNotes?: (appointment: SelectedCalendarAppointment, notes: string) => Promise<void>;
   onUpdateCustomerContact?: (
     appointment: SelectedCalendarAppointment,
-    contact: { name: string; email: string; phone: string },
+    contact: ClientProfileEdit,
   ) => Promise<void>;
   completionState?: CompletionState;
   api?: CalendarPageApi;
@@ -4444,6 +4456,12 @@ function AppointmentDetailsDrawer({
 
   const [clientCardTab, setClientCardTab] = useState<"history" | "forms" | "photos" | "notes" | "messages">("history");
   const [clientCardProfile, setClientCardProfile] = useState<CustomerProfileResponse | null>(null);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileDraft, setProfileDraft] = useState({
+    name: "", email: "", phone: "", addressStreet: "", addressCity: "", addressState: "", addressZip: "", birthday: "",
+  });
+  const [profileSaveState, setProfileSaveState] = useState<"idle" | "submitting" | "error">("idle");
+  const [profileSaveError, setProfileSaveError] = useState("");
 
   // Load the customer profile for the drawer's client card so the History tab
   // can show recent visits at first glance.
@@ -4589,10 +4607,6 @@ function AppointmentDetailsDrawer({
     });
     const balanceDue = p?.outstandingBalanceCents ?? selectedAppointment.balanceDueCents ?? 0;
     const staffNote = profileCustomer?.notes ?? selectedAppointment.customerNotes;
-    const recentVisits = (p?.bookings ?? [])
-      .slice()
-      .sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime())
-      .slice(0, 5);
     return (
       <>
         <button
@@ -4607,7 +4621,7 @@ function AppointmentDetailsDrawer({
               <button
                 type="button"
                 className="cs-profile-drawer__back"
-                onClick={() => setDrawerView("details")}
+                onClick={() => { setIsEditingProfile(false); setDrawerView("details"); }}
                 aria-label="Back to appointment details"
               >
                 ←
@@ -4627,6 +4641,107 @@ function AppointmentDetailsDrawer({
 
             <div className="cs-profile-block cs-profile-block--card">
               <p className="cs-profile-block__label">Contact details</p>
+              {isEditingProfile ? (
+                <div className="cs-customer-notes-editor cs-client-edit-form">
+                  {([
+                    ["name", "Name", "text"],
+                    ["email", "Email", "email"],
+                    ["phone", "Phone", "tel"],
+                    ["addressStreet", "Street", "text"],
+                    ["addressCity", "City", "text"],
+                    ["addressState", "State", "text"],
+                    ["addressZip", "ZIP", "text"],
+                    ["birthday", "Birthday", "date"],
+                  ] as const).map(([key, label, type]) => (
+                    <label key={key} className="cs-client-edit-form__field">
+                      <span>{label}</span>
+                      <input
+                        type={type}
+                        value={profileDraft[key]}
+                        onChange={(e) => setProfileDraft((d) => ({ ...d, [key]: e.target.value }))}
+                        disabled={profileSaveState === "submitting"}
+                      />
+                    </label>
+                  ))}
+                  <div className="cs-customer-notes-editor__actions">
+                    <button
+                      type="button"
+                      className="cs-btn cs-btn--ghost cs-btn--sm"
+                      style={{ padding: "5px 11px", fontSize: "10px" }}
+                      onClick={() => setIsEditingProfile(false)}
+                      disabled={profileSaveState === "submitting"}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="cs-btn cs-btn--primary cs-btn--sm"
+                      style={{ padding: "5px 11px", fontSize: "10px" }}
+                      disabled={profileSaveState === "submitting"}
+                      onClick={async () => {
+                        if (!onUpdateCustomerContact) return;
+                        if (!profileDraft.name.trim()) {
+                          setProfileSaveState("error");
+                          setProfileSaveError("Name is required.");
+                          return;
+                        }
+                        setProfileSaveState("submitting");
+                        setProfileSaveError("");
+                        try {
+                          await onUpdateCustomerContact(selectedAppointment, {
+                            name: profileDraft.name.trim(),
+                            email: profileDraft.email.trim(),
+                            phone: profileDraft.phone.trim(),
+                            addressStreet: profileDraft.addressStreet.trim(),
+                            addressCity: profileDraft.addressCity.trim(),
+                            addressState: profileDraft.addressState.trim(),
+                            addressZip: profileDraft.addressZip.trim(),
+                            birthday: profileDraft.birthday,
+                          });
+                          if (api) {
+                            setClientCardProfile(await api.getCustomerProfile(tenantSlug, selectedAppointment.customerId));
+                          }
+                          setIsEditingProfile(false);
+                          setProfileSaveState("idle");
+                        } catch (err) {
+                          setProfileSaveState("error");
+                          setProfileSaveError(err instanceof Error ? err.message : "Unable to save client info.");
+                        }
+                      }}
+                    >
+                      {profileSaveState === "submitting" ? "Saving…" : "Save changes"}
+                    </button>
+                  </div>
+                  {profileSaveState === "error" ? (
+                    <p role="alert" className="cs-settings-error">{profileSaveError}</p>
+                  ) : null}
+                </div>
+              ) : (
+              <>
+              {onUpdateCustomerContact ? (
+                <button
+                  type="button"
+                  className="cs-btn cs-btn--sm cs-btn--primary"
+                  style={{ margin: "4px 0 14px", padding: "5px 11px", fontSize: "10px" }}
+                  onClick={() => {
+                    setProfileDraft({
+                      name: profileCustomer?.name ?? selectedAppointment.customerName ?? "",
+                      email: profileCustomer?.email ?? selectedAppointment.customerEmail ?? "",
+                      phone: profileCustomer?.phone ?? selectedAppointment.customerPhone ?? "",
+                      addressStreet: profileCustomer?.addressStreet ?? "",
+                      addressCity: profileCustomer?.addressCity ?? "",
+                      addressState: profileCustomer?.addressState ?? "",
+                      addressZip: profileCustomer?.addressZip ?? "",
+                      birthday: profileCustomer?.birthday ?? "",
+                    });
+                    setProfileSaveState("idle");
+                    setProfileSaveError("");
+                    setIsEditingProfile(true);
+                  }}
+                >
+                  Edit contact info
+                </button>
+              ) : null}
               <ul className="cs-contact-list">
                 {contactRows.map((row) => (
                   <li key={row.kind} className="cs-contact-list__row">
@@ -4637,6 +4752,8 @@ function AppointmentDetailsDrawer({
                   </li>
                 ))}
               </ul>
+              </>
+              )}
             </div>
 
             <div className="cs-profile-drawer__metrics">
@@ -4669,28 +4786,41 @@ function AppointmentDetailsDrawer({
             ) : null}
 
             <div className="cs-profile-block cs-profile-block--plain">
-              <p className="cs-profile-block__label">Recent visits</p>
-              {p === null ? (
-                <p className="cs-profile-block__value cs-profile-block__value--muted">Loading…</p>
-              ) : recentVisits.length === 0 ? (
-                <p className="cs-profile-block__value cs-profile-block__value--muted">No bookings yet.</p>
-              ) : (
-                <ul className="cs-profile-visits">
-                  {recentVisits.map((b) => {
-                    const bDate = new Date(b.startsAt);
-                    const owed = b.balanceDueCents > 0 ? formatMoney(b.balanceDueCents) + " owed" : null;
-                    return (
-                      <li key={b.id} className="cs-profile-visits__row">
-                        <span className="cs-profile-visits__service">{b.serviceName}</span>
-                        <span className="cs-profile-visits__meta">
-                          {bDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                          {owed ? ` · ${owed}` : ""}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+              <div className="cs-clientrow__tabs" role="tablist">
+                {(
+                  [
+                    ["history", "History"],
+                    ["forms", "Forms"],
+                    ["photos", "Photos"],
+                    ["notes", "Notes"],
+                    ["messages", "Messages"],
+                  ] as const
+                ).map(([tab, label]) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    aria-selected={clientCardTab === tab}
+                    className={`cs-clientrow__tab${clientCardTab === tab ? " is-active" : ""}`}
+                    onClick={() => setClientCardTab(tab)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="cs-clientrow__tab-panel">
+                {clientCardTab === "history" ? (
+                  <ClientCardHistory profile={clientCardProfile} />
+                ) : clientCardTab === "forms" ? (
+                  <ClientCardForms state={formResponsesState} onViewForm={setViewingFormEntry} />
+                ) : clientCardTab === "photos" ? (
+                  <p className="cs-empty">Before/after photos aren't stored yet. Placeholder for a future phase.</p>
+                ) : clientCardTab === "notes" ? (
+                  <p className="cs-empty">{staffNote ? staffNote : "No staff note for this client."}</p>
+                ) : (
+                  <p className="cs-empty">Client messaging isn't implemented yet. Placeholder for a future phase.</p>
+                )}
+              </div>
             </div>
           </div>
         </aside>

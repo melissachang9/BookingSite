@@ -188,6 +188,8 @@ async def get_customer_profile(
             select(Booking)
             .options(
                 selectinload(Booking.service),
+                selectinload(Booking.tenant),
+                selectinload(Booking.items),
                 selectinload(Booking.provider),
                 selectinload(Booking.payments).selectinload(Payment.events),
                 selectinload(Booking.payment_events),
@@ -271,6 +273,8 @@ async def update_customer(
             select(Booking)
             .options(
                 selectinload(Booking.service),
+                selectinload(Booking.tenant),
+                selectinload(Booking.items),
                 selectinload(Booking.provider),
                 selectinload(Booking.payments).selectinload(Payment.events),
                 selectinload(Booking.payment_events),
