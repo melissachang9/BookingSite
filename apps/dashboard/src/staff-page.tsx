@@ -5095,6 +5095,7 @@ const PERMISSION_LABEL_OVERRIDES: Record<string, string> = {
   "bookings.collect_payment": "Take payment at checkout",
   "payments.view": "See the payments queue",
   "payments.manage": "Collect, refund and correct",
+  "payments.configure": "Connect the card processor (Clover)",
   "customers.view": "Open client records",
   "customers.manage": "Edit clients and notes",
   "forms.view": "Read submitted forms",

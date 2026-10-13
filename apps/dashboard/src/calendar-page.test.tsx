@@ -540,6 +540,166 @@ describe("CalendarPage", () => {
     }
   });
 
+  it("settles the balance with a payment taken on the Clover device", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const api = createApi([baseBooking]);
+      const cloverPayment = {
+        id: "PAYC",
+        amountCents: 10000,
+        tipCents: 1500,
+        totalCents: 11500,
+        cardBrand: "VISA",
+        cardLast4: "4242",
+        createdAt: "2026-05-26T19:00:00.000Z",
+        matches: "balance" as const,
+      };
+      const settled = createBooking({
+        balanceDueCents: 0,
+        payments: [
+          {
+            id: "payment-clover",
+            amountCents: 11500,
+            tipCents: 1500,
+            status: "succeeded",
+            depositStatus: "paid_in_full",
+            paymentMethodType: "card",
+            checkoutSessionKind: "admin_completion",
+            createdAt: "2026-05-26T19:05:00.000Z",
+            processor: "clover",
+            processorChannel: "device",
+            cardLast4: "4242",
+          },
+        ],
+      });
+      const recordCloverDevicePayment = vi.fn().mockResolvedValue(settled);
+      const listCloverDevicePayments = vi.fn().mockResolvedValue({ items: [cloverPayment] });
+      const cloverApi = {
+        ...api,
+        getPaymentCapabilities: vi.fn().mockResolvedValue({
+          processor: "clover",
+          status: "connected",
+          canLinkDevicePayments: true,
+          canChargeCards: true,
+          canRefundCards: true,
+          currencyMismatch: false,
+          needsReauth: false,
+        }),
+        listCloverDevicePayments,
+        recordCloverDevicePayment,
+      };
+
+      render(
+        <CalendarPage
+          definition={{ eyebrow: "Calendar-first booking", description: "Calendar" }}
+          tenantSlug="brow-beauty-lab"
+          api={cloverApi}
+        />,
+      );
+
+      await screen.findByText("24 – 30 May");
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
+      const details = await screen.findByRole("dialog", { name: "Appointment details" });
+      fireEvent.click(within(details).getByRole("button", { name: "Complete & check out" }));
+      const checkout = await screen.findByRole("dialog", { name: "Checkout" });
+
+      fireEvent.click(await within(checkout).findByRole("button", { name: /^Clover/ }));
+      expect(listCloverDevicePayments).toHaveBeenCalledWith(
+        "brow-beauty-lab",
+        expect.objectContaining({ bookingId: "booking-1" }),
+      );
+      const link = within(checkout).getByRole("button", { name: "Pick a Clover payment" });
+      expect(link).toBeDisabled();
+
+      fireEvent.click(await within(checkout).findByRole("button", { name: /VISA ••4242/ }));
+      fireEvent.click(within(checkout).getByRole("button", { name: "Link $115.00 Clover payment" }));
+
+      await waitFor(() => {
+        // Only the id goes to the server; it reads the amount from Clover itself.
+        expect(recordCloverDevicePayment).toHaveBeenCalledWith("brow-beauty-lab", "booking-1", { cloverPaymentId: "PAYC" });
+        expect(api.updateBookingStatus).toHaveBeenCalledWith("brow-beauty-lab", "booking-1", {
+          status: "completed",
+          paymentResolution: "collected",
+        });
+      });
+      expect(api.recordManualPayment).not.toHaveBeenCalled();
+      expect(within(checkout).getByText("Sale Complete")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows a refund-owed banner on a canceled booking paid on the Clover device", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const owed = {
+        id: "payment-owed",
+        amountCents: 2500,
+        tipCents: 0,
+        status: "succeeded",
+        depositStatus: "paid",
+        paymentMethodType: "card",
+        checkoutSessionKind: "deposit_in_person",
+        createdAt: "2026-05-24T15:00:00.000Z",
+        processor: "clover" as const,
+        processorChannel: "device" as const,
+        cardLast4: "4242",
+      };
+      const api = createApi([createBooking({ status: "canceled", payments: [owed], depositStatus: "follow_up" })]);
+      const recordCloverDeviceRefund = vi.fn().mockRejectedValueOnce(new Error("Refund it on the Clover device first, then record it here.")).mockResolvedValue(baseBooking);
+
+      render(
+        <CalendarPage
+          definition={{ eyebrow: "Calendar-first booking", description: "Calendar" }}
+          tenantSlug="brow-beauty-lab"
+          api={{ ...api, recordCloverDeviceRefund }}
+        />,
+      );
+      await screen.findByText("24 – 30 May");
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
+      const details = await screen.findByRole("dialog", { name: "Appointment details" });
+      expect(within(details).getByText(/Refund owed · \$25\.00/)).toBeInTheDocument();
+
+      fireEvent.click(within(details).getByRole("button", { name: "I refunded it on the Clover device" }));
+      expect(await within(details).findByText(/Refund it on the Clover device first/)).toBeInTheDocument();
+
+      fireEvent.click(within(details).getByRole("button", { name: "I refunded it on the Clover device" }));
+      await waitFor(() => expect(recordCloverDeviceRefund).toHaveBeenCalledTimes(2));
+      expect(recordCloverDeviceRefund).toHaveBeenLastCalledWith("brow-beauty-lab", "booking-1", "payment-owed");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("doesn't offer Clover at checkout when the business can't match device payments", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const api = createApi([baseBooking]);
+      render(
+        <CalendarPage
+          definition={{ eyebrow: "Calendar-first booking", description: "Calendar" }}
+          tenantSlug="brow-beauty-lab"
+          api={api}
+        />,
+      );
+      await screen.findByText("24 – 30 May");
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
+      const details = await screen.findByRole("dialog", { name: "Appointment details" });
+      fireEvent.click(within(details).getByRole("button", { name: "Complete & check out" }));
+      const checkout = await screen.findByRole("dialog", { name: "Checkout" });
+      expect(within(checkout).getByRole("button", { name: /^Cash/ })).toBeInTheDocument();
+      expect(within(checkout).queryByRole("button", { name: /^Clover/ })).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("locks the tip to its payment method and completes once fully settled", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
@@ -906,9 +1066,10 @@ describe("CalendarPage", () => {
         expect(within(dialog).getByRole("button", { name: /Taylor Guest/ })).toBeInTheDocument();
       });
       fireEvent.click(within(dialog).getByRole("button", { name: /Taylor Guest/ }));
-      expect(within(dialog).getByText("guest@example.com · 555-0100")).toBeInTheDocument();
+      expect(within(dialog).getByText("guest@example.com")).toBeInTheDocument();
+      expect(within(dialog).getByText("555-0100")).toBeInTheDocument();
 
-      fireEvent.click(within(dialog).getByRole("button", { name: "Book & send confirmation" }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "Hold slot & collect payment" }));
 
       await vi.waitFor(() => {
         expect(api.createBookingDraft).toHaveBeenCalledWith({
@@ -926,6 +1087,71 @@ describe("CalendarPage", () => {
         });
       });
     } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("collects a walk-in payment after holding the slot and confirms the booking", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+    // Openings load asynchronously; accept the out-of-hours prompt if it shows.
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    try {
+      const opening = {
+        startAt: "2026-05-27T19:00:00.000Z",
+        endAt: "2026-05-27T20:00:00.000Z",
+        providerId: "provider-1",
+        providerName: "Jordan Rivera",
+        locationId: "location-1",
+      } satisfies SlotAvailability;
+      const api = createApi([baseBooking], {
+        openingsByDate: { "2026-05-27": [opening] },
+        draftSummary: { ...baseDraftSummary, fullAmountCents: 10000, taxCents: 0 },
+      });
+      const confirmBookingDraftWithPayment = vi.fn().mockResolvedValue(baseBooking);
+      const releaseBookingDraft = vi.fn().mockResolvedValue({ ...baseDraftSummary, status: "canceled" });
+      const walkInApi = { ...api, confirmBookingDraftWithPayment, releaseBookingDraft };
+
+      render(
+        <CalendarPage
+          definition={{ eyebrow: "Calendar-first booking", description: "Calendar" }}
+          tenantSlug="brow-beauty-lab"
+          api={walkInApi}
+        />,
+      );
+
+      expect(await screen.findByText("24 – 30 May")).toBeInTheDocument();
+      fireEvent.click(await screen.findByLabelText("Wed schedule track"));
+      const dialog = await screen.findByRole("dialog", { name: "Calendar slot actions" });
+      fireEvent.change(within(dialog).getByPlaceholderText("Search clients — type a name"), { target: { value: "Tay" } });
+      await vi.waitFor(() => {
+        expect(within(dialog).getByRole("button", { name: /Taylor Guest/ })).toBeInTheDocument();
+      });
+      fireEvent.click(within(dialog).getByRole("button", { name: /Taylor Guest/ }));
+      fireEvent.change(within(dialog).getByPlaceholderText("Add context for this client or appointment."), { target: { value: "Walk-in" } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Hold slot & collect payment" }));
+
+      const collect = await within(dialog).findByRole("region", { name: "Collect payment" });
+      expect(api.createBookingDraft).toHaveBeenCalledWith(expect.objectContaining({ notes: "Walk-in" }));
+      expect(within(dialog).queryByRole("button", { name: "Hold slot & collect payment" })).not.toBeInTheDocument();
+
+      fireEvent.change(within(collect).getByPlaceholderText("e.g. 004512"), { target: { value: "7788" } });
+      fireEvent.click(within(collect).getByRole("button", { name: "Record payment & confirm" }));
+
+      await vi.waitFor(() => {
+        expect(confirmBookingDraftWithPayment).toHaveBeenCalledWith("brow-beauty-lab", "draft-1", {
+          paymentMethodType: "external_pos",
+          amountMode: "deposit",
+          amountCents: 2500,
+          externalReference: "7788",
+        });
+      });
+      await vi.waitFor(() => {
+        expect(screen.queryByRole("dialog", { name: "Calendar slot actions" })).not.toBeInTheDocument();
+      });
+    } finally {
+      confirmSpy.mockRestore();
       vi.useRealTimers();
     }
   });
@@ -970,7 +1196,7 @@ describe("CalendarPage", () => {
 
       fireEvent.change(within(dialog).getByPlaceholderText("Search clients — type a name"), { target: { value: "Tay" } });
       fireEvent.click(await within(dialog).findByRole("button", { name: /Taylor Guest/ }));
-      fireEvent.click(within(dialog).getByRole("button", { name: "Book & send confirmation" }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "Hold slot & collect payment" }));
       return { api, confirmSpy };
     }
 
@@ -1021,7 +1247,7 @@ describe("CalendarPage", () => {
     });
   });
 
-  it("updates appointment duration from appointment type and books the edited start time", async () => {
+  it("updates appointment duration from appointment type and books the clicked start time", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -1069,8 +1295,6 @@ describe("CalendarPage", () => {
       fireEvent.click(providerTrack);
 
       const dialog = await screen.findByRole("dialog", { name: "Calendar slot actions" });
-      fireEvent.click(within(dialog).getByRole("button", { name: "Change time" }));
-      fireEvent.change(within(dialog).getByDisplayValue("12:00"), { target: { value: "13:15" } });
       fireEvent.click(within(dialog).getByRole("button", { name: "Treatment" }));
       fireEvent.click(within(dialog).getByRole("option", { name: "Waxing" }));
 
@@ -1087,7 +1311,7 @@ describe("CalendarPage", () => {
       await vi.waitFor(() => {
         expect(api.createOrUpdateCustomer).toHaveBeenCalled();
       });
-      const bookButton = within(dialog).getByRole("button", { name: "Book & send confirmation" });
+      const bookButton = within(dialog).getByRole("button", { name: "Hold slot & collect payment" });
       await vi.waitFor(() => {
         expect(bookButton).toBeEnabled();
       });
@@ -1099,14 +1323,13 @@ describe("CalendarPage", () => {
           serviceId: "service-2",
           providerId: "provider-1",
           locationId: "location-1",
-          startsAt: "2026-05-27T20:15:00.000Z",
+          startsAt: "2026-05-27T19:00:00.000Z",
           customer: {
             name: "New Client",
             email: "new-client@example.com",
             phone: "555-0144",
           },
           bookingMethod: "staff_entered",
-          overrideAvailability: true,
         });
       });
     } finally {

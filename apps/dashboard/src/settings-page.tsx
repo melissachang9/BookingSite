@@ -16,6 +16,7 @@ import {
 import { platformApi, apiBaseUrl } from "./platform-api";
 import { CropModal } from "./staff-page";
 import { ReportsSection } from "./reports-section";
+import { PaymentsSettingsSection } from "./payments-settings-section";
 
 type RouteDefinitionLike = {
   title: string;
@@ -142,6 +143,13 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
     title: "Wallet & Membership",
     eyebrow: "Advanced",
     description: "Enable wallet credit and membership program toggles.",
+    status: "available",
+  },
+  {
+    id: "payments",
+    title: "Card Processor",
+    eyebrow: "Payments & checkout",
+    description: "Connect Clover for card payments, deposit links and refunds.",
     status: "available",
   },
   {
@@ -340,6 +348,11 @@ export function SettingsPage({
                   canViewReports={hasPermission(currentUser, "reports.view")}
                   canViewFinancial={hasPermission(currentUser, "reports.financial")}
                   canExport={hasPermission(currentUser, "reports.export")}
+                />
+              ) : section.id === "payments" ? (
+                <PaymentsSettingsSection
+                  tenantSlug={currentUser.tenantSlug}
+                  canConfigure={hasPermission(currentUser, "payments.configure")}
                 />
               ) : section.id === "payment-methods" ? (
                 <PaymentMethodsSection

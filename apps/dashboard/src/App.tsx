@@ -24,6 +24,7 @@ import {
 } from "./platform-api";
 import { CalendarPage } from "./calendar-page";
 import { SettingsPage } from "./settings-page";
+import { CloverCallbackPage } from "./payments-settings-section";
 import { StaffPage } from "./staff-page";
 import { ServicesPage } from "./services-page";
 import { CustomersPage } from "./clients-page";
@@ -805,8 +806,14 @@ export function App() {
                 displayStartHour={calendarDisplayStartHour}
                 displayEndHour={calendarDisplayEndHour}
                 weekStartsOn={weekStartsOn}
+                customPaymentMethods={tenantSummary?.settings.customPaymentMethods ?? []}
+                currentUser={session.user}
               />
             }
+          />
+          <Route
+            path="/settings/payments/clover/callback"
+            element={<CloverCallbackPage tenantSlug={session.user.tenantSlug} />}
           />
           <Route
             path="/services"

@@ -4302,6 +4302,21 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .cs-client-history-row__month { margin-top: 3px; font: 700 9px var(--cs-font); color: var(--cs-label); letter-spacing: .08em; }
 .cs-client-history-row__body { display: flex; flex-direction: column; min-width: 0; gap: 3px; color: inherit; text-decoration: none; }
 .cs-client-history-row__body:hover .cs-client-history-row__title { text-decoration: underline; }
+/* Rows rendered as buttons (e.g. submitted forms) open a detail view. */
+.cs-client-history-row__button { cursor: pointer; text-align: left; }
+.cs-client-history-row__button:disabled { cursor: default; }
+/* Title + status pill: space the pill off the title and keep it compact. */
+.cs-client-history-row__title-line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; }
+.cs-client-history-row--form .cs-pill { padding: 3px 9px; font-size: 9px; }
+/* Form rows: the button fills the whole row so the entire row is clickable. */
+.cs-client-history-row--form > .cs-client-history-row__button {
+  grid-column: 1 / -1;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+}
 .cs-client-history-row__title { font: 700 13px var(--cs-font); color: var(--cs-ink); }
 .cs-client-history-row__meta { overflow: hidden; font: 500 11px var(--cs-font); color: var(--cs-label); text-overflow: ellipsis; white-space: nowrap; }
 .cs-client-history-row__badge,
@@ -5148,6 +5163,10 @@ select.cs-svc-details__input {
   padding: 11px 12px;
   background: var(--cs-grey);
 }
+/* Submitted forms open their response when clicked. */
+.cs-form-response-item[role="button"] { cursor: pointer; }
+.cs-form-response-item[role="button"]:hover { filter: brightness(.97); }
+.cs-form-response-item[role="button"]:focus-visible { outline: 2px solid var(--cs-ink); outline-offset: 2px; }
 .cs-form-response-item--submitted { background: var(--cs-ok-fill); border-color: rgba(47, 81, 56, .18); }
 .cs-form-response-item--missing { background: var(--cs-warn-fill); border-color: rgba(122, 74, 43, .18); }
 .cs-form-response-item__name { font: 600 13px var(--cs-font); color: var(--cs-ink); display: flex; align-items: center; gap: 8px; }
@@ -5202,6 +5221,20 @@ select.cs-svc-details__input {
   right: 0;
   width: min(100vw, 520px);
 }
+.cs-drawer-legacy.cs-form-response-drawer { width: min(100vw, 520px); }
+/* Scrollable body with side padding so long answers wrap inside the drawer. */
+.cs-form-response-drawer__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 24px 24px;
+}
+.cs-form-response-drawer__body .cs-form-response-viewer { min-width: 0; }
+.cs-form-response-drawer__body .cs-form-response-viewer__value,
+.cs-form-response-drawer__body .cs-form-response-viewer__label,
+.cs-form-response-drawer__body .cs-form-response-viewer__file-link { overflow-wrap: anywhere; }
 
 /* ------------------------------------------------------- staff roster - */
 .cs-staff-avatar {
@@ -6897,3 +6930,51 @@ select:disabled {
   .rp-grid2 { grid-template-columns: 1fr; }
   .rp-export { margin-left: 0; }
 }
+
+/* ---------------------------------------------------------------------------
+   Collect payment step (new-booking drawer, after a staff hold)
+   ------------------------------------------------------------------------ */
+.cs-collect { display: flex; flex-direction: column; gap: 14px; padding: 16px 18px; border-radius: var(--cs-r-inner); background: var(--cs-canvas); }
+.cs-collect__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.cs-collect__head .cs-section__label { margin-bottom: 4px; }
+.cs-collect__hint { font: 500 12px var(--cs-font); color: var(--cs-label); }
+.cs-collect__timer { flex: none; padding: 5px 11px; border-radius: var(--cs-r-pill); background: var(--cs-mint); color: var(--cs-ink); font: 700 11px var(--cs-font); font-variant-numeric: tabular-nums; }
+.cs-collect__timer.is-urgent { background: var(--cs-peach); }
+.cs-collect__timer.is-expired { background: var(--cs-pink); }
+.cs-collect .cs-seg { background: var(--cs-surface); }
+.cs-collect .cs-seg > button { flex: 1; }
+.cs-collect__methods { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.cs-collect__method { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-12); background: var(--cs-surface); cursor: pointer; text-align: left; }
+.cs-collect__method:hover:not(:disabled) { border-color: rgba(20, 17, 15, .28); }
+.cs-collect__method.is-active { border-color: var(--cs-ink); box-shadow: 0 0 0 1px var(--cs-ink); }
+.cs-collect__method-label { font: 700 13px var(--cs-font); color: var(--cs-ink); }
+.cs-collect__method-hint { font: 500 11px var(--cs-font); color: var(--cs-label); }
+.cs-collect__field { display: flex; flex-direction: column; gap: 6px; font: 600 12px var(--cs-font); color: var(--cs-ink); }
+.cs-collect__field .cs-input { background: var(--cs-surface); }
+.cs-collect__total { display: flex; align-items: baseline; justify-content: space-between; padding-top: 12px; border-top: 1px solid var(--cs-hairline); font: 600 13px var(--cs-font); color: var(--cs-label); }
+.cs-collect__total strong { font: 800 22px var(--cs-font); color: var(--cs-ink); letter-spacing: -.02em; }
+.cs-collect__actions { display: flex; gap: 8px; }
+.cs-collect__actions .cs-btn--primary { flex: 1; }
+
+/* Settings → Card processor (Clover) */
+.cs-payments-settings { display: flex; flex-direction: column; gap: 14px; }
+.cs-payments-settings__row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.cs-payments-settings__name { font: 700 15px var(--cs-font); color: var(--cs-ink); margin-bottom: 4px; }
+.cs-payments-settings__facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 0; }
+.cs-payments-settings__facts > div { padding: 10px 12px; border-radius: var(--cs-r-12); background: var(--cs-canvas); }
+.cs-payments-settings__facts dt { font: 600 11px var(--cs-font); letter-spacing: .06em; text-transform: uppercase; color: var(--cs-label); }
+.cs-payments-settings__facts dd { margin: 4px 0 0; font: 600 13px var(--cs-font); color: var(--cs-ink); }
+
+/* Clover device payment picker */
+.cs-clover-payments { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cs-clover-payment { width: 100%; display: grid; grid-template-columns: 64px 1fr auto; grid-template-areas: "time card amount" "time match amount"; gap: 2px 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-12); background: var(--cs-surface); text-align: left; cursor: pointer; }
+.cs-clover-payment:disabled { cursor: not-allowed; opacity: .6; }
+.cs-clover-payment:hover:not(:disabled) { border-color: rgba(20, 17, 15, .28); }
+.cs-clover-payment.is-selected { border-color: var(--cs-ink); box-shadow: 0 0 0 1px var(--cs-ink); }
+.cs-clover-payment__time { grid-area: time; font: 600 12px var(--cs-font); color: var(--cs-label); }
+.cs-clover-payment__card { grid-area: card; font: 700 13px var(--cs-font); color: var(--cs-ink); }
+.cs-clover-payment__amount { grid-area: amount; font: 800 15px var(--cs-font); color: var(--cs-ink); text-align: right; }
+.cs-clover-payment__amount small { display: block; font: 500 11px var(--cs-font); color: var(--cs-label); }
+.cs-clover-payment__match { grid-area: match; font: 600 11px var(--cs-font); color: var(--cs-label); }
+.cs-clover-payment__match.is-match { color: var(--cs-ok-text); }
+.cs-collect__skip { width: 100%; }

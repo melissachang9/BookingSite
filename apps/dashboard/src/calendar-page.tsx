@@ -2,6 +2,7 @@ import { startTransition, useCallback, useEffect, useMemo, useRef, useState, typ
 import { createPortal } from "react-dom";
 import { ContactIcon, buildContactRows, memberMonthsSince } from "./client-profile-parts";
 import type {
+  AuthenticatedUser,
   AvailabilityRequest,
   AvailabilityResponse,
   BookingDraftSummary,
@@ -15,6 +16,7 @@ import type {
   BookingPaymentSummary,
   BookingItemSummary,
   BookingSummary,
+  CloverDevicePayment,
   CreateBookingDraftRequest,
   CreateCheckoutSessionRequest,
   CreateCheckoutSessionResponse,
@@ -23,9 +25,11 @@ import type {
   CustomerProfileResponse,
   CustomerSummary,
   CustomPaymentMethod,
+  PaymentCapabilities,
   ProviderListResponse,
   ProviderTimeOffEntry,
   ProviderTimeOffList,
+  RecordCloverDevicePaymentRequest,
   RecordManualPaymentRequest,
   SendFormReminderResponse,
   ServiceCategoryListResponse,
@@ -40,6 +44,8 @@ import type {
 } from "@booking/shared-types";
 
 import { FormResponseViewer } from "./form-response-viewer";
+import { CollectDepositStep, type CollectDepositApi } from "./collect-deposit-step";
+import { CloverDevicePaymentPicker } from "./clover-device-payment-picker";
 import { platformApi } from "./platform-api";
 
 type CalendarDataState =
@@ -162,7 +168,7 @@ type SlotCustomerForm = {
 type DraftCreationState =
   | { kind: "idle" }
   | { kind: "submitting" }
-  | { kind: "success"; draftId: string }
+  | { kind: "success"; draftId: string; draft?: BookingDraftSummary }
   | { kind: "error"; message: string };
 
 type CustomerCreateState =
@@ -228,6 +234,20 @@ export type CalendarPageApi = {
   lookupCustomers: (query: CustomerLookupQuery) => Promise<CustomerLookupResponse>;
   getAvailability: (request: AvailabilityRequest) => Promise<AvailabilityResponse>;
   createBookingDraft: (body: CreateBookingDraftRequest) => Promise<BookingDraftSummary>;
+  /** Optional so older test doubles still type-check; without them staff can't take payment in the drawer. */
+  confirmBookingDraftWithPayment?: CollectDepositApi["confirmBookingDraftWithPayment"];
+  releaseBookingDraft?: CollectDepositApi["releaseBookingDraft"];
+  confirmBookingDraftWithoutPayment?: CollectDepositApi["confirmBookingDraftWithoutPayment"];
+  /** Clover: match payments taken on the device. All optional so older doubles still type-check. */
+  getPaymentCapabilities?: (tenantSlug: string) => Promise<PaymentCapabilities>;
+  listCloverDevicePayments?: CollectDepositApi["listCloverDevicePayments"];
+  confirmBookingDraftWithCloverPayment?: CollectDepositApi["confirmBookingDraftWithCloverPayment"];
+  recordCloverDevicePayment?: (
+    tenantSlug: string,
+    bookingId: string,
+    body: RecordCloverDevicePaymentRequest,
+  ) => Promise<BookingSummary>;
+  recordCloverDeviceRefund?: (tenantSlug: string, bookingId: string, paymentId: string) => Promise<BookingSummary>;
   /** Optional so older test doubles still type-check; without it no add-ons are offered. */
   listServiceAddOns?: (tenantSlug: string, serviceId: string) => Promise<ServiceAddOnListResponse>;
   createOrUpdateCustomer: (body: { name: string; email?: string; phone?: string }) => Promise<{ customerId: string }>;
@@ -280,6 +300,8 @@ type CalendarPageProps = {
   weekStartsOn?: number;
   storefrontBaseUrl?: string;
   customPaymentMethods?: CustomPaymentMethod[];
+  /** Signed-in user; gates staff-only actions such as taking payment. */
+  currentUser?: AuthenticatedUser;
 };
 
 const dateFormatter = new Intl.DateTimeFormat("en-CA", {
@@ -354,7 +376,7 @@ const monthDayLabel = Array.from({ length: 7 }, (_, index) => {
 });
 
 const CALENDAR_SIDEBAR_RAIL_ID = "dashboard-calendar-sidebar-rail";
-const storefrontBaseUrl = import.meta.env.VITE_PUBLIC_STOREFRONT_BASE_URL ?? "http://127.0.0.1:3001";
+const DEFAULT_STOREFRONT_BASE_URL = import.meta.env.VITE_PUBLIC_STOREFRONT_BASE_URL ?? "http://127.0.0.1:3001";
 
 function getUpcomingDate(offsetDays: number): string {
   return dateFormatter.format(new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000));
@@ -860,8 +882,9 @@ export function CalendarPage({
   displayStartHour,
   displayEndHour,
   weekStartsOn,
-  storefrontBaseUrl = "http://127.0.0.1:3001",
+  storefrontBaseUrl = DEFAULT_STOREFRONT_BASE_URL,
   customPaymentMethods = [],
+  currentUser,
 }: CalendarPageProps) {
   const [calendarState, setCalendarState] = useState<CalendarDataState>({ kind: "loading" });
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
@@ -905,6 +928,23 @@ export function CalendarPage({
   const [selectedTimeOffId, setSelectedTimeOffId] = useState<string | null>(null);
   const [completionState, setCompletionState] = useState<CompletionState>({ kind: "idle" });
   const [reloadKey, setReloadKey] = useState(0);
+  // What the card processor can do for this business (Clover matching etc.).
+  // A failure just leaves the Clover options off; External POS and cash still work.
+  const [paymentCapabilities, setPaymentCapabilities] = useState<PaymentCapabilities | null>(null);
+  useEffect(() => {
+    if (!api.getPaymentCapabilities) return;
+    let cancelled = false;
+    api.getPaymentCapabilities(tenantSlug)
+      .then((capabilities) => {
+        if (!cancelled) setPaymentCapabilities(capabilities);
+      })
+      .catch(() => {
+        if (!cancelled) setPaymentCapabilities(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, tenantSlug]);
   const isInitialLoad = useRef(true);
   // When arriving at /calendar?bookingId=..., fetch that booking up front so we
   // can focus the calendar on the booking's date and open its details after the
@@ -2013,9 +2053,10 @@ export function CalendarPage({
         bookingMethod: "staff_entered",
         ...(isAvailable ? {} : { overrideAvailability: true }),
         ...(selectedSlotAddOnIds.length > 0 ? { addOnIds: selectedSlotAddOnIds } : {}),
+        ...(selectedSlotNotes.trim() ? { notes: selectedSlotNotes.trim() } : {}),
       });
 
-      setDraftCreationState({ kind: "success", draftId: draft.id });
+      setDraftCreationState({ kind: "success", draftId: draft.id, draft });
     } catch (error) {
       setDraftCreationState({
         kind: "error",
@@ -2088,6 +2129,44 @@ export function CalendarPage({
     draftCreationState.kind === "success"
       ? `${storefrontBaseUrl}/${tenantSlug}/book/${draftCreationState.draftId}`
       : null;
+
+  // After a staff draft holds the slot, the drawer switches to collecting payment.
+  const canCollectPayment = currentUser
+    ? currentUser.permissions.some((grant) => grant.key === "bookings.collect_payment" && grant.allowed)
+    : true;
+  const collectDepositApi: CollectDepositApi | null =
+    api.confirmBookingDraftWithPayment && api.releaseBookingDraft
+      ? {
+          confirmBookingDraftWithPayment: api.confirmBookingDraftWithPayment,
+          releaseBookingDraft: api.releaseBookingDraft,
+          listCloverDevicePayments: api.listCloverDevicePayments,
+          confirmBookingDraftWithCloverPayment: api.confirmBookingDraftWithCloverPayment,
+          confirmBookingDraftWithoutPayment: api.confirmBookingDraftWithoutPayment,
+        }
+      : null;
+  const slotCollectStep =
+    draftCreationState.kind === "success" && draftCreationState.draft && collectDepositApi ? (
+      <CollectDepositStep
+        key={draftCreationState.draft.id}
+        draft={draftCreationState.draft}
+        tenantSlug={tenantSlug}
+        api={collectDepositApi}
+        customPaymentMethods={customPaymentMethods}
+        canCollectPayment={canCollectPayment}
+        capabilities={paymentCapabilities}
+        onConfirmed={(booking) => {
+          setSelectedSlot(null);
+          setDraftCreationState({ kind: "idle" });
+          setSelectedAppointmentId(booking.id);
+          setReloadKey((k) => k + 1);
+        }}
+        onReleased={() => {
+          setSelectedSlot(null);
+          setDraftCreationState({ kind: "idle" });
+          setReloadKey((k) => k + 1);
+        }}
+      />
+    ) : null;
 
   const handleCompleteAppointment = async (
     appointment: SelectedCalendarAppointment,
@@ -2493,6 +2572,7 @@ export function CalendarPage({
           notes={selectedSlotNotes}
           draftCreationState={draftCreationState}
           draftHref={draftHref}
+          collectStep={slotCollectStep}
           onClose={() => setSelectedSlot(null)}
           onSelectProvider={handleSelectSlotProvider}
           onSelectService={handleSelectSlotService}
@@ -2547,6 +2627,7 @@ export function CalendarPage({
           storefrontBaseUrl={storefrontBaseUrl}
           customPaymentMethods={customPaymentMethods}
           onPaymentRecorded={() => setReloadKey((k) => k + 1)}
+          paymentCapabilities={paymentCapabilities}
         />,
         document.body,
       )}
@@ -3486,6 +3567,8 @@ type SlotActionDrawerProps = {
   notes: string;
   draftCreationState: DraftCreationState;
   draftHref: string | null;
+  /** Replaces the booking form's footer once a staff draft holds the slot. */
+  collectStep?: ReactElement | null;
   onClose: () => void;
   onSelectProvider: (providerId: string) => void;
   onSelectService: (serviceId: string) => void;
@@ -3517,6 +3600,7 @@ function SlotActionDrawer({
   notes,
   draftCreationState,
   draftHref,
+  collectStep,
   onClose,
   onSelectProvider,
   onSelectService,
@@ -3663,30 +3747,49 @@ function SlotActionDrawer({
 
                 // Locked-in client: show a clean profile card instead of the search field.
                 if (selectedCustomer !== null) {
-                  const contactLines = [selectedCustomer.email, selectedCustomer.phone].filter(Boolean).join(" · ");
                   return (
                     <div>
                       <div className="cs-section__label">Client</div>
-                      <div className="cs-panel" style={{ padding: 14 }}>
-                        <div className="cs-clientrow">
-                          <span className="cs-clientrow__avatar" aria-hidden="true">{getInitials(selectedCustomer.name)}</span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div className="cs-clientrow__name">{selectedCustomer.name}</div>
-                            <div className="cs-clientrow__meta">{contactLines || "No contact info"}</div>
+                      <div className="cs-clientrow cs-clientrow--profile-card">
+                        <div className="cs-clientrow__body">
+                          <div className="cs-clientrow__top">
+                            <span className="cs-clientrow__avatar cs-clientrow__avatar--round" aria-hidden="true">{getInitials(selectedCustomer.name)}</span>
+                            <div className="cs-clientrow__identity">
+                              <div className="cs-clientrow__name">{selectedCustomer.name}</div>
+                              <div className="cs-clientrow__meta">Existing client</div>
+                            </div>
+                            <button
+                              type="button"
+                              className="cs-btn cs-btn--sm"
+                              onClick={() => {
+                                setSelectedCustomer(null);
+                                onCustomerFieldChange("firstName", "");
+                                onCustomerFieldChange("lastName", "");
+                                onCustomerFieldChange("email", "");
+                                onCustomerFieldChange("phone", "");
+                              }}
+                            >
+                              Change
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            className="cs-btn cs-btn--sm cs-btn--ghost"
-                            onClick={() => {
-                              setSelectedCustomer(null);
-                              onCustomerFieldChange("firstName", "");
-                              onCustomerFieldChange("lastName", "");
-                              onCustomerFieldChange("email", "");
-                              onCustomerFieldChange("phone", "");
-                            }}
-                          >
-                            Change
-                          </button>
+                          {selectedCustomer.phone || selectedCustomer.email ? (
+                            <div className="cs-clientrow__contact">
+                              {selectedCustomer.phone ? (
+                                <div className="cs-clientrow__contact-row">
+                                  <span className="cs-clientrow__contact-icon" aria-hidden="true">☎</span>
+                                  <span>{selectedCustomer.phone}</span>
+                                </div>
+                              ) : null}
+                              {selectedCustomer.email ? (
+                                <div className="cs-clientrow__contact-row">
+                                  <span className="cs-clientrow__contact-icon" aria-hidden="true">✉</span>
+                                  <span>{selectedCustomer.email}</span>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <div className="cs-clientrow__meta">No contact info</div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -3911,10 +4014,12 @@ function SlotActionDrawer({
                 <div className="cs-banner cs-banner--error" role="alert">{draftCreationState.message}</div>
               ) : null}
               {draftCreationState.kind === "success" ? (
-                <div className="cs-panel cs-panel--success cs-alert" role="status">
-                  <span className="cs-alert__icon" aria-hidden="true" style={{ background: "var(--cs-ok-text)" }}>✓</span>
-                  <div className="cs-alert__body">Booking draft created and slot held for 15 minutes.</div>
-                </div>
+                collectStep ?? (
+                  <div className="cs-panel cs-panel--success cs-alert" role="status">
+                    <span className="cs-alert__icon" aria-hidden="true" style={{ background: "var(--cs-ok-text)" }}>✓</span>
+                    <div className="cs-alert__body">Slot held. Collect payment to confirm the booking.</div>
+                  </div>
+                )
               ) : null}
             </>
           ) : (
@@ -4009,7 +4114,8 @@ function SlotActionDrawer({
           ) : null}
         </div>
 
-        {/* Footer */}
+        {/* Footer (the collect-payment step has its own actions) */}
+        {collectStep ? null : (
         <div className="cs-drawer__foot">
           <div className="cs-actions">
             <button type="button" className="cs-btn" onClick={onClose}>Cancel</button>
@@ -4021,10 +4127,10 @@ function SlotActionDrawer({
                 disabled={!canCreateDraft || draftCreationState.kind === "success"}
               >
                 {draftCreationState.kind === "submitting"
-                  ? "Creating draft…"
+                  ? "Holding slot…"
                   : draftCreationState.kind === "success"
-                  ? "Draft created"
-                  : "Book & send confirmation"}
+                  ? "Slot held"
+                  : "Hold slot & collect payment"}
               </button>
             ) : (
               <button type="button" className="cs-btn cs-btn--primary" onClick={onAddTimeBlock} disabled={!canAddTimeBlock}>
@@ -4033,16 +4139,18 @@ function SlotActionDrawer({
             )}
           </div>
           {draftHref && draftCreationState.kind === "success" ? (
-            <a className="cs-btn cs-btn--ghost" href={draftHref} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", marginTop: 8, textDecoration: "none" }}>
+            <a
+              className="cs-btn"
+              href={draftHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", boxSizing: "border-box", width: "100%", marginTop: 10, padding: "12px 20px", textAlign: "center", textDecoration: "none", background: "var(--cs-surface)", border: "1px solid var(--cs-hairline)" }}
+            >
               Open draft in storefront
             </a>
           ) : null}
-          {/* Hidden button to trigger date/time popovers from the drawer header */}
-          <div style={{ display: "flex", gap: 12, marginTop: 8, justifyContent: "flex-end" }}>
-            <button type="button" className="cs-btn cs-btn--ghost" style={{ padding: "6px 10px", fontSize: 11 }} onClick={() => { setPickerMonth(monthAnchor(selectedSlot.date)); setShowDatePopover((prev) => !prev); }}>Change date</button>
-            <button type="button" className="cs-btn cs-btn--ghost" style={{ padding: "6px 10px", fontSize: 11 }} onClick={() => setShowTimeInput(true)}>Change time</button>
-          </div>
         </div>
+        )}
       </aside>
     </>
   );
@@ -4382,6 +4490,7 @@ type AppointmentDetailsDrawerProps = {
   storefrontBaseUrl: string;
   customPaymentMethods: CustomPaymentMethod[];
   onPaymentRecorded?: () => void;
+  paymentCapabilities?: PaymentCapabilities | null;
 };
 
 function AppointmentDetailsDrawer({
@@ -4410,6 +4519,7 @@ function AppointmentDetailsDrawer({
   storefrontBaseUrl,
   customPaymentMethods,
   onPaymentRecorded,
+  paymentCapabilities = null,
 }: AppointmentDetailsDrawerProps): ReactElement | null {
   const [viewingFormEntry, setViewingFormEntry] = useState<BookingFormResponseEntry | null>(null);
   const [drawerView, setDrawerView] = useState<"details" | "checkout" | "profile">("details");
@@ -4458,6 +4568,8 @@ function AppointmentDetailsDrawer({
   const [clientCardProfile, setClientCardProfile] = useState<CustomerProfileResponse | null>(null);
   const [treatmentMode, setTreatmentMode] = useState<"none" | "change" | "add" | "change-item">("none");
   const [changingItemId, setChangingItemId] = useState<string | null>(null);
+  const [refundOwedBusy, setRefundOwedBusy] = useState(false);
+  const [refundOwedError, setRefundOwedError] = useState("");
   // While the calendar reloads (after adding/removing an item) the services and
   // categories props are briefly empty; keep the last known values so the
   // service-family colours don't flash to the default tint.
@@ -4691,6 +4803,7 @@ function AppointmentDetailsDrawer({
         <CheckoutPanel
           appointment={selectedAppointment}
           api={api}
+          paymentCapabilities={paymentCapabilities}
           tenantSlug={tenantSlug}
           customPaymentMethods={customPaymentMethods}
           familyColor={drawerFamilyColor}
@@ -5036,8 +5149,11 @@ function AppointmentDetailsDrawer({
       if (kind.includes("deposit")) label = `Deposit paid ${dateLabel}`;
       else if (p.paymentMethodType === "wallet") label = "Wallet credit";
       else if (p.paymentMethodType === "cash") label = `Cash paid ${dateLabel}`;
+      else if (p.processor === "clover") label = `Clover${p.cardLast4 ? ` ••${p.cardLast4}` : ""} paid ${dateLabel}`;
       else if (p.paymentMethodType === "card") label = `Card paid ${dateLabel}`;
+      else if (p.paymentMethodType === "external_pos") label = `POS paid ${dateLabel}`;
       else label = `Paid ${dateLabel}`;
+      if (p.externalReference) label = `${label} · Ref ${p.externalReference}`;
       return { id: p.id, label, amountCents: p.amountCents };
     });
 
@@ -5091,6 +5207,44 @@ function AppointmentDetailsDrawer({
             </div>
             <button type="button" className="cs-drawer__close" onClick={onClose} aria-label="Close">×</button>
           </div>
+
+          {/* Refund owed: a Flex-paid deposit on a canceled booking is refunded on the device. */}
+          {selectedAppointment.status === "canceled" && api?.recordCloverDeviceRefund
+            ? selectedAppointment.payments
+                .filter((p) => p.processor === "clover" && p.processorChannel === "device" && p.status === "succeeded")
+                .map((p) => (
+                  <div key={p.id} className="cs-panel cs-alert" role="alert" style={{ background: "var(--cs-peach)" }}>
+                    <div className="cs-alert__body">
+                      <strong>Refund owed · {formatMoney(p.amountCents)}</strong>
+                      <div style={{ font: "500 12px/1.5 var(--cs-font)", marginTop: 4 }}>
+                        This booking was canceled. Refund the {p.cardLast4 ? `••${p.cardLast4} ` : ""}payment on the Clover
+                        device, then record it here.
+                      </div>
+                      {refundOwedError ? <div role="alert" className="cs-settings-error">{refundOwedError}</div> : null}
+                      <button
+                        type="button"
+                        className="cs-btn cs-btn--sm"
+                        style={{ marginTop: 8 }}
+                        disabled={refundOwedBusy}
+                        onClick={async () => {
+                          setRefundOwedBusy(true);
+                          setRefundOwedError("");
+                          try {
+                            await api.recordCloverDeviceRefund!(tenantSlug, selectedAppointment.id, p.id);
+                            onPaymentRecorded?.();
+                          } catch (error) {
+                            setRefundOwedError(error instanceof Error ? error.message : "Unable to record the refund.");
+                          } finally {
+                            setRefundOwedBusy(false);
+                          }
+                        }}
+                      >
+                        {refundOwedBusy ? "Checking Clover…" : "I refunded it on the Clover device"}
+                      </button>
+                    </div>
+                  </div>
+                ))
+            : null}
 
           {/* Treatment card — tinted with the service family colour */}
           <div className="cs-treatment-card" style={{ background: familyBg }}>
@@ -5690,6 +5844,8 @@ function AppointmentDetailsDrawer({
 type CheckoutPanelProps = {
   appointment: SelectedCalendarAppointment;
   api: CalendarPageApi;
+  /** What the card processor can do; Clover matching shows when it's on. */
+  paymentCapabilities?: PaymentCapabilities | null;
   tenantSlug: string;
   customPaymentMethods: CustomPaymentMethod[];
   familyColor: string;
@@ -5707,6 +5863,7 @@ type CheckoutPanelProps = {
 function CheckoutPanel({
   appointment,
   api,
+  paymentCapabilities = null,
   tenantSlug,
   customPaymentMethods,
   familyColor,
@@ -5803,6 +5960,10 @@ function CheckoutPanel({
 
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
+  // External POS: the terminal receipt/approval # (or card last 4) is required.
+  const [posReference, setPosReference] = useState("");
+  // Clover: the device payment staff picked to settle the balance.
+  const [cloverPayment, setCloverPayment] = useState<CloverDevicePayment | null>(null);
   const [state, setState] = useState<"idle" | "submitting" | "error" | "success">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [showAddMethod, setShowAddMethod] = useState(false);
@@ -5819,7 +5980,13 @@ function CheckoutPanel({
   const [showWalletPopup, setShowWalletPopup] = useState(false);
   const [walletApplyText, setWalletApplyText] = useState("");
 
+  const cloverMatchingAvailable = Boolean(
+    paymentCapabilities?.canLinkDevicePayments && api.listCloverDevicePayments && api.recordCloverDevicePayment,
+  );
   const builtinMethods = [
+    ...(cloverMatchingAvailable
+      ? [{ id: "clover", label: "Clover", description: "Paid on the Clover device", tone: "mint" }]
+      : []),
     { id: "cash", label: "Cash", description: "Drawer count", tone: "neutral" },
     { id: "external_pos", label: "External POS", description: "Enter exact amount", tone: "peach" },
     { id: "manual", label: "Manual / Card", description: "Card or other", tone: "lilac" },
@@ -5832,7 +5999,10 @@ function CheckoutPanel({
     builtinMethods.find((method) => method.id === methodId)?.tone ?? "neutral";
 
   const labelForPayment = (p: BookingPaymentSummary): string => {
-    if (p.checkoutSessionKind && p.checkoutSessionKind.includes("deposit")) return "Deposit";
+    if (p.checkoutSessionKind && p.checkoutSessionKind.includes("deposit")) {
+      return p.processor === "clover" && p.cardLast4 ? `Deposit · Clover ••${p.cardLast4}` : "Deposit";
+    }
+    if (p.processor === "clover") return `Clover${p.cardLast4 ? ` ••${p.cardLast4}` : ""}`;
     if (p.paymentMethodType === "wallet") return "Wallet credit";
     if (p.paymentMethodType === "no_show_fee") return "No-show fee";
     if (p.paymentMethodType === "card") return "Credit card";
@@ -5891,9 +6061,16 @@ function CheckoutPanel({
   };
 
   const handleRecord = async (methodId: string) => {
-    const cents = parseAmount();
+    const isExternalPos = methodId === "external_pos";
+    // An unconnected terminal must be charged the exact remaining balance.
+    const cents = isExternalPos ? remainingBalance : parseAmount();
     if (cents <= 0 || cents > remainingBalance) {
       setErrorMessage("Amount must be between 1 cent and the remaining balance.");
+      setState("error");
+      return;
+    }
+    if (isExternalPos && !posReference.trim()) {
+      setErrorMessage("Enter the POS receipt or approval number (or card last 4).");
       setState("error");
       return;
     }
@@ -5913,6 +6090,7 @@ function CheckoutPanel({
         tipCents: recordedTipCents,
         paymentMethodType: methodId,
         notes: combinedNotes,
+        ...(isExternalPos ? { externalReference: posReference.trim() } : {}),
       });
       const updatedPayments = (updated.payments ?? []).filter(
         (p) => p.status === "succeeded" && p.amountCents > 0,
@@ -5920,6 +6098,7 @@ function CheckoutPanel({
       setPayments(updatedPayments);
       setSelectedMethod(null);
       setNotes("");
+      setPosReference("");
       setPaymentStep("methods");
       const newRemaining = Math.max(total - updatedPayments.reduce((s, p) => s + p.amountCents, 0), 0);
       if (newRemaining <= 0) {
@@ -5936,6 +6115,38 @@ function CheckoutPanel({
       setErrorMessage(error instanceof Error ? error.message : "Payment recording failed.");
       setSelectedMethod(null);
       setPaymentStep("methods");
+    }
+  };
+
+  const handleRecordClover = async () => {
+    if (!cloverPayment || !api.recordCloverDevicePayment) return;
+    setState("submitting");
+    setErrorMessage("");
+    try {
+      const updated = await api.recordCloverDevicePayment(tenantSlug, appointment.id, {
+        cloverPaymentId: cloverPayment.id,
+        ...(notes.trim() ? { notes: notes.trim() } : {}),
+      });
+      const updatedPayments = (updated.payments ?? []).filter(
+        (p) => p.status === "succeeded" && p.amountCents > 0,
+      );
+      setPayments(updatedPayments);
+      setSelectedMethod(null);
+      setCloverPayment(null);
+      setNotes("");
+      setPaymentStep("methods");
+      if ((updated.balanceDueCents ?? 1) <= 0) {
+        await onComplete(appointment, "collected", { cents: discountCents, type: discountType });
+        setSaleCompleted(true);
+        setIsReadOnly(true);
+        setState("success");
+      } else {
+        setState("idle");
+        onPaymentRecorded();
+      }
+    } catch (error) {
+      setState("error");
+      setErrorMessage(error instanceof Error ? error.message : "Unable to link the Clover payment.");
     }
   };
 
@@ -6604,18 +6815,48 @@ function CheckoutPanel({
                     {allMethods.find((m) => m.id === selectedMethod)?.label ?? selectedMethod}
                   </span>
                 </div>
+                {selectedMethod === "clover" && api.listCloverDevicePayments ? (
+                  <div className="cs-checkout-panel__notes">
+                    <span>Ring the client up on the Clover device for {formatMoney(remainingBalance)}, then pick the payment</span>
+                    <CloverDevicePaymentPicker
+                      tenantSlug={tenantSlug}
+                      api={{ listCloverDevicePayments: api.listCloverDevicePayments }}
+                      bookingId={appointment.id}
+                      selectedId={cloverPayment?.id ?? null}
+                      onSelect={setCloverPayment}
+                      disabled={state === "submitting"}
+                    />
+                  </div>
+                ) : null}
+                {selectedMethod === "clover" ? null : (
                 <label className="cs-checkout-panel__amount-row">
-                  <span>Amount to charge</span>
+                  <span>{selectedMethod === "external_pos" ? "Charge on the terminal (exact balance)" : "Amount to charge"}</span>
                   <input
                     type="text"
                     inputMode="decimal"
                     className="cs-checkout-panel__amount-input"
-                    value={amountText}
+                    value={selectedMethod === "external_pos" ? (remainingBalance / 100).toFixed(2) : amountText}
                     onChange={(e) => setAmountText(e.target.value)}
                     disabled={state === "submitting"}
-                    autoFocus
+                    readOnly={selectedMethod === "external_pos"}
+                    autoFocus={selectedMethod !== "external_pos"}
                   />
                 </label>
+                )}
+                {selectedMethod === "external_pos" ? (
+                  <label className="cs-checkout-panel__notes">
+                    <span>Receipt or approval # (or card last 4)</span>
+                    <input
+                      type="text"
+                      value={posReference}
+                      onChange={(e) => setPosReference(e.target.value)}
+                      disabled={state === "submitting"}
+                      placeholder="e.g. 004512"
+                      maxLength={128}
+                      autoFocus
+                    />
+                  </label>
+                ) : null}
                 <label className="cs-checkout-panel__notes">
                   <span>Notes (optional)</span>
                   <input
@@ -6629,10 +6870,23 @@ function CheckoutPanel({
                 <button
                   type="button"
                   className="cs-btn cs-btn--primary cs-checkout-panel__record-button"
-                  onClick={() => void handleRecord(selectedMethod)}
-                  disabled={state === "submitting" || parseAmount() <= 0 || parseAmount() > remainingBalance}
+                  onClick={() => void (selectedMethod === "clover" ? handleRecordClover() : handleRecord(selectedMethod))}
+                  disabled={
+                    state === "submitting" ||
+                    (selectedMethod === "clover"
+                      ? cloverPayment === null
+                      : selectedMethod === "external_pos"
+                        ? remainingBalance <= 0 || !posReference.trim()
+                        : parseAmount() <= 0 || parseAmount() > remainingBalance)
+                  }
                 >
-                  {state === "submitting" ? "Recording..." : `Record ${formatMoney(parseAmount())}`}
+                  {state === "submitting"
+                    ? "Recording..."
+                    : selectedMethod === "clover"
+                      ? cloverPayment
+                        ? `Link ${formatMoney(cloverPayment.totalCents)} Clover payment`
+                        : "Pick a Clover payment"
+                      : `Record ${formatMoney(selectedMethod === "external_pos" ? remainingBalance : parseAmount())}`}
                 </button>
               </section>
             ) : (
@@ -6965,7 +7219,9 @@ function FormResponseDrawer({ entry, onClose }: FormResponseDrawerProps): ReactE
             </button>
           </div>
         </header>
-        <FormResponseViewer response={entry} />
+        <div className="cs-form-response-drawer__body">
+          <FormResponseViewer response={entry} />
+        </div>
       </aside>
     </>
   );

@@ -97,11 +97,16 @@ export function formatLocationAddress(location: {
   return [location.addressLine1, location.addressLine2, cityRegion].filter(Boolean).join(" ");
 }
 
-export function formatCurrency(amountCents: number): string {
+/**
+ * Whole amounts read "$45"; amounts with cents keep them ("$45.50") so a price
+ * or deposit is never shown rounded to a different number than what is charged.
+ */
+export function formatCurrency(amountCents: number, currency = "USD"): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
+    currency,
+    minimumFractionDigits: amountCents % 100 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
   }).format(amountCents / 100);
 }
 
