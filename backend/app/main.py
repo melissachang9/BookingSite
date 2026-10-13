@@ -22,6 +22,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+TOKEN_REFRESH_INTERVAL_SECONDS = 30 * 60
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await initialize_database()
@@ -29,9 +32,9 @@ async def lifespan(_: FastAPI):
         await seed_demo_data(session)
 
     # Start background slot hold cleanup
-    from app.services.slot_hold_cleanup import cleanup_expired_slot_holds, run_periodic_cleanup
+    from app.services.slot_hold_cleanup import run_hold_sweep, run_periodic_cleanup
 
-    await cleanup_expired_slot_holds()  # run once on startup
+    await run_hold_sweep()  # run once on startup
     cleanup_task = asyncio.create_task(run_periodic_cleanup())
 
     async def _watchdog(task: asyncio.Task, name: str) -> None:
@@ -44,13 +47,29 @@ async def lifespan(_: FastAPI):
 
     asyncio.create_task(_watchdog(cleanup_task, "slot_hold_cleanup"))
 
+    # Keep Clover OAuth tokens fresh for businesses that are idle for days.
+    from app.services.clover_connections import refresh_expiring_processor_tokens
+
+    async def _run_token_refresh() -> None:
+        while True:
+            try:
+                await asyncio.sleep(TOKEN_REFRESH_INTERVAL_SECONDS)
+                await refresh_expiring_processor_tokens()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.exception("Processor token refresh failed, will retry")
+
+    token_refresh_task = asyncio.create_task(_run_token_refresh())
+
     yield
 
-    cleanup_task.cancel()
-    try:
-        await cleanup_task
-    except asyncio.CancelledError:
-        pass
+    for task in (cleanup_task, token_refresh_task):
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     await dispose_engine()
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, time
 from typing import Any, Optional
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, Time, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, Time, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, IdMixin, TimestampMixin
@@ -440,6 +440,10 @@ class Payment(Base, IdMixin, TimestampMixin):
     __tablename__ = "payments"
     __table_args__ = (
         UniqueConstraint("checkout_session_id", name="uq_payment_checkout_session"),
+        # A processor payment can be linked to only one of our payments, ever.
+        UniqueConstraint(
+            "processor", "processor_merchant_id", "processor_payment_id", name="uq_payment_processor_payment"
+        ),
         Index("ix_payments_tenant_status_created_at", "tenant_id", "status", "created_at"),
         Index("ix_payments_booking_id", "booking_id"),
     )
@@ -460,6 +464,19 @@ class Payment(Base, IdMixin, TimestampMixin):
     checkout_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     success_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cancel_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Receipt/approval number (or card last 4) for payments taken outside our
+    # processor, e.g. on an unconnected POS terminal.
+    external_reference: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # Which processor took the money and how: stripe | clover, and for Clover
+    # device (card present on the Flex) | ecom (customer online) | moto (staff
+    # keyed it). Refunds route on these, never on id prefixes.
+    processor: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    processor_channel: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    processor_merchant_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    processor_payment_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    card_brand: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    card_last4: Mapped[Optional[str]] = mapped_column(String(4), nullable=True)
+    charge_attempt_key: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
 
     customer: Mapped[Customer] = relationship(back_populates="payments")
     booking: Mapped[Optional[Booking]] = relationship(back_populates="payments")
@@ -482,8 +499,55 @@ class PaymentEvent(Base, IdMixin, TimestampMixin):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     stripe_session_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     stripe_payment_intent_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Processor-neutral counterpart of the stripe_* columns (charge/refund id, decline code).
+    processor_reference: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     payment: Mapped[Payment] = relationship(back_populates="events")
+
+
+class ProcessorConnection(Base, IdMixin, TimestampMixin):
+    """A business's connection to a payment processor (Clover).
+
+    Secrets are stored encrypted (see services/payment_secrets.py) and are never
+    returned by any API. One connection per business and processor, and one
+    business per processor merchant, so money can't be routed to another tenant.
+    """
+
+    __tablename__ = "processor_connections"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "processor", name="uq_processor_connection_tenant"),
+        Index(
+            "uq_processor_connection_merchant",
+            "processor",
+            "environment",
+            "merchant_id",
+            unique=True,
+            postgresql_where=text("status <> 'disconnected'"),
+            sqlite_where=text("status <> 'disconnected'"),
+        ),
+    )
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    processor: Mapped[str] = mapped_column(String(16), nullable=False)
+    environment: Mapped[str] = mapped_column(String(16), nullable=False)
+    auth_mode: Mapped[str] = mapped_column(String(16), nullable=False)  # oauth | api_keys
+    merchant_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    merchant_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    merchant_currency: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)  # connected | needs_reauth | disconnected
+    access_token_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    access_token_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    refresh_token_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    refresh_token_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    ecommerce_private_key_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Public by design (the card form needs it in the browser).
+    pakms_public_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    last_refreshed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    connected_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    connected_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    disconnected_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    disconnected_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class BookingDraft(Base, IdMixin, TimestampMixin):
@@ -504,6 +568,12 @@ class BookingDraft(Base, IdMixin, TimestampMixin):
     price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     deposit_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Staff who created the draft from the calendar (null for online bookings).
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    # Staff-only notes; copied to the booking on confirmation, never shown publicly.
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # When staff first asked the customer to pay (payment link sent).
+    payment_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="booking_drafts")
     customer: Mapped[Optional[Customer]] = relationship(back_populates="booking_drafts")

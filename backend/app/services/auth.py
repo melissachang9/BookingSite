@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
 from app.core.security import create_access_token, create_refresh_token, decode_token, verify_password
-from app.db.models import User, UserPermissionOverride
+from app.db.models import Tenant, User, UserPermissionOverride
 from app.schemas.auth import AuthenticatedUserResponse, PermissionGrantResponse, SessionResponse
 
 
@@ -52,6 +52,7 @@ PERMISSION_CATALOG: list[PermissionDefinition] = [
     # Payments
     PermissionDefinition("payments.view", "Payments", "View payments", "Browse payment history and balances."),
     PermissionDefinition("payments.manage", "Payments", "Issue refunds and adjustments", "Refund, void, or apply compensating payment events."),
+    PermissionDefinition("payments.configure", "Payments", "Connect payment processor", "Connect or disconnect the card processor (Clover). Decides where payments are deposited."),
 
     # Customers
     PermissionDefinition("customers.view", "Customers", "View customers", "Open customer profiles and visit history."),
@@ -95,7 +96,9 @@ ROLE_PERMISSION_ALLOWLIST: dict[str, set[str]] = {
     "manager": {
         key
         for key in ALL_PERMISSION_KEYS
-        # Managers get everything by default in the role template.
+        # Managers get everything by default in the role template, except
+        # choosing where the business's money is deposited (owner only).
+        if key != "payments.configure"
     },
     "staff": {
         "dashboard.view",
@@ -171,6 +174,27 @@ async def effective_permissions_for_user(session: AsyncSession, user: User) -> s
         else:
             effective.discard(key)
     return effective
+
+
+async def assert_tenant_permission(
+    session: AsyncSession,
+    user: User | None,
+    tenant: Tenant,
+    permission_key: str,
+) -> User:
+    """Service-level permission check for routes where auth is optional.
+
+    Mirrors the require_tenant_permission dependency: signed in, same tenant,
+    and the effective permission set (role defaults + overrides) has the key.
+    """
+    if user is None:
+        raise api_exception(401, "unauthorized", "Authentication is required.")
+    if user.tenant_id != tenant.id:
+        raise api_exception(403, "forbidden", "You do not have access to this tenant.")
+    effective = await effective_permissions_for_user(session, user)
+    if permission_key not in effective:
+        raise api_exception(403, "forbidden", "You do not have permission to perform this action.")
+    return user
 
 
 async def _grants_for_user(session: AsyncSession, user: User) -> list[PermissionGrantResponse]:

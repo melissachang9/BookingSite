@@ -21,14 +21,16 @@ from app.schemas.payments import (
     SendPaymentReminderResponse,
 )
 from app.services.payment_processor import (
+    resolve_payment_processor,
+    simulated_checkout_allowed,
     create_stripe_booking_balance_checkout_session,
     create_stripe_deposit_checkout_session,
     get_stripe_checkout_session,
     is_stripe_checkout_session_id,
     StripeWebhookEvent,
-    stripe_processor_configured,
 )
 from app.services.booking_drafts import (
+    _has_pending_pre_booking_requirements,
     _ensure_aware,
     _ensure_not_expired,
     _load_booking,
@@ -38,8 +40,8 @@ from app.services.booking_drafts import (
 from app.services.notifications import send_transactional_email
 from app.services.presenters import booking_balance_due_cents, booking_draft_to_summary, booking_to_summary
 from app.services.state_machine import guard_transition
-from app.services.auth import ROLE_PERMISSION_ALLOWLIST
-from app.services.tenants import get_tenant_by_slug
+from app.services.auth import effective_permissions_for_user
+from app.services.tenants import get_tenant_by_slug, tenant_currency
 
 
 def _payment_link_expiry_minutes(settings_json: dict[str, object]) -> int:
@@ -49,6 +51,19 @@ def _payment_link_expiry_minutes(settings_json: dict[str, object]) -> int:
         or 30
     )
     return raw_value if isinstance(raw_value, int) and raw_value >= 5 else 30
+
+
+def _require_online_checkout_available(processor: str) -> None:
+    if processor == "none":
+        raise api_exception(
+            409,
+            "payments_unavailable",
+            "Online card payments are not set up for this business yet.",
+        )
+
+
+def _checkout_processor_column(processor: str) -> str | None:
+    return processor if processor in {"stripe", "clover"} else None
 
 
 def _build_checkout_url(cancel_url: str, session_id: str) -> str:
@@ -116,14 +131,17 @@ def _append_booking_payment_event(
     )
 
 
-def _require_booking_balance_checkout_access(current_user: User | None, *, tenant_id: str) -> User:
+async def _require_booking_balance_checkout_access(
+    session: AsyncSession, current_user: User | None, *, tenant_id: str
+) -> User:
     if current_user is None:
         raise api_exception(401, "unauthorized", "Authentication is required.")
 
     if current_user.tenant_id != tenant_id:
         raise api_exception(403, "forbidden", "You do not have access to this tenant.")
 
-    if "bookings.collect_payment" not in ROLE_PERMISSION_ALLOWLIST.get(current_user.role, set()):
+    # Role defaults plus per-user overrides, like every other permission gate.
+    if "bookings.collect_payment" not in await effective_permissions_for_user(session, current_user):
         raise api_exception(403, "forbidden", "You do not have permission to perform this action.")
 
     return current_user
@@ -262,6 +280,28 @@ async def _expire_checkout_payment(
         )
 
 
+async def _flag_late_captured_payment(
+    session: AsyncSession,
+    payment: Payment,
+    *,
+    stripe_session_id: str | None,
+    stripe_payment_intent_id: str | None,
+) -> None:
+    """Money was captured after the checkout window closed. Leave the payment
+    open (not canceled) and append a visible event for staff follow-up."""
+    if _has_payment_event(payment, kind="late_payment_received", stripe_session_id=stripe_session_id):
+        return
+    _append_payment_event(
+        session,
+        payment,
+        kind="late_payment_received",
+        amount_cents=payment.amount_cents,
+        notes="The processor captured this payment after the checkout window closed. Refund it or rebook the client.",
+        stripe_session_id=stripe_session_id,
+        stripe_payment_intent_id=stripe_payment_intent_id,
+    )
+
+
 async def _complete_deposit_checkout_payment(
     session: AsyncSession,
     *,
@@ -282,6 +322,21 @@ async def _complete_deposit_checkout_payment(
 
     now = datetime.now(timezone.utc)
     if payment.checkout_expires_at is None or _ensure_aware(payment.checkout_expires_at) <= now:
+        if stripe_session_id is not None:
+            # The processor says this was paid: never mark captured money as
+            # canceled. Record it so staff can refund or rebook.
+            await _flag_late_captured_payment(
+                session,
+                payment,
+                stripe_session_id=stripe_session_id,
+                stripe_payment_intent_id=stripe_payment_intent_id,
+            )
+            await session.commit()
+            raise api_exception(
+                409,
+                "conflict",
+                "Payment was received after the checkout expired. The business has been flagged to follow up or refund it.",
+            )
         await _expire_checkout_payment(
             session,
             payment,
@@ -367,6 +422,19 @@ async def _complete_booking_balance_checkout_payment(
 
     now = datetime.now(timezone.utc)
     if payment.checkout_expires_at is None or _ensure_aware(payment.checkout_expires_at) <= now:
+        if stripe_session_id is not None:
+            await _flag_late_captured_payment(
+                session,
+                payment,
+                stripe_session_id=stripe_session_id,
+                stripe_payment_intent_id=stripe_payment_intent_id,
+            )
+            await session.commit()
+            raise api_exception(
+                409,
+                "conflict",
+                "Payment was received after the checkout expired. The business has been flagged to follow up or refund it.",
+            )
         await _expire_checkout_payment(
             session,
             payment,
@@ -572,7 +640,7 @@ async def create_checkout_session(
         if payload.booking_id is None:
             raise api_exception(400, "bad_request", "Booking id is required for booking balance checkout.")
 
-        actor = _require_booking_balance_checkout_access(current_user, tenant_id=tenant.id)
+        actor = await _require_booking_balance_checkout_access(session, current_user, tenant_id=tenant.id)
         booking = await _load_booking(session, payload.booking_id, tenant.id)
         if booking.status not in {"confirmed", "completed"}:
             raise api_exception(409, "conflict", "Only confirmed or completed bookings can open a balance checkout link.")
@@ -602,12 +670,14 @@ async def create_checkout_session(
                 expires_at=existing_payment.checkout_expires_at,
             )
 
+        processor = resolve_payment_processor(tenant)
+        _require_online_checkout_available(processor)
         expires_at = now + timedelta(minutes=_payment_link_expiry_minutes(tenant.settings_json))
         session_id = str(uuid4())
         checkout_url = _build_checkout_url(payload.cancel_url, session_id)
 
         stripe_checkout = None
-        if stripe_processor_configured():
+        if processor == "stripe":
             stripe_checkout = await create_stripe_booking_balance_checkout_session(
                 tenant_slug=tenant_slug,
                 booking_id=booking.id,
@@ -617,6 +687,7 @@ async def create_checkout_session(
                 success_url=payload.success_url,
                 cancel_url=payload.cancel_url,
                 expires_at=expires_at,
+                currency=tenant_currency(tenant),
             )
             session_id = stripe_checkout.session_id
             checkout_url = stripe_checkout.checkout_url
@@ -629,8 +700,10 @@ async def create_checkout_session(
             status="pending",
             deposit_status=booking.deposit_status,
             amount_cents=remaining_balance_cents,
-            currency="USD",
+            currency=tenant_currency(tenant),
             payment_method_type="card",
+            processor=_checkout_processor_column(processor),
+            processor_channel="ecom" if processor == "clover" else None,
             checkout_session_kind="booking_balance",
             checkout_session_id=session_id,
             checkout_expires_at=expires_at,
@@ -676,13 +749,11 @@ async def create_checkout_session(
 
     if draft.customer_id is None or draft.customer is None:
         raise api_exception(400, "bad_request", "Customer details are required before payment.")
-    if any(
-        requirement.customer_prompt_timing == "pre_booking" and requirement.status == "pending"
-        for requirement in draft.form_requirements
-    ):
-        guard_transition("booking_draft", draft.id, draft.status, "awaiting_form")
-        draft.status = "awaiting_form"
-        await session.commit()
+    if _has_pending_pre_booking_requirements(draft):
+        if draft.status != "awaiting_form":
+            guard_transition("booking_draft", draft.id, draft.status, "awaiting_form")
+            draft.status = "awaiting_form"
+            await session.commit()
         raise api_exception(400, "bad_request", "Complete the required forms before payment.")
     if draft.deposit_cents <= 0:
         raise api_exception(409, "conflict", "This booking does not require a deposit checkout session.")
@@ -715,6 +786,8 @@ async def create_checkout_session(
             expires_at=existing_payment.checkout_expires_at,
         )
 
+    processor = resolve_payment_processor(tenant)
+    _require_online_checkout_available(processor)
     expires_at = max(
         _ensure_aware(draft.expires_at),
         now + timedelta(minutes=_payment_link_expiry_minutes(tenant.settings_json)),
@@ -723,7 +796,7 @@ async def create_checkout_session(
     checkout_url = _build_checkout_url(payload.cancel_url, session_id)
 
     stripe_checkout = None
-    if stripe_processor_configured():
+    if processor == "stripe":
         stripe_checkout = await create_stripe_deposit_checkout_session(
             tenant_slug=tenant_slug,
             booking_draft_id=draft.id,
@@ -733,6 +806,7 @@ async def create_checkout_session(
             success_url=payload.success_url,
             cancel_url=payload.cancel_url,
             expires_at=expires_at,
+            currency=tenant_currency(tenant),
         )
         session_id = stripe_checkout.session_id
         checkout_url = stripe_checkout.checkout_url
@@ -745,8 +819,10 @@ async def create_checkout_session(
         status="pending",
         deposit_status="unpaid",
         amount_cents=draft.deposit_cents,
-        currency="USD",
+        currency=tenant_currency(tenant),
         payment_method_type="card",
+        processor=_checkout_processor_column(processor),
+        processor_channel="ecom" if processor == "clover" else None,
         checkout_session_kind="deposit",
         checkout_session_id=session_id,
         checkout_expires_at=expires_at,
@@ -798,6 +874,18 @@ async def complete_checkout_session(
 ) -> BookingSummaryResponse:
     tenant = await get_tenant_by_slug(session, tenant_slug)
     payment = await _load_checkout_payment(session, tenant_id=tenant.id, session_id=session_id)
+
+    if payment.processor == "clover" and payment.status != "succeeded":
+        # Clover payments are completed by the card charge itself, never by a
+        # bare "complete" call.
+        raise api_exception(409, "conflict", "Enter your card details on the payment page to complete this payment.")
+    if (
+        payment.status != "succeeded"
+        and not is_stripe_checkout_session_id(payment.checkout_session_id)
+        and not simulated_checkout_allowed()
+    ):
+        # Without proof from a processor, a "complete" call must never mark money as paid.
+        raise api_exception(409, "payments_unavailable", "This checkout cannot be completed without a payment processor.")
 
     if payment.status == "succeeded" and payment.checkout_session_kind == "deposit" and payment.booking_id is not None:
         return await _complete_deposit_checkout_payment(

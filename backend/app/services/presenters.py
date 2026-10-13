@@ -372,10 +372,24 @@ def form_requirement_to_summary(requirement: BookingDraftFormRequirement) -> For
     )
 
 
+def booking_draft_amounts(draft: BookingDraft) -> tuple[int, int, int]:
+    """(subtotal, tax, full total) for a draft, matching the booking's math.
+
+    Tax applies to the service subtotal (price + add-ons) at the live rate the
+    confirmed booking will use.
+    """
+    tenant = draft.tenant if isinstance(draft.tenant, Tenant) else None
+    draft_add_ons = draft.add_ons if "add_ons" not in sa_inspect(draft).unloaded else []
+    subtotal = draft.price_cents + sum(add_on.price_cents for add_on in draft_add_ons)
+    tax = round(subtotal * (_tenant_tax_rate_percent(tenant) / 100))
+    return subtotal, tax, subtotal + tax
+
+
 def booking_draft_to_summary(draft: BookingDraft) -> BookingDraftSummaryResponse:
     tenant = draft.tenant if isinstance(draft.tenant, Tenant) else None
     # Only read add-ons when eagerly loaded (no lazy loads in async code).
     draft_add_ons = draft.add_ons if "add_ons" not in sa_inspect(draft).unloaded else []
+    _, draft_tax_cents, draft_full_cents = booking_draft_amounts(draft)
     reminder_hours_before = 24
     if tenant is not None:
         raw_hours = tenant.settings_json.get("reminderHoursBefore", 24)
@@ -413,6 +427,8 @@ def booking_draft_to_summary(draft: BookingDraft) -> BookingDraftSummaryResponse
             for add_on in draft_add_ons
         ],
         add_ons_total_cents=sum(add_on.price_cents for add_on in draft_add_ons),
+        tax_cents=draft_tax_cents,
+        full_amount_cents=draft_full_cents,
     )
 
 
@@ -447,6 +463,11 @@ def booking_to_summary(booking: Booking) -> BookingSummaryResponse:
             checkout_session_kind=payment.checkout_session_kind,
             created_at=payment.created_at,
             refund_reason=_extract_refund_reason(payment),
+            external_reference=payment.external_reference,
+            processor=payment.processor,
+            processor_channel=payment.processor_channel,
+            card_brand=payment.card_brand,
+            card_last4=payment.card_last4,
         )
         for payment in sorted(booking.payments, key=lambda p: p.created_at)
         if payment.amount_cents > 0

@@ -309,12 +309,14 @@ def test_record_manual_payment_records_tip_on_selected_method(client) -> None:
             "amountCents": booking["balanceDueCents"] + tip_cents,
             "tipCents": tip_cents,
             "paymentMethodType": "external_pos",
+            "externalReference": "APPR 4321",
         },
     )
 
     assert response.status_code == 200
     payment = response.json()["payments"][-1]
     assert payment["paymentMethodType"] == "external_pos"
+    assert payment["externalReference"] == "APPR 4321"
     assert payment["checkoutSessionKind"] == "admin_completion"
     assert payment["tipCents"] == tip_cents
 
@@ -346,7 +348,7 @@ def test_record_manual_payment_multiple_until_fully_paid(client) -> None:
     resp2 = client.post(
         f"/api/v1/tenants/brow-beauty-lab/bookings/{booking['id']}/payments/manual",
         headers=headers,
-        json={"amountCents": remainder, "paymentMethodType": "external_pos"},
+        json={"amountCents": remainder, "paymentMethodType": "external_pos", "externalReference": "1234"},
     )
     assert resp2.status_code == 200
     assert resp2.json()["paymentResolution"] == "collected"

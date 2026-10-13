@@ -116,6 +116,9 @@ class TenantSettingsResponse(CamelModel):
     week_starts_on: int = 0  # 0=Sunday, 1=Monday, ..., 6=Saturday
     country: str = "US"
     currency: str = "USD"
+    payment_link_expiry_minutes: int = 30
+    # Set only by connecting/disconnecting a processor, never by the settings PATCH.
+    payment_processor: str | None = None
     sms_phone: str | None = None
     business_hours_enabled: bool = False
     restrict_providers_to_business_hours: bool = False
@@ -233,6 +236,7 @@ class UpdateTenantSettingsRequest(CamelModel):
     no_show_fee_cents: int | None = Field(default=None, ge=0, le=100000)
     tax_rate_percent: float | None = Field(default=None, ge=0, le=100)
     auto_charge_no_show_fee: bool | None = None
+    payment_link_expiry_minutes: int | None = Field(default=None, ge=30, le=1440)
     custom_payment_methods: list[CustomPaymentMethodRequest] | None = None
 
 

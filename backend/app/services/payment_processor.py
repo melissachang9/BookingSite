@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import hashlib
 import hmac
 import json
+import logging
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
@@ -12,6 +13,8 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.http import api_exception
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -61,6 +64,33 @@ def stripe_processor_configured() -> bool:
 def stripe_webhook_configured() -> bool:
     settings = get_settings()
     return isinstance(settings.stripe_webhook_secret, str) and settings.stripe_webhook_secret.strip().startswith("whsec_")
+
+
+def simulated_checkout_allowed() -> bool:
+    """The fake checkout page is a development aid only.
+
+    Outside development/test, completing a non-processor session would let
+    anyone with a draft link mark a deposit as paid.
+    """
+    return get_settings().app_env in {"development", "test"}
+
+
+def resolve_payment_processor(tenant) -> str:
+    """Which processor takes card payments for this business.
+
+    Returns "stripe" | "clover" | "simulated" | "none". An explicit
+    `paymentProcessor` tenant setting wins; without one, legacy behaviour:
+    Stripe when a key is configured, otherwise the simulated checkout (dev only).
+    """
+    settings_json = tenant.settings_json if isinstance(getattr(tenant, "settings_json", None), dict) else {}
+    chosen = settings_json.get("paymentProcessor")
+    if chosen == "clover":
+        return "clover"
+    if chosen == "none":
+        return "none"
+    if chosen == "stripe" or stripe_processor_configured():
+        return "stripe" if stripe_processor_configured() else "none"
+    return "simulated" if simulated_checkout_allowed() else "none"
 
 
 def is_stripe_checkout_session_id(session_id: str | None) -> bool:
@@ -247,6 +277,7 @@ async def create_stripe_deposit_checkout_session(
     success_url: str,
     cancel_url: str,
     expires_at: datetime | None,
+    currency: str = "usd",
 ) -> StripeCheckoutSession:
     data = [
         ("mode", "payment"),
@@ -254,7 +285,7 @@ async def create_stripe_deposit_checkout_session(
         ("cancel_url", build_stripe_cancel_url(cancel_url)),
         ("payment_method_types[0]", "card"),
         ("line_items[0][quantity]", "1"),
-        ("line_items[0][price_data][currency]", "usd"),
+        ("line_items[0][price_data][currency]", currency.lower()),
         ("line_items[0][price_data][unit_amount]", str(amount_cents)),
         ("line_items[0][price_data][product_data][name]", f"{service_name} deposit"),
         ("client_reference_id", booking_draft_id),
@@ -296,6 +327,7 @@ async def create_stripe_booking_balance_checkout_session(
     success_url: str,
     cancel_url: str,
     expires_at: datetime | None,
+    currency: str = "usd",
 ) -> StripeCheckoutSession:
     data = [
         ("mode", "payment"),
@@ -303,7 +335,7 @@ async def create_stripe_booking_balance_checkout_session(
         ("cancel_url", build_stripe_cancel_url(cancel_url)),
         ("payment_method_types[0]", "card"),
         ("line_items[0][quantity]", "1"),
-        ("line_items[0][price_data][currency]", "usd"),
+        ("line_items[0][price_data][currency]", currency.lower()),
         ("line_items[0][price_data][unit_amount]", str(amount_cents)),
         ("line_items[0][price_data][product_data][name]", f"{service_name} remaining balance"),
         ("client_reference_id", booking_id),
@@ -346,6 +378,32 @@ async def get_stripe_checkout_session(session_id: str) -> StripeCheckoutStatus:
         payment_status=payload.get("payment_status") if isinstance(payload.get("payment_status"), str) else None,
         payment_intent_id=_payment_intent_id(payload.get("payment_intent")),
     )
+
+
+async def expire_stripe_checkout_session(session_id: str) -> StripeCheckoutStatus:
+    """Close an open Checkout Session so the customer can no longer pay it."""
+    payload = await _stripe_request("POST", f"checkout/sessions/{session_id}/expire")
+    return StripeCheckoutStatus(
+        session_id=session_id,
+        status=payload.get("status") if isinstance(payload.get("status"), str) else None,
+        payment_status=payload.get("payment_status") if isinstance(payload.get("payment_status"), str) else None,
+        payment_intent_id=_payment_intent_id(payload.get("payment_intent")),
+    )
+
+
+async def expire_stripe_checkout_session_quietly(session_id: str | None) -> None:
+    """Best-effort close of a Stripe Checkout Session after a hold ends.
+
+    Used after the database change is committed. A failure (already expired,
+    already paid, Stripe down) is logged, not raised: a payment that still
+    completes is reconciled by the webhook / completion path.
+    """
+    if not is_stripe_checkout_session_id(session_id) or not stripe_processor_configured():
+        return
+    try:
+        await expire_stripe_checkout_session(session_id)  # type: ignore[arg-type]
+    except Exception:  # noqa: BLE001
+        logger.warning("Could not expire Stripe checkout session %s", session_id, exc_info=True)
 
 
 async def create_stripe_refund(
@@ -391,19 +449,26 @@ async def create_stripe_refund(
 
 async def refund_payment_via_processor(
     *,
-    checkout_session_id: str,
+    payment,
     amount_cents: int,
     idempotency_key: str,
 ) -> ProcessorRefundResult | None:
-    """Try to refund via the configured payment processor.
+    """Try to refund a payment through the processor that took it.
 
-    Returns a ProcessorRefundResult on success, or None if no processor
-    is configured / the payment wasn't processed by a known processor.
-    Callers should fall back to wallet credit when None is returned.
+    Routes on `payment.processor` (legacy rows without one fall back to the
+    Stripe `cs_` id prefix). Returns a ProcessorRefundResult on success, or
+    None when the payment can't be refunded through an API (manual payments,
+    card-present payments taken on a Clover device) so callers can fall back to
+    wallet credit or a "refund owed" follow-up. A processor error raises.
     """
-    if is_stripe_checkout_session_id(checkout_session_id) and stripe_processor_configured():
+    processor = payment.processor
+    session_id = payment.checkout_session_id
+    if processor is None and is_stripe_checkout_session_id(session_id):
+        processor = "stripe"
+
+    if processor == "stripe" and is_stripe_checkout_session_id(session_id) and stripe_processor_configured():
         stripe_refund = await create_stripe_refund(
-            session_id=checkout_session_id,
+            session_id=session_id,
             amount_cents=amount_cents,
             idempotency_key=idempotency_key,
         )
@@ -414,10 +479,14 @@ async def refund_payment_via_processor(
             processor_refund_id=stripe_refund.refund_id,
         )
 
-    # Future processors (Clover, Square, etc.) go here:
-    # if is_clover_payment(checkout_session_id) and clover_configured():
-    #     clover_refund = await create_clover_refund(...)
-    #     return ProcessorRefundResult(processor="clover", ...)
+    if processor == "clover" and payment.processor_channel in {"ecom", "moto"}:
+        # Online/keyed Clover charges refund through the Clover API (added with
+        # the Clover client). Never fall back to wallet credit silently.
+        raise api_exception(
+            503,
+            "service_unavailable",
+            "Refunding Clover card payments is not available yet.",
+        )
 
     return None
 
@@ -428,6 +497,7 @@ async def charge_stripe_no_show_fee(
     amount_cents: int,
     description: str,
     idempotency_key: str,
+    currency: str = "usd",
 ) -> StripeRefund | None:
     """Charge a no-show fee to a customer's saved card via Stripe.
 
@@ -461,7 +531,7 @@ async def charge_stripe_no_show_fee(
         "payment_intents",
         data=[
             ("amount", str(amount_cents)),
-            ("currency", "usd"),
+            ("currency", currency.lower()),
             ("customer", stripe_customer_id),
             ("payment_method", payment_method_id),
             ("off_session", "true"),

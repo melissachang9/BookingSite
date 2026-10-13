@@ -20,6 +20,13 @@ class BookingPaymentSummary(CamelModel):
     checkout_session_kind: str | None = None
     created_at: datetime
     refund_reason: str | None = None
+    # POS receipt/approval number for payments taken outside our processor.
+    external_reference: str | None = None
+    # Which processor took the money and how (clover: device | ecom | moto).
+    processor: str | None = None
+    processor_channel: str | None = None
+    card_brand: str | None = None
+    card_last4: str | None = None
 
 
 class BookingItemSummary(CamelModel):

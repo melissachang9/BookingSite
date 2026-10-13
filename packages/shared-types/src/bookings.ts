@@ -14,6 +14,20 @@ export type BookingState =
   | "canceled"
   | "no_show";
 
+/**
+ * Lifecycle of a booking draft (a held slot). Active: draft, slot_held,
+ * awaiting_form, awaiting_payment. Terminal: confirmed (became a booking),
+ * expired (hold lapsed before payment), canceled (staff released the hold).
+ */
+export type BookingDraftState =
+  | "draft"
+  | "slot_held"
+  | "awaiting_form"
+  | "awaiting_payment"
+  | "confirmed"
+  | "expired"
+  | "canceled";
+
 export type BookingMethod = "public_online" | "staff_entered" | "admin_checkout";
 
 export type DepositStatus =
@@ -78,7 +92,7 @@ export type BookingDraftSummary = AuditFields &
     serviceId: UUID;
     providerId: UUID;
     locationId?: UUID | null;
-    status: Extract<BookingState, "draft" | "slot_held" | "awaiting_form" | "awaiting_payment">;
+    status: BookingDraftState;
     bookingMethod: BookingMethod;
     startsAt: ISODateString;
     endsAt: ISODateString;
@@ -94,6 +108,9 @@ export type BookingDraftSummary = AuditFields &
     /** Chosen add-ons: minutes are in durationMinutes, prices are on top of priceCents. */
     addOns?: BookingDraftAddOn[];
     addOnsTotalCents?: number;
+    /** Tax on price + add-ons, and the full visit total (subtotal + tax). */
+    taxCents?: number;
+    fullAmountCents?: number;
   };
 
 export type BookingDraftAddOn = {
@@ -161,6 +178,13 @@ export type BookingPaymentSummary = {
   checkoutSessionKind?: string | null;
   createdAt: ISODateString;
   refundReason?: string | null;
+  /** POS receipt/approval number for payments taken outside our processor. */
+  externalReference?: string | null;
+  /** Which processor took the money and how (clover: device | ecom | moto). */
+  processor?: "stripe" | "clover" | null;
+  processorChannel?: "device" | "ecom" | "moto" | null;
+  cardBrand?: string | null;
+  cardLast4?: string | null;
 };
 
 export type CustomerManageBooking = {
@@ -213,6 +237,8 @@ export type CreateBookingDraftRequest = {
   bookingMethod?: BookingMethod;
   overrideAvailability?: boolean;
   addOnIds?: UUID[];
+  /** Staff-only notes for the team (staff_entered drafts only). */
+  notes?: string;
 };
 
 export type UpdateBookingDraftRequest = {
@@ -226,10 +252,20 @@ export type UpdateBookingDraftRequest = {
   intakeCompletionTiming?: IntakeCompletionTiming;
 };
 
+/** Staff record a payment taken in person (POS terminal, cash...) to confirm a held draft. */
 export type ConfirmWithPaymentRequest = {
-  paymentMethodType?: string;
+  paymentMethodType: string;
+  /** "deposit" = exactly the deposit; "full" = the whole visit (+ optional tip). */
+  amountMode: "deposit" | "full";
   amountCents: number;
+  tipCents?: number;
+  /** Receipt/approval number or card last 4; required for external_pos. */
+  externalReference?: string;
   notes?: string;
+};
+
+export type ReleaseBookingDraftRequest = {
+  reason?: string;
 };
 
 export type BookingStatusTransition = {

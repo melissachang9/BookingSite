@@ -260,7 +260,7 @@ def test_cancel_manage_booking_calls_stripe_refund_when_configured(client, monke
     async def _fake_create_stripe_refund(session_id: str, *, amount_cents: int, idempotency_key: str):
         assert session_id == "cs_test_checkout_789"
         assert amount_cents == draft["depositCents"]
-        assert idempotency_key.startswith("customer-cancel-")
+        assert idempotency_key.startswith("cancel-manage-")
         return StripeRefund(
             refund_id="re_test_789",
             amount_cents=amount_cents,
@@ -269,7 +269,7 @@ def test_cancel_manage_booking_calls_stripe_refund_when_configured(client, monke
 
     monkeypatch.setattr("app.services.payments.create_stripe_deposit_checkout_session", _fake_create_stripe_checkout_session)
     monkeypatch.setattr("app.services.payments.get_stripe_checkout_session", _fake_get_stripe_checkout_session)
-    monkeypatch.setattr("app.services.booking_drafts.create_stripe_refund", _fake_create_stripe_refund)
+    monkeypatch.setattr("app.services.payment_processor.create_stripe_refund", _fake_create_stripe_refund)
 
     checkout_response = client.post(
         "/api/v1/tenants/brow-beauty-lab/payments/checkout-sessions",
@@ -300,9 +300,9 @@ def test_cancel_manage_booking_calls_stripe_refund_when_configured(client, monke
     assert payload["booking"]["depositStatus"] == "refunded"
 
     snapshot = _booking_payment_snapshot(booking["id"])
-    assert "refund_recorded" in snapshot["paymentEventKinds"]
+    assert "refund_processed" in snapshot["paymentEventKinds"]
     assert any(note and "re_test_789" in note for note in snapshot["paymentEventNotes"])
-    assert any(payload.get("externalRefundIds") == ["re_test_789"] for payload in snapshot["bookingEventPayloads"])
+    assert any(payload.get("processorRefundId") == "re_test_789" for payload in snapshot["bookingEventPayloads"])
 
 
 def test_stripe_webhook_confirms_booking_without_success_page_return(client, monkeypatch) -> None:

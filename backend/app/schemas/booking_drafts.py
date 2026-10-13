@@ -63,9 +63,15 @@ class CreateBookingDraftRequest(CamelModel):
     location_id: str | None = None
     starts_at: datetime
     customer: CustomerInput | None = None
-    booking_method: str | None = "public_online"
+    booking_method: Literal["public_online", "staff_entered"] = "public_online"
     override_availability: bool = False
     add_on_ids: list[str] = Field(default_factory=list, max_length=20)
+    # Staff-only notes for the team; ignored for online bookings.
+    notes: str | None = Field(default=None, max_length=1000)
+
+
+class ReleaseBookingDraftRequest(CamelModel):
+    reason: str | None = Field(default=None, max_length=500)
 
 
 class UpdateBookingDraftRequest(CamelModel):
@@ -75,9 +81,16 @@ class UpdateBookingDraftRequest(CamelModel):
 
 
 class ConfirmWithPaymentRequest(CamelModel):
-    payment_method_type: str = "card"
-    amount_cents: int
-    notes: str | None = None
+    """Staff record a payment taken in person (POS terminal, cash...)."""
+
+    payment_method_type: str = Field(min_length=1, max_length=64)
+    # "deposit" = exactly the deposit; "full" = the whole visit (+ optional tip).
+    amount_mode: Literal["deposit", "full"] = "deposit"
+    amount_cents: int = Field(gt=0)
+    tip_cents: int = Field(default=0, ge=0)
+    # Receipt/approval number or card last 4; required for external POS.
+    external_reference: str | None = Field(default=None, max_length=128)
+    notes: str | None = Field(default=None, max_length=500)
 
 
 class BookingDraftAddOnResponse(CamelModel):
@@ -113,3 +126,6 @@ class BookingDraftSummaryResponse(CamelModel):
     # duration_minutes, their prices are added on top of price_cents.
     add_ons: list[BookingDraftAddOnResponse] = Field(default_factory=list)
     add_ons_total_cents: int = 0
+    # Tax on price + add-ons, and the full visit total (subtotal + tax).
+    tax_cents: int = 0
+    full_amount_cents: int = 0

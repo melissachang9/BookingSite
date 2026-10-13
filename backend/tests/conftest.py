@@ -24,6 +24,10 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.delenv("RESEND_API_KEY", raising=False)
     monkeypatch.delenv("RESEND_FROM_EMAIL", raising=False)
     monkeypatch.delenv("RESEND_REPLY_TO_EMAIL", raising=False)
+    for name in ("CLOVER_APP_ID", "CLOVER_APP_SECRET", "CLOVER_ENVIRONMENT"):
+        monkeypatch.delenv(name, raising=False)
+    # A fixed test-only key so processor secrets can be encrypted in tests.
+    monkeypatch.setenv("PAYMENT_SECRETS_KEY", "Zm9yLXRlc3RzLW9ubHktbm90LWEtcmVhbC1rZXk9PT0=")
 
     from app.core.config import get_settings
     from app.db.session import clear_session_state
@@ -46,3 +50,20 @@ def demo_credentials() -> dict[str, str]:
         "email": "owner@browbeautylab.test",
         "password": "DemoBooking123",
     }
+
+
+@pytest.fixture()
+def fake_clover(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    """Clover app credentials plus an in-memory Clover behind the HTTP seam."""
+    from app.core.config import get_settings
+    from tests.fakes.clover import FakeClover
+
+    monkeypatch.setenv("CLOVER_APP_ID", "test-clover-app")
+    monkeypatch.setenv("CLOVER_APP_SECRET", "test-clover-secret")
+    monkeypatch.setenv("CLOVER_ENVIRONMENT", "sandbox")
+    get_settings.cache_clear()
+
+    fake = FakeClover()
+    monkeypatch.setattr("app.services.clover_client._http_client", fake.client)
+    yield fake
+    get_settings.cache_clear()

@@ -24,6 +24,7 @@ This package holds contracts shared across backend and frontend surfaces.
 ## Canonical enum discipline
 
 - Booking states: `draft`, `slot_held`, `awaiting_form`, `awaiting_payment`, `confirmed`, `completed`, `canceled`, `no_show`.
+- Booking draft states (`BookingDraftState`): the active `draft`, `slot_held`, `awaiting_form`, `awaiting_payment`, plus terminal `confirmed`, `expired` (hold lapsed) and `canceled` (staff released the hold).
 - Form scopes: customer-facing and internal-only concepts must remain distinct in shared contracts.
 - Form timing: preserve pre-booking, pre-visit, and post-visit timing contexts.
 - Form fields should use explicit field types such as short text, long text, single select, multi select, yes/no, date, number, file or photo upload, signature, section, static text, and checkbox.

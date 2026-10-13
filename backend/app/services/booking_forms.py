@@ -31,7 +31,7 @@ from app.schemas.forms import (
     SendFormReminderResponse,
     SubmitFormRequirementRequest,
 )
-from app.services.booking_drafts import _ensure_aware, _ensure_not_expired, _load_booking, _load_booking_draft
+from app.services.booking_drafts import _ensure_aware, _ensure_not_expired, _is_pending_pre_booking_requirement, _load_booking, _load_booking_draft
 from app.services.notifications import send_transactional_email
 from app.services.state_machine import guard_transition
 from app.services.tenants import get_tenant_by_slug
@@ -179,9 +179,11 @@ async def submit_booking_form_requirement(
     pending_requirements = [
         item
         for item in draft.form_requirements
-        if item.id != requirement.id and item.customer_prompt_timing == "pre_booking" and item.status == "pending"
+        if item.id != requirement.id and _is_pending_pre_booking_requirement(item)
     ]
-    if not pending_requirements:
+    # Only a draft waiting on forms moves back to slot_held; drafts already
+    # past that step (e.g. awaiting payment, pre-visit forms) keep their status.
+    if not pending_requirements and draft.status == "awaiting_form":
         guard_transition("booking_draft", draft.id, draft.status, "slot_held")
         draft.status = "slot_held"
 

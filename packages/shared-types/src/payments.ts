@@ -98,4 +98,83 @@ export type RecordManualPaymentRequest = {
   tipCents?: number;
   paymentMethodType: string;
   notes?: string;
+  /** Receipt/approval number or card last 4; required for external_pos. */
+  externalReference?: string;
+};
+// --- Card processor connection (Clover) ---------------------------------
+
+export type PaymentProcessorKind = "clover" | "stripe" | "simulated" | "none";
+
+/** What a business can do with card payments right now. Never contains secrets. */
+export type PaymentCapabilities = {
+  processor: PaymentProcessorKind;
+  environment?: "sandbox" | "production" | "fake" | null;
+  /** null = never connected. */
+  status?: "connected" | "needs_reauth" | "disconnected" | null;
+  authMode?: "oauth" | "api_keys" | null;
+  merchantName?: string | null;
+  /** Staff can match payments taken on the Clover device to a booking. */
+  canLinkDevicePayments: boolean;
+  /** Online / phone card payments (the Clover card form). */
+  canChargeCards: boolean;
+  canRefundCards: boolean;
+  /** The Clover account's currency differs from the business currency. */
+  currencyMismatch: boolean;
+  needsReauth: boolean;
+  connectedAt?: ISODateString | null;
+};
+
+export type PublicPaymentConfig = {
+  processor: PaymentProcessorKind;
+  currency: string;
+  clover?: {
+    merchantId: string;
+    publicKey: string;
+    sdkUrl: string;
+    locale: string;
+    environment: string;
+  } | null;
+};
+
+export type CloverAuthorizeUrlResponse = { authorizeUrl: string };
+
+export type CloverOAuthCompleteRequest = { code: string; merchantId: string; state: string };
+
+export type CloverApiKeysRequest = {
+  environment: "sandbox" | "production";
+  merchantId: string;
+  platformApiToken: string;
+  ecommercePublicKey: string;
+  ecommercePrivateKey: string;
+};
+
+// --- Payments taken on the Clover device ---------------------------------
+
+/** A payment taken on the Clover device, offered to staff to match to a booking. */
+export type CloverDevicePayment = {
+  id: string;
+  /** Amount before tip. */
+  amountCents: number;
+  tipCents: number;
+  totalCents: number;
+  cardBrand?: string | null;
+  cardLast4?: string | null;
+  authCode?: string | null;
+  employeeId?: string | null;
+  createdAt: ISODateString;
+  /** Which amount for the booking being paid it equals, if any. */
+  matches?: "deposit" | "full" | "balance" | null;
+};
+
+export type CloverDevicePaymentList = { items: CloverDevicePayment[] };
+
+export type ConfirmWithCloverPaymentRequest = {
+  cloverPaymentId: string;
+  amountMode: "deposit" | "full";
+  notes?: string;
+};
+
+export type RecordCloverDevicePaymentRequest = {
+  cloverPaymentId: string;
+  notes?: string;
 };

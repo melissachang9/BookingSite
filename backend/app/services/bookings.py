@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -18,6 +19,7 @@ from app.services.service_terms import provider_service_link, resolve_service_te
 
 logger = logging.getLogger(__name__)
 from app.services.state_machine import guard_transition
+from app.services.tenants import tenant_currency
 from app.services.wallet import record_wallet_transaction
 
 
@@ -202,18 +204,77 @@ async def record_manual_payment(
     if payload.tip_cents > payload.amount_cents:
         raise api_exception(409, "conflict", "Tip amount cannot exceed the recorded payment amount.")
 
-    notes = _clean_notes(payload.notes)
+    # The tip is on top of the visit; only the rest pays down the balance.
+    balance_due_cents = booking_balance_due_cents(booking)
+    paid_toward_balance = payload.amount_cents - payload.tip_cents
+    if paid_toward_balance > balance_due_cents:
+        raise api_exception(
+            409,
+            "conflict",
+            f"Payment of ${paid_toward_balance / 100:,.2f} is more than the ${balance_due_cents / 100:,.2f} balance due.",
+        )
+
+    reference = _clean_notes(payload.external_reference)
+    # An unconnected terminal can't be reconciled automatically, so the record
+    # must point at the terminal receipt. (Checkout locks the amount to the
+    # exact remaining balance, which can include a discount applied at
+    # completion, so the server only guards against overpayment above.)
+    if payload.payment_method_type == "external_pos" and reference is None:
+        raise api_exception(
+            422,
+            "validation_error",
+            "Enter the POS receipt or approval number (or card last 4) for an external POS payment.",
+        )
+
+    return await record_booking_payment(
+        session,
+        tenant,
+        booking,
+        method=payload.payment_method_type,
+        amount_cents=payload.amount_cents,
+        tip_cents=payload.tip_cents,
+        reference=reference,
+        notes=_clean_notes(payload.notes),
+        actor=actor,
+    )
+
+
+async def record_booking_payment(
+    session: AsyncSession,
+    tenant: Tenant,
+    booking: Booking,
+    *,
+    method: str,
+    amount_cents: int,
+    tip_cents: int,
+    reference: str | None,
+    notes: str | None,
+    actor: User,
+    processor_fields: dict[str, object] | None = None,
+    event_note: str | None = None,
+) -> BookingSummaryResponse:
+    """Record a payment against a confirmed booking's balance.
+
+    The caller has validated the payment (method, amount against the balance).
+    Shared by manual payments and payments matched from the Clover device.
+    """
+    tenant_id = tenant.id
+    balance_due_cents = booking_balance_due_cents(booking)
+    paid_toward_balance = amount_cents - tip_cents
+    event_notes = " · ".join(part for part in (event_note, f"Ref {reference}" if reference else None, notes) if part) or None
     payment = Payment(
         tenant_id=booking.tenant_id,
         booking=booking,
         customer_id=booking.customer_id,
         status="succeeded",
         deposit_status="paid_in_full",
-        amount_cents=payload.amount_cents,
-        tip_cents=payload.tip_cents,
-        currency="USD",
-        payment_method_type=payload.payment_method_type,
+        amount_cents=amount_cents,
+        tip_cents=tip_cents,
+        currency=tenant_currency(tenant),
+        payment_method_type=method,
         checkout_session_kind="admin_completion",
+        external_reference=reference,
+        **(processor_fields or {}),
     )
     session.add(payment)
     await session.flush()
@@ -223,11 +284,11 @@ async def record_manual_payment(
         payment,
         kind="payment_recorded",
         actor=actor,
-        amount_cents=payload.amount_cents,
-        notes=notes,
+        amount_cents=amount_cents,
+        notes=event_notes,
     )
 
-    new_balance_cents = booking_balance_due_cents(booking) - payload.amount_cents
+    new_balance_cents = balance_due_cents - paid_toward_balance
     fully_paid = new_balance_cents <= 0
 
     _append_booking_event(
@@ -235,14 +296,16 @@ async def record_manual_payment(
         booking,
         event_kind="admin_completion",
         actor=actor,
-        amount_cents=payload.amount_cents,
+        amount_cents=amount_cents,
         notes=notes,
         extra_payload={
-            "paymentMethodType": payload.payment_method_type,
-            "tipCents": payload.tip_cents,
+            "paymentMethodType": method,
+            "tipCents": tip_cents,
+            "externalReference": reference,
             "bookingStatus": booking.status,
             "paymentResolutionAfter": "collected" if fully_paid else "pending",
             "remainingBalanceCents": max(new_balance_cents, 0),
+            **{key: value for key, value in (processor_fields or {}).items() if key in {"processor", "processor_channel"}},
         },
     )
 
@@ -250,7 +313,11 @@ async def record_manual_payment(
         _apply_payment_resolution(booking, "collected")
 
     reload_booking_id = booking.id
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as error:
+        await session.rollback()
+        raise api_exception(409, "conflict", "This payment is already linked to another booking.") from error
     session.expire_all()
     updated_booking = await _load_booking(session, reload_booking_id, tenant_id)
     return booking_to_summary(updated_booking)
@@ -405,7 +472,7 @@ async def apply_wallet_credit(
         deposit_status="paid_in_full",
         amount_cents=apply_amount,
         tip_cents=payload.tip_cents,
-        currency="USD",
+        currency=tenant_currency(booking.tenant),
         payment_method_type="wallet",
         checkout_session_kind="admin_completion",
     )
@@ -772,6 +839,7 @@ async def update_booking_status(
                     amount_cents=no_show_fee_cents,
                     description=f"No-show fee for {booking.service.name if booking.service else 'appointment'}",
                     idempotency_key=f"no-show-{booking.id}",
+                    currency=tenant_currency(booking.tenant),
                 )
             except Exception:
                 logger.exception(
@@ -786,7 +854,7 @@ async def update_booking_status(
             status="succeeded" if stripe_charge_result is not None else "failed",
             deposit_status="paid_in_full" if stripe_charge_result is not None else "unpaid",
             amount_cents=no_show_fee_cents,
-            currency="USD",
+            currency=tenant_currency(booking.tenant),
             payment_method_type="stripe" if stripe_charge_result is not None else "no_show_fee",
             checkout_session_kind=None,
         )
@@ -984,6 +1052,7 @@ async def cancel_booking(
     refunded_amount_cents = 0
     forfeited_amount_cents = 0
     wallet_credited_cents = 0
+    refund_owed_cents = 0
     processor_refund_id: str | None = None
 
     guard_transition("booking", booking.id, booking.status, "canceled")
@@ -996,13 +1065,11 @@ async def cancel_booking(
         for payment in deposit_payments:
             # Try processor refund first (Stripe, future Clover/Square).
             # Falls back to wallet credit if the processor isn't available.
-            processor_result = None
-            if payment.checkout_session_id:
-                processor_result = await refund_payment_via_processor(
-                    checkout_session_id=payment.checkout_session_id,
-                    amount_cents=payment.amount_cents,
-                    idempotency_key=f"cancel-staff-{booking.id}-{payment.id}",
-                )
+            processor_result = await refund_payment_via_processor(
+                payment=payment,
+                amount_cents=payment.amount_cents,
+                idempotency_key=f"cancel-staff-{booking.id}-{payment.id}",
+            )
 
             if processor_result is not None:
                 refunded_amount_cents += processor_result.amount_cents
@@ -1017,6 +1084,17 @@ async def cancel_booking(
                     amount_cents=processor_result.amount_cents,
                     notes=f"Refunded ${processor_result.amount_cents / 100:.2f} via {processor_result.processor} "
                           f"(refund {processor_result.processor_refund_id}). Staff canceled. Operator: {actor.name}.",
+                )
+            elif payment.processor == "clover" and payment.processor_channel == "device":
+                # Paid on the Clover device: refund it there, then record it on the booking.
+                refund_owed_cents += payment.amount_cents
+                _append_payment_event(
+                    session,
+                    payment,
+                    kind="refund_owed",
+                    actor=actor,
+                    amount_cents=payment.amount_cents,
+                    notes=f"Booking canceled; refund this deposit on the Clover device, then record it here. Operator: {actor.name}.",
                 )
             else:
                 # Fall back to wallet credit
@@ -1042,8 +1120,13 @@ async def cancel_booking(
                 booking_id=booking.id,
                 notes=f"Deposit credited to wallet when staff canceled. Operator: {actor.name}.",
             )
-        booking.deposit_status = "refunded"
-        booking.payment_resolution = "waived"
+        if refund_owed_cents > 0:
+            # Stays on the follow-up list until staff record the device refund.
+            booking.deposit_status = "follow_up"
+            booking.payment_resolution = "follow_up"
+        else:
+            booking.deposit_status = "refunded"
+            booking.payment_resolution = "waived"
     elif forfeited:
         for payment in deposit_payments:
             forfeited_amount_cents += payment.amount_cents
@@ -1063,6 +1146,7 @@ async def cancel_booking(
 
     extra_payload: dict[str, object] = {
         "walletCreditedCents": wallet_credited_cents,
+        "refundOwedCents": refund_owed_cents,
         "forfeitedAmountCents": forfeited_amount_cents,
         "isInsideCancellationWindow": is_inside_cancellation_window,
         "refundInsideWindow": refund_inside_window,

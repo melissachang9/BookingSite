@@ -93,6 +93,8 @@ DEFAULT_TENANT_SETTINGS = {
     "calendarDisplayEndHour": 19,
     "country": "US",
     "currency": "USD",
+    # How long a phone/payment-link hold lasts (Stripe needs >= 30 min links).
+    "paymentLinkExpiryMinutes": 30,
     "smsPhone": None,
     "businessHoursEnabled": False,
     "restrictProvidersToBusinessHours": False,
@@ -127,6 +129,14 @@ def _default_branding(payload: CreateTenantRequest) -> dict[str, object]:
             "body": "Services will appear here as soon as the launch checklist is completed.",
         },
     }
+
+
+def tenant_currency(tenant: Tenant) -> str:
+    """ISO currency code payments are recorded and charged in for this business."""
+    raw = tenant.settings_json.get("currency") if isinstance(tenant.settings_json, dict) else None
+    if isinstance(raw, str) and len(raw.strip()) == 3:
+        return raw.strip().upper()
+    return str(DEFAULT_TENANT_SETTINGS["currency"])
 
 
 async def get_tenant_by_slug(session: AsyncSession, tenant_slug: str) -> Tenant:
@@ -191,6 +201,9 @@ async def update_tenant_settings(
 
     if payload.auto_charge_no_show_fee is not None:
         current["autoChargeNoShowFee"] = payload.auto_charge_no_show_fee
+
+    if payload.payment_link_expiry_minutes is not None:
+        current["paymentLinkExpiryMinutes"] = payload.payment_link_expiry_minutes
 
     if payload.custom_payment_methods is not None:
         current["customPaymentMethods"] = [

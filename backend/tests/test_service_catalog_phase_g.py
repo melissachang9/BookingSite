@@ -255,6 +255,7 @@ def test_delete_service_rejects_when_bookings_reference_it(client) -> None:
     provider_id = _first_provider_id(client, headers)
     draft = client.post(
         "/api/v1/tenants/brow-beauty-lab/booking-drafts",
+        headers=headers,
         json={
             "tenantSlug": "brow-beauty-lab",
             "serviceId": service["id"],

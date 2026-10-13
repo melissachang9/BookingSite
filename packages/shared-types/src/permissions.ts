@@ -11,6 +11,7 @@ export type PermissionKey =
   | "bookings.collect_payment"
   | "payments.view"
   | "payments.manage"
+  | "payments.configure"
   | "customers.view"
   | "customers.manage"
   | "forms.view"

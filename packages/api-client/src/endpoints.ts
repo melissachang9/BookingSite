@@ -19,7 +19,16 @@ import type {
   CreateBookingDraftRequest,
   CreateCheckoutSessionRequest,
   CreateCheckoutSessionResponse,
+  CloverApiKeysRequest,
+  CloverAuthorizeUrlResponse,
+  CloverDevicePaymentList,
+  CloverOAuthCompleteRequest,
+  ConfirmWithCloverPaymentRequest,
   ConfirmWithPaymentRequest,
+  RecordCloverDevicePaymentRequest,
+  PaymentCapabilities,
+  PublicPaymentConfig,
+  ReleaseBookingDraftRequest,
   CreateFormRequest,
   CreateLocationRequest,
   CreateResourceRequest,
@@ -389,6 +398,15 @@ export const createPlatformApi = (client: ApiClient) => ({
       method: "POST",
       body,
     }),
+  confirmBookingDraftWithoutPayment: (tenantSlug: string, bookingDraftId: string) =>
+    client.request<BookingSummary>(`tenants/${tenantSlug}/booking-drafts/${bookingDraftId}/confirm-without-payment`, {
+      method: "POST",
+    }),
+  releaseBookingDraft: (tenantSlug: string, bookingDraftId: string, body: ReleaseBookingDraftRequest = {}) =>
+    client.request<BookingDraftSummary>(`tenants/${tenantSlug}/booking-drafts/${bookingDraftId}/release`, {
+      method: "POST",
+      body,
+    }),
   updateBookingDraft: (tenantSlug: string, bookingDraftId: string, body: UpdateBookingDraftRequest) =>
     client.patch<BookingDraftSummary, UpdateBookingDraftRequest>(
       `tenants/${tenantSlug}/booking-drafts/${bookingDraftId}`,
@@ -452,6 +470,45 @@ export const createPlatformApi = (client: ApiClient) => ({
       `tenants/${body.tenantSlug}/payments/checkout-sessions`,
       body,
     ),
+  getPaymentCapabilities: (tenantSlug: string) =>
+    client.get<PaymentCapabilities>(`tenants/${tenantSlug}/payments/capabilities`),
+  getPublicPaymentConfig: (tenantSlug: string) =>
+    client.get<PublicPaymentConfig>(`tenants/${tenantSlug}/payments/public-config`),
+  listCloverDevicePayments: (
+    tenantSlug: string,
+    query: { sinceMinutes?: number; bookingDraftId?: string; bookingId?: string } = {},
+  ) =>
+    client.get<CloverDevicePaymentList>(`tenants/${tenantSlug}/payments/clover/device-payments`, { query }),
+  confirmBookingDraftWithCloverPayment: (
+    tenantSlug: string,
+    bookingDraftId: string,
+    body: ConfirmWithCloverPaymentRequest,
+  ) =>
+    client.post<BookingSummary, ConfirmWithCloverPaymentRequest>(
+      `tenants/${tenantSlug}/booking-drafts/${bookingDraftId}/confirm-with-clover-payment`,
+      body,
+    ),
+  recordCloverDevicePayment: (tenantSlug: string, bookingId: string, body: RecordCloverDevicePaymentRequest) =>
+    client.post<BookingSummary, RecordCloverDevicePaymentRequest>(
+      `tenants/${tenantSlug}/bookings/${bookingId}/payments/clover-device`,
+      body,
+    ),
+  recordCloverDeviceRefund: (tenantSlug: string, bookingId: string, paymentId: string) =>
+    client.request<BookingSummary>(
+      `tenants/${tenantSlug}/bookings/${bookingId}/payments/${paymentId}/record-clover-refund`,
+      { method: "POST" },
+    ),
+  getCloverAuthorizeUrl: (tenantSlug: string) =>
+    client.get<CloverAuthorizeUrlResponse>(`tenants/${tenantSlug}/payments/clover/authorize-url`),
+  completeCloverOAuth: (tenantSlug: string, body: CloverOAuthCompleteRequest) =>
+    client.post<PaymentCapabilities, CloverOAuthCompleteRequest>(
+      `tenants/${tenantSlug}/payments/clover/oauth/complete`,
+      body,
+    ),
+  connectCloverWithApiKeys: (tenantSlug: string, body: CloverApiKeysRequest) =>
+    client.post<PaymentCapabilities, CloverApiKeysRequest>(`tenants/${tenantSlug}/payments/clover/api-keys`, body),
+  disconnectClover: (tenantSlug: string) =>
+    client.request<PaymentCapabilities>(`tenants/${tenantSlug}/payments/clover/disconnect`, { method: "POST" }),
   listPaymentFollowUp: (tenantSlug: string) =>
     client.get<DepositPaymentFollowUpListResponse>(`tenants/${tenantSlug}/payments/follow-up`),
   sendPaymentReminder: (tenantSlug: string, bookingDraftId: string) =>

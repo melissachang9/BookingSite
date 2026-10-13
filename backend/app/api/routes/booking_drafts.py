@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies.auth import require_tenant_permission
+from app.api.dependencies.auth import get_optional_current_user, require_tenant_permission
 from app.db.models import User
 from app.db.session import get_db_session
 from app.schemas.bookings import BookingSummaryResponse
@@ -9,11 +9,19 @@ from app.schemas.booking_drafts import (
     BookingDraftSummaryResponse,
     ConfirmWithPaymentRequest,
     CreateBookingDraftRequest,
+    ReleaseBookingDraftRequest,
     UpdateBookingDraftRequest,
 )
 from app.schemas.forms import FormRequirementResponse, FormResponseSummaryResponse, SubmitFormRequirementRequest
-from app.services.booking_drafts import confirm_booking_draft, confirm_booking_draft_with_payment, create_booking_draft, get_booking_draft, update_booking_draft
+from app.services.booking_drafts import (
+    confirm_booking_draft,
+    create_booking_draft,
+    get_booking_draft,
+    release_booking_draft,
+    update_booking_draft,
+)
 from app.services.booking_forms import save_booking_form_requirement_draft, submit_booking_form_requirement
+from app.services.staff_booking_drafts import confirm_staff_draft_with_payment, confirm_staff_draft_without_payment
 
 
 router = APIRouter(tags=["booking-drafts"])
@@ -22,14 +30,17 @@ router = APIRouter(tags=["booking-drafts"])
 @router.post(
     "/tenants/{tenant_slug}/booking-drafts",
     response_model=BookingDraftSummaryResponse,
-    summary="Create a public booking draft and slot hold",
+    summary="Create a booking draft and slot hold (online, or staff-entered from the calendar)",
 )
 async def create_booking_draft_route(
     tenant_slug: str,
     payload: CreateBookingDraftRequest,
+    current_user: User | None = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingDraftSummaryResponse:
-    return await create_booking_draft(session, tenant_slug, payload)
+    # Online drafts are anonymous; staff-entered drafts are permission-checked
+    # in the service so the rule lives next to the booking logic.
+    return await create_booking_draft(session, tenant_slug, payload, current_user)
 
 
 @router.get(
@@ -75,16 +86,45 @@ async def confirm_booking_draft_route(
 @router.post(
     "/tenants/{tenant_slug}/booking-drafts/{booking_draft_id}/confirm-with-payment",
     response_model=BookingSummaryResponse,
-    summary="Confirm a booking draft and record an in-person payment (staff-side)",
+    summary="Confirm a held booking after staff record an in-person payment (POS, cash...)",
 )
 async def confirm_booking_draft_with_payment_route(
     tenant_slug: str,
     booking_draft_id: str,
     payload: ConfirmWithPaymentRequest,
-    current_user: User = Depends(require_tenant_permission("bookings.manage")),
+    current_user: User = Depends(require_tenant_permission("bookings.collect_payment")),
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingSummaryResponse:
-    return await confirm_booking_draft_with_payment(session, tenant_slug, booking_draft_id, payload, current_user)
+    return await confirm_staff_draft_with_payment(session, tenant_slug, booking_draft_id, payload, current_user)
+
+
+@router.post(
+    "/tenants/{tenant_slug}/booking-drafts/{booking_draft_id}/confirm-without-payment",
+    response_model=BookingSummaryResponse,
+    summary="Confirm a held booking for a service that takes no deposit (staff-side)",
+)
+async def confirm_booking_draft_without_payment_route(
+    tenant_slug: str,
+    booking_draft_id: str,
+    current_user: User = Depends(require_tenant_permission("calendar.create_booking")),
+    session: AsyncSession = Depends(get_db_session),
+) -> BookingSummaryResponse:
+    return await confirm_staff_draft_without_payment(session, tenant_slug, booking_draft_id, current_user)
+
+
+@router.post(
+    "/tenants/{tenant_slug}/booking-drafts/{booking_draft_id}/release",
+    response_model=BookingDraftSummaryResponse,
+    summary="Release a held slot without booking it (staff-side)",
+)
+async def release_booking_draft_route(
+    tenant_slug: str,
+    booking_draft_id: str,
+    payload: ReleaseBookingDraftRequest,
+    current_user: User = Depends(require_tenant_permission("calendar.create_booking")),
+    session: AsyncSession = Depends(get_db_session),
+) -> BookingDraftSummaryResponse:
+    return await release_booking_draft(session, tenant_slug, booking_draft_id, payload, current_user)
 
 
 @router.post(

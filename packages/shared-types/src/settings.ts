@@ -90,6 +90,10 @@ export type TenantSettings = {
   walletExpirationMonths: number | null;
   membershipEnabled: boolean;
   customPaymentMethods: CustomPaymentMethod[];
+  /** How long a held slot waits for a payment link to be paid (30–1440 min). */
+  paymentLinkExpiryMinutes?: number;
+  /** Set by connecting/disconnecting a processor; null = legacy behaviour. */
+  paymentProcessor?: "clover" | "stripe" | "none" | null;
 };
 
 export type CustomPaymentMethod = {
@@ -118,6 +122,7 @@ export type UpdateTenantSettingsRequest = {
   noShowFeeCents?: number;
   taxRatePercent?: number;
   autoChargeNoShowFee?: boolean;
+  paymentLinkExpiryMinutes?: number;
   customPaymentMethods?: CustomPaymentMethod[];
 };
 

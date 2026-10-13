@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     twilio_auth_token: Optional[str] = None
     twilio_phone_number: Optional[str] = None
     storefront_public_base_url: str = "http://localhost:3001"
+    dashboard_public_base_url: str = "http://localhost:5173"
+    # Clover (OAuth app credentials; per-business tokens live in processor_connections).
+    clover_app_id: Optional[str] = None
+    clover_app_secret: Optional[str] = None
+    # sandbox | production | fake (fake = in-process stand-in, never in production)
+    clover_environment: str = "sandbox"
+    # Comma-separated Fernet keys (newest first) used to encrypt stored processor secrets.
+    payment_secrets_key: Optional[str] = None
     media_root: str = "/media"
     media_base_url: str = "http://localhost:8000/api/v1/forms/files"
     cors_origins: str = (

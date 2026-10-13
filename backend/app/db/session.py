@@ -590,6 +590,18 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("bookings", "checked_in_at", "TIMESTAMP WITH TIME ZONE"),
     ("bookings", "service_started_at", "TIMESTAMP WITH TIME ZONE"),
     ("bookings", "tax_cents", "INTEGER"),
+    ("booking_drafts", "created_by_user_id", "VARCHAR(36)"),
+    ("booking_drafts", "notes", "TEXT"),
+    ("booking_drafts", "payment_requested_at", "TIMESTAMP WITH TIME ZONE"),
+    ("payments", "external_reference", "VARCHAR(128)"),
+    ("payments", "processor", "VARCHAR(16)"),
+    ("payments", "processor_channel", "VARCHAR(16)"),
+    ("payments", "processor_merchant_id", "VARCHAR(64)"),
+    ("payments", "processor_payment_id", "VARCHAR(64)"),
+    ("payments", "card_brand", "VARCHAR(32)"),
+    ("payments", "card_last4", "VARCHAR(4)"),
+    ("payments", "charge_attempt_key", "VARCHAR(80)"),
+    ("payment_events", "processor_reference", "VARCHAR(255)"),
 )
 
 # Reporting indexes for databases created before they were declared on the models.
@@ -600,6 +612,7 @@ _ADDED_INDEXES: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS ix_payments_tenant_status_created_at ON payments (tenant_id, status, created_at)",
     "CREATE INDEX IF NOT EXISTS ix_payments_booking_id ON payments (booking_id)",
     "CREATE INDEX IF NOT EXISTS ix_payment_events_tenant_kind_occurred_at ON payment_events (tenant_id, kind, occurred_at)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_payment_processor_payment ON payments (processor, processor_merchant_id, processor_payment_id)",
 )
 
 

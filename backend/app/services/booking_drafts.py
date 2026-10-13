@@ -33,9 +33,16 @@ from app.db.models import (
 )
 from app.schemas.bookings import BookingListResponse, BookingSummaryResponse, CancelManageBookingRequest, CustomerManageBookingResponse, RescheduleManageBookingRequest
 from app.services.payment_processor import refund_payment_via_processor
-from app.services.state_machine import guard_transition
+from app.services.audit import record_audit
+from app.services.auth import assert_tenant_permission
+from app.services.state_machine import ACTIVE_BOOKING_DRAFT_STATUSES, guard_transition
 from app.services.wallet import record_wallet_transaction
-from app.schemas.booking_drafts import BookingDraftSummaryResponse, ConfirmWithPaymentRequest, CreateBookingDraftRequest, UpdateBookingDraftRequest
+from app.schemas.booking_drafts import (
+    BookingDraftSummaryResponse,
+    CreateBookingDraftRequest,
+    ReleaseBookingDraftRequest,
+    UpdateBookingDraftRequest,
+)
 from app.services.availability import list_availability
 from app.services.presenters import booking_draft_to_summary, booking_to_summary, tenant_to_summary
 from app.services.resource_availability import reserve_resources
@@ -45,7 +52,7 @@ from app.services.tenants import get_tenant_by_slug
 from app.services.timezones import resolve_zone
 
 
-ACTIVE_DRAFT_STATUSES = {"draft", "slot_held", "awaiting_form", "awaiting_payment"}
+ACTIVE_DRAFT_STATUSES = ACTIVE_BOOKING_DRAFT_STATUSES
 
 
 async def _location_date_text(
@@ -68,10 +75,25 @@ def _ensure_aware(value: datetime) -> datetime:
 
 
 def _ensure_not_expired(draft: BookingDraft) -> None:
+    """Reject work on a draft whose hold has lapsed or was released.
+
+    Confirmed drafts pass (callers handle them via confirmed_booking_id).
+    """
+    if draft.status == "expired":
+        raise api_exception(409, "conflict", "Booking draft has expired.")
+    if draft.status == "canceled":
+        raise api_exception(409, "conflict", "This hold was released by the business.")
     if draft.status not in ACTIVE_DRAFT_STATUSES:
         return
     if _ensure_aware(draft.expires_at) <= datetime.now(timezone.utc):
         raise api_exception(409, "conflict", "Booking draft has expired.")
+
+
+def _clean_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
 
 
 async def _upsert_customer(
@@ -79,6 +101,7 @@ async def _upsert_customer(
     tenant_id: str,
     payload: dict[str, str | None],
     assign_owner_user_id: str | None = None,
+    source_channel: str = "public_online",
 ) -> Customer:
     email = payload.get("email")
     phone = payload.get("phone")
@@ -101,7 +124,7 @@ async def _upsert_customer(
             referred_by=referred_by or None,
             owner_user_id=assign_owner_user_id,
             acquired_at=now,
-            source_channel="public_online",
+            source_channel=source_channel,
         )
         session.add(customer)
         await session.flush()
@@ -112,7 +135,7 @@ async def _upsert_customer(
     customer.phone = phone or customer.phone
     if customer.acquired_at is None:
         customer.acquired_at = now
-        customer.source_channel = "public_online"
+        customer.source_channel = source_channel
     await session.flush()
     return customer
 
@@ -190,9 +213,14 @@ async def _attach_form_requirements(session: AsyncSession, draft: BookingDraft) 
         return
 
     seen_form_ids: set[str] = set()
+    # Only customer forms due before booking block the draft; pre-visit,
+    # post-visit and internal forms are collected later.
+    needs_pre_booking_form = False
 
     for attachment in attachments:
         scope = attachment.form.scope if attachment.form is not None else "customer"
+        if scope == "customer" and (attachment.customer_prompt_timing or "pre_booking") == "pre_booking":
+            needs_pre_booking_form = True
         session.add(
             BookingDraftFormRequirement(
                 tenant_id=draft.tenant_id,
@@ -215,6 +243,8 @@ async def _attach_form_requirements(session: AsyncSession, draft: BookingDraft) 
         )
         if latest_version is None:
             continue
+        if form_def.scope == "customer" and (form_def.customer_prompt_timing or "pre_booking") == "pre_booking":
+            needs_pre_booking_form = True
         session.add(
             BookingDraftFormRequirement(
                 tenant_id=draft.tenant_id,
@@ -227,29 +257,42 @@ async def _attach_form_requirements(session: AsyncSession, draft: BookingDraft) 
             )
         )
 
-    guard_transition("booking_draft", draft.id, draft.status, "awaiting_form")
-    draft.status = "awaiting_form"
+    if needs_pre_booking_form:
+        guard_transition("booking_draft", draft.id, draft.status, "awaiting_form")
+        draft.status = "awaiting_form"
     await session.flush()
 
 
-def _has_pending_pre_booking_requirements(draft: BookingDraft) -> bool:
-    return any(
-        requirement.customer_prompt_timing == "pre_booking" and requirement.status == "pending"
-        for requirement in draft.form_requirements
+def _is_pending_pre_booking_requirement(requirement: BookingDraftFormRequirement) -> bool:
+    return (
+        requirement.scope == "customer"
+        and (requirement.customer_prompt_timing or "pre_booking") == "pre_booking"
+        and requirement.status == "pending"
     )
+
+
+def _has_pending_pre_booking_requirements(draft: BookingDraft) -> bool:
+    return any(_is_pending_pre_booking_requirement(requirement) for requirement in draft.form_requirements)
 
 
 async def _load_booking_draft(
     session: AsyncSession,
     booking_draft_id: str,
     tenant_id: str | None = None,
+    *,
+    for_update: bool = False,
 ) -> BookingDraft:
     filters = [BookingDraft.id == booking_draft_id]
     if tenant_id is not None:
         filters.append(BookingDraft.tenant_id == tenant_id)
 
+    query = select(BookingDraft)
+    if for_update:
+        # Serialize promotion paths (payment completion, staff confirm, release)
+        # so a draft can't be confirmed twice or confirmed while being released.
+        query = query.with_for_update()
     draft = await session.scalar(
-        select(BookingDraft)
+        query
         .options(
             selectinload(BookingDraft.tenant),
             selectinload(BookingDraft.service).selectinload(Service.location_links),
@@ -332,6 +375,7 @@ async def _promote_draft_to_booking(
         price_cents=draft.price_cents,
         deposit_cents=draft.deposit_cents,
         source_channel=_booking_source_channel(draft),
+        notes=draft.notes,
     )
     session.add(booking)
     await session.flush()
@@ -435,9 +479,11 @@ def _append_manage_booking_event(
     wallet_credited_cents: int = 0,
     processor_refund_id: str | None = None,
     processor_refund_amount_cents: int = 0,
+    refund_owed_cents: int = 0,
 ) -> None:
     payload: dict[str, object] = {
         "actorType": "customer",
+        "refundOwedCents": refund_owed_cents,
         "actorLabel": "Customer self-service",
         "reason": reason,
         "walletCreditedCents": wallet_credited_cents,
@@ -570,11 +616,20 @@ async def create_booking_draft(
     session: AsyncSession,
     tenant_slug: str,
     payload: CreateBookingDraftRequest,
+    actor: User | None = None,
 ) -> BookingDraftSummaryResponse:
     if payload.tenant_slug != tenant_slug:
         raise api_exception(400, "bad_request", "Tenant slug in the request body must match the route.")
 
+    is_staff_draft = payload.booking_method == "staff_entered"
+    if payload.override_availability and not is_staff_draft:
+        raise api_exception(422, "validation_error", "Availability override is only allowed for staff-entered bookings.")
+
     tenant = await get_tenant_by_slug(session, tenant_slug)
+    # Staff drafts bend availability rules and carry staff attribution, so they
+    # need a signed-in team member of this business. Online drafts stay public.
+    if is_staff_draft:
+        await assert_tenant_permission(session, actor, tenant, "calendar.create_booking")
     service = await session.scalar(
         select(Service)
         .options(selectinload(Service.location_links))
@@ -690,6 +745,7 @@ async def create_booking_draft(
             tenant.id,
             payload.customer.model_dump(),
             assign_owner_user_id=assign_owner,
+            source_channel="staff_entered" if is_staff_draft else "public_online",
         )
 
     draft = BookingDraft(
@@ -699,7 +755,7 @@ async def create_booking_draft(
         provider_id=provider.id,
         location_id=resolved_location_id,
         status="slot_held",
-        booking_method=payload.booking_method or "public_online",
+        booking_method="staff_entered" if is_staff_draft else "public_online",
         starts_at=resolved_start_at,
         ends_at=resolved_end_at,
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
@@ -713,9 +769,26 @@ async def create_booking_draft(
             _default_deposit_cents(tenant),
         ),
         duration_minutes=terms.duration_minutes + add_on_minutes,
+        created_by_user_id=actor.id if is_staff_draft and actor is not None else None,
+        notes=_clean_text(payload.notes) if is_staff_draft else None,
     )
     session.add(draft)
     await session.flush()
+    if is_staff_draft:
+        await record_audit(
+            session,
+            tenant_id=tenant.id,
+            entity_type="booking_draft",
+            entity_id=draft.id,
+            action="created_by_staff",
+            actor=actor,
+            changes={
+                "startsAt": draft.starts_at.isoformat(),
+                "serviceId": draft.service_id,
+                "providerId": draft.provider_id,
+                "overrideAvailability": payload.override_availability,
+            },
+        )
 
     # Snapshot each add-on as chosen; later catalog edits don't change it.
     for add_on in add_ons:
@@ -825,6 +898,7 @@ async def cancel_manage_booking(
     refunded_amount_cents = 0
     forfeited_amount_cents = 0
     wallet_credited_cents = 0
+    refund_owed_cents = 0
     processor_refund_id: str | None = None
 
     guard_transition("booking", booking.id, booking.status, "canceled")
@@ -837,13 +911,11 @@ async def cancel_manage_booking(
         for payment in deposit_payments:
             # Try processor refund first (Stripe, future Clover/Square).
             # Falls back to wallet credit if the processor isn't available.
-            processor_result = None
-            if payment.checkout_session_id:
-                processor_result = await refund_payment_via_processor(
-                    checkout_session_id=payment.checkout_session_id,
-                    amount_cents=payment.amount_cents,
-                    idempotency_key=f"cancel-manage-{booking.id}-{payment.id}",
-                )
+            processor_result = await refund_payment_via_processor(
+                payment=payment,
+                amount_cents=payment.amount_cents,
+                idempotency_key=f"cancel-manage-{booking.id}-{payment.id}",
+            )
 
             if processor_result is not None:
                 refunded_amount_cents += processor_result.amount_cents
@@ -857,6 +929,17 @@ async def cancel_manage_booking(
                     amount_cents=processor_result.amount_cents,
                     notes=f"Refunded ${processor_result.amount_cents / 100:.2f} via {processor_result.processor} "
                           f"(refund {processor_result.processor_refund_id}). Customer canceled from the private manage link.",
+                )
+            elif payment.processor == "clover" and payment.processor_channel == "device":
+                # Paid on the Clover device: money can only go back on the device.
+                # Flag it for staff instead of crediting a wallet the client didn't ask for.
+                refund_owed_cents += payment.amount_cents
+                _append_manage_payment_event(
+                    session,
+                    payment,
+                    kind="refund_owed",
+                    amount_cents=payment.amount_cents,
+                    notes="Customer canceled; refund this deposit on the Clover device, then record it on the booking.",
                 )
             else:
                 # Fall back to wallet credit
@@ -881,8 +964,13 @@ async def cancel_manage_booking(
                 booking_id=booking.id,
                 notes="Deposit credited to wallet when customer canceled from the private manage link.",
             )
-        booking.deposit_status = "refunded"
-        booking.payment_resolution = "waived"
+        if refund_owed_cents > 0:
+            # Stays on the follow-up list until staff record the device refund.
+            booking.deposit_status = "follow_up"
+            booking.payment_resolution = "follow_up"
+        else:
+            booking.deposit_status = "refunded"
+            booking.payment_resolution = "waived"
     elif forfeited:
         for payment in deposit_payments:
             forfeited_amount_cents += payment.amount_cents
@@ -910,6 +998,7 @@ async def cancel_manage_booking(
         wallet_credited_cents=wallet_credited_cents,
         processor_refund_id=processor_refund_id,
         processor_refund_amount_cents=refunded_amount_cents,
+        refund_owed_cents=refund_owed_cents,
     )
 
     await session.commit()
@@ -1070,6 +1159,127 @@ async def update_booking_draft(
     return booking_draft_to_summary(hydrated_draft)
 
 
+async def _cancel_pending_draft_payments(
+    session: AsyncSession,
+    draft: BookingDraft,
+    *,
+    event_kind: str,
+    notes: str,
+    actor: User | None,
+) -> list[Payment]:
+    """Cancel open checkout payments for a draft that will never confirm.
+
+    Appends a compensating event per payment; processor sessions are closed
+    by the caller after commit.
+    """
+    pending = (
+        await session.scalars(
+            select(Payment).where(
+                Payment.tenant_id == draft.tenant_id,
+                Payment.booking_draft_id == draft.id,
+                Payment.status == "pending",
+            )
+        )
+    ).all()
+    now = datetime.now(timezone.utc)
+    for payment in pending:
+        payment.status = "canceled"
+        session.add(
+            PaymentEvent(
+                tenant_id=payment.tenant_id,
+                payment_id=payment.id,
+                kind=event_kind,
+                actor_type="user" if actor is not None else "system",
+                actor_id=actor.id if actor is not None else None,
+                display_name=actor.name if actor is not None else "Hold expiry sweep",
+                occurred_at=now,
+                amount_cents=payment.amount_cents,
+                notes=notes,
+                stripe_session_id=payment.checkout_session_id,
+            )
+        )
+    return list(pending)
+
+
+async def _end_draft_hold(
+    session: AsyncSession,
+    draft: BookingDraft,
+    *,
+    new_status: str,
+) -> None:
+    """Move a draft to a terminal status and free its slot and resources."""
+    guard_transition("booking_draft", draft.id, draft.status, new_status)
+    draft.status = new_status
+    await session.execute(
+        delete(SlotHold).where(SlotHold.tenant_id == draft.tenant_id, SlotHold.booking_draft_id == draft.id)
+    )
+    await session.execute(
+        delete(ResourceAllocation).where(
+            ResourceAllocation.tenant_id == draft.tenant_id,
+            ResourceAllocation.booking_draft_id == draft.id,
+            ResourceAllocation.booking_id.is_(None),
+        )
+    )
+
+
+async def release_booking_draft(
+    session: AsyncSession,
+    tenant_slug: str,
+    booking_draft_id: str,
+    payload: ReleaseBookingDraftRequest,
+    actor: User,
+) -> BookingDraftSummaryResponse:
+    """Staff give up a held slot (customer changed their mind, wrong time...)."""
+    from app.services.payment_processor import expire_stripe_checkout_session_quietly
+
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    draft = await _load_booking_draft(session, booking_draft_id, tenant.id, for_update=True)
+
+    if draft.status == "canceled":
+        return booking_draft_to_summary(draft)
+    if draft.status == "confirmed" or draft.confirmed_booking_id is not None:
+        raise api_exception(409, "conflict", "This booking is already confirmed; cancel the booking instead.")
+    if draft.status not in ACTIVE_DRAFT_STATUSES and draft.status != "expired":
+        raise api_exception(409, "conflict", f"A {draft.status} hold cannot be released.")
+
+    reason = _clean_text(payload.reason)
+    previous_status = draft.status
+    if draft.status == "expired":
+        # Already off the calendar; record that staff closed it out so a late
+        # payment is refunded rather than booked.
+        guard_transition("booking_draft", draft.id, draft.status, "canceled")
+        draft.status = "canceled"
+    else:
+        await _end_draft_hold(session, draft, new_status="canceled")
+    canceled_payments = await _cancel_pending_draft_payments(
+        session,
+        draft,
+        event_kind="checkout_expired",
+        notes="Payment link closed because staff released the held slot.",
+        actor=actor,
+    )
+    await record_audit(
+        session,
+        tenant_id=tenant.id,
+        entity_type="booking_draft",
+        entity_id=draft.id,
+        action="released_by_staff",
+        actor=actor,
+        changes={"previousStatus": previous_status, "status": "canceled"},
+        notes=reason,
+    )
+    session_ids = [p.checkout_session_id for p in canceled_payments if p.checkout_session_id]
+    await session.commit()
+
+    # Close processor sessions after commit so the customer can't pay for a
+    # released slot. Failures are logged; a late payment is reconciled later.
+    for session_id in session_ids:
+        await expire_stripe_checkout_session_quietly(session_id)
+
+    hydrated = await _load_booking_draft(session, booking_draft_id, tenant.id)
+    return booking_draft_to_summary(hydrated)
+
+
 async def confirm_booking_draft(
     session: AsyncSession,
     tenant_slug: str,
@@ -1085,9 +1295,10 @@ async def confirm_booking_draft(
     _ensure_not_expired(draft)
 
     if _has_pending_pre_booking_requirements(draft):
-        guard_transition("booking_draft", draft.id, draft.status, "awaiting_form")
-        draft.status = "awaiting_form"
-        await session.commit()
+        if draft.status != "awaiting_form":
+            guard_transition("booking_draft", draft.id, draft.status, "awaiting_form")
+            draft.status = "awaiting_form"
+            await session.commit()
         raise api_exception(400, "bad_request", "Complete required forms before confirming the booking.")
 
     if draft.customer_id is None or draft.customer is None:
@@ -1111,88 +1322,6 @@ async def confirm_booking_draft(
             "bookingMethod": draft.booking_method,
         },
     )
-
-    await session.commit()
-    hydrated_booking = await _load_booking(session, booking.id, tenant.id)
-    return booking_to_summary(hydrated_booking)
-
-
-async def confirm_booking_draft_with_payment(
-    session: AsyncSession,
-    tenant_slug: str,
-    booking_draft_id: str,
-    payload: ConfirmWithPaymentRequest,
-    actor: User,
-) -> BookingSummaryResponse:
-    """Confirm a booking draft and record an in-person payment (staff-side)."""
-    from app.services.bookings import _append_payment_event, _append_booking_event, _apply_payment_resolution
-
-    tenant = await get_tenant_by_slug(session, tenant_slug)
-    draft = await _load_booking_draft(session, booking_draft_id, tenant.id)
-
-    if draft.confirmed_booking_id is not None:
-        booking = await _load_booking(session, draft.confirmed_booking_id, tenant.id)
-        return booking_to_summary(booking)
-
-    _ensure_not_expired(draft)
-
-    if draft.customer_id is None or draft.customer is None:
-        raise api_exception(400, "bad_request", "Customer details are required before confirming the booking.")
-
-    # Promote draft to booking
-    deposit_status = "paid" if payload.amount_cents > 0 else "not_required"
-    payment_resolution = "pending"
-    booking = await _promote_draft_to_booking(
-        session,
-        draft,
-        deposit_status=deposit_status,
-        payment_resolution=payment_resolution,
-        event_kind="deposit_collected_in_person",
-        event_amount_cents=payload.amount_cents,
-        event_payload={
-            "bookingDraftId": draft.id,
-            "bookingMethod": draft.booking_method,
-            "paymentMethodType": payload.payment_method_type,
-        },
-    )
-
-    # Record the payment
-    if payload.amount_cents > 0:
-        payment = Payment(
-            tenant_id=booking.tenant_id,
-            booking=booking,
-            customer_id=booking.customer_id,
-            status="succeeded",
-            deposit_status="paid",
-            amount_cents=payload.amount_cents,
-            currency="USD",
-            payment_method_type=payload.payment_method_type,
-            checkout_session_kind=None,
-        )
-        session.add(payment)
-        await session.flush()
-
-        _append_payment_event(
-            session,
-            payment,
-            kind="payment_recorded",
-            actor=actor,
-            amount_cents=payload.amount_cents,
-            notes=payload.notes or "In-person deposit collected by staff.",
-        )
-
-        _append_booking_event(
-            session,
-            booking,
-            event_kind="admin_completion",
-            actor=actor,
-            amount_cents=payload.amount_cents,
-            notes=payload.notes,
-            extra_payload={
-                "paymentMethodType": payload.payment_method_type,
-                "bookingStatus": booking.status,
-            },
-        )
 
     await session.commit()
     hydrated_booking = await _load_booking(session, booking.id, tenant.id)

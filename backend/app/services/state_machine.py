@@ -3,6 +3,7 @@
 Per AGENTS.md, the documented lifecycle is:
 
   BookingDraft: draft -> slot_held -> awaiting_form -> awaiting_payment -> confirmed
+               (any active status) -> expired | canceled
   Booking:     confirmed -> completed | canceled | no_show
 
 Every status mutation must go through `guard_transition()` which raises
@@ -19,11 +20,22 @@ from app.core.http import api_exception
 
 BOOKING_DRAFT_TRANSITIONS: dict[str, set[str]] = {
     "draft": {"slot_held"},
-    "slot_held": {"awaiting_form", "awaiting_payment", "confirmed"},
-    "awaiting_form": {"slot_held", "awaiting_payment"},
-    "awaiting_payment": {"confirmed"},
+    "slot_held": {"awaiting_form", "awaiting_payment", "confirmed", "expired", "canceled"},
+    "awaiting_form": {"slot_held", "awaiting_payment", "expired", "canceled"},
+    "awaiting_payment": {"confirmed", "expired", "canceled"},
     "confirmed": set(),  # terminal for drafts
+    # The hold lapsed. Only the late-payment reconcile path may still confirm
+    # an expired draft (the customer paid while the processor session was open);
+    # every other path rejects it via _ensure_not_expired. Staff may close an
+    # expired hold out (canceled) so a late payment is refunded, not booked.
+    "expired": {"confirmed", "canceled"},
+    "canceled": set(),  # staff released the hold
 }
+
+# Drafts that still hold (or are trying to hold) their slot.
+ACTIVE_BOOKING_DRAFT_STATUSES: frozenset[str] = frozenset(
+    {"draft", "slot_held", "awaiting_form", "awaiting_payment"}
+)
 
 BOOKING_TRANSITIONS: dict[str, set[str]] = {
     "confirmed": {"completed", "no_show", "canceled"},
