@@ -310,7 +310,10 @@ async def _complete_deposit_checkout_payment(
     stripe_session_id: str | None = None,
     stripe_payment_intent_id: str | None = None,
     completion_note: str,
+    captured: bool = False,
 ) -> BookingSummaryResponse:
+    """`captured=True`: the processor already took the money (a Clover charge).
+    The hold was validated by the caller, so this never cancels the payment."""
     tenant = await get_tenant_by_slug(session, tenant_slug)
 
     if payment.checkout_session_kind != "deposit" or payment.booking_draft_id is None:
@@ -321,7 +324,7 @@ async def _complete_deposit_checkout_payment(
         return booking_to_summary(booking)
 
     now = datetime.now(timezone.utc)
-    if payment.checkout_expires_at is None or _ensure_aware(payment.checkout_expires_at) <= now:
+    if not captured and (payment.checkout_expires_at is None or _ensure_aware(payment.checkout_expires_at) <= now):
         if stripe_session_id is not None:
             # The processor says this was paid: never mark captured money as
             # canceled. Record it so staff can refund or rebook.
@@ -366,7 +369,8 @@ async def _complete_deposit_checkout_payment(
         booking = await _load_booking(session, draft.confirmed_booking_id, tenant.id)
         return booking_to_summary(booking)
 
-    _ensure_not_expired(draft)
+    if not captured:
+        _ensure_not_expired(draft)
     if draft.customer_id is None or draft.customer is None:
         raise api_exception(400, "bad_request", "Customer details are required before payment can complete.")
 
@@ -410,6 +414,7 @@ async def _complete_booking_balance_checkout_payment(
     stripe_session_id: str | None = None,
     stripe_payment_intent_id: str | None = None,
     completion_note: str,
+    captured: bool = False,
 ) -> BookingSummaryResponse:
     tenant = await get_tenant_by_slug(session, tenant_slug)
 
@@ -421,7 +426,7 @@ async def _complete_booking_balance_checkout_payment(
         return booking_to_summary(booking)
 
     now = datetime.now(timezone.utc)
-    if payment.checkout_expires_at is None or _ensure_aware(payment.checkout_expires_at) <= now:
+    if not captured and (payment.checkout_expires_at is None or _ensure_aware(payment.checkout_expires_at) <= now):
         if stripe_session_id is not None:
             await _flag_late_captured_payment(
                 session,
@@ -749,7 +754,9 @@ async def create_checkout_session(
 
     if draft.customer_id is None or draft.customer is None:
         raise api_exception(400, "bad_request", "Customer details are required before payment.")
-    if _has_pending_pre_booking_requirements(draft):
+    # Staff-entered bookings (phone/walk-in) defer forms to before the visit;
+    # online clients fill them in before paying.
+    if draft.booking_method != "staff_entered" and _has_pending_pre_booking_requirements(draft):
         if draft.status != "awaiting_form":
             guard_transition("booking_draft", draft.id, draft.status, "awaiting_form")
             draft.status = "awaiting_form"
@@ -775,8 +782,10 @@ async def create_checkout_session(
     )
 
     if existing_payment is not None and existing_payment.checkout_expires_at is not None and existing_payment.checkout_url is not None:
-        guard_transition("booking_draft", draft.id, draft.status, "awaiting_payment")
-        draft.status = "awaiting_payment"
+        # Reusing an open link keeps the draft awaiting payment (a resend).
+        if draft.status != "awaiting_payment":
+            guard_transition("booking_draft", draft.id, draft.status, "awaiting_payment")
+            draft.status = "awaiting_payment"
         draft.expires_at = max(_ensure_aware(draft.expires_at), _ensure_aware(existing_payment.checkout_expires_at))
         draft.hold.expires_at = draft.expires_at
         await session.commit()
@@ -854,8 +863,9 @@ async def create_checkout_session(
         stripe_session_id=stripe_checkout.session_id if stripe_checkout is not None else None,
     )
 
-    guard_transition("booking_draft", draft.id, draft.status, "awaiting_payment")
-    draft.status = "awaiting_payment"
+    if draft.status != "awaiting_payment":
+        guard_transition("booking_draft", draft.id, draft.status, "awaiting_payment")
+        draft.status = "awaiting_payment"
     draft.expires_at = expires_at
     draft.hold.expires_at = expires_at
 

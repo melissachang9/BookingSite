@@ -5,6 +5,7 @@ import type {
   AuthenticatedUser,
   AvailabilityRequest,
   AvailabilityResponse,
+  BookingDraftList,
   BookingDraftSummary,
   BookingFormRequirementEntry,
   BookingFormRequirementList,
@@ -38,6 +39,7 @@ import type {
   ServiceListResponse,
   ServiceSummary,
   SlotAvailability,
+  StaffBalanceCardChargeRequest,
   UpdateBookingRequest,
   UpdateBookingStatusRequest,
   UpdateCustomerRequest,
@@ -46,6 +48,7 @@ import type {
 import { FormResponseViewer } from "./form-response-viewer";
 import { CollectDepositStep, type CollectDepositApi } from "./collect-deposit-step";
 import { CloverDevicePaymentPicker } from "./clover-device-payment-picker";
+import { BalanceCardPanel } from "./collect-card-panels";
 import { platformApi } from "./platform-api";
 
 type CalendarDataState =
@@ -248,6 +251,20 @@ export type CalendarPageApi = {
     body: RecordCloverDevicePaymentRequest,
   ) => Promise<BookingSummary>;
   recordCloverDeviceRefund?: (tenantSlug: string, bookingId: string, paymentId: string) => Promise<BookingSummary>;
+  /** Card payments through Clover's secure form, and payment links. */
+  getPublicPaymentConfig?: CollectDepositApi["getPublicPaymentConfig"];
+  chargeStaffDraftCard?: CollectDepositApi["chargeStaffDraftCard"];
+  chargeStaffBookingBalanceCard?: (
+    tenantSlug: string,
+    bookingId: string,
+    body: StaffBalanceCardChargeRequest,
+  ) => Promise<BookingSummary>;
+  sendPaymentLink?: CollectDepositApi["sendPaymentLink"];
+  getBookingDraft?: CollectDepositApi["getBookingDraft"];
+  listBookingDrafts?: (
+    tenantSlug: string,
+    query: { startsAtGte: string; startsAtLte: string },
+  ) => Promise<BookingDraftList>;
   /** Optional so older test doubles still type-check; without it no add-ons are offered. */
   listServiceAddOns?: (tenantSlug: string, serviceId: string) => Promise<ServiceAddOnListResponse>;
   createOrUpdateCustomer: (body: { name: string; email?: string; phone?: string }) => Promise<{ customerId: string }>;
@@ -945,6 +962,37 @@ export function CalendarPage({
       cancelled = true;
     };
   }, [api, tenantSlug]);
+  // Slots held while a client pays (phone bookings): shown as "Awaiting deposit" chips.
+  const [heldDrafts, setHeldDrafts] = useState<BookingDraftSummary[]>([]);
+  const [selectedHeldDraftId, setSelectedHeldDraftId] = useState<string | null>(null);
+  const [heldRefresh, setHeldRefresh] = useState(0);
+  const heldRangeKey =
+    calendarState.kind === "ready" && calendarState.days.length > 0
+      ? `${calendarState.days[0].date}|${calendarState.days[calendarState.days.length - 1].date}`
+      : "";
+  useEffect(() => {
+    if (!api.listBookingDrafts || heldRangeKey === "") return;
+    const [first, last] = heldRangeKey.split("|");
+    let cancelled = false;
+    api
+      .listBookingDrafts(tenantSlug, { startsAtGte: `${first}T00:00:00.000Z`, startsAtLte: `${last}T23:59:59.999Z` })
+      .then((response) => {
+        if (!cancelled) setHeldDrafts(response.items);
+      })
+      .catch(() => {
+        // Holds are extra context; the calendar still works if they can't load.
+        if (!cancelled) setHeldDrafts([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, tenantSlug, heldRangeKey, heldRefresh]);
+  // Keep countdowns honest and drop holds that lapsed or were paid.
+  useEffect(() => {
+    if (!api.listBookingDrafts) return;
+    const id = window.setInterval(() => setHeldRefresh((n) => n + 1), 30000);
+    return () => window.clearInterval(id);
+  }, [api]);
   const isInitialLoad = useRef(true);
   // When arriving at /calendar?bookingId=..., fetch that booking up front so we
   // can focus the calendar on the booking's date and open its details after the
@@ -2142,6 +2190,11 @@ export function CalendarPage({
           listCloverDevicePayments: api.listCloverDevicePayments,
           confirmBookingDraftWithCloverPayment: api.confirmBookingDraftWithCloverPayment,
           confirmBookingDraftWithoutPayment: api.confirmBookingDraftWithoutPayment,
+          getPublicPaymentConfig: api.getPublicPaymentConfig,
+          chargeStaffDraftCard: api.chargeStaffDraftCard,
+          sendPaymentLink: api.sendPaymentLink,
+          getBookingDraft: api.getBookingDraft,
+          getBooking: api.getBooking,
         }
       : null;
   const slotCollectStep =
@@ -2166,6 +2219,37 @@ export function CalendarPage({
           setReloadKey((k) => k + 1);
         }}
       />
+    ) : null;
+
+  // A held slot opened from the calendar resumes the same collect-payment step.
+  const selectedHeldDraft = heldDrafts.find((held) => held.id === selectedHeldDraftId) ?? null;
+  const heldSlotStep =
+    selectedHeldDraft && collectDepositApi ? (
+      <HeldSlotDrawer
+        draft={selectedHeldDraft}
+        onClose={() => setSelectedHeldDraftId(null)}
+      >
+        <CollectDepositStep
+          key={selectedHeldDraft.id}
+          draft={selectedHeldDraft}
+          tenantSlug={tenantSlug}
+          api={collectDepositApi}
+          customPaymentMethods={customPaymentMethods}
+          canCollectPayment={canCollectPayment}
+          capabilities={paymentCapabilities}
+          onConfirmed={(booking) => {
+            setSelectedHeldDraftId(null);
+            setSelectedAppointmentId(booking.id);
+            setReloadKey((k) => k + 1);
+            setHeldRefresh((n) => n + 1);
+          }}
+          onReleased={() => {
+            setSelectedHeldDraftId(null);
+            setReloadKey((k) => k + 1);
+            setHeldRefresh((n) => n + 1);
+          }}
+        />
+      </HeldSlotDrawer>
     ) : null;
 
   const handleCompleteAppointment = async (
@@ -2541,6 +2625,8 @@ export function CalendarPage({
           timeBlockDurationMinutes={selectedService?.durationMinutes ?? 60}
           onSelectAppointment={handleSelectAppointment}
           timeBlocks={timeBlocks}
+          heldDrafts={heldDrafts}
+          onSelectHeldDraft={setSelectedHeldDraftId}
           selectedTimeBlockId={selectedTimeBlockId}
           onSelectTimeBlock={handleSelectTimeBlock}
           onRequestCalendarSlot={handleRequestCalendarSlot}
@@ -2597,6 +2683,7 @@ export function CalendarPage({
         />,
         document.body,
       )}
+      {heldSlotStep ? createPortal(heldSlotStep, document.body) : null}
       {createPortal(
         <AppointmentDetailsDrawer
           selectedAppointment={selectedAppointment}
@@ -3019,6 +3106,8 @@ function CalendarBoard({
   timeBlockDurationMinutes,
   onSelectAppointment,
   timeBlocks,
+  heldDrafts,
+  onSelectHeldDraft,
   selectedTimeBlockId,
   onSelectTimeBlock,
   onRequestCalendarSlot,
@@ -3040,6 +3129,8 @@ function CalendarBoard({
   timeBlockDurationMinutes: number;
   onSelectAppointment: (appointmentId: string) => void;
   timeBlocks: CalendarTimeBlock[];
+  heldDrafts: BookingDraftSummary[];
+  onSelectHeldDraft: (draftId: string) => void;
   selectedTimeBlockId: string | null;
   onSelectTimeBlock: (blockId: string) => void;
   onRequestCalendarSlot: (slot: PendingCalendarSlot) => void;
@@ -3419,6 +3510,38 @@ function CalendarBoard({
                           >
                             <span className="cs-chip__time">{formatTimeRange(block.startAt, block.endAt)}</span>
                             <span className="cs-chip__client">{`Time block · ${block.providerName}`}</span>
+                          </button>
+                        );
+                      })
+                  : null}
+                {(column.providerId !== undefined || viewMode === "week")
+                  ? heldDrafts
+                      .filter(
+                        (held) =>
+                          getTenantDate(held.startsAt) === column.date &&
+                          (column.providerId === undefined || held.providerId === column.providerId),
+                      )
+                      .map((held) => {
+                        const startMinutes = minutesInTenantDay(held.startsAt);
+                        const rawEndMinutes = minutesInTenantDay(held.endsAt);
+                        const endMinutes = rawEndMinutes > startMinutes ? rawEndMinutes : startMinutes + 15;
+                        const minutesLeft = Math.max(0, Math.ceil((new Date(held.expiresAt).getTime() - Date.now()) / 60000));
+                        const clientName = held.customer?.name ?? "Client";
+                        return (
+                          <button
+                            key={`held-${held.id}`}
+                            type="button"
+                            className="cs-chip cs-chip--hold"
+                            aria-label={`Awaiting deposit: ${clientName}, ${held.service.name}, held ${minutesLeft} more minutes`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onSelectHeldDraft(held.id);
+                            }}
+                            style={{ "--top": chipTop(startMinutes), "--h": chipHeight(Math.max(15, endMinutes - startMinutes)) } as CSSProperties}
+                          >
+                            <span className="cs-chip__time">{formatTimeRange(held.startsAt, held.endsAt)}</span>
+                            <span className="cs-chip__client">{`Awaiting deposit · ${minutesLeft}m`}</span>
+                            <span className="cs-chip__treatment">{`${clientName} · ${held.service.name}`}</span>
                           </button>
                         );
                       })
@@ -5983,9 +6106,16 @@ function CheckoutPanel({
   const cloverMatchingAvailable = Boolean(
     paymentCapabilities?.canLinkDevicePayments && api.listCloverDevicePayments && api.recordCloverDevicePayment,
   );
+  // Typing a client's card into Clover's secure form (phone orders at checkout).
+  const cardPhoneAvailable = Boolean(
+    paymentCapabilities?.canChargeCards && api.getPublicPaymentConfig && api.chargeStaffBookingBalanceCard,
+  );
   const builtinMethods = [
     ...(cloverMatchingAvailable
       ? [{ id: "clover", label: "Clover", description: "Paid on the Clover device", tone: "mint" }]
+      : []),
+    ...(cardPhoneAvailable
+      ? [{ id: "card_phone", label: "Card (phone)", description: "Type the client's card", tone: "lilac" }]
       : []),
     { id: "cash", label: "Cash", description: "Drawer count", tone: "neutral" },
     { id: "external_pos", label: "External POS", description: "Enter exact amount", tone: "peach" },
@@ -6118,6 +6248,25 @@ function CheckoutPanel({
     }
   };
 
+  // After any payment is recorded: refresh what's paid, and complete the sale once settled.
+  const applyRecordedPayment = async (updated: BookingSummary) => {
+    const updatedPayments = (updated.payments ?? []).filter((p) => p.status === "succeeded" && p.amountCents > 0);
+    setPayments(updatedPayments);
+    setSelectedMethod(null);
+    setCloverPayment(null);
+    setNotes("");
+    setPaymentStep("methods");
+    if ((updated.balanceDueCents ?? 1) <= 0) {
+      await onComplete(appointment, "collected", { cents: discountCents, type: discountType });
+      setSaleCompleted(true);
+      setIsReadOnly(true);
+      setState("success");
+    } else {
+      setState("idle");
+      onPaymentRecorded();
+    }
+  };
+
   const handleRecordClover = async () => {
     if (!cloverPayment || !api.recordCloverDevicePayment) return;
     setState("submitting");
@@ -6127,23 +6276,7 @@ function CheckoutPanel({
         cloverPaymentId: cloverPayment.id,
         ...(notes.trim() ? { notes: notes.trim() } : {}),
       });
-      const updatedPayments = (updated.payments ?? []).filter(
-        (p) => p.status === "succeeded" && p.amountCents > 0,
-      );
-      setPayments(updatedPayments);
-      setSelectedMethod(null);
-      setCloverPayment(null);
-      setNotes("");
-      setPaymentStep("methods");
-      if ((updated.balanceDueCents ?? 1) <= 0) {
-        await onComplete(appointment, "collected", { cents: discountCents, type: discountType });
-        setSaleCompleted(true);
-        setIsReadOnly(true);
-        setState("success");
-      } else {
-        setState("idle");
-        onPaymentRecorded();
-      }
+      await applyRecordedPayment(updated);
     } catch (error) {
       setState("error");
       setErrorMessage(error instanceof Error ? error.message : "Unable to link the Clover payment.");
@@ -6828,7 +6961,19 @@ function CheckoutPanel({
                     />
                   </div>
                 ) : null}
-                {selectedMethod === "clover" ? null : (
+                {selectedMethod === "card_phone" && api.getPublicPaymentConfig && api.chargeStaffBookingBalanceCard ? (
+                  <BalanceCardPanel
+                    tenantSlug={tenantSlug}
+                    bookingId={appointment.id}
+                    api={{ getPublicPaymentConfig: api.getPublicPaymentConfig, chargeStaffBookingBalanceCard: api.chargeStaffBookingBalanceCard }}
+                    tipCents={tipLocked ? 0 : tipCents}
+                    totalCents={remainingBalance}
+                    blockedReason={discountCents > 0 ? "Finish the discount first: it is applied when the sale completes, after the card is charged." : null}
+                    disabled={state === "submitting"}
+                    onPaid={applyRecordedPayment}
+                  />
+                ) : null}
+                {selectedMethod === "clover" || selectedMethod === "card_phone" ? null : (
                 <label className="cs-checkout-panel__amount-row">
                   <span>{selectedMethod === "external_pos" ? "Charge on the terminal (exact balance)" : "Amount to charge"}</span>
                   <input
@@ -6857,6 +7002,7 @@ function CheckoutPanel({
                     />
                   </label>
                 ) : null}
+                {selectedMethod === "card_phone" ? null : (
                 <label className="cs-checkout-panel__notes">
                   <span>Notes (optional)</span>
                   <input
@@ -6867,6 +7013,8 @@ function CheckoutPanel({
                     placeholder="e.g. Paid at front desk"
                   />
                 </label>
+                )}
+                {selectedMethod === "card_phone" ? null : (
                 <button
                   type="button"
                   className="cs-btn cs-btn--primary cs-checkout-panel__record-button"
@@ -6888,6 +7036,7 @@ function CheckoutPanel({
                         : "Pick a Clover payment"
                       : `Record ${formatMoney(selectedMethod === "external_pos" ? remainingBalance : parseAmount())}`}
                 </button>
+                )}
               </section>
             ) : (
               <section className="cs-checkout-panel__methods">
@@ -7316,5 +7465,38 @@ function ClientCardForms({
         );
       })}
     </ul>
+  );
+}
+
+
+/** A slot held while the client pays, opened from its calendar chip. */
+function HeldSlotDrawer({
+  draft,
+  onClose,
+  children,
+}: {
+  draft: BookingDraftSummary;
+  onClose: () => void;
+  children: ReactElement;
+}): ReactElement {
+  return (
+    <>
+      <button type="button" className="cs-drawer-backdrop" aria-label="Close held slot" onClick={onClose} />
+      <aside className="cs-drawer-legacy cs-drawer-shim" role="dialog" aria-label="Held slot">
+        <div className="cs-drawer__inner">
+          <div className="cs-drawer__head">
+            <div>
+              <div className="cs-drawer__kicker">Awaiting deposit</div>
+              <div className="cs-drawer__title">{draft.customer?.name ?? "Client"}</div>
+              <div className="cs-drawer__meta">
+                {draft.service.name} · {draft.provider.name} · {formatTimeRange(draft.startsAt, draft.endsAt)}
+              </div>
+            </div>
+            <button type="button" className="cs-drawer__close" onClick={onClose} aria-label="Close">×</button>
+          </div>
+          {children}
+        </div>
+      </aside>
+    </>
   );
 }

@@ -11,6 +11,7 @@ import type {
 } from "@booking/shared-types";
 
 import { CloverDevicePaymentPicker, type CloverDevicePaymentPickerApi } from "./clover-device-payment-picker";
+import { PaymentLinkPanel, PhoneCardPanel, type PaymentLinkApi, type PhoneCardApi } from "./collect-card-panels";
 
 /**
  * Shown in the new-booking drawer once a staff draft holds the slot. Staff
@@ -41,6 +42,13 @@ export type CollectDepositApi = {
   ) => Promise<BookingSummary>;
   /** For services that take no deposit. */
   confirmBookingDraftWithoutPayment?: (tenantSlug: string, bookingDraftId: string) => Promise<BookingSummary>;
+  /** Phone card entry through Clover's secure form. */
+  getPublicPaymentConfig?: PhoneCardApi["getPublicPaymentConfig"];
+  chargeStaffDraftCard?: PhoneCardApi["chargeStaffDraftCard"];
+  /** Text/email the client a payment link, then wait for them to pay. */
+  sendPaymentLink?: PaymentLinkApi["sendPaymentLink"];
+  getBookingDraft?: PaymentLinkApi["getBookingDraft"];
+  getBooking?: PaymentLinkApi["getBooking"];
 };
 
 type CollectDepositStepProps = {
@@ -58,6 +66,8 @@ type CollectDepositStepProps = {
 type MethodOption = { id: string; label: string; hint: string };
 
 const CLOVER_METHOD: MethodOption = { id: "clover", label: "Clover", hint: "Paid on the Clover device" };
+const CARD_METHOD: MethodOption = { id: "card", label: "Card (phone)", hint: "Type the card the client reads out" };
+const LINK_METHOD: MethodOption = { id: "link", label: "Payment link", hint: "Text or email the client a link" };
 
 const BUILTIN_METHODS: MethodOption[] = [
   { id: "external_pos", label: "External POS", hint: "Paid on the card terminal" },
@@ -108,13 +118,22 @@ export function CollectDepositStep({
   const cloverAvailable = Boolean(
     capabilities?.canLinkDevicePayments && api.listCloverDevicePayments && api.confirmBookingDraftWithCloverPayment,
   );
+  // Online card payments (phone card entry, payment link) need a connected processor.
+  const cardAvailable = Boolean(
+    capabilities?.canChargeCards && api.getPublicPaymentConfig && api.chargeStaffDraftCard && depositCents + (draft.fullAmountCents ?? 0) > 0,
+  );
+  const linkAvailable = Boolean(
+    capabilities?.canChargeCards && api.sendPaymentLink && api.getBookingDraft && api.getBooking && depositCents > 0,
+  );
   const methods = useMemo<MethodOption[]>(
     () => [
       ...(cloverAvailable ? [CLOVER_METHOD] : []),
+      ...(cardAvailable ? [CARD_METHOD] : []),
+      ...(linkAvailable ? [LINK_METHOD] : []),
       ...BUILTIN_METHODS,
       ...customPaymentMethods.map((m) => ({ id: m.id, label: m.label, hint: m.label })),
     ],
-    [cloverAvailable, customPaymentMethods],
+    [cardAvailable, cloverAvailable, customPaymentMethods, linkAvailable],
   );
   const [methodId, setMethodId] = useState(cloverAvailable ? "clover" : "external_pos");
   const [cloverPayment, setCloverPayment] = useState<CloverDevicePayment | null>(null);
@@ -125,11 +144,15 @@ export function CollectDepositStep({
     kind: "idle",
   });
 
-  const secondsLeft = useSecondsLeft(draft.expiresAt);
+  // Sending a payment link extends the hold; the draft prop doesn't change.
+  const [holdExpiresAt, setHoldExpiresAt] = useState(draft.expiresAt);
+  const secondsLeft = useSecondsLeft(holdExpiresAt);
   const expired = secondsLeft === 0;
   const busy = state.kind === "submitting" || state.kind === "releasing";
 
   const isClover = methodId === "clover";
+  // Card entry and the payment link run their own submit; the shared button is for typed-in payments.
+  const isOwnSubmit = methodId === "card" || methodId === "link";
   const tipCents = amountMode === "full" ? parseTipCents(tipText) : 0;
   const visitCents = amountMode === "deposit" ? depositCents : fullCents;
   const totalCents = visitCents + (tipCents ?? 0);
@@ -213,7 +236,7 @@ export function CollectDepositStep({
         </div>
       ) : null}
 
-      {!isClover ? (
+      {!isClover && methodId !== "link" ? (
       <div className="cs-seg" role="radiogroup" aria-label="Amount">
         {depositCents > 0 ? (
           <button type="button" role="radio" aria-checked={amountMode === "deposit"} aria-pressed={amountMode === "deposit"} onClick={() => setAmountMode("deposit")} disabled={busy}>
@@ -260,6 +283,30 @@ export function CollectDepositStep({
         </div>
       ) : null}
 
+      {methodId === "card" && api.getPublicPaymentConfig && api.chargeStaffDraftCard ? (
+        <PhoneCardPanel
+          tenantSlug={tenantSlug}
+          draft={draft}
+          api={{ getPublicPaymentConfig: api.getPublicPaymentConfig, chargeStaffDraftCard: api.chargeStaffDraftCard }}
+          amountMode={amountMode}
+          tipCents={tipCents ?? 0}
+          totalCents={totalCents}
+          disabled={busy || expired || !canCollectPayment || tipCents === null || visitCents <= 0}
+          onConfirmed={onConfirmed}
+        />
+      ) : null}
+
+      {methodId === "link" && api.sendPaymentLink && api.getBookingDraft && api.getBooking ? (
+        <PaymentLinkPanel
+          tenantSlug={tenantSlug}
+          draft={draft}
+          api={{ sendPaymentLink: api.sendPaymentLink, getBookingDraft: api.getBookingDraft, getBooking: api.getBooking }}
+          disabled={busy || expired || !canCollectPayment}
+          onSent={setHoldExpiresAt}
+          onConfirmed={onConfirmed}
+        />
+      ) : null}
+
       {needsReference ? (
         <label className="cs-collect__field">
           <span>Receipt or approval # (or card last 4)</span>
@@ -274,7 +321,7 @@ export function CollectDepositStep({
         </label>
       ) : null}
 
-      {amountMode === "full" && !isClover ? (
+      {amountMode === "full" && !isClover && methodId !== "link" ? (
         <label className="cs-collect__field">
           <span>Tip (optional)</span>
           <input
@@ -288,6 +335,7 @@ export function CollectDepositStep({
         </label>
       ) : null}
 
+      {!isOwnSubmit ? (
       <label className="cs-collect__field">
         <span>Note (optional)</span>
         <input
@@ -299,9 +347,11 @@ export function CollectDepositStep({
           disabled={busy}
         />
       </label>
+      ) : null}
 
+      {methodId !== "link" ? (
       <div className="cs-collect__total">
-        <span>{isClover ? "Matched payment" : "Charge on the terminal"}</span>
+        <span>{isClover ? "Matched payment" : methodId === "card" ? "Charge to the card" : "Charge on the terminal"}</span>
         <strong>
           {isClover
             ? cloverPayment
@@ -312,6 +362,7 @@ export function CollectDepositStep({
               : formatMoney(totalCents)}
         </strong>
       </div>
+      ) : null}
 
       {state.kind === "error" ? (
         <div className="cs-banner cs-banner--error" role="alert">{state.message}</div>
@@ -326,9 +377,11 @@ export function CollectDepositStep({
         <button type="button" className="cs-btn" onClick={() => void handleRelease()} disabled={busy}>
           {state.kind === "releasing" ? "Releasing…" : "Release hold"}
         </button>
-        <button type="button" className="cs-btn cs-btn--primary" onClick={() => void handleConfirm()} disabled={!canSubmit}>
-          {state.kind === "submitting" ? "Confirming…" : isClover ? "Link payment & confirm" : "Record payment & confirm"}
-        </button>
+        {isOwnSubmit ? null : (
+          <button type="button" className="cs-btn cs-btn--primary" onClick={() => void handleConfirm()} disabled={!canSubmit}>
+            {state.kind === "submitting" ? "Confirming…" : isClover ? "Link payment & confirm" : "Record payment & confirm"}
+          </button>
+        )}
       </div>
       {canConfirmWithoutPayment ? (
         <button

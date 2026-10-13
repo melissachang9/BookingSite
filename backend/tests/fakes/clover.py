@@ -43,6 +43,14 @@ class FakeClover:
     access_lifetime_seconds: int = 1800
     requests: list[RecordedRequest] = field(default_factory=list)
     payments: dict[str, dict[str, Any]] = field(default_factory=dict)  # payment id -> Clover payload
+    charges: dict[str, dict[str, Any]] = field(default_factory=dict)  # charge id -> charge
+    refunds: list[dict[str, Any]] = field(default_factory=list)
+    idempotent: dict[str, dict[str, Any]] = field(default_factory=dict)  # idempotency key -> stored response
+    # Next /v1/charges calls fail with these behaviours (consumed in order): "decline" | "timeout" | "server_error"
+    charge_failures: list[str] = field(default_factory=list)
+    # Make the NEXT charge succeed at Clover but the response is lost (a timeout for us).
+    lose_next_charge_response: bool = False
+    refund_fails: bool = False
     payment_merchant: dict[str, str] = field(default_factory=dict)
     _counter: int = 0
 
@@ -154,6 +162,11 @@ class FakeClover:
         if merchant_id is None:
             return httpx.Response(401, json={"message": "Unauthorized"})
 
+        if path == "/v1/charges" and request.method == "POST":
+            return self._charge(request, body, merchant_id)
+        if path == "/v1/refunds" and request.method == "POST":
+            return self._refund(request, body, merchant_id)
+
         parts = path.split("/")
         if len(parts) >= 5 and parts[1:3] == ["v3", "merchants"] and parts[4] == "payments" and request.method == "GET":
             if parts[3] != merchant_id:
@@ -192,6 +205,54 @@ class FakeClover:
             return httpx.Response(200, json={"active": True, "apiAccessKey": merchant.pakms_key})
 
         return httpx.Response(404, json={"message": f"fake clover: no route for {request.method} {path}"})
+
+    def _charge(self, request: httpx.Request, body: Any, merchant_id: str) -> httpx.Response:
+        key = request.headers.get("idempotency-key", "")
+        if not key:
+            return httpx.Response(400, json={"error": {"message": "idempotency-key is required"}})
+        if "x-forwarded-for" not in request.headers:
+            return httpx.Response(400, json={"error": {"message": "x-forwarded-for is required"}})
+        if key in self.idempotent:
+            return httpx.Response(200, json=self.idempotent[key])  # replay: same charge, no new money
+        failure = self.charge_failures.pop(0) if self.charge_failures else None
+        source = (body or {}).get("source", "")
+        if source == "clv_decline" or failure == "decline":
+            return httpx.Response(402, json={"error": {"type": "card_error", "code": "card_declined", "message": "Your card was declined."}})
+        if failure == "timeout":
+            raise httpx.ReadTimeout("fake clover timed out", request=request)
+        if failure == "server_error":
+            return httpx.Response(500, json={"message": "boom"})
+        self._counter += 1
+        charge = {
+            "id": f"CHG{self._counter:04d}",
+            "status": "succeeded",
+            "captured": True,
+            "amount": body["amount"],
+            "currency": body["currency"],
+            "source": {"last4": "4242", "brand": "VISA"},
+            "metadata": body.get("metadata", {}),
+        }
+        self.charges[charge["id"]] = {**charge, "merchant": merchant_id, "ecomind": body.get("ecomind")}
+        self.idempotent[key] = charge
+        if self.lose_next_charge_response:
+            self.lose_next_charge_response = False
+            raise httpx.ReadTimeout("response lost", request=request)
+        return httpx.Response(200, json=charge)
+
+    def _refund(self, request: httpx.Request, body: Any, merchant_id: str) -> httpx.Response:
+        key = request.headers.get("idempotency-key", "")
+        if key in self.idempotent:
+            return httpx.Response(200, json=self.idempotent[key])
+        if self.refund_fails:
+            return httpx.Response(500, json={"message": "refund failed"})
+        charge = self.charges.get((body or {}).get("charge", ""))
+        if charge is None or charge["merchant"] != merchant_id:
+            return httpx.Response(404, json={"message": "charge not found"})
+        self._counter += 1
+        refund = {"id": f"REF{self._counter:04d}", "status": "succeeded", "amount": (body or {}).get("amount") or charge["amount"], "charge": charge["id"]}
+        self.refunds.append(refund)
+        self.idempotent[key] = refund
+        return httpx.Response(200, json=refund)
 
     def client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(transport=httpx.MockTransport(self.handler))

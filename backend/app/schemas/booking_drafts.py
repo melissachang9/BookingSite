@@ -111,6 +111,8 @@ class BookingDraftSummaryResponse(CamelModel):
     location_id: str | None = None
     status: str
     booking_method: str
+    # Set once the draft became a booking (so a waiting screen can open it).
+    confirmed_booking_id: str | None = None
     starts_at: datetime
     ends_at: datetime
     expires_at: datetime
@@ -129,3 +131,7 @@ class BookingDraftSummaryResponse(CamelModel):
     # Tax on price + add-ons, and the full visit total (subtotal + tax).
     tax_cents: int = 0
     full_amount_cents: int = 0
+
+
+class BookingDraftListResponse(CamelModel):
+    items: list[BookingDraftSummaryResponse]

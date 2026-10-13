@@ -6978,3 +6978,19 @@ select:disabled {
 .cs-clover-payment__match { grid-area: match; font: 600 11px var(--cs-font); color: var(--cs-label); }
 .cs-clover-payment__match.is-match { color: var(--cs-ok-text); }
 .cs-collect__skip { width: 100%; }
+
+/* Clover secure card form */
+.cs-clover-form { display: flex; flex-direction: column; gap: 12px; }
+.cs-clover-form__fields { display: flex; flex-direction: column; gap: 10px; }
+.cs-clover-form__fields label { display: flex; flex-direction: column; gap: 5px; font: 600 12px var(--cs-font); color: var(--cs-ink); }
+.cs-clover-form__row { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 10px; }
+.cs-clover-form__field { min-height: 40px; padding: 0 12px; display: flex; align-items: center; background: var(--cs-surface); border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-12); }
+.cs-clover-form__field iframe { width: 100%; }
+.cs-collect__check { display: flex; align-items: center; gap: 8px; font: 500 13px var(--cs-font); color: var(--cs-ink); }
+.cs-collect__deliveries { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font: 500 12px var(--cs-font); }
+.cs-collect__deliveries .is-ok { color: var(--cs-ok-text); }
+.cs-collect__deliveries .is-problem { color: var(--cs-warn-text); }
+
+/* Slot held while a client pays their deposit. */
+.cs-chip--hold { background: var(--cs-surface); border: 1.5px dashed rgba(20, 17, 15, .35); }
+.cs-chip--hold .cs-chip__client { color: var(--cs-warn-text); font-weight: 700; }

@@ -540,6 +540,9 @@ function BusinessPoliciesSection({
   const [noShowFeeCents, setNoShowFeeCents] = useState<number>(tenant?.settings.noShowFeeCents ?? 0);
   const [taxRatePercent, setTaxRatePercent] = useState<number>(tenant?.settings.taxRatePercent ?? 0);
   const [autoChargeNoShowFee, setAutoChargeNoShowFee] = useState<boolean>(tenant?.settings.autoChargeNoShowFee ?? false);
+  const [paymentLinkExpiryMinutes, setPaymentLinkExpiryMinutes] = useState<number>(
+    tenant?.settings.paymentLinkExpiryMinutes ?? 30,
+  );
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
   useEffect(() => {
@@ -552,6 +555,7 @@ function BusinessPoliciesSection({
       setNoShowFeeCents(tenant.settings.noShowFeeCents);
       setTaxRatePercent(tenant.settings.taxRatePercent);
       setAutoChargeNoShowFee(tenant.settings.autoChargeNoShowFee ?? false);
+      setPaymentLinkExpiryMinutes(tenant.settings.paymentLinkExpiryMinutes ?? 30);
     }
   }, [tenant]);
 
@@ -571,6 +575,7 @@ function BusinessPoliciesSection({
         noShowFeeCents,
         taxRatePercent,
         autoChargeNoShowFee,
+        paymentLinkExpiryMinutes,
       });
       onTenantUpdated(updated);
       setSaveState({ kind: "success", message: "Business policies saved." });
@@ -703,6 +708,25 @@ function BusinessPoliciesSection({
             <span>Automatically charge the no-show fee when marking a booking as no-show</span>
           </label>
         </div>
+      </div>
+
+      <div className="cs-form-row">
+        <label className="cs-field">
+          <span>Payment link holds the slot for (minutes)</span>
+          <input
+            type="number"
+            min={30}
+            max={1440}
+            step={5}
+            value={paymentLinkExpiryMinutes}
+            onChange={(event) => setPaymentLinkExpiryMinutes(parseInt(event.target.value || "30", 10))}
+            disabled={!canManageSettings || saveState.kind === "submitting"}
+          />
+          <small>
+            When staff text or email a deposit link, the time stays held this long (30 minutes to 24 hours). Resending
+            the link doesn't extend it.
+          </small>
+        </label>
       </div>
 
       {saveState.kind === "success" ? <p role="status" className="cs-status">{saveState.message}</p> : null}

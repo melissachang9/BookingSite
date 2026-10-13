@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     # Clover (OAuth app credentials; per-business tokens live in processor_connections).
     clover_app_id: Optional[str] = None
     clover_app_secret: Optional[str] = None
+    # Behind a trusted reverse proxy, use X-Forwarded-For as the customer's IP.
+    trust_proxy_headers: bool = False
     # sandbox | production | fake (fake = in-process stand-in, never in production)
     clover_environment: str = "sandbox"
     # Comma-separated Fernet keys (newest first) used to encrypt stored processor secrets.

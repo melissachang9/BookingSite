@@ -185,3 +185,88 @@ async def send_booking_confirmation(
         )
     await session.commit()
     return outcomes
+
+
+
+async def send_payment_link(
+    session: AsyncSession,
+    draft,
+    *,
+    tenant: Tenant,
+    payment_url: str,
+    deposit_cents: int,
+    minutes: int,
+    channels: list[str],
+    actor: User,
+) -> list[DeliveryOutcome]:
+    """Text and/or email the client their deposit link. One audit row per channel."""
+    customer = draft.customer
+    service_name = draft.service.name if draft.service is not None else "appointment"
+    when = await _local_start_label(session, draft, tenant)
+    deposit = f"${deposit_cents / 100:,.2f}"
+    outcomes: list[DeliveryOutcome] = []
+
+    if "email" in channels:
+        if not customer.email:
+            outcomes.append(DeliveryOutcome("email", "skipped", None, error="No email on file."))
+        elif not _email_configured():
+            outcomes.append(DeliveryOutcome("email", "skipped", customer.email, error="Email delivery is not configured."))
+        else:
+            text = (
+                f"Hi {customer.name},\n\nTo confirm your {service_name} at {tenant.name} on {when}, please pay your "
+                f"{deposit} deposit within {minutes} minutes:\n{payment_url}\n\n"
+                "The time is held for you until then."
+            )
+            html = (
+                f"<p>Hi {escape(customer.name)},</p><p>To confirm your <strong>{escape(service_name)}</strong> at "
+                f"{escape(tenant.name)} on <strong>{escape(when)}</strong>, please pay your <strong>{escape(deposit)}</strong> "
+                f"deposit within {minutes} minutes.</p><p><a href=\"{escape(payment_url)}\">Pay your deposit</a></p>"
+                "<p>The time is held for you until then.</p>"
+            )
+            try:
+                result = await send_transactional_email(
+                    recipient_email=customer.email,
+                    subject=f"Pay your deposit to confirm {service_name}",
+                    text_body=text,
+                    html_body=html,
+                )
+                outcomes.append(DeliveryOutcome("email", "sent", result.recipient_email, result.provider, result.provider_message_id))
+            except Exception as error:  # noqa: BLE001 - one channel failing must not hide the other
+                logger.warning("Payment link email failed for draft %s", draft.id, exc_info=True)
+                outcomes.append(DeliveryOutcome("email", "failed", customer.email, error=_error_text(error)))
+
+    if "sms" in channels:
+        sms_phone = customer.sms_phone or customer.phone
+        if not customer.sms_consent:
+            outcomes.append(DeliveryOutcome("sms", "skipped", sms_phone, error="Client has not agreed to texts."))
+        elif not sms_phone:
+            outcomes.append(DeliveryOutcome("sms", "skipped", None, error="No mobile number on file."))
+        elif not _twilio_configured():
+            outcomes.append(DeliveryOutcome("sms", "skipped", sms_phone, error="SMS delivery is not configured."))
+        else:
+            body = f"{tenant.name}: pay your {deposit} deposit within {minutes} min to confirm {service_name} on {when}: {payment_url}"
+            try:
+                result = await send_transactional_sms(recipient_phone=sms_phone, body=body)
+                outcomes.append(DeliveryOutcome("sms", "sent", result.recipient_phone, result.provider, result.provider_message_id))
+            except Exception as error:  # noqa: BLE001
+                logger.warning("Payment link SMS failed for draft %s", draft.id, exc_info=True)
+                outcomes.append(DeliveryOutcome("sms", "failed", sms_phone, error=_error_text(error)))
+
+    for outcome in outcomes:
+        await record_audit(
+            session,
+            tenant_id=tenant.id,
+            entity_type="booking_draft",
+            entity_id=draft.id,
+            action=f"payment_link_{outcome.status}",
+            actor=actor,
+            changes={
+                "channel": outcome.channel,
+                "recipient": outcome.recipient,
+                "provider": outcome.provider,
+                "providerMessageId": outcome.provider_message_id,
+            },
+            notes=outcome.error,
+        )
+    await session.commit()
+    return outcomes

@@ -235,7 +235,13 @@ def test_late_stripe_capture_is_flagged_not_canceled(client, monkeypatch) -> Non
 
 
 def _payment(**overrides):
-    base = dict(processor=None, processor_channel=None, checkout_session_id=None)
+    base = dict(
+        processor=None,
+        processor_channel=None,
+        checkout_session_id=None,
+        processor_payment_id=None,
+        processor_merchant_id=None,
+    )
     base.update(overrides)
     return SimpleNamespace(**base)
 
@@ -255,6 +261,7 @@ def test_refund_router_leaves_clover_device_payments_to_staff() -> None:
 
 
 def test_refund_router_never_wallet_credits_a_clover_online_charge() -> None:
+    # A Clover card payment with no charge id can't be refunded, and must not fall back to wallet credit.
     from fastapi import HTTPException
 
     from app.services.payment_processor import refund_payment_via_processor
@@ -262,7 +269,7 @@ def test_refund_router_never_wallet_credits_a_clover_online_charge() -> None:
     payment = _payment(processor="clover", processor_channel="ecom")
     with pytest.raises(HTTPException) as caught:
         asyncio.run(refund_payment_via_processor(payment=payment, amount_cents=100, idempotency_key="k"))
-    assert caught.value.status_code == 503
+    assert caught.value.status_code == 409
 
 
 def test_refund_router_falls_back_to_the_stripe_prefix_for_legacy_rows(monkeypatch) -> None:

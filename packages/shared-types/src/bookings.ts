@@ -94,6 +94,8 @@ export type BookingDraftSummary = AuditFields &
     locationId?: UUID | null;
     status: BookingDraftState;
     bookingMethod: BookingMethod;
+    /** Set once the draft became a booking. */
+    confirmedBookingId?: UUID | null;
     startsAt: ISODateString;
     endsAt: ISODateString;
     expiresAt: ISODateString;

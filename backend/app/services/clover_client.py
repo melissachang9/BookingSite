@@ -394,3 +394,91 @@ async def get_payment(ctx: CloverContext, payment_id: str) -> CloverPayment | No
             return None
         raise
     return _parse_payment(payload)
+
+
+# ---------------------------------------------------------------------------
+# Card-not-present charges and refunds (Ecommerce API)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CloverCharge:
+    id: str
+    amount_cents: int
+    card_brand: str | None
+    last4: str | None
+
+
+def _ecommerce_token(ctx: CloverContext) -> str:
+    return ctx.ecommerce_token or ctx.access_token
+
+
+async def create_charge(
+    ctx: CloverContext,
+    *,
+    amount_cents: int,
+    currency: str,
+    source_token: str,
+    ecomind: str,  # "ecom" (customer typed it) | "moto" (staff typed it)
+    idempotency_key: str,
+    client_ip: str | None,
+    metadata: dict[str, str],
+) -> CloverCharge:
+    """Charge a tokenized card. Replaying the same idempotency key must not charge twice.
+
+    Raises CloverDeclined for a declined/invalid card and CloverOutcomeUnknown
+    when we can't tell whether it went through (retry with the SAME key).
+    """
+    payload = await clover_request(
+        "POST",
+        clover_hosts(ctx.environment).ecommerce,
+        "/v1/charges",
+        token=_ecommerce_token(ctx),
+        json_body={
+            "amount": amount_cents,
+            "currency": currency.lower(),
+            "source": source_token,
+            "ecomind": ecomind,
+            "capture": True,
+            "metadata": metadata,
+        },
+        idempotency_key=idempotency_key,
+        client_ip=client_ip,
+    )
+    if not isinstance(payload, dict) or not isinstance(payload.get("id"), str):
+        raise CloverOutcomeUnknown("Clover returned an unreadable charge response.")
+    status = payload.get("status")
+    if status not in {"succeeded", None} or payload.get("captured") is False:
+        message, code = _error_message(payload, "The card was declined.")
+        raise CloverDeclined(message, code=code)
+    source = payload.get("source") if isinstance(payload.get("source"), dict) else {}
+    last4 = source.get("last4")
+    brand = source.get("brand")
+    return CloverCharge(
+        id=payload["id"],
+        amount_cents=int(payload.get("amount") or amount_cents),
+        card_brand=brand if isinstance(brand, str) else None,
+        last4=last4 if isinstance(last4, str) else None,
+    )
+
+
+@dataclass(frozen=True)
+class CloverRefund:
+    id: str
+    amount_cents: int
+
+
+async def create_refund(
+    ctx: CloverContext, *, charge_id: str, amount_cents: int, idempotency_key: str
+) -> CloverRefund:
+    payload = await clover_request(
+        "POST",
+        clover_hosts(ctx.environment).ecommerce,
+        "/v1/refunds",
+        token=_ecommerce_token(ctx),
+        json_body={"charge": charge_id, "amount": amount_cents},
+        idempotency_key=idempotency_key,
+    )
+    if not isinstance(payload, dict) or not isinstance(payload.get("id"), str) or payload.get("status") == "failed":
+        raise CloverRequestError("Clover did not complete the refund.")
+    return CloverRefund(id=payload["id"], amount_cents=int(payload.get("amount") or amount_cents))

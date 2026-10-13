@@ -23,6 +23,7 @@ import {
   writeStoredSession,
 } from "./platform-api";
 import { CalendarPage } from "./calendar-page";
+import { PaymentsPage } from "./payments-page";
 import { SettingsPage } from "./settings-page";
 import { CloverCallbackPage } from "./payments-settings-section";
 import { StaffPage } from "./staff-page";
@@ -118,6 +119,16 @@ const routeDefinitions: RouteDefinition[] = [
     workstreams: ["Service editing", "Form requirements", "Deposit defaults"],
     actions: ["Edit service", "Attach forms", "Preview storefront"],
     group: "settings-management",
+  },
+  {
+    path: "/payments",
+    title: "Payments",
+    eyebrow: "Deposits & follow-up",
+    description: "Held slots waiting on a deposit: resend links, copy them, or follow up before they lapse.",
+    metric: "Follow-up",
+    tone: "progress",
+    workstreams: ["Unpaid deposit links", "Payment reminders"],
+    actions: ["Send reminder", "Copy link", "Release hold"],
   },
   {
     path: "/forms",
@@ -340,7 +351,11 @@ function AuthenticatedLayout({
   };
 
   const topLevelDefinitions = routeDefinitions.filter(
-    (definition) => definition.path !== "/onboarding" && !definition.group,
+    (definition) =>
+      definition.path !== "/onboarding" &&
+      !definition.group &&
+      // The payments queue is only for people allowed to see payments.
+      (definition.path !== "/payments" || hasPermission(session.user, "payments.view")),
   );
 
   const getInitials = (name: string): string => {
@@ -367,6 +382,12 @@ function AuthenticatedLayout({
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 21s7-6.5 7-12a7 7 0 10-14 0c0 5.5 7 12 7 12z" />
         <circle cx="12" cy="9" r="2.5" />
+      </svg>
+    ),
+    "/payments": (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="6" width="18" height="12" rx="2" />
+        <path d="M3 10h18M7 15h3" />
       </svg>
     ),
     "/forms": (
@@ -822,6 +843,16 @@ export function App() {
           <Route path="/customers" element={<CustomersPage definition={pageByPath.get("customers") ?? routeDefinitions[0]} currentUser={session.user} />} />
           <Route path="/locations" element={<Navigate to="/settings#locations" replace />} />
           <Route path="/providers" element={<Navigate to="/staff" replace />} />
+          <Route
+            path="/payments"
+            element={
+              <PaymentsPage
+                definition={pageByPath.get("payments") ?? routeDefinitions[0]}
+                currentUser={session.user}
+                storefrontBaseUrl={storefrontBaseUrl}
+              />
+            }
+          />
           <Route path="/forms" element={<FormsPage definition={pageByPath.get("forms") ?? routeDefinitions[0]} currentUser={session.user} />} />
           <Route
             path="/settings"

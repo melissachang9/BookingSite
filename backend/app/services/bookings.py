@@ -18,6 +18,7 @@ from app.services.presenters import booking_balance_due_cents, booking_price_cen
 from app.services.service_terms import provider_service_link, resolve_service_terms
 
 logger = logging.getLogger(__name__)
+from app.services.auth import assert_tenant_permission
 from app.services.state_machine import guard_transition
 from app.services.tenants import tenant_currency
 from app.services.wallet import record_wallet_transaction
@@ -252,8 +253,11 @@ async def record_booking_payment(
     actor: User,
     processor_fields: dict[str, object] | None = None,
     event_note: str | None = None,
+    payment: Payment | None = None,
 ) -> BookingSummaryResponse:
     """Record a payment against a confirmed booking's balance.
+
+    Pass `payment` to complete a row that already exists (a card charge).
 
     The caller has validated the payment (method, amount against the balance).
     Shared by manual payments and payments matched from the Clover device.
@@ -262,10 +266,7 @@ async def record_booking_payment(
     balance_due_cents = booking_balance_due_cents(booking)
     paid_toward_balance = amount_cents - tip_cents
     event_notes = " · ".join(part for part in (event_note, f"Ref {reference}" if reference else None, notes) if part) or None
-    payment = Payment(
-        tenant_id=booking.tenant_id,
-        booking=booking,
-        customer_id=booking.customer_id,
+    values = dict(
         status="succeeded",
         deposit_status="paid_in_full",
         amount_cents=amount_cents,
@@ -276,7 +277,13 @@ async def record_booking_payment(
         external_reference=reference,
         **(processor_fields or {}),
     )
-    session.add(payment)
+    if payment is None:
+        payment = Payment(tenant_id=booking.tenant_id, booking=booking, customer_id=booking.customer_id, **values)
+        session.add(payment)
+    else:
+        payment.booking = booking
+        for key, value in values.items():
+            setattr(payment, key, value)
     await session.flush()
 
     _append_payment_event(
@@ -546,6 +553,18 @@ async def refund_payment(
     is_partial = refund_amount_cents < payment.amount_cents
     is_wallet_payment = payment.payment_method_type == "wallet"
 
+    # Money taken through Clover's card form goes back through Clover before we
+    # record anything; if Clover refuses, nothing here changes.
+    processor_result = None
+    if payment.processor == "clover" and payment.processor_channel in {"ecom", "moto"}:
+        # Moving real money back to a card needs the refund permission, not just checkout.
+        await assert_tenant_permission(session, actor, tenant, "payments.manage")
+        processor_result = await refund_payment_via_processor(
+            payment=payment,
+            amount_cents=refund_amount_cents,
+            idempotency_key=f"staff-refund-{payment.id}-{payment.amount_cents}-{refund_amount_cents}",
+        )
+
     if is_partial:
         # Reduce the payment amount; keep it succeeded unless fully refunded.
         payment.amount_cents -= refund_amount_cents
@@ -573,6 +592,13 @@ async def refund_payment(
         actor_notes = (
             f"Wallet credit returned{partial_note} (${refund_amount_cents / 100:.2f}). Operator: {actor.name}."
             + (f" Reason: {reason}" if reason else "")
+        )
+    elif processor_result is not None:
+        event_kind = "refund_processed"
+        partial_note = " (partial)" if is_partial else ""
+        actor_notes = (
+            f"Refunded{partial_note} ${refund_amount_cents / 100:.2f} via Clover (refund {processor_result.processor_refund_id}). "
+            f"Operator: {actor.name}." + (f" Reason: {reason}" if reason else "")
         )
     else:
         event_kind = "refund_recorded"

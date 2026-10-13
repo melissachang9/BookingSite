@@ -37,6 +37,15 @@ services:
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       STRIPE_API_BASE_URL: ${STRIPE_API_BASE_URL:-https://api.stripe.com/v1}
       STOREFRONT_PUBLIC_BASE_URL: ${STOREFRONT_PUBLIC_BASE_URL:-http://localhost:3001}
+      DASHBOARD_PUBLIC_BASE_URL: ${DASHBOARD_PUBLIC_BASE_URL:-http://localhost:5173}
+      # Clover (card payments). The app id/secret come from your Clover developer app.
+      CLOVER_APP_ID: ${CLOVER_APP_ID:-}
+      CLOVER_APP_SECRET: ${CLOVER_APP_SECRET:-}
+      CLOVER_ENVIRONMENT: ${CLOVER_ENVIRONMENT:-sandbox}
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
+      # Encrypts stored processor credentials. Generate one with:
+      #   python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      PAYMENT_SECRETS_KEY: ${PAYMENT_SECRETS_KEY:-}
     depends_on:
       db:
         condition: service_healthy

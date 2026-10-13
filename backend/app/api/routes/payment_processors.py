@@ -1,13 +1,20 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.auth import require_tenant_permission
 from app.db.models import User
 from app.db.session import get_db_session
 from app.schemas.bookings import BookingSummaryResponse
+from app.core.client_ip import client_ip
 from app.schemas.payments import (
+    CardChargeRequest,
+    CheckoutSessionViewResponse,
+    PaymentLinkRequest,
+    PaymentLinkResponse,
+    StaffBalanceCardChargeRequest,
+    StaffDraftCardChargeRequest,
     CloverApiKeysRequest,
     CloverAuthorizeUrlResponse,
     CloverDevicePaymentListResponse,
@@ -16,6 +23,13 @@ from app.schemas.payments import (
     PaymentCapabilitiesResponse,
     PublicPaymentConfigResponse,
     RecordCloverDevicePaymentRequest,
+)
+from app.services.payment_links import send_deposit_payment_link
+from app.services.clover_charges import (
+    charge_checkout_session,
+    charge_staff_booking_balance,
+    charge_staff_draft,
+    get_checkout_session_view,
 )
 from app.services.clover_payments import (
     confirm_staff_draft_with_clover_payment,
@@ -184,3 +198,83 @@ async def record_clover_device_refund_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingSummaryResponse:
     return await record_clover_device_refund(session, tenant_slug, booking_id, payment_id, current_user)
+
+
+# ---------------------------------------------------------------------------
+# Card payments through Clover's secure card form
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/tenants/{tenant_slug}/payments/checkout-sessions/{session_id}",
+    response_model=CheckoutSessionViewResponse,
+    summary="What the payment page shows for a checkout session (the session id is the access key)",
+)
+async def get_checkout_session_view_route(
+    tenant_slug: str,
+    session_id: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> CheckoutSessionViewResponse:
+    return await get_checkout_session_view(session, tenant_slug, session_id)
+
+
+@router.post(
+    "/tenants/{tenant_slug}/payments/checkout-sessions/{session_id}/card-charge",
+    response_model=BookingSummaryResponse,
+    summary="Pay a deposit or balance with a card tokenized by Clover's secure form",
+)
+async def charge_checkout_session_route(
+    tenant_slug: str,
+    session_id: str,
+    payload: CardChargeRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+) -> BookingSummaryResponse:
+    return await charge_checkout_session(session, tenant_slug, session_id, payload, client_ip(request))
+
+
+@router.post(
+    "/tenants/{tenant_slug}/booking-drafts/{booking_draft_id}/card-charge",
+    response_model=BookingSummaryResponse,
+    summary="Staff take a client's card over the phone to confirm a held booking",
+)
+async def charge_staff_draft_route(
+    tenant_slug: str,
+    booking_draft_id: str,
+    payload: StaffDraftCardChargeRequest,
+    request: Request,
+    current_user: User = Depends(require_tenant_permission("bookings.collect_payment")),
+    session: AsyncSession = Depends(get_db_session),
+) -> BookingSummaryResponse:
+    return await charge_staff_draft(session, tenant_slug, booking_draft_id, payload, current_user, client_ip(request))
+
+
+@router.post(
+    "/tenants/{tenant_slug}/bookings/{booking_id}/payments/card-charge",
+    response_model=BookingSummaryResponse,
+    summary="Staff take a client's card over the phone to settle a booking balance",
+)
+async def charge_staff_booking_balance_route(
+    tenant_slug: str,
+    booking_id: str,
+    payload: StaffBalanceCardChargeRequest,
+    request: Request,
+    current_user: User = Depends(require_tenant_permission("bookings.collect_payment")),
+    session: AsyncSession = Depends(get_db_session),
+) -> BookingSummaryResponse:
+    return await charge_staff_booking_balance(session, tenant_slug, booking_id, payload, current_user, client_ip(request))
+
+
+@router.post(
+    "/tenants/{tenant_slug}/booking-drafts/{booking_draft_id}/payment-link",
+    response_model=PaymentLinkResponse,
+    summary="Hold a slot and text/email the client a link to pay their deposit",
+)
+async def send_payment_link_route(
+    tenant_slug: str,
+    booking_draft_id: str,
+    payload: PaymentLinkRequest,
+    current_user: User = Depends(require_tenant_permission("bookings.collect_payment")),
+    session: AsyncSession = Depends(get_db_session),
+) -> PaymentLinkResponse:
+    return await send_deposit_payment_link(session, tenant_slug, booking_draft_id, payload, current_user)

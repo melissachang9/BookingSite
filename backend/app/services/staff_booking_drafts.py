@@ -131,8 +131,13 @@ async def confirm_staff_draft(
     actor: User,
     processor_fields: dict[str, object] | None = None,
     event_note: str | None = None,
+    payment: Payment | None = None,
+    send_confirmation: bool = True,
 ) -> BookingSummaryResponse:
     """Promote a held draft to a confirmed booking with its payment recorded.
+
+    Pass `payment` to complete a payment row that already exists (a card charge
+    creates its row before calling the processor) instead of creating one.
 
     The caller has already validated the amount (check_staff_draft_amount) and
     the payment itself. `processor_fields` are extra Payment columns for
@@ -174,10 +179,7 @@ async def confirm_staff_draft(
         },
     )
 
-    payment = Payment(
-        tenant_id=booking.tenant_id,
-        booking=booking,
-        customer_id=booking.customer_id,
+    values = dict(
         status="succeeded",
         deposit_status="paid_in_full" if full_mode else "paid",
         amount_cents=amount_cents,
@@ -188,7 +190,13 @@ async def confirm_staff_draft(
         external_reference=reference,
         **(processor_fields or {}),
     )
-    session.add(payment)
+    if payment is None:
+        payment = Payment(tenant_id=booking.tenant_id, booking=booking, customer_id=booking.customer_id, **values)
+        session.add(payment)
+    else:
+        payment.booking = booking
+        for key, value in values.items():
+            setattr(payment, key, value)
     await session.flush()
 
     event_notes = " · ".join(
@@ -225,10 +233,11 @@ async def confirm_staff_draft(
     session.expire_all()
 
     hydrated = await _load_booking(session, booking_id, tenant_id)
-    await session.refresh(actor)  # expired above; the audit trail reads it
-    await send_booking_confirmation(session, hydrated, actor=actor)
-    session.expire_all()
-    hydrated = await _load_booking(session, booking_id, tenant_id)
+    if send_confirmation:
+        await session.refresh(actor)  # expired above; the audit trail reads it
+        await send_booking_confirmation(session, hydrated, actor=actor)
+        session.expire_all()
+        hydrated = await _load_booking(session, booking_id, tenant_id)
     return booking_to_summary(hydrated)
 
 

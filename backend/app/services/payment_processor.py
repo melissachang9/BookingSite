@@ -480,12 +480,34 @@ async def refund_payment_via_processor(
         )
 
     if processor == "clover" and payment.processor_channel in {"ecom", "moto"}:
-        # Online/keyed Clover charges refund through the Clover API (added with
-        # the Clover client). Never fall back to wallet credit silently.
-        raise api_exception(
-            503,
-            "service_unavailable",
-            "Refunding Clover card payments is not available yet.",
+        # Online/keyed Clover charges refund through the Clover API. A failure
+        # raises: never fall back to wallet credit silently.
+        from app.services import clover_client
+        from app.services.clover_connections import get_clover_context
+
+        if not payment.processor_payment_id:
+            raise api_exception(409, "conflict", "This payment has no Clover charge to refund.")
+        ctx = await get_clover_context(payment.tenant_id)
+        if payment.processor_merchant_id and payment.processor_merchant_id != ctx.merchant_id:
+            raise api_exception(
+                409,
+                "conflict",
+                "This payment was taken on a different Clover account than the one connected now.",
+            )
+        try:
+            refund = await clover_client.create_refund(
+                ctx,
+                charge_id=payment.processor_payment_id,
+                amount_cents=amount_cents,
+                idempotency_key=idempotency_key,
+            )
+        except clover_client.CloverError as error:
+            raise api_exception(502, "payment_processor_error", error.message) from error
+        return ProcessorRefundResult(
+            refund_id=refund.id,
+            amount_cents=refund.amount_cents,
+            processor="clover",
+            processor_refund_id=refund.id,
         )
 
     return None

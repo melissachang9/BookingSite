@@ -675,6 +675,79 @@ describe("CalendarPage", () => {
     }
   });
 
+  it("shows a held slot as an Awaiting deposit chip and lets staff release it", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const held = {
+        ...baseDraftSummary,
+        id: "draft-held",
+        customer: { ...baseBooking.customer, name: "Pat Phone" },
+        expiresAt: "2026-05-26T19:25:00.000Z",
+        status: "awaiting_payment" as const,
+      };
+      const api = createApi([baseBooking]);
+      const listBookingDrafts = vi.fn().mockResolvedValueOnce({ items: [held] }).mockResolvedValue({ items: [] });
+      const releaseBookingDraft = vi.fn().mockResolvedValue({ ...held, status: "canceled" });
+      const heldApi = {
+        ...api,
+        listBookingDrafts,
+        releaseBookingDraft,
+        confirmBookingDraftWithPayment: vi.fn(),
+      };
+
+      render(
+        <CalendarPage
+          definition={{ eyebrow: "Calendar-first booking", description: "Calendar" }}
+          tenantSlug="brow-beauty-lab"
+          api={heldApi}
+        />,
+      );
+
+      await screen.findByText("24 – 30 May");
+      const chip = await screen.findByRole("button", { name: /Awaiting deposit: Pat Phone/ });
+      expect(chip).toHaveTextContent("Awaiting deposit · 25m");
+      expect(listBookingDrafts).toHaveBeenCalledWith(
+        "brow-beauty-lab",
+        expect.objectContaining({ startsAtGte: expect.stringContaining("T00:00:00"), startsAtLte: expect.stringContaining("T23:59:59") }),
+      );
+
+      fireEvent.click(chip);
+      const drawer = await screen.findByRole("dialog", { name: "Held slot" });
+      expect(within(drawer).getByText("Pat Phone")).toBeInTheDocument();
+      expect(within(drawer).getByRole("region", { name: "Collect payment" })).toBeInTheDocument();
+
+      fireEvent.click(within(drawer).getByRole("button", { name: "Release hold" }));
+      await waitFor(() => expect(releaseBookingDraft).toHaveBeenCalledWith("brow-beauty-lab", "draft-held", {}));
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Held slot" })).not.toBeInTheDocument());
+      // The chip goes away once the board refreshes.
+      await waitFor(() => expect(screen.queryByRole("button", { name: /Awaiting deposit: Pat Phone/ })).not.toBeInTheDocument());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("doesn't break the calendar when held slots can't load", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+    try {
+      const api = createApi([baseBooking]);
+      render(
+        <CalendarPage
+          definition={{ eyebrow: "Calendar-first booking", description: "Calendar" }}
+          tenantSlug="brow-beauty-lab"
+          api={{ ...api, listBookingDrafts: vi.fn().mockRejectedValue(new Error("boom")) }}
+        />,
+      );
+      expect(await screen.findByText("24 – 30 May")).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: /Taylor Guest booked/i })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Awaiting deposit/ })).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("doesn't offer Clover at checkout when the business can't match device payments", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));

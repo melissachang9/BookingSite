@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { storefrontApi, isApiClientError, isApiNotFoundError } from "../../../../lib/storefront-api";
 import { formatCurrency, formatExpiryWindow, formatInTenantTime, slugify, titleFromSlug } from "../../../../lib/storefront-shell";
 import { completeDepositCheckoutAction } from "../actions";
+import { CardPayment } from "../../../../lib/card-payment";
 
 type BookingPaymentPageProps = {
   params: Promise<{ tenantSlug: string; draftId: string }>;
@@ -28,10 +29,32 @@ export default async function BookingPaymentPage({ params, searchParams }: Booki
   }
 
   try {
-    const [tenant, draft] = await Promise.all([
+    const [tenant, draft, session, paymentConfig] = await Promise.all([
       storefrontApi.getTenantBySlug(tenantSlug),
       storefrontApi.getBookingDraft(tenantSlug, draftId),
+      storefrontApi.getCheckoutSessionView(tenantSlug, sessionId),
+      storefrontApi.getPublicPaymentConfig(tenantSlug),
     ]);
+
+    if (session.status === "succeeded" && draft.confirmedBookingId) {
+      redirect(`/${tenantSlug}/book/${draftId}/success?bookingId=${draft.confirmedBookingId}`);
+    }
+    const lapsed = session.status === "expired" || session.status === "canceled" || draft.status === "expired" || draft.status === "canceled";
+    if (lapsed) {
+      return (
+        <main className="page-stack">
+          <section className="state-panel">
+            <p className="store-eyebrow">Hold expired</p>
+            <h2>This time is no longer being held</h2>
+            <p>The window to pay this deposit has passed. Nothing was charged. Pick a time again to continue.</p>
+            <Link href={`/${tenantSlug}/services/${slugify(draft.service.name)}`} className="store-button">
+              Choose a time
+            </Link>
+          </section>
+        </main>
+      );
+    }
+    const cloverConfig = session.processor === "clover" ? paymentConfig.clover : null;
 
     return (
       <main className="page-stack">
@@ -98,12 +121,33 @@ export default async function BookingPaymentPage({ params, searchParams }: Booki
                 <strong>Confirmation</strong>
                 <p>Your appointment will be confirmed as soon as this payment step finishes successfully.</p>
               </div>
-              <form action={completeDepositCheckoutAction}>
-                <input type="hidden" name="tenantSlug" value={tenantSlug} />
-                <input type="hidden" name="bookingDraftId" value={draft.id} />
-                <input type="hidden" name="sessionId" value={sessionId} />
-                <button type="submit">Pay deposit</button>
-              </form>
+              {session.processor === "clover" ? (
+                cloverConfig ? (
+                  <CardPayment
+                    config={cloverConfig}
+                    submitLabel={`Pay ${formatCurrency(session.amountCents, session.currency)}`}
+                    target={{ kind: "deposit", tenantSlug, bookingDraftId: draft.id, sessionId }}
+                  />
+                ) : (
+                  <p role="alert" className="store-card-error">
+                    Card payments aren't available right now. Please contact the studio to book.
+                  </p>
+                )
+              ) : session.processor === "simulated" ? (
+                <form action={completeDepositCheckoutAction}>
+                  <input type="hidden" name="tenantSlug" value={tenantSlug} />
+                  <input type="hidden" name="bookingDraftId" value={draft.id} />
+                  <input type="hidden" name="sessionId" value={sessionId} />
+                  <button type="submit">Pay deposit</button>
+                </form>
+              ) : (
+                <form action={completeDepositCheckoutAction}>
+                  <input type="hidden" name="tenantSlug" value={tenantSlug} />
+                  <input type="hidden" name="bookingDraftId" value={draft.id} />
+                  <input type="hidden" name="sessionId" value={sessionId} />
+                  <button type="submit">Continue to payment</button>
+                </form>
+              )}
             </section>
 
             <Link href={`/${tenantSlug}/book/${draftId}`} className="ghost-link">

@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.auth import get_optional_current_user, require_tenant_permission
@@ -6,6 +8,7 @@ from app.db.models import User
 from app.db.session import get_db_session
 from app.schemas.bookings import BookingSummaryResponse
 from app.schemas.booking_drafts import (
+    BookingDraftListResponse,
     BookingDraftSummaryResponse,
     ConfirmWithPaymentRequest,
     CreateBookingDraftRequest,
@@ -21,6 +24,7 @@ from app.services.booking_drafts import (
     update_booking_draft,
 )
 from app.services.booking_forms import save_booking_form_requirement_draft, submit_booking_form_requirement
+from app.services.payment_links import list_pending_booking_drafts
 from app.services.staff_booking_drafts import confirm_staff_draft_with_payment, confirm_staff_draft_without_payment
 
 
@@ -41,6 +45,24 @@ async def create_booking_draft_route(
     # Online drafts are anonymous; staff-entered drafts are permission-checked
     # in the service so the rule lives next to the booking logic.
     return await create_booking_draft(session, tenant_slug, payload, current_user)
+
+
+@router.get(
+    "/tenants/{tenant_slug}/booking-drafts",
+    response_model=BookingDraftListResponse,
+    summary="Held slots (awaiting payment) to show on the calendar",
+)
+async def list_booking_drafts_route(
+    tenant_slug: str,
+    starts_at_gte: datetime = Query(alias="startsAtGte"),
+    starts_at_lte: datetime = Query(alias="startsAtLte"),
+    _: User = Depends(require_tenant_permission("calendar.view")),
+    session: AsyncSession = Depends(get_db_session),
+) -> BookingDraftListResponse:
+    items = await list_pending_booking_drafts(
+        session, tenant_slug, starts_at_gte=starts_at_gte, starts_at_lte=starts_at_lte
+    )
+    return BookingDraftListResponse(items=items)
 
 
 @router.get(

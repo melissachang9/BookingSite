@@ -178,3 +178,58 @@ export type RecordCloverDevicePaymentRequest = {
   cloverPaymentId: string;
   notes?: string;
 };
+
+
+// --- Card payments through Clover's secure card form -----------------------
+
+/** A card typed into Clover's secure form, already tokenized in the browser. */
+export type CardChargeRequest = {
+  sourceToken: string;
+  /** New for each card entry; reused when retrying "we couldn't confirm" so it can't charge twice. */
+  attemptId: string;
+};
+
+export type StaffDraftCardChargeRequest = CardChargeRequest & {
+  amountMode: "deposit" | "full";
+  tipCents?: number;
+};
+
+export type StaffBalanceCardChargeRequest = CardChargeRequest & { tipCents?: number };
+
+/** What the payment page shows. No customer details. */
+export type CheckoutSessionView = {
+  sessionId: string;
+  kind: "deposit" | "booking_balance" | string;
+  /** "expired" when the hold ran out before payment. */
+  status: "pending" | "processing" | "succeeded" | "canceled" | "refunded" | "expired" | string;
+  amountCents: number;
+  currency: string;
+  expiresAt?: ISODateString | null;
+  processor: "clover" | "stripe" | "simulated";
+  serviceName: string;
+  startsAt: ISODateString;
+  bookingId?: UUID | null;
+  bookingDraftId?: UUID | null;
+};
+
+export type PaymentLinkRequest = {
+  channels: Array<"sms" | "email">;
+  /** Staff confirm the client asked for a text. */
+  smsConsentConfirmed?: boolean;
+};
+
+export type DeliveryResult = {
+  channel: "sms" | "email" | string;
+  status: "sent" | "failed" | "skipped" | string;
+  recipient?: string | null;
+  error?: string | null;
+};
+
+export type PaymentLinkResponse = {
+  bookingDraft: BookingDraftSummary;
+  paymentUrl: string;
+  holdExpiresAt: ISODateString;
+  deliveries: DeliveryResult[];
+};
+
+export type BookingDraftList = { items: BookingDraftSummary[] };

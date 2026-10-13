@@ -19,6 +19,9 @@ import type {
   CreateBookingDraftRequest,
   CreateCheckoutSessionRequest,
   CreateCheckoutSessionResponse,
+  BookingDraftList,
+  CardChargeRequest,
+  CheckoutSessionView,
   CloverApiKeysRequest,
   CloverAuthorizeUrlResponse,
   CloverDevicePaymentList,
@@ -27,7 +30,11 @@ import type {
   ConfirmWithPaymentRequest,
   RecordCloverDevicePaymentRequest,
   PaymentCapabilities,
+  PaymentLinkRequest,
+  PaymentLinkResponse,
   PublicPaymentConfig,
+  StaffBalanceCardChargeRequest,
+  StaffDraftCardChargeRequest,
   ReleaseBookingDraftRequest,
   CreateFormRequest,
   CreateLocationRequest,
@@ -474,6 +481,31 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.get<PaymentCapabilities>(`tenants/${tenantSlug}/payments/capabilities`),
   getPublicPaymentConfig: (tenantSlug: string) =>
     client.get<PublicPaymentConfig>(`tenants/${tenantSlug}/payments/public-config`),
+  getCheckoutSessionView: (tenantSlug: string, sessionId: string) =>
+    client.get<CheckoutSessionView>(`tenants/${tenantSlug}/payments/checkout-sessions/${sessionId}`),
+  chargeCheckoutSession: (tenantSlug: string, sessionId: string, body: CardChargeRequest, headers?: HeadersInit) =>
+    client.post<BookingSummary, CardChargeRequest>(
+      `tenants/${tenantSlug}/payments/checkout-sessions/${sessionId}/card-charge`,
+      body,
+      headers ? { headers } : undefined,
+    ),
+  chargeStaffDraftCard: (tenantSlug: string, bookingDraftId: string, body: StaffDraftCardChargeRequest) =>
+    client.post<BookingSummary, StaffDraftCardChargeRequest>(
+      `tenants/${tenantSlug}/booking-drafts/${bookingDraftId}/card-charge`,
+      body,
+    ),
+  chargeStaffBookingBalanceCard: (tenantSlug: string, bookingId: string, body: StaffBalanceCardChargeRequest) =>
+    client.post<BookingSummary, StaffBalanceCardChargeRequest>(
+      `tenants/${tenantSlug}/bookings/${bookingId}/payments/card-charge`,
+      body,
+    ),
+  sendPaymentLink: (tenantSlug: string, bookingDraftId: string, body: PaymentLinkRequest) =>
+    client.post<PaymentLinkResponse, PaymentLinkRequest>(
+      `tenants/${tenantSlug}/booking-drafts/${bookingDraftId}/payment-link`,
+      body,
+    ),
+  listBookingDrafts: (tenantSlug: string, query: { startsAtGte: string; startsAtLte: string }) =>
+    client.get<BookingDraftList>(`tenants/${tenantSlug}/booking-drafts`, { query }),
   listCloverDevicePayments: (
     tenantSlug: string,
     query: { sinceMinutes?: number; bookingDraftId?: string; bookingId?: string } = {},

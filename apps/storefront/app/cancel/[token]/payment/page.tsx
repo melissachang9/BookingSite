@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { storefrontApi, isApiClientError, isApiNotFoundError } from "../../../lib/storefront-api";
 import { formatCurrency, formatInTenantTime } from "../../../lib/storefront-shell";
 import { completeManageBookingBalanceCheckoutAction } from "../actions";
+import { CardPayment } from "../../../lib/card-payment";
 
 type ManageBookingPaymentPageProps = {
   params: Promise<{ token: string }>;
@@ -30,6 +31,12 @@ export default async function ManageBookingPaymentPage({ params, searchParams }:
   try {
     const manageBooking = await storefrontApi.getManageBooking(token);
     const { booking, tenant } = manageBooking;
+    const [session, paymentConfig] = await Promise.all([
+      storefrontApi.getCheckoutSessionView(tenant.slug, sessionId),
+      storefrontApi.getPublicPaymentConfig(tenant.slug),
+    ]);
+    const cloverConfig = session.processor === "clover" ? paymentConfig.clover : null;
+    const sessionLapsed = session.status === "expired" || session.status === "canceled";
 
     return (
       <main className="page-stack">
@@ -91,13 +98,31 @@ export default async function ManageBookingPaymentPage({ params, searchParams }:
                 <strong>Confirmation</strong>
                 <p>Your private booking link will update as soon as this payment step finishes successfully.</p>
               </div>
-              <form action={completeManageBookingBalanceCheckoutAction}>
-                <input type="hidden" name="token" value={token} />
-                <input type="hidden" name="sessionId" value={sessionId} />
-                <button type="submit" className="store-button" disabled={booking.balanceDueCents <= 0}>
-                  Pay remaining balance
-                </button>
-              </form>
+              {sessionLapsed ? (
+                <p role="alert" className="store-card-error">
+                  This payment link has expired. Ask the studio for a new one.
+                </p>
+              ) : session.processor === "clover" ? (
+                cloverConfig ? (
+                  <CardPayment
+                    config={cloverConfig}
+                    submitLabel={`Pay ${formatCurrency(session.amountCents, session.currency)}`}
+                    target={{ kind: "balance", token, sessionId }}
+                  />
+                ) : (
+                  <p role="alert" className="store-card-error">
+                    Card payments aren't available right now. Please contact the studio.
+                  </p>
+                )
+              ) : (
+                <form action={completeManageBookingBalanceCheckoutAction}>
+                  <input type="hidden" name="token" value={token} />
+                  <input type="hidden" name="sessionId" value={sessionId} />
+                  <button type="submit" className="store-button" disabled={booking.balanceDueCents <= 0}>
+                    Pay remaining balance
+                  </button>
+                </form>
+              )}
             </section>
 
             <Link href={`/cancel/${token}`} className="ghost-link">

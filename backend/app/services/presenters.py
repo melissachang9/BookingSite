@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import inspect as sa_inspect
 
 from app.core.security import create_customer_manage_token
@@ -404,8 +406,16 @@ def booking_draft_to_summary(draft: BookingDraft) -> BookingDraftSummaryResponse
         service_id=draft.service_id,
         provider_id=draft.provider_id,
         location_id=draft.location_id,
-        status=draft.status,
+        # A hold past its time reads as expired even before the sweeper marks it.
+        status=(
+            "expired"
+            if draft.status in {"draft", "slot_held", "awaiting_form", "awaiting_payment"}
+            and (draft.expires_at if draft.expires_at.tzinfo else draft.expires_at.replace(tzinfo=timezone.utc))
+            <= datetime.now(timezone.utc)
+            else draft.status
+        ),
         booking_method=draft.booking_method,
+        confirmed_booking_id=draft.confirmed_booking_id,
         starts_at=draft.starts_at,
         ends_at=draft.ends_at,
         expires_at=draft.expires_at,

@@ -290,7 +290,9 @@ async def _load_booking_draft(
     if for_update:
         # Serialize promotion paths (payment completion, staff confirm, release)
         # so a draft can't be confirmed twice or confirmed while being released.
-        query = query.with_for_update()
+        # A locking read must show the row as it is NOW, not as this session
+        # last saw it (a hold may have been released or expired meanwhile).
+        query = query.with_for_update().execution_options(populate_existing=True)
     draft = await session.scalar(
         query
         .options(
@@ -852,7 +854,8 @@ async def get_booking_draft(
 ) -> BookingDraftSummaryResponse:
     tenant = await get_tenant_by_slug(session, tenant_slug)
     draft = await _load_booking_draft(session, booking_draft_id, tenant.id)
-    _ensure_not_expired(draft)
+    # Reading a lapsed hold reports it as expired (so pages can show a recovery
+    # message) instead of failing; changing it is still refused elsewhere.
     return booking_draft_to_summary(draft)
 
 
