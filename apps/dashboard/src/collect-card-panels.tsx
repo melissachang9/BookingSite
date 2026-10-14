@@ -251,6 +251,9 @@ export function PaymentLinkPanel({
           The client asked for a text
         </label>
       ) : null}
+      {needsConsent && !consent ? (
+        <span className="cs-collect__hint">Tick "The client asked for a text" to send a text, or untick Text to send email only.</span>
+      ) : null}
       {error ? <div role="alert" className="cs-banner cs-banner--error">{error}</div> : null}
       <button type="button" className="cs-btn cs-btn--primary" onClick={() => void send()} disabled={!canSend}>
         {sending ? "Sending…" : channels.length === 0 ? "Hold slot & get link" : "Send payment link"}

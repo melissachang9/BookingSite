@@ -117,6 +117,8 @@ export type PaymentCapabilities = {
   canLinkDevicePayments: boolean;
   /** Online / phone card payments (the Clover card form). */
   canChargeCards: boolean;
+  /** Staff can text/email a deposit link. Also true for the simulated checkout in development. */
+  canSendPaymentLink: boolean;
   canRefundCards: boolean;
   /** The Clover account's currency differs from the business currency. */
   currencyMismatch: boolean;

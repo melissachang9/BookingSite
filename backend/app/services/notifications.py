@@ -94,6 +94,20 @@ async def send_transactional_email(
     )
 
 
+def to_e164(phone: str) -> str:
+    """Twilio needs +<country><number>. Staff type numbers many ways; assume North America
+    (10 digits, or 11 starting with 1) when there is no leading +."""
+    raw = phone.strip()
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if raw.startswith("+"):
+        return f"+{digits}"
+    if len(digits) == 10:
+        return f"+1{digits}"
+    if len(digits) == 11 and digits.startswith("1"):
+        return f"+{digits}"
+    raise api_exception(400, "bad_request", f"{phone!r} isn't a phone number we can text. Use 10 digits or +country code.")
+
+
 async def send_transactional_sms(
     *,
     recipient_phone: str,
@@ -103,6 +117,8 @@ async def send_transactional_sms(
     settings = get_settings()
     if not _twilio_configured():
         raise api_exception(503, "service_unavailable", "SMS delivery is not configured.")
+
+    recipient_phone = to_e164(recipient_phone)
 
     from urllib.parse import urlencode
 

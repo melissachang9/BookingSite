@@ -85,6 +85,7 @@ const cloverCapabilities: PaymentCapabilities = {
   status: "connected",
   canLinkDevicePayments: true,
   canChargeCards: true,
+  canSendPaymentLink: true,
   canRefundCards: true,
   currencyMismatch: false,
   needsReauth: false,

@@ -400,8 +400,15 @@ async def disconnect_clover(session: AsyncSession, tenant_slug: str, actor: User
 
 def _capabilities_from(tenant: Tenant, connection: ProcessorConnection | None) -> PaymentCapabilitiesResponse:
     processor = resolve_payment_processor(tenant)
+    # Until Clover is connected, a business on the simulated checkout (development only) or on
+    # Stripe's hosted checkout can still send a payment link. Both give the client a ready-made URL.
+    simulated_link = processor in {"simulated", "stripe"}
     if connection is None or connection.status == "disconnected":
-        return PaymentCapabilitiesResponse(processor=processor, status=connection.status if connection else None)
+        return PaymentCapabilitiesResponse(
+            processor=processor,
+            status=connection.status if connection else None,
+            can_send_payment_link=simulated_link,
+        )
 
     connected = connection.status == "connected"
     card_ready = connected and bool(connection.pakms_public_key)
@@ -415,6 +422,7 @@ def _capabilities_from(tenant: Tenant, connection: ProcessorConnection | None) -
         merchant_name=connection.merchant_name,
         can_link_device_payments=connected and not mismatch,
         can_charge_cards=card_ready and not mismatch,
+        can_send_payment_link=(card_ready and not mismatch) or simulated_link,
         can_refund_cards=card_ready and not mismatch,
         currency_mismatch=mismatch,
         needs_reauth=connection.status == "needs_reauth",

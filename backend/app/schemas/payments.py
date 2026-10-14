@@ -86,6 +86,7 @@ class PaymentCapabilitiesResponse(CamelModel):
     merchant_name: str | None = None
     can_link_device_payments: bool = False
     can_charge_cards: bool = False
+    can_send_payment_link: bool = False
     can_refund_cards: bool = False
     currency_mismatch: bool = False
     needs_reauth: bool = False

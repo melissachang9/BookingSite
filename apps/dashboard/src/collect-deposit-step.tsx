@@ -123,7 +123,7 @@ export function CollectDepositStep({
     capabilities?.canChargeCards && api.getPublicPaymentConfig && api.chargeStaffDraftCard && depositCents + (draft.fullAmountCents ?? 0) > 0,
   );
   const linkAvailable = Boolean(
-    capabilities?.canChargeCards && api.sendPaymentLink && api.getBookingDraft && api.getBooking && depositCents > 0,
+    capabilities?.canSendPaymentLink && api.sendPaymentLink && api.getBookingDraft && api.getBooking && depositCents > 0,
   );
   const methods = useMemo<MethodOption[]>(
     () => [

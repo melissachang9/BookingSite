@@ -6994,3 +6994,5 @@ select:disabled {
 /* Slot held while a client pays their deposit. */
 .cs-chip--hold { background: var(--cs-surface); border: 1.5px dashed rgba(20, 17, 15, .35); }
 .cs-chip--hold .cs-chip__client { color: var(--cs-warn-text); font-weight: 700; }
+
+.cs-collect__hint { font-size: 0.85rem; opacity: 0.75; }
