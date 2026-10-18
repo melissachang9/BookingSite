@@ -650,6 +650,52 @@ describe("ServicesPage", () => {
     });
   });
 
+  it("names a new service so it never clashes with an existing one", async () => {
+    mockLoaders({
+      services: [...baseServices, { ...baseServices[2], id: "svc-new", name: "New Service" }],
+    });
+    const createSpy = vi.spyOn(platformApi, "createService").mockResolvedValue({ id: "svc-created" } as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "New service" }));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy.mock.calls[0][1]).toMatchObject({ name: "New Service 2" });
+  });
+
+  it("tries the next name when a hidden service already holds the first", async () => {
+    mockLoaders();
+    const conflict = Object.assign(new Error("A service with this name already exists for the tenant."), { status: 409 });
+    const createSpy = vi
+      .spyOn(platformApi, "createService")
+      .mockRejectedValueOnce(conflict)
+      .mockResolvedValueOnce({ id: "svc-created" } as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "New service" }));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(2));
+    expect(createSpy.mock.calls[0][1]).toMatchObject({ name: "New Service" });
+    expect(createSpy.mock.calls[1][1]).toMatchObject({ name: "New Service 2" });
+  });
+
+  it("keeps the service heading and category label in step with the form as it is edited", async () => {
+    mockLoaders();
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Lash Tint")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Lash Tint"));
+    const heading = await screen.findByRole("heading", { name: "Lash Tint", level: 4 });
+    expect(screen.getByText("Uncategorized", { selector: ".cs-svc-detail-head__eyebrow" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Service name"), { target: { value: "Microneedling" } });
+    expect(heading).toHaveTextContent("Microneedling");
+    fireEvent.change(screen.getByLabelText("Category"), { target: { value: "cat-facials" } });
+    expect(screen.getByText("Facials", { selector: ".cs-svc-detail-head__eyebrow" })).toBeInTheDocument();
+  });
+
   it("denies access entirely when services.view is false", async () => {
     mockLoaders();
     render(<ServicesPage definition={definition} currentUser={readOnlyUser} />);

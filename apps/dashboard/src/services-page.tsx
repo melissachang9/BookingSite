@@ -384,13 +384,26 @@ export function ServicesPage({
                       return;
                     }
                     try {
-                      const created = await platformApi.createService(tenantSlug, {
-                        name: "New Service",
-                        durationMinutes: 60,
-                        priceCents: 0,
-                        depositCents: 0,
-                        locationIds: [firstLocationId],
-                      });
+                      // Service names are unique, so a leftover "New Service" becomes "New Service 2", and so on.
+                      // The list only shows active services, so retry if a hidden one holds the name.
+                      let created: ServiceSummary | null = null;
+                      const taken = new Set(services.map((item) => item.name.trim().toLowerCase()));
+                      for (let attempt = 1; created === null; attempt += 1) {
+                        const name = attempt === 1 ? "New Service" : `New Service ${attempt}`;
+                        if (taken.has(name.toLowerCase())) continue;
+                        try {
+                          created = await platformApi.createService(tenantSlug, {
+                            name,
+                            durationMinutes: 60,
+                            priceCents: 0,
+                            depositCents: 0,
+                            locationIds: [firstLocationId],
+                          });
+                        } catch (err) {
+                          const conflict = (err as { status?: number } | null)?.status === 409;
+                          if (!conflict || attempt >= 25) throw err;
+                        }
+                      }
                       await refreshServices();
                       setSelection({ kind: "service", serviceId: created.id });
                       setStatus("New service created. Fill in the details below.");
@@ -1037,7 +1050,8 @@ function ServiceDetail({
     { key: "onlineBooking", label: "Online booking" },
   ];
 
-  const categoryIndex = categories.findIndex((category) => category.id === service.categoryId);
+  // The header follows the form as the operator types, so it never disagrees with the fields below it.
+  const categoryIndex = categories.findIndex((category) => category.id === form.categoryId);
   const categoryName = categoryIndex >= 0 ? categories[categoryIndex]!.name : "Uncategorized";
 
   return (
@@ -1045,7 +1059,7 @@ function ServiceDetail({
       <header className="cs-md-detail__header cs-svc-detail-head">
         <div className="cs-svc-detail-head__text">
           <p className="cs-svc-detail-head__eyebrow">{categoryName}</p>
-          <h4 className="cs-svc-detail-head__name">{service.name}</h4>
+          <h4 className="cs-svc-detail-head__name">{form.name.trim() || service.name}</h4>
         </div>
         {canManage ? (
           <div className="cs-svc-detail-head__actions">
@@ -3003,7 +3017,7 @@ function CategoryDetailPanel({
       <header className="cs-md-detail__header cs-svc-detail-head">
         <div className="cs-svc-detail-head__text">
           <p className="cs-svc-detail-head__eyebrow">Category</p>
-          <h4 className="cs-svc-detail-head__name">{category.name}</h4>
+          <h4 className="cs-svc-detail-head__name">{form.name.trim() || category.name}</h4>
         </div>
         <div className="cs-svc-detail-head__actions">
           <span className="cs-cat-swatch" style={{ background: color }} aria-hidden="true" />
