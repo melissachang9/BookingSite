@@ -2,6 +2,7 @@ import { startTransition, useEffect, useMemo, useRef, useState, type FormEvent, 
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import type {
   AuthenticatedUser,
+  CancellationRefundMethod,
   CreateTenantRequest,
   CreateTenantResponse,
   SessionResponse,
@@ -71,6 +72,9 @@ type OnboardingFormState = {
   homepageUrl: string;
   primaryColor: string;
   accentColor: string;
+  cancellationWindowHours: number;
+  /** Where a deposit goes when a client cancels with enough notice. */
+  cancellationRefundMethod: CancellationRefundMethod;
 };
 
 type OnboardingSaveState =
@@ -904,6 +908,8 @@ function OnboardingPage({
     homepageUrl: "",
     primaryColor: "#9f5323",
     accentColor: "#7a3c13",
+    cancellationWindowHours: 24,
+    cancellationRefundMethod: "original_payment",
   });
 
   const updateFormField = <TField extends keyof OnboardingFormState>(field: TField, value: OnboardingFormState[TField]) => {
@@ -926,6 +932,8 @@ function OnboardingPage({
         homepageUrl: formState.homepageUrl.trim() || undefined,
         primaryColor: formState.primaryColor,
         accentColor: formState.accentColor,
+        cancellationWindowHours: formState.cancellationWindowHours,
+        cancellationRefundMethod: formState.cancellationRefundMethod,
       };
       const result = await platformApi.createTenant(payload);
 
@@ -1076,6 +1084,28 @@ function OnboardingPage({
               <label>
                 <span>Accent color</span>
                 <input value={formState.accentColor} onChange={(event) => updateFormField("accentColor", event.target.value)} />
+              </label>
+
+              <label>
+                <span>Cancellation window (hours)</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={168}
+                  value={formState.cancellationWindowHours}
+                  onChange={(event) => updateFormField("cancellationWindowHours", Math.min(168, Math.max(0, Number(event.target.value) || 0)))}
+                />
+              </label>
+
+              <label>
+                <span>Refund for cancellations with notice</span>
+                <select
+                  value={formState.cancellationRefundMethod}
+                  onChange={(event) => updateFormField("cancellationRefundMethod", event.target.value as CancellationRefundMethod)}
+                >
+                  <option value="original_payment">Refund to the original payment method</option>
+                  <option value="wallet_credit">Give it back as credit (any service, never expires)</option>
+                </select>
               </label>
             </div>
 

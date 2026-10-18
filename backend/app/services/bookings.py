@@ -12,7 +12,12 @@ from app.core.http import api_exception
 from app.db.models import Booking, BookingDraft, BookingItem, BookingPaymentEvent, Payment, PaymentEvent, Provider, ResourceAllocation, Service, ServiceAddOn, Tenant, User
 from app.schemas.bookings import AddBookingItemRequest, BookingListResponse, BookingProgressRequest, BookingSummaryResponse, CancelBookingRequest, PaginationMetaResponse, UpdateBookingRequest, UpdateBookingStatusRequest
 from app.schemas.payments import ApplyWalletCreditRequest, RecordManualPaymentRequest, RefundPaymentRequest
-from app.services.booking_drafts import _cancellation_policy_for_booking, _load_booking
+from app.services.booking_drafts import (
+    _cancellation_policy_for_booking,
+    _load_booking,
+    _refund_as_credit,
+    load_category_forms,
+)
 from app.services.payment_processor import charge_stripe_no_show_fee, refund_payment_via_processor
 from app.services.presenters import booking_balance_due_cents, booking_price_cents, booking_tax_cents, booking_to_summary
 from app.services.service_terms import provider_service_link, resolve_service_terms
@@ -674,8 +679,12 @@ async def _deliver_post_visit_forms(session: AsyncSession, booking: Booking) -> 
         )
     ).all()
 
+    form_count = 0
+    seen_form_ids: set[str] = set()
     for attachment in attachments:
         scope = attachment.form.scope if attachment.form is not None else "customer"
+        seen_form_ids.add(attachment.form_id)
+        form_count += 1
         session.add(
             BookingDraftFormRequirement(
                 tenant_id=booking.tenant_id,
@@ -688,8 +697,26 @@ async def _deliver_post_visit_forms(session: AsyncSession, booking: Booking) -> 
                 status="pending",
             )
         )
+    # Post-visit forms the service's category requires (latest version), each form once.
+    for form_def, latest_version in await load_category_forms(session, booking.tenant_id, booking.service_id):
+        if form_def.id in seen_form_ids or (form_def.customer_prompt_timing or "pre_booking") != "post_visit":
+            continue
+        seen_form_ids.add(form_def.id)
+        form_count += 1
+        session.add(
+            BookingDraftFormRequirement(
+                tenant_id=booking.tenant_id,
+                booking_draft_id=None,
+                booking_id=booking.id,
+                form_id=form_def.id,
+                form_version_id=latest_version.id,
+                scope=form_def.scope,
+                customer_prompt_timing="post_visit",
+                status="pending",
+            )
+        )
 
-    if attachments:
+    if form_count:
         await session.commit()
 
         # Send email notification with the forms link
@@ -703,7 +730,7 @@ async def _deliver_post_visit_forms(session: AsyncSession, booking: Booking) -> 
             forms_url = f"{settings.storefront_public_base_url}/forms/{token}"
             service_name = booking.service.name if booking.service is not None else "your appointment"
             customer_name = customer.name or "there"
-            forms_word = "form" if len(attachments) == 1 else "forms"
+            forms_word = "form" if form_count == 1 else "forms"
 
             try:
                 await send_transactional_email(
@@ -712,14 +739,14 @@ async def _deliver_post_visit_forms(session: AsyncSession, booking: Booking) -> 
                     text_body=(
                         f"Hi {customer_name},\n\n"
                         f"Your {service_name} appointment is complete. "
-                        f"Please fill out {len(attachments)} post-visit {forms_word} to help us improve your experience.\n\n"
+                        f"Please fill out {form_count} post-visit {forms_word} to help us improve your experience.\n\n"
                         f"Complete your {forms_word} here: {forms_url}\n\n"
                         f"Thank you!"
                     ),
                     html_body=(
                         f"<p>Hi {customer_name},</p>"
                         f"<p>Your <strong>{service_name}</strong> appointment is complete. "
-                        f"Please fill out <strong>{len(attachments)} post-visit {forms_word}</strong> to help us improve your experience.</p>"
+                        f"Please fill out <strong>{form_count} post-visit {forms_word}</strong> to help us improve your experience.</p>"
                         f"<p><a href=\"{forms_url}\">Complete your {forms_word} here</a></p>"
                         f"<p>Thank you!</p>"
                     ),
@@ -1074,6 +1101,7 @@ async def cancel_booking(
         raise api_exception(409, "conflict", "This booking no longer has the payment record required for cancellation.")
 
     refundable = requires_payment_record and (not is_inside_cancellation_window or refund_inside_window)
+    credit_deposit = refundable and _refund_as_credit(tenant)
     forfeited = requires_payment_record and not refundable
     refunded_amount_cents = 0
     forfeited_amount_cents = 0
@@ -1087,7 +1115,7 @@ async def cancel_booking(
     booking.canceled_by = "staff"
     booking.cancel_reason = reason
 
-    if refundable:
+    if refundable and not credit_deposit:
         for payment in deposit_payments:
             # Try processor refund first (Stripe, future Clover/Square).
             # Falls back to wallet credit if the processor isn't available.
@@ -1153,6 +1181,30 @@ async def cancel_booking(
         else:
             booking.deposit_status = "refunded"
             booking.payment_resolution = "waived"
+    elif credit_deposit:
+        for payment in deposit_payments:
+            wallet_credited_cents += payment.amount_cents
+            payment.status = "refunded"
+            payment.deposit_status = "refunded"
+            _append_payment_event(
+                session,
+                payment,
+                kind="wallet_credited",
+                actor=actor,
+                amount_cents=payment.amount_cents,
+                notes=f"Staff canceled with enough notice; deposit issued as wallet credit per the business's refund policy. Operator: {actor.name}.",
+            )
+        await record_wallet_transaction(
+            session,
+            customer=booking.customer,
+            amount_cents=wallet_credited_cents,
+            kind="cancellation_credit",
+            actor=actor,
+            booking_id=booking.id,
+            notes=f"Deposit credited to wallet: canceled with enough notice. Operator: {actor.name}.",
+        )
+        booking.deposit_status = "refunded"
+        booking.payment_resolution = "waived"
     elif forfeited:
         for payment in deposit_payments:
             forfeited_amount_cents += payment.amount_cents

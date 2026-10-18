@@ -104,6 +104,7 @@ class CustomerManageBookingResponse(CamelModel):
     booking: BookingSummaryResponse
     cancellation_window_hours: int
     refund_inside_window: bool
+    cancellation_refund_method: Literal["original_payment", "wallet_credit"] = "original_payment"
     cancellation_deadline_at: datetime
     is_inside_cancellation_window: bool
 

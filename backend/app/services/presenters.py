@@ -22,6 +22,7 @@ from app.schemas.catalog import (
     TenantSettingsResponse,
     TenantSummaryResponse,
 )
+from app.services.service_terms import effective_online_booking
 
 
 def _tenant_tax_rate_percent(tenant: Tenant | None) -> float:
@@ -193,6 +194,7 @@ def location_to_summary(location: Location) -> LocationSummaryResponse:
 
 
 def service_to_summary(service: Service, tenant: Tenant | None = None) -> ServiceSummaryResponse:
+    effective = effective_online_booking(service)
     fallback_image_url, fallback_image_alt = _service_media_for(service, tenant)
     image_url = service.image_url or fallback_image_url
     image_alt_text = service.image_alt_text or fallback_image_alt
@@ -239,6 +241,14 @@ def service_to_summary(service: Service, tenant: Tenant | None = None) -> Servic
         booking_payment_value_cents=service.booking_payment_value_cents,
         booking_payment_percent=service.booking_payment_percent,
         provider_selection_mode=service.provider_selection_mode,
+        effective_booking_payment_mode=effective.payment_mode,
+        effective_booking_payment_value_cents=effective.payment_value_cents,
+        effective_booking_payment_percent=effective.payment_percent,
+        effective_booking_payment_source=effective.payment_source,
+        effective_require_card_on_file=effective.require_card_on_file,
+        effective_require_card_source=effective.require_card_source,
+        effective_provider_selection_mode=effective.provider_selection_mode,
+        effective_provider_selection_source=effective.provider_selection_source,
     )
 
 

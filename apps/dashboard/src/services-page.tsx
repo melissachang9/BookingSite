@@ -23,6 +23,7 @@ import type {
 } from "@booking/shared-types";
 
 import { categoryColor } from "./category-colors";
+import { effectiveDepositCents } from "./online-booking";
 import { formatMoneyShort } from "./format-money";
 import { OverflowMenu } from "./overflow-menu";
 import { uploadImageFile } from "./upload-image";
@@ -377,7 +378,6 @@ export function ServicesPage({
                   onClick={async () => {
                     // Create a minimal draft service and select it so the full
                     // ServiceDetail panel opens with all tabs available.
-                    const defaultDeposit = tenant?.settings.defaultDepositCents ?? 0;
                     const firstLocationId = locations.length > 0 ? locations[0].id : null;
                     if (!firstLocationId) {
                       setStatus("Create a location first.");
@@ -500,7 +500,6 @@ export function ServicesPage({
                     onDuplicate={handleDuplicateService}
                     refreshProviders={refreshProviders}
                     canManageSettings={canManageSettings}
-                    defaultDepositCents={tenant?.settings?.defaultDepositCents ?? 0}
                   />
                 );
               })()
@@ -510,6 +509,7 @@ export function ServicesPage({
                 category={selectedCategory}
                 color={categoryColor(Math.max(0, orderedCategories.findIndex((c) => c.id === selectedCategory.id)))}
                 canManage={canManage}
+                canManageForms={canManageSettings}
                 onChanged={async (message) => {
                   await refreshCategories();
                   if (message) setStatus(message);
@@ -589,11 +589,11 @@ type ServiceCardState = {
   locationIds: string[];
   isActive: boolean;
   onlineBookingDescription: string;
-  requireCardOnFile: boolean;
-  bookingPaymentMode: string; // 'none' | 'full' | 'partial_flat' | 'partial_percent'
-  bookingPaymentValueAmount: string; // dollar amount for partial_flat; blank = studio default
+  requireCardOnFile: boolean | null; // null = same as the category
+  bookingPaymentMode: string; // '' (same as the category) | 'none' | 'full' | 'partial_flat' | 'partial_percent'
+  bookingPaymentValueAmount: string; // dollar amount for partial_flat
   bookingPaymentPercent: string; // percentage for partial_percent
-  providerSelectionMode: string; // 'client_choice', 'auto_assign', 'hide'
+  providerSelectionMode: string; // '' (same as the category), 'client_choice', 'auto_assign', 'hide'
   featuredLabel: string; // '' for none
   imageUrl: string;
   formIds: string[]; // customer-facing forms this service requires
@@ -601,6 +601,91 @@ type ServiceCardState = {
   scarcityHint: string;
   metaDescription: string;
 };
+
+function describePaymentRule(mode: string | null | undefined, valueCents?: number | null, percent?: number | null): string {
+  if (mode === "none") return "no payment at booking";
+  if (mode === "full") return "full payment at booking";
+  if (mode === "partial_flat") return `${formatMoney(valueCents ?? 0)} at booking`;
+  if (mode === "partial_percent") return `${percent ?? 0}% at booking`;
+  return "no payment at booking";
+}
+
+const PROVIDER_SELECTION_LABELS: Record<string, string> = {
+  client_choice: "clients choose their artist",
+  auto_assign: "assigned automatically",
+  hide: "artist selection hidden",
+};
+
+/** The "Taken at booking" choices, shared by services and categories. */
+function PaymentRuleChoices({
+  name, mode, valueAmount, percent, priceCents, inheritLabel, ariaLabel, onChange,
+}: {
+  name: string;
+  mode: string;
+  valueAmount: string;
+  percent: string;
+  /** Used to show the amount due at the visit; null for categories (no single price). */
+  priceCents: number | null;
+  /** When set, a first "same as the category" choice (mode "") is offered. */
+  inheritLabel?: string;
+  ariaLabel: string;
+  onChange: (patch: { mode?: string; valueAmount?: string; percent?: string }) => void;
+}) {
+  const flatCents = parseMoneyInput(valueAmount) ?? 0;
+  const pct = Number(percent);
+  const percentCents = priceCents !== null && Number.isFinite(pct) ? Math.round((priceCents * pct) / 100) : 0;
+  const dueAtVisit = (takenCents: number) =>
+    priceCents === null ? null : `${formatMoney(Math.max(0, priceCents - Math.min(takenCents, priceCents)))} due at visit`;
+  const option = (value: string, content: ReactNode, extra?: ReactNode) => (
+    <label className={`cs-svc-choice${mode === value ? " is-selected" : ""}`}>
+      <input type="radio" name={name} value={value} className="cs-svc-choice__radio"
+        checked={mode === value} onChange={() => onChange({ mode: value })} />
+      <span className="cs-svc-choice__label">{content}</span>
+      {extra ? <span className="cs-svc-choice__extra">{extra}</span> : null}
+    </label>
+  );
+  return (
+    <div className="cs-svc-choices" role="radiogroup" aria-label={ariaLabel}>
+      {inheritLabel ? option("", inheritLabel) : null}
+      {option("none", "No payment required at booking")}
+      {option("full", priceCents === null ? "Full payment" : `Full payment — ${formatMoney(priceCents)}`)}
+      {option(
+        "partial_flat",
+        <>
+          Partial payment — $
+          <input
+            className="cs-svc-choice__input"
+            type="text"
+            inputMode="decimal"
+            aria-label="Partial payment amount"
+            placeholder="0.00"
+            value={valueAmount}
+            onFocus={() => onChange({ mode: "partial_flat" })}
+            onChange={(e) => onChange({ valueAmount: e.target.value, mode: "partial_flat" })}
+          />
+        </>,
+        mode === "partial_flat" ? dueAtVisit(flatCents) : null,
+      )}
+      {option(
+        "partial_percent",
+        <>
+          Partial payment — %
+          <input
+            className="cs-svc-choice__input"
+            type="number"
+            min={0}
+            max={100}
+            aria-label="Partial payment percentage"
+            value={percent}
+            onFocus={() => onChange({ mode: "partial_percent" })}
+            onChange={(e) => onChange({ percent: e.target.value, mode: "partial_percent" })}
+          />
+        </>,
+        mode === "partial_percent" ? dueAtVisit(percentCents) : null,
+      )}
+    </div>
+  );
+}
 
 function toCardState(service: ServiceSummary): ServiceCardState {
   return {
@@ -615,18 +700,13 @@ function toCardState(service: ServiceSummary): ServiceCardState {
     locationIds: [...service.locationIds],
     isActive: service.isActive,
     onlineBookingDescription: service.onlineBookingDescription ?? "",
-    requireCardOnFile: service.requireCardOnFile ?? false,
-    // Services saved before payment modes existed take their plain deposit at
-    // booking, which is the same as a fixed partial payment (or none at $0).
-    bookingPaymentMode: service.bookingPaymentMode || (service.depositCents > 0 ? "partial_flat" : "none"),
+    requireCardOnFile: service.requireCardOnFile ?? null,
+    // Empty means the service follows its category.
+    bookingPaymentMode: service.bookingPaymentMode ?? "",
     bookingPaymentValueAmount:
-      service.bookingPaymentValueCents != null
-        ? (service.bookingPaymentValueCents / 100).toFixed(2)
-        : !service.bookingPaymentMode && service.depositCents > 0
-          ? (service.depositCents / 100).toFixed(2)
-          : "",
+      service.bookingPaymentValueCents != null ? (service.bookingPaymentValueCents / 100).toFixed(2) : "",
     bookingPaymentPercent: service.bookingPaymentPercent != null ? String(service.bookingPaymentPercent) : "",
-    providerSelectionMode: service.providerSelectionMode ?? "client_choice",
+    providerSelectionMode: service.providerSelectionMode ?? "",
     featuredLabel: service.featuredLabel ?? "",
     imageUrl: service.imageUrl ?? "",
     formIds: [...service.formIds],
@@ -649,7 +729,6 @@ function ServiceDetail({
   onDuplicate,
   refreshProviders,
   canManageSettings,
-  defaultDepositCents,
 }: {
   service: ServiceSummary;
   categories: ServiceCategorySummary[];
@@ -663,7 +742,6 @@ function ServiceDetail({
   onDuplicate: (service: ServiceSummary) => void;
   refreshProviders: () => Promise<void>;
   canManageSettings: boolean;
-  defaultDepositCents: number;
 }) {
   const [form, setForm] = useState<ServiceCardState>(() => toCardState(service));
   const detailsFormId = useId();
@@ -760,9 +838,9 @@ function ServiceDetail({
       priceCents, depositCents,
       locationIds: form.locationIds,
       isActive: form.isActive,
-      requireCardOnFile: form.requireCardOnFile,
-      bookingPaymentMode: form.bookingPaymentMode || null,
     };
+    if (form.requireCardOnFile === null) body.inheritRequireCardOnFile = true;
+    else body.requireCardOnFile = form.requireCardOnFile;
     const desc = form.description.trim();
     if (desc) body.description = desc;
     else if (service.description) body.clearDescription = true;
@@ -772,16 +850,16 @@ function ServiceDetail({
     const obDesc = form.onlineBookingDescription.trim();
     if (obDesc) body.onlineBookingDescription = obDesc;
     else if (service.onlineBookingDescription) body.clearOnlineBookingDescription = true;
-    // Payment value/percent
+    // Payment rule: empty follows the category; otherwise the service's own.
+    if (!form.bookingPaymentMode) {
+      body.inheritBookingPayment = true;
+    } else {
+      body.bookingPaymentMode = form.bookingPaymentMode;
+    }
     if (form.bookingPaymentMode === "partial_flat") {
-      if (form.bookingPaymentValueAmount.trim()) {
-        const val = parseMoneyInput(form.bookingPaymentValueAmount);
-        if (val == null) { onSaved("Enter a valid partial payment amount."); return; }
-        body.bookingPaymentValueCents = val;
-      } else {
-        // Blank means "use the studio default deposit".
-        body.clearBookingPaymentValue = true;
-      }
+      const val = form.bookingPaymentValueAmount.trim() ? parseMoneyInput(form.bookingPaymentValueAmount) : null;
+      if (val == null) { onSaved("Enter the amount to take at booking."); return; }
+      body.bookingPaymentValueCents = val;
     }
     if (form.bookingPaymentMode === "partial_percent") {
       const pct = Number(form.bookingPaymentPercent);
@@ -801,7 +879,7 @@ function ServiceDetail({
     if (meta) body.metaDescription = meta;
     else if (service.metaDescription) body.clearMetaDescription = true;
     // Provider selection mode
-    body.providerSelectionMode = form.providerSelectionMode || null;
+    body.providerSelectionMode = form.providerSelectionMode;
     if (form.featuredLabel) body.featuredLabel = form.featuredLabel as CategoryFeaturedLabel;
     else if (service.featuredLabel) body.clearFeaturedLabel = true;
     if (form.imageUrl) {
@@ -960,8 +1038,7 @@ function ServiceDetail({
   const baseDurationMinutes = Number.isFinite(formDuration) && formDuration > 0 ? formDuration : service.durationMinutes;
   const baseFormPrice = parseMoneyInput(form.priceAmount);
   const basePriceCents = baseFormPrice != null && baseFormPrice >= 0 ? baseFormPrice : service.priceCents;
-  const baseFormDeposit = parseMoneyInput(form.depositAmount);
-  const baseDepositCents = baseFormDeposit != null && baseFormDeposit >= 0 ? baseFormDeposit : service.depositCents;
+  const baseDepositCents = effectiveDepositCents(service, basePriceCents);
 
   const tabs: Array<{ key: ServiceTabKey; label: string }> = [
     { key: "details", label: "Details" },
@@ -1050,7 +1127,8 @@ function ServiceDetail({
           baseDepositCents={baseDepositCents} tenantSlug={tenantSlug}
           storefrontBaseUrl={storefrontBaseUrl}
           form={form} setForm={setForm}
-          saving={saving} handleSave={handleSave} />
+          saving={saving} handleSave={handleSave}
+          category={categories.find((c) => c.id === form.categoryId) ?? null} />
       ) : null}
       {activeTab === "resources" ? (
         <ServiceResourcesTab service={service} tenantSlug={tenantSlug} locations={locations}
@@ -1062,7 +1140,7 @@ function ServiceDetail({
       {activeTab === "onlineBooking" ? (
         <ServiceOnlineBookingTab formId={detailsFormId} form={form} setForm={setForm} canManage={canManage}
           schedulingHref={schedulingHref} handleCopyLink={handleCopyLink} copyHint={copyHint}
-          saving={saving} handleSave={handleSave} defaultDepositCents={defaultDepositCents} />
+          saving={saving} handleSave={handleSave} category={categories.find((c) => c.id === form.categoryId) ?? null} />
       ) : null}
     </div>
   );
@@ -1304,14 +1382,15 @@ function ServiceDetailsTab({
               <div className="cs-svc-forms">
                 {forms.map((item) => {
                   const appliesToAll = item.appliesToAllServices;
-                  const checked = appliesToAll || form.formIds.includes(item.id);
+                  const categoryName = categories.find((c) => c.id === form.categoryId && (item.categoryIds ?? []).includes(c.id))?.name;
+                  const checked = appliesToAll || Boolean(categoryName) || form.formIds.includes(item.id);
                   return (
                     <label key={item.id} className={`cs-svc-form-row${checked ? "" : " is-off"}`}>
                       <input
                         type="checkbox"
                         className="cs-check"
                         checked={checked}
-                        disabled={appliesToAll || !canManageForms}
+                        disabled={appliesToAll || Boolean(categoryName) || !canManageForms}
                         onChange={(e) => {
                           const next = e.target.checked;
                           setForm((c) => ({
@@ -1324,6 +1403,8 @@ function ServiceDetailsTab({
                       <span className="cs-svc-form-row__meta">
                         {appliesToAll
                           ? "Required for every service"
+                          : categoryName
+                            ? `Required by ${categoryName}`
                           : checked
                             ? FORM_TIMING_LABELS[item.customerPromptTiming ?? "pre_booking"] ?? "Required"
                             : "Not required"}
@@ -1366,8 +1447,9 @@ function ServiceStaffTab({
   variantsLoaded, isVariantsDirty, variantsSaving, handleSaveVariants,
   handleSaveStaffTab,
   baseDurationMinutes, basePriceCents, baseDepositCents, tenantSlug, storefrontBaseUrl,
-  form, setForm, saving, handleSave,
+  form, setForm, saving, handleSave, category,
 }: {
+  category: ServiceCategorySummary | null;
   service: ServiceSummary;
   eligibleProviders: ProviderSummary[];
   assignedProviderIds: Set<string>;
@@ -1396,6 +1478,8 @@ function ServiceStaffTab({
   saving: boolean;
   handleSave: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
+  const selectionCategoryName = category?.name ?? "its category";
+  const selectionInherited = category?.providerSelectionMode ?? "client_choice";
   if (eligibleProviders.length === 0) {
     return (
       <div className="cs-svc-detail-form">
@@ -1641,6 +1725,7 @@ function ServiceStaffTab({
         <span className="cs-svc-card__eyebrow">Client selection on booking</span>
         <div className="cs-svc-selection">
           {([
+            ["", `Same as ${selectionCategoryName}`, `Currently: ${PROVIDER_SELECTION_LABELS[selectionInherited] ?? selectionInherited}.`],
             ["client_choice", "Let clients choose their artist", "Clients see all eligible staff and pick one when booking online."],
             ["auto_assign", "Assign automatically", "Distribute bookings evenly across eligible staff. Best for fairness."],
             ["hide", "Hide artist selection", "Clients book the service without seeing who'll perform it. Useful for new staff or training periods."],
@@ -1678,7 +1763,7 @@ function ServiceStaffTab({
 
 function ServiceOnlineBookingTab({
   formId, form, setForm, canManage, schedulingHref, handleCopyLink, copyHint,
-  saving, handleSave, defaultDepositCents,
+  saving, handleSave, category,
 }: {
   formId: string;
   form: ServiceCardState;
@@ -1689,25 +1774,21 @@ function ServiceOnlineBookingTab({
   copyHint: string | null;
   saving: boolean;
   handleSave: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  defaultDepositCents: number;
+  category: ServiceCategorySummary | null;
 }) {
   const priceCents = parseMoneyInput(form.priceAmount) ?? 0;
-  // What's left to pay at the visit for the partial options (service price only).
-  const flatCents = form.bookingPaymentValueAmount.trim()
-    ? parseMoneyInput(form.bookingPaymentValueAmount) ?? 0
-    : defaultDepositCents;
-  const percent = Number(form.bookingPaymentPercent);
-  const percentCents = Number.isFinite(percent) ? Math.round((priceCents * percent) / 100) : 0;
-  const dueAtVisit = (takenCents: number) => formatMoney(Math.max(0, priceCents - Math.min(takenCents, priceCents)));
-  const selectMode = (mode: string) => setForm((c) => ({ ...c, bookingPaymentMode: mode }));
   const prettyUrl = schedulingHref.replace(/^https?:\/\//, "");
-
-  const option = (mode: string, content: ReactNode, extra?: ReactNode) => (
-    <label className={`cs-svc-choice${form.bookingPaymentMode === mode ? " is-selected" : ""}`}>
-      <input type="radio" name="bookingPaymentMode" value={mode} className="cs-svc-choice__radio"
-        checked={form.bookingPaymentMode === mode} onChange={() => selectMode(mode)} />
-      <span className="cs-svc-choice__label">{content}</span>
-      {extra ? <span className="cs-svc-choice__extra">{extra}</span> : null}
+  const inheritedPayment = category?.bookingPaymentMode
+    ? describePaymentRule(category.bookingPaymentMode, category.bookingPaymentValueCents, category.bookingPaymentPercent)
+    : "no payment at booking";
+  const categoryName = category?.name ?? "its category";
+  const inheritedCard = category?.requireCardOnFile ? "required" : "not required";
+  const cardChoice = (value: boolean | null, label: string) => (
+    <label className={`cs-svc-choice${form.requireCardOnFile === value ? " is-selected" : ""}`}>
+      <input type="radio" name="requireCardOnFile" className="cs-svc-choice__radio"
+        checked={form.requireCardOnFile === value}
+        onChange={() => setForm((c) => ({ ...c, requireCardOnFile: value }))} />
+      <span className="cs-svc-choice__label">{label}</span>
     </label>
   );
 
@@ -1728,48 +1809,24 @@ function ServiceOnlineBookingTab({
 
           <hr className="cs-svc-details__divider" />
 
-          <div className="cs-svc-details__field" role="radiogroup" aria-label="Taken at booking">
+          <div className="cs-svc-details__field">
             <span className="cs-svc-details__label">Taken at booking</span>
-            <div className="cs-svc-choices">
-              {option("none", "No payment required at booking")}
-              {option("full", `Full payment — ${formatMoney(priceCents)}`)}
-              {option(
-                "partial_flat",
-                <>
-                  Partial payment — $
-                  <input
-                    className="cs-svc-choice__input"
-                    type="text"
-                    inputMode="decimal"
-                    aria-label="Partial payment amount"
-                    placeholder={(defaultDepositCents / 100).toFixed(2)}
-                    value={form.bookingPaymentValueAmount}
-                    onFocus={() => selectMode("partial_flat")}
-                    onChange={(e) => setForm((c) => ({ ...c, bookingPaymentValueAmount: e.target.value, bookingPaymentMode: "partial_flat" }))}
-                  />
-                </>,
-                form.bookingPaymentMode === "partial_flat" ? `${dueAtVisit(flatCents)} due at visit` : null,
-              )}
-              {option(
-                "partial_percent",
-                <>
-                  Partial payment — %
-                  <input
-                    className="cs-svc-choice__input"
-                    type="number"
-                    min={0}
-                    max={100}
-                    aria-label="Partial payment percentage"
-                    value={form.bookingPaymentPercent}
-                    onFocus={() => selectMode("partial_percent")}
-                    onChange={(e) => setForm((c) => ({ ...c, bookingPaymentPercent: e.target.value, bookingPaymentMode: "partial_percent" }))}
-                  />
-                </>,
-                form.bookingPaymentMode === "partial_percent" ? `${dueAtVisit(percentCents)} due at visit` : null,
-              )}
-            </div>
+            <PaymentRuleChoices
+              name="bookingPaymentMode"
+              ariaLabel="Taken at booking"
+              mode={form.bookingPaymentMode}
+              valueAmount={form.bookingPaymentValueAmount}
+              percent={form.bookingPaymentPercent}
+              priceCents={priceCents}
+              inheritLabel={`Same as ${categoryName} — ${inheritedPayment}`}
+              onChange={(patch) => setForm((c) => ({
+                ...c,
+                ...(patch.mode !== undefined ? { bookingPaymentMode: patch.mode } : {}),
+                ...(patch.valueAmount !== undefined ? { bookingPaymentValueAmount: patch.valueAmount } : {}),
+                ...(patch.percent !== undefined ? { bookingPaymentPercent: patch.percent } : {}),
+              }))}
+            />
             <p className="cs-svc-helper">
-              Leave the amount blank to take the studio default deposit ({formatMoney(defaultDepositCents)}).
               A deposit set for a provider on the Staff tab takes priority, and add-ons count toward full and
               percentage payments. Refunds on cancellation follow your cancellation rules in Settings.
             </p>
@@ -1777,20 +1834,16 @@ function ServiceOnlineBookingTab({
 
           <hr className="cs-svc-details__divider" />
 
-          <div className="cs-svc-setting">
-            <span className="cs-svc-setting__text">
-              <span className="cs-svc-card__title">Require a card on file</span>
-              <span className="cs-svc-section__lead">
-                Not active yet — clients aren&apos;t asked for a card at booking until card collection is added.
-              </span>
+          <div className="cs-svc-details__field" role="radiogroup" aria-label="Require a card on file">
+            <span className="cs-svc-details__label">Require a card on file</span>
+            <span className="cs-svc-section__lead">
+              Not active yet — clients aren&apos;t asked for a card at booking until card collection is added.
             </span>
-            <button
-              type="button"
-              className={`cs-switch${form.requireCardOnFile ? "" : " cs-switch--off"}`}
-              aria-label="Require card on file toggle"
-              aria-pressed={form.requireCardOnFile}
-              onClick={() => setForm((c) => ({ ...c, requireCardOnFile: !c.requireCardOnFile }))}
-            />
+            <div className="cs-svc-choices">
+              {cardChoice(null, `Same as ${categoryName} — ${inheritedCard}`)}
+              {cardChoice(true, "Required")}
+              {cardChoice(false, "Not required")}
+            </div>
           </div>
 
           <hr className="cs-svc-details__divider" />
@@ -2671,6 +2724,13 @@ type CategoryFormState = {
   valueStack: ValueStackItem[];
   bonuses: ValueStackItem[];
   faqs: CategoryFaqItem[];
+  // Online booking rules inherited by the category's services.
+  bookingPaymentMode: string; // '' = not set
+  bookingPaymentValueAmount: string;
+  bookingPaymentPercent: string;
+  requireCardOnFile: boolean;
+  providerSelectionMode: string; // '' = not set (clients choose their artist)
+  formIds: string[];
 };
 
 function categoryToFormState(category: ServiceCategorySummary): CategoryFormState {
@@ -2692,6 +2752,13 @@ function categoryToFormState(category: ServiceCategorySummary): CategoryFormStat
     valueStack: category.valueStack ?? [],
     bonuses: category.bonuses ?? [],
     faqs: category.faqs ?? [],
+    bookingPaymentMode: category.bookingPaymentMode ?? "",
+    bookingPaymentValueAmount:
+      category.bookingPaymentValueCents != null ? (category.bookingPaymentValueCents / 100).toFixed(2) : "",
+    bookingPaymentPercent: category.bookingPaymentPercent != null ? String(category.bookingPaymentPercent) : "",
+    requireCardOnFile: category.requireCardOnFile ?? false,
+    providerSelectionMode: category.providerSelectionMode ?? "",
+    formIds: category.formIds ?? [],
   };
 }
 
@@ -2700,6 +2767,7 @@ function CategoryDetailPanel({
   category,
   color,
   canManage,
+  canManageForms,
   onChanged,
   onStatus,
   onDelete,
@@ -2708,6 +2776,8 @@ function CategoryDetailPanel({
   category: ServiceCategorySummary;
   color: string;
   canManage: boolean;
+  /** Attaching a form to a category edits the form, which needs the forms permission. */
+  canManageForms: boolean;
   onChanged: (status?: string | null) => Promise<void>;
   onStatus: (msg: string) => void;
   onDelete: () => void;
@@ -2720,10 +2790,27 @@ function CategoryDetailPanel({
   const [uploading, setUploading] = useState<"heroImageUrl" | "socialImageUrl" | null>(null);
   const [copyHint, setCopyHint] = useState<string | null>(null);
   const copyTimerRef = useRef<number | null>(null);
+  // Client-facing forms that can be required for every service in the category.
+  const [customerForms, setCustomerForms] = useState<FormSummaryResponse[]>([]);
+  const [formsError, setFormsError] = useState<string | null>(null);
 
   useEffect(() => {
     setForm(categoryToFormState(category));
   }, [category]);
+
+  useEffect(() => {
+    let cancelled = false;
+    platformApi.listForms(tenantSlug)
+      .then((resp) => {
+        if (cancelled) return;
+        setCustomerForms(resp.items.filter((item) => item.scope === "customer" && item.isActive));
+        setFormsError(null);
+      })
+      .catch((error) => {
+        if (!cancelled) setFormsError(readErrorMessage(error, "Unable to load forms."));
+      });
+    return () => { cancelled = true; };
+  }, [tenantSlug, category.id]);
 
   useEffect(() => {
     return () => {
@@ -2838,9 +2925,42 @@ function CategoryDetailPanel({
       .map((item) => ({ question: item.question.trim(), answer: item.answer.trim() }))
       .filter((item) => item.question.length > 0 && item.answer.length > 0);
 
+    // Online booking rules the category's services inherit.
+    if (!form.bookingPaymentMode) {
+      if (category.bookingPaymentMode) body.clearBookingPayment = true;
+    } else {
+      body.bookingPaymentMode = form.bookingPaymentMode;
+      if (form.bookingPaymentMode === "partial_flat") {
+        const amount = form.bookingPaymentValueAmount.trim() ? parseMoneyInput(form.bookingPaymentValueAmount) : null;
+        if (amount == null) { onStatus("Enter the amount to take at booking."); return; }
+        body.bookingPaymentValueCents = amount;
+      }
+      if (form.bookingPaymentMode === "partial_percent") {
+        const pct = Number(form.bookingPaymentPercent);
+        if (!form.bookingPaymentPercent.trim() || !Number.isFinite(pct) || pct < 0 || pct > 100) {
+          onStatus("Enter a partial payment percentage from 0 to 100."); return;
+        }
+        body.bookingPaymentPercent = pct;
+      }
+    }
+    if (form.requireCardOnFile) body.requireCardOnFile = true;
+    else if (category.requireCardOnFile !== null && category.requireCardOnFile !== undefined) body.clearRequireCardOnFile = true;
+    if (form.providerSelectionMode) body.providerSelectionMode = form.providerSelectionMode;
+    else if (category.providerSelectionMode) body.clearProviderSelectionMode = true;
+
     setSaving(true);
     try {
       await platformApi.updateServiceCategory(tenantSlug, category.id, body);
+      // Forms own their category list, so a changed requirement updates the form.
+      for (const item of customerForms) {
+        const required = form.formIds.includes(item.id);
+        if (required !== (item.categoryIds ?? []).includes(category.id)) {
+          const categoryIds = required
+            ? [...(item.categoryIds ?? []), category.id]
+            : (item.categoryIds ?? []).filter((id) => id !== category.id);
+          await platformApi.updateForm(tenantSlug, item.id, { categoryIds });
+        }
+      }
       await onChanged(`Category "${name}" saved.`);
     } catch (error) {
       onStatus(readErrorMessage(error, "Unable to save category."));
@@ -2907,16 +3027,22 @@ function CategoryDetailPanel({
                   onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
               </label>
               <label className="cs-svc-details__field cs-svc-details__field--half">
-                <span className="cs-svc-details__label">URL slug</span>
-                <input className="cs-svc-details__input" value={form.slug} placeholder="auto from name when blank"
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, slug: event.target.value.toLowerCase().replace(/\s+/g, "-") }))
-                  } />
+                <span className="cs-svc-details__label">Booking link</span>
+                <span className="cs-cat-slug">
+                  <span className="cs-cat-slug__prefix" aria-hidden="true">
+                    {`${storefrontBaseUrl}/${tenantSlug}/c/`.replace(/^https?:\/\//, "")}
+                  </span>
+                  <input className="cs-svc-details__input cs-cat-slug__input" aria-label="Category link"
+                    value={form.slug} placeholder="auto from name when blank"
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, slug: event.target.value.toLowerCase().replace(/\s+/g, "-") }))
+                    } />
+                </span>
               </label>
             </div>
             {landingHref ? (
               <p className="cs-cat-landing">
-                Landing page{" "}
+                Live at{" "}
                 <a href={landingHref} target="_blank" rel="noreferrer">{landingHref.replace(/^https?:\/\//, "")}</a>
                 <button type="button" className="cs-link-btn" onClick={handleCopyLink}>Copy</button>
                 {copyHint ? <span className="cs-svc-helper cs-svc-helper--ok">{copyHint}</span> : null}
@@ -2987,6 +3113,118 @@ function CategoryDetailPanel({
               <input ref={authorInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif"
                 className="cs-visually-hidden" tabIndex={-1} aria-hidden="true"
                 onChange={(event) => { void uploadInto(event.target.files?.[0], "socialImageUrl"); event.target.value = ""; }} />
+            </div>
+          </div>
+
+          <div className="cs-svc-card cs-svc-details">
+            <h3 className="cs-svc-card__title">Online booking</h3>
+            <p className="cs-svc-helper">
+              Every service in this category follows these rules unless it sets its own. A service&apos;s own setting
+              always wins.
+            </p>
+
+            <div className="cs-svc-details__field">
+              <span className="cs-svc-details__label">Taken at booking</span>
+              <PaymentRuleChoices
+                name={`category-payment-${category.id}`}
+                ariaLabel="Category taken at booking"
+                mode={form.bookingPaymentMode}
+                valueAmount={form.bookingPaymentValueAmount}
+                percent={form.bookingPaymentPercent}
+                priceCents={null}
+                onChange={(patch) => setForm((prev) => ({
+                  ...prev,
+                  ...(patch.mode !== undefined ? { bookingPaymentMode: patch.mode } : {}),
+                  ...(patch.valueAmount !== undefined ? { bookingPaymentValueAmount: patch.valueAmount } : {}),
+                  ...(patch.percent !== undefined ? { bookingPaymentPercent: patch.percent } : {}),
+                }))}
+              />
+              {!form.bookingPaymentMode ? (
+                <p className="cs-svc-helper">Not set — services here take no payment at booking unless they set their own.</p>
+              ) : null}
+            </div>
+
+            <hr className="cs-svc-details__divider" />
+
+            <div className="cs-svc-setting">
+              <span className="cs-svc-setting__text">
+                <span className="cs-svc-card__title">Require a card on file</span>
+                <span className="cs-svc-section__lead">
+                  Not active yet — clients aren&apos;t asked for a card at booking until card collection is added.
+                </span>
+              </span>
+              <button
+                type="button"
+                className={`cs-switch${form.requireCardOnFile ? "" : " cs-switch--off"}`}
+                aria-label="Category require card on file toggle"
+                aria-pressed={form.requireCardOnFile}
+                onClick={() => setForm((prev) => ({ ...prev, requireCardOnFile: !prev.requireCardOnFile }))}
+              />
+            </div>
+
+            <hr className="cs-svc-details__divider" />
+
+            <div className="cs-svc-details__field" role="radiogroup" aria-label="Client selection on booking">
+              <span className="cs-svc-details__label">Client selection on booking</span>
+              <div className="cs-svc-choices">
+                {([
+                  ["client_choice", "Let clients choose their artist"],
+                  ["auto_assign", "Assign automatically"],
+                  ["hide", "Hide artist selection"],
+                ] as const).map(([mode, label]) => {
+                  const selected = (form.providerSelectionMode || "client_choice") === mode;
+                  return (
+                    <label key={mode} className={`cs-svc-choice${selected ? " is-selected" : ""}`}>
+                      <input type="radio" name={`category-selection-${category.id}`} className="cs-svc-choice__radio"
+                        checked={selected}
+                        onChange={() => setForm((prev) => ({ ...prev, providerSelectionMode: mode }))} />
+                      <span className="cs-svc-choice__label">{label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <hr className="cs-svc-details__divider" />
+
+            <div className="cs-svc-details__field">
+              <span className="cs-svc-details__label">Required forms</span>
+              <p className="cs-svc-helper">Required in addition to any forms a service requires on its own.</p>
+              {formsError ? (
+                <p role="alert" className="cs-svc-helper cs-svc-helper--error">{formsError}</p>
+              ) : customerForms.length === 0 ? (
+                <p className="cs-svc-helper">No client-facing forms yet. Create them on the Forms page.</p>
+              ) : (
+                <div className="cs-svc-forms">
+                  {customerForms.map((item) => {
+                    const checked = form.formIds.includes(item.id);
+                    return (
+                      <label key={item.id} className={`cs-svc-form-row${checked ? "" : " is-off"}`}>
+                        <input
+                          type="checkbox"
+                          className="cs-check"
+                          checked={checked}
+                          disabled={!canManageForms}
+                          onChange={(event) => {
+                            const next = event.target.checked;
+                            setForm((prev) => ({
+                              ...prev,
+                              formIds: next ? [...prev.formIds, item.id] : prev.formIds.filter((id) => id !== item.id),
+                            }));
+                          }}
+                        />
+                        <span className="cs-svc-form-row__name">{item.name}</span>
+                        <span className="cs-svc-form-row__meta">
+                          {checked ? FORM_TIMING_LABELS[item.customerPromptTiming ?? "pre_booking"] ?? "Required" : "Not required"}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+              {customerForms.length > 0 && !canManageForms ? (
+                <p className="cs-svc-helper">You don&apos;t have permission to change which forms are required.</p>
+              ) : null}
             </div>
           </div>
 

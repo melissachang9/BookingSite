@@ -22,6 +22,7 @@ from app.db.models import (
     Resource,
     Service,
     ServiceCategory,
+    ServiceCategoryFormAttachment,
     ServiceFormAttachment,
     ServiceLocation,
     ServiceResource,
@@ -80,12 +81,12 @@ DEFAULT_BUSINESS_HOURS = {
 DEFAULT_TENANT_SETTINGS = {
     "cancellationWindowHours": 24,
     "refundInsideWindow": False,
+    "cancellationRefundMethod": "original_payment",
     "reminderHoursBefore": 24,
     "appointmentReminderHours": 24,
     "appointmentReminderChannels": ["email"],
     "minLeadTimeMinutes": 60,
     "maxAdvanceBookingDays": 45,
-    "defaultDepositCents": 2500,
     "noShowFeeCents": 5000,
     "taxRatePercent": 0,
     "autoChargeNoShowFee": False,
@@ -184,14 +185,15 @@ async def update_tenant_settings(
     if payload.refund_inside_window is not None:
         current["refundInsideWindow"] = payload.refund_inside_window
 
+    if payload.cancellation_refund_method is not None:
+        current["cancellationRefundMethod"] = payload.cancellation_refund_method
+
     if payload.min_lead_time_minutes is not None:
         current["minLeadTimeMinutes"] = payload.min_lead_time_minutes
 
     if payload.max_advance_booking_days is not None:
         current["maxAdvanceBookingDays"] = payload.max_advance_booking_days
 
-    if payload.default_deposit_cents is not None:
-        current["defaultDepositCents"] = payload.default_deposit_cents
 
     if payload.no_show_fee_cents is not None:
         current["noShowFeeCents"] = payload.no_show_fee_cents
@@ -410,12 +412,17 @@ async def create_tenant_account(session: AsyncSession, payload: CreateTenantRequ
     if existing_user_id is not None:
         raise api_exception(409, "conflict", "A user with this email already exists.")
 
+    initial_settings = deepcopy(DEFAULT_TENANT_SETTINGS)
+    if payload.cancellation_window_hours is not None:
+        initial_settings["cancellationWindowHours"] = payload.cancellation_window_hours
+    if payload.cancellation_refund_method is not None:
+        initial_settings["cancellationRefundMethod"] = payload.cancellation_refund_method
     tenant = Tenant(
         slug=normalized_slug,
         name=payload.name.strip(),
         timezone=payload.timezone.strip(),
         branding_json=_default_branding(payload),
-        settings_json=deepcopy(DEFAULT_TENANT_SETTINGS),
+        settings_json=initial_settings,
     )
     session.add(tenant)
     await session.flush()
@@ -494,6 +501,16 @@ async def create_tenant_service(
     if missing_location_ids:
         raise api_exception(404, "not_found", "One or more locations were not found for this tenant.")
 
+    category = None
+    if payload.category_id is not None:
+        category = await _load_category_for_tenant(session, tenant.id, payload.category_id)
+    payment_mode = payload.booking_payment_mode or None
+    payment_value = payload.booking_payment_value_cents
+    if payment_mode is None and payload.deposit_cents > 0:
+        # A plain deposit is stored as an explicit fixed payment, so it survives later category rules.
+        payment_mode, payment_value = "partial_flat", payload.deposit_cents
+    if payment_mode == "partial_flat" and payment_value is None:
+        raise api_exception(422, "validation_error", "Enter the fixed amount to collect when booking.")
     service = Service(
         tenant_id=tenant.id,
         name=payload.name.strip(),
@@ -504,11 +521,11 @@ async def create_tenant_service(
         price_cents=payload.price_cents,
         deposit_cents=payload.deposit_cents,
         is_active=payload.is_active,
-        category_id=payload.category_id,
+        category_id=category.id if category is not None else None,
         online_booking_description=payload.online_booking_description.strip() if isinstance(payload.online_booking_description, str) and payload.online_booking_description.strip() else None,
-        require_card_on_file=payload.require_card_on_file if payload.require_card_on_file is not None else False,
-        booking_payment_mode=payload.booking_payment_mode,
-        booking_payment_value_cents=payload.booking_payment_value_cents,
+        require_card_on_file=payload.require_card_on_file,
+        booking_payment_mode=payment_mode,
+        booking_payment_value_cents=payment_value,
         booking_payment_percent=payload.booking_payment_percent,
         provider_selection_mode=getattr(payload, "provider_selection_mode", None),
     )
@@ -519,6 +536,7 @@ async def create_tenant_service(
     service.slug = await _ensure_unique_service_slug(
         session, tenant.id, getattr(payload, "slug", None), service.name
     )
+    service.category = category
     session.add(service)
     await session.commit()
     return service_to_summary(service, tenant)
@@ -1782,7 +1800,7 @@ async def _load_category_for_tenant(
     return category
 
 
-def _category_to_summary(category: ServiceCategory):
+def _category_to_summary(category: ServiceCategory, form_ids: list[str] | None = None):
     from app.schemas.catalog import (
         CategoryFaqItem,
         ServiceCategorySummaryResponse,
@@ -1811,7 +1829,31 @@ def _category_to_summary(category: ServiceCategory):
         featured_label=category.featured_label,
         meta_description=category.meta_description,
         faqs=[CategoryFaqItem(**item) for item in (category.faqs or [])],
+        booking_payment_mode=category.booking_payment_mode,
+        booking_payment_value_cents=category.booking_payment_value_cents,
+        booking_payment_percent=category.booking_payment_percent,
+        require_card_on_file=category.require_card_on_file,
+        provider_selection_mode=category.provider_selection_mode,
+        form_ids=form_ids or [],
     )
+
+
+async def _category_form_ids(session: AsyncSession, tenant_id: str, category_ids: list[str]) -> dict[str, list[str]]:
+    """Forms each category requires, keyed by category id."""
+    result: dict[str, list[str]] = {category_id: [] for category_id in category_ids}
+    if not category_ids:
+        return result
+    rows = (
+        await session.execute(
+            select(ServiceCategoryFormAttachment.category_id, ServiceCategoryFormAttachment.form_id).where(
+                ServiceCategoryFormAttachment.tenant_id == tenant_id,
+                ServiceCategoryFormAttachment.category_id.in_(category_ids),
+            )
+        )
+    ).all()
+    for category_id, form_id in rows:
+        result[category_id].append(form_id)
+    return result
 
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -1890,7 +1932,8 @@ async def list_tenant_service_categories(session: AsyncSession, tenant_slug: str
             .order_by(ServiceCategory.sort_order.asc(), ServiceCategory.created_at.asc())
         )
     ).all()
-    return ServiceCategoryListResponse(categories=[_category_to_summary(c) for c in categories])
+    form_ids = await _category_form_ids(session, tenant.id, [c.id for c in categories])
+    return ServiceCategoryListResponse(categories=[_category_to_summary(c, form_ids[c.id]) for c in categories])
 
 
 async def get_public_category_by_slug(
@@ -2077,9 +2120,32 @@ async def update_tenant_service_category(
         category.social_proof = payload.social_proof.model_dump(by_alias=False)
     if payload.faqs is not None:
         category.faqs = [item.model_dump(by_alias=False) for item in payload.faqs] or None
+
+    # Online booking rules inherited by the category's services.
+    if payload.clear_booking_payment:
+        category.booking_payment_mode = None
+        category.booking_payment_value_cents = None
+        category.booking_payment_percent = None
+    elif payload.booking_payment_mode is not None:
+        category.booking_payment_mode = payload.booking_payment_mode or None
+        category.booking_payment_value_cents = (
+            payload.booking_payment_value_cents if payload.booking_payment_mode == "partial_flat" else None
+        )
+        category.booking_payment_percent = (
+            payload.booking_payment_percent if payload.booking_payment_mode == "partial_percent" else None
+        )
+    if payload.clear_require_card_on_file:
+        category.require_card_on_file = None
+    elif payload.require_card_on_file is not None:
+        category.require_card_on_file = payload.require_card_on_file
+    if payload.clear_provider_selection_mode:
+        category.provider_selection_mode = None
+    elif payload.provider_selection_mode:
+        category.provider_selection_mode = payload.provider_selection_mode
     await session.commit()
     await session.refresh(category)
-    return _category_to_summary(category)
+    form_ids = await _category_form_ids(session, tenant.id, [category.id])
+    return _category_to_summary(category, form_ids[category.id])
 
 
 async def delete_tenant_service_category(
@@ -2103,6 +2169,9 @@ async def delete_tenant_service_category(
         .where(Service.tenant_id == tenant.id, Service.category_id == category.id)
         .values(category_id=target_id)
         .execution_options(synchronize_session="fetch")
+    )
+    await session.execute(
+        delete(ServiceCategoryFormAttachment).where(ServiceCategoryFormAttachment.category_id == category.id)
     )
     await session.delete(category)
     await session.commit()
@@ -2218,9 +2287,11 @@ async def update_tenant_service(
         service.is_active = payload.is_active
     if payload.clear_category:
         service.category_id = None
+        service.category = None
     elif payload.category_id is not None:
         category = await _load_category_for_tenant(session, tenant.id, payload.category_id)
         service.category_id = category.id
+        service.category = category
 
     if payload.location_ids is not None:
         requested = list(dict.fromkeys(payload.location_ids))
@@ -2324,16 +2395,25 @@ async def update_tenant_service(
     elif getattr(payload, "online_booking_description", None) is not None:
         cleaned = payload.online_booking_description.strip()
         service.online_booking_description = cleaned or None
-    if getattr(payload, "require_card_on_file", None) is not None:
+    if getattr(payload, "inherit_require_card_on_file", False):
+        service.require_card_on_file = None
+    elif getattr(payload, "require_card_on_file", None) is not None:
         service.require_card_on_file = payload.require_card_on_file
-    if getattr(payload, "booking_payment_mode", None) is not None:
-        service.booking_payment_mode = payload.booking_payment_mode or None
-    if getattr(payload, "booking_payment_value_cents", None) is not None:
-        service.booking_payment_value_cents = payload.booking_payment_value_cents
-    elif getattr(payload, "clear_booking_payment_value", False):
+    if getattr(payload, "inherit_booking_payment", False):
+        service.booking_payment_mode = None
         service.booking_payment_value_cents = None
-    if getattr(payload, "booking_payment_percent", None) is not None:
-        service.booking_payment_percent = payload.booking_payment_percent
+        service.booking_payment_percent = None
+    else:
+        if getattr(payload, "booking_payment_mode", None) is not None:
+            service.booking_payment_mode = payload.booking_payment_mode or None
+        if getattr(payload, "booking_payment_value_cents", None) is not None:
+            service.booking_payment_value_cents = payload.booking_payment_value_cents
+        elif getattr(payload, "clear_booking_payment_value", False):
+            service.booking_payment_value_cents = None
+        if getattr(payload, "booking_payment_percent", None) is not None:
+            service.booking_payment_percent = payload.booking_payment_percent
+        if service.booking_payment_mode == "partial_flat" and service.booking_payment_value_cents is None:
+            raise api_exception(422, "validation_error", "Enter the fixed amount to collect when booking.")
     if getattr(payload, "provider_selection_mode", None) is not None:
         service.provider_selection_mode = payload.provider_selection_mode or None
 

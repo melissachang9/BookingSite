@@ -10,6 +10,7 @@ import {
   type LocationSummary,
   type SessionResponse,
   type TenantBranding,
+  type CancellationRefundMethod,
   type TenantSummary,
 } from "@booking/shared-types";
 
@@ -533,10 +534,11 @@ function BusinessPoliciesSection({
   tenantSlug: string;
 }) {
   const [cancellationWindowHours, setCancellationWindowHours] = useState<number>(tenant?.settings.cancellationWindowHours ?? 24);
-  const [refundInsideWindow, setRefundInsideWindow] = useState<boolean>(tenant?.settings.refundInsideWindow ?? false);
+  const [cancellationRefundMethod, setCancellationRefundMethod] = useState<CancellationRefundMethod>(
+    tenant?.settings.cancellationRefundMethod ?? "original_payment",
+  );
   const [minLeadTimeMinutes, setMinLeadTimeMinutes] = useState<number>(tenant?.settings.minLeadTimeMinutes ?? 60);
   const [maxAdvanceBookingDays, setMaxAdvanceBookingDays] = useState<number>(tenant?.settings.maxAdvanceBookingDays ?? 45);
-  const [defaultDepositCents, setDefaultDepositCents] = useState<number>(tenant?.settings.defaultDepositCents ?? 0);
   const [noShowFeeCents, setNoShowFeeCents] = useState<number>(tenant?.settings.noShowFeeCents ?? 0);
   const [taxRatePercent, setTaxRatePercent] = useState<number>(tenant?.settings.taxRatePercent ?? 0);
   const [autoChargeNoShowFee, setAutoChargeNoShowFee] = useState<boolean>(tenant?.settings.autoChargeNoShowFee ?? false);
@@ -548,10 +550,9 @@ function BusinessPoliciesSection({
   useEffect(() => {
     if (tenant) {
       setCancellationWindowHours(tenant.settings.cancellationWindowHours);
-      setRefundInsideWindow(tenant.settings.refundInsideWindow);
+      setCancellationRefundMethod(tenant.settings.cancellationRefundMethod ?? "original_payment");
       setMinLeadTimeMinutes(tenant.settings.minLeadTimeMinutes);
       setMaxAdvanceBookingDays(tenant.settings.maxAdvanceBookingDays);
-      setDefaultDepositCents(tenant.settings.defaultDepositCents);
       setNoShowFeeCents(tenant.settings.noShowFeeCents);
       setTaxRatePercent(tenant.settings.taxRatePercent);
       setAutoChargeNoShowFee(tenant.settings.autoChargeNoShowFee ?? false);
@@ -568,10 +569,9 @@ function BusinessPoliciesSection({
     try {
       const updated = await platformApi.updateTenantSettings(tenantSlug, {
         cancellationWindowHours,
-        refundInsideWindow,
+        cancellationRefundMethod,
         minLeadTimeMinutes,
         maxAdvanceBookingDays,
-        defaultDepositCents,
         noShowFeeCents,
         taxRatePercent,
         autoChargeNoShowFee,
@@ -608,18 +608,21 @@ function BusinessPoliciesSection({
           />
           <small>Hours before the appointment when the cancellation policy applies. 0 means no window.</small>
         </label>
-        <div className="cs-field">
-          <span>Refund inside window</span>
-          <label className="cs-switch-row">
-            <input
-              type="checkbox"
-              checked={refundInsideWindow}
-              onChange={(event) => setRefundInsideWindow(event.target.checked)}
-              disabled={!canManageSettings || saveState.kind === "submitting"}
-            />
-            <span>Refund deposit even when canceling inside the window</span>
-          </label>
-        </div>
+        <label className="cs-field">
+          <span>Refund for cancellations with notice</span>
+          <select
+            value={cancellationRefundMethod}
+            onChange={(event) => setCancellationRefundMethod(event.target.value as CancellationRefundMethod)}
+            disabled={!canManageSettings || saveState.kind === "submitting"}
+          >
+            <option value="original_payment">Refund to the original payment method</option>
+            <option value="wallet_credit">Give it back as credit</option>
+          </select>
+          <small>
+            Applies when a client cancels before the window starts. Credit goes to the client's wallet, works on any
+            service and never expires. Cancellations inside the window keep the deposit.
+          </small>
+        </label>
       </div>
 
       <p className="cs-kicker">Booking rules</p>
@@ -651,22 +654,9 @@ function BusinessPoliciesSection({
         </label>
       </div>
 
-      <p className="cs-kicker">Deposits & fees</p>
+      <p className="cs-kicker">Fees</p>
 
       <div className="cs-form-row">
-        <label className="cs-field">
-          <span>Default deposit ($)</span>
-          <input
-            type="number"
-            min={0}
-            max={1000}
-            step={0.01}
-            value={(defaultDepositCents / 100).toFixed(2)}
-            onChange={(event) => setDefaultDepositCents(Math.round(parseFloat(event.target.value || "0") * 100))}
-            disabled={!canManageSettings || saveState.kind === "submitting"}
-          />
-          <small>Default deposit amount for new services. 0 means no deposit required.</small>
-        </label>
         <label className="cs-field">
           <span>No-show fee ($)</span>
           <input

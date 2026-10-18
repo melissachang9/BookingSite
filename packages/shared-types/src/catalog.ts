@@ -53,11 +53,21 @@ export type ServiceSummary = AuditFields &
     categoryId?: string | null;
     sortOrder: number;
     onlineBookingDescription?: string | null;
-    requireCardOnFile: boolean;
+    /** The service's own online booking rules. null/undefined means "inherit from the category". */
+    requireCardOnFile?: boolean | null;
     bookingPaymentMode?: string | null;
     bookingPaymentValueCents?: number | null;
     bookingPaymentPercent?: number | null;
     providerSelectionMode?: string | null;
+    /** What applies after inheritance, and where each value comes from. */
+    effectiveBookingPaymentMode?: string | null;
+    effectiveBookingPaymentValueCents?: number | null;
+    effectiveBookingPaymentPercent?: number | null;
+    effectiveBookingPaymentSource?: OnlineBookingSource | "legacy" | "none";
+    effectiveRequireCardOnFile?: boolean;
+    effectiveRequireCardSource?: OnlineBookingSource | "default";
+    effectiveProviderSelectionMode?: string;
+    effectiveProviderSelectionSource?: OnlineBookingSource | "default";
     featuredLabel?: CategoryFeaturedLabel | null;
     slug?: string | null;
     scarcityHint?: string | null;
@@ -103,6 +113,9 @@ export type UpdateServiceRequest = {
   bookingPaymentValueCents?: number | null;
   bookingPaymentPercent?: number | null;
   providerSelectionMode?: string | null;
+  /** Back to "inherit from the category". */
+  inheritBookingPayment?: boolean;
+  inheritRequireCardOnFile?: boolean;
   featuredLabel?: CategoryFeaturedLabel | null;
   clearFeaturedLabel?: boolean;
   imageUrl?: string | null;
@@ -140,6 +153,9 @@ export type CategoryFeaturedLabel =
   | "new"
   | "limited";
 
+/** Where an online booking rule comes from. */
+export type OnlineBookingSource = "service" | "category";
+
 export type ServiceCategorySummary = AuditFields &
   TenantScoped & {
     name: string;
@@ -158,6 +174,14 @@ export type ServiceCategorySummary = AuditFields &
     featuredLabel?: CategoryFeaturedLabel | null;
     metaDescription?: string | null;
     faqs?: CategoryFaqItem[];
+    /** Online booking rules inherited by services that don't set their own. null = not set. */
+    bookingPaymentMode?: string | null;
+    bookingPaymentValueCents?: number | null;
+    bookingPaymentPercent?: number | null;
+    requireCardOnFile?: boolean | null;
+    providerSelectionMode?: string | null;
+    /** Forms every service in this category requires. */
+    formIds?: UUID[];
   };
 
 export type ServiceCategoryListResponse = {
@@ -185,6 +209,14 @@ export type UpdateServiceCategoryRequest = {
   featuredLabel?: CategoryFeaturedLabel | null;
   metaDescription?: string | null;
   faqs?: CategoryFaqItem[];
+  bookingPaymentMode?: string | null;
+  bookingPaymentValueCents?: number | null;
+  bookingPaymentPercent?: number | null;
+  requireCardOnFile?: boolean | null;
+  providerSelectionMode?: string | null;
+  clearBookingPayment?: boolean;
+  clearRequireCardOnFile?: boolean;
+  clearProviderSelectionMode?: boolean;
   clearSlug?: boolean;
   clearOutcomeHeadline?: boolean;
   clearSubheadline?: boolean;

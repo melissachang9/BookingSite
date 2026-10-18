@@ -490,6 +490,120 @@ describe("ServicesPage", () => {
     expect(updateSpy.mock.calls[0][2]).toMatchObject({ bookingPaymentMode: "partial_percent", bookingPaymentPercent: 30 });
   });
 
+  it("shows a service following its category's payment rule and saves it as inherited", async () => {
+    mockLoaders({
+      categories: [
+        { ...baseCategories[0], bookingPaymentMode: "partial_flat", bookingPaymentValueCents: 4000 },
+        baseCategories[1],
+      ],
+    });
+    const updateSpy = vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("tab", { name: "Online booking" }));
+
+    const inherit = await screen.findByRole("radio", { name: "Same as Brows — $40.00 at booking" });
+    expect(inherit).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    const body = updateSpy.mock.calls[0][2] as any;
+    expect(body.inheritBookingPayment).toBe(true);
+    expect(body.inheritRequireCardOnFile).toBe(true);
+    expect(body.bookingPaymentMode).toBeUndefined();
+  });
+
+  it("requires an amount for a fixed payment on a service", async () => {
+    mockLoaders();
+    const updateSpy = vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("tab", { name: "Online booking" }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Partial payment — \$/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("Enter the amount to take at booking.")).toBeInTheDocument();
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+
+  it("saves online booking rules and required forms on a category", async () => {
+    mockLoaders({
+      forms: [
+        { id: "form-consent", name: "Brow consent", scope: "customer", isActive: true, appliesToAllServices: false, serviceIds: [], categoryIds: [], customerPromptTiming: "pre_booking" },
+      ],
+    });
+    const updateCategory = vi.spyOn(platformApi, "updateServiceCategory").mockResolvedValue({} as any);
+    const updateForm = vi.spyOn(platformApi, "updateForm").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brows")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Brows" }));
+
+    fireEvent.click(await screen.findByRole("radio", { name: "Full payment" }));
+    fireEvent.click(screen.getByRole("button", { name: "Category require card on file toggle" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Hide artist selection" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: /Brow consent/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateCategory).toHaveBeenCalledTimes(1));
+    expect(updateCategory.mock.calls[0][2]).toMatchObject({
+      bookingPaymentMode: "full",
+      requireCardOnFile: true,
+      providerSelectionMode: "hide",
+    });
+    await waitFor(() =>
+      expect(updateForm).toHaveBeenCalledWith("brow-beauty-lab", "form-consent", { categoryIds: ["cat-brows"] }),
+    );
+  });
+
+  it("shows a category's saved payment rule as selected", async () => {
+    mockLoaders({
+      categories: [{ ...baseCategories[0], bookingPaymentMode: "full" }, baseCategories[1]],
+    });
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brows")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Brows" }));
+    expect(await screen.findByRole("radio", { name: "Full payment" })).toBeChecked();
+    expect(screen.queryByText(/Not set — services here take no payment/)).toBeNull();
+  });
+
+  it("marks forms a service's category requires as required by the category", async () => {
+    mockLoaders({
+      forms: [
+        { id: "form-consent", name: "Brow consent", scope: "customer", isActive: true, appliesToAllServices: false, serviceIds: [], categoryIds: ["cat-brows"], customerPromptTiming: "pre_booking" },
+      ],
+    });
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+
+    expect(await screen.findByText("Required by Brows")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /Brow consent/ })).toBeDisabled();
+  });
+
+  it("lets the category booking link be edited and saved", async () => {
+    mockLoaders({ categories: [{ ...baseCategories[0], slug: "brows" }, baseCategories[1]] });
+    const updateCategory = vi.spyOn(platformApi, "updateServiceCategory").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brows")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Brows" }));
+    const link = await screen.findByLabelText("Category link");
+    expect(link).toHaveValue("brows");
+    fireEvent.change(link, { target: { value: "Brow Studio" } });
+    expect(link).toHaveValue("brow-studio");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateCategory).toHaveBeenCalledTimes(1));
+    expect(updateCategory.mock.calls[0][2]).toMatchObject({ slug: "brow-studio" });
+  });
+
   it("denies access entirely when services.view is false", async () => {
     mockLoaders();
     render(<ServicesPage definition={definition} currentUser={readOnlyUser} />);

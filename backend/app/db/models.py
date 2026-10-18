@@ -166,14 +166,15 @@ class Service(Base, IdMixin, TimestampMixin):
     after_image_alt: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     meta_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     online_booking_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    require_card_on_file: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Online booking rules. NULL means "inherit from the service category" (see service_terms.effective_online_booking).
+    require_card_on_file: Mapped[Optional[bool]] = mapped_column(Boolean, default=None, nullable=True)
     booking_payment_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # none, partial_percent, partial_flat, full
     booking_payment_value_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     booking_payment_percent: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 0-100
     provider_selection_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # client_choice, auto_assign, hide
 
     tenant: Mapped[Tenant] = relationship(back_populates="services")
-    category: Mapped[Optional["ServiceCategory"]] = relationship(back_populates="services")
+    category: Mapped[Optional["ServiceCategory"]] = relationship(back_populates="services", lazy="joined")
     provider_links: Mapped[list[ProviderService]] = relationship(back_populates="service", cascade="all, delete-orphan")
     location_links: Mapped[list[ServiceLocation]] = relationship(back_populates="service", cascade="all, delete-orphan")
     bookings: Mapped[list[Booking]] = relationship(back_populates="service")
@@ -225,8 +226,17 @@ class ServiceCategory(Base, IdMixin, TimestampMixin):
     featured_label: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     meta_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     faqs: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
+    # Online booking rules every service in the category inherits unless it sets its own.
+    booking_payment_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # none, partial_percent, partial_flat, full
+    booking_payment_value_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    booking_payment_percent: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 0-100
+    require_card_on_file: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    provider_selection_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # client_choice, auto_assign, hide
 
     services: Mapped[list[Service]] = relationship(back_populates="category")
+    form_attachments: Mapped[list["ServiceCategoryFormAttachment"]] = relationship(
+        back_populates="category", cascade="all, delete-orphan"
+    )
 
 
 class Provider(Base, IdMixin, TimestampMixin):
@@ -668,6 +678,10 @@ class FormDefinition(Base, IdMixin, TimestampMixin):
         back_populates="form",
         cascade="all, delete-orphan",
     )
+    category_attachments: Mapped[list["ServiceCategoryFormAttachment"]] = relationship(
+        back_populates="form",
+        cascade="all, delete-orphan",
+    )
 
 
 class FormVersion(Base, IdMixin, TimestampMixin):
@@ -695,6 +709,23 @@ class ServiceFormAttachment(Base, IdMixin, TimestampMixin):
     service: Mapped[Service] = relationship(back_populates="form_attachments")
     form: Mapped[FormDefinition] = relationship(back_populates="service_attachments")
     form_version: Mapped[FormVersion] = relationship()
+
+
+class ServiceCategoryFormAttachment(Base, IdMixin, TimestampMixin):
+    """A form every service in the category requires, in addition to the service's own forms.
+
+    Always resolves to the form's latest version when a booking is started.
+    """
+
+    __tablename__ = "service_category_form_attachments"
+    __table_args__ = (UniqueConstraint("category_id", "form_id", name="uq_category_form_attachment"),)
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    category_id: Mapped[str] = mapped_column(String(36), ForeignKey("service_categories.id"), index=True, nullable=False)
+    form_id: Mapped[str] = mapped_column(String(36), ForeignKey("forms.id"), index=True, nullable=False)
+
+    category: Mapped[ServiceCategory] = relationship(back_populates="form_attachments")
+    form: Mapped[FormDefinition] = relationship(back_populates="category_attachments")
 
 
 class FormResponse(Base, IdMixin, TimestampMixin):

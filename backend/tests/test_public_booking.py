@@ -1718,3 +1718,102 @@ def test_cleanup_expired_slot_holds_preserves_active_holds(client) -> None:
 
     count_after = asyncio.run(_count_holds())
     assert count_after == count_before
+
+
+# ---------------------------------------------------------------------------
+# Refund method for cancellations with enough notice: original payment or wallet credit
+# ---------------------------------------------------------------------------
+
+
+def _set_refund_method(method: str) -> None:
+    async def _run() -> None:
+        from sqlalchemy import select
+        from sqlalchemy.orm.attributes import flag_modified
+
+        from app.db.models import Tenant
+        from app.db.session import get_session_maker
+
+        async with get_session_maker()() as session:
+            tenant = await session.scalar(select(Tenant).where(Tenant.slug == "brow-beauty-lab"))
+            tenant.settings_json = {**tenant.settings_json, "cancellationRefundMethod": method}
+            flag_modified(tenant, "settings_json")
+            await session.commit()
+
+    asyncio.run(_run())
+
+
+def _wallet_balance_for_booking(booking_id: str) -> int:
+    async def _run() -> int:
+        from sqlalchemy import select
+
+        from app.db.models import Booking, Customer
+        from app.db.session import get_session_maker
+
+        async with get_session_maker()() as session:
+            booking = await session.scalar(select(Booking).where(Booking.id == booking_id))
+            customer = await session.scalar(select(Customer).where(Customer.id == booking.customer_id))
+            return customer.wallet_balance_cents
+
+    return asyncio.run(_run())
+
+
+def test_cancel_manage_booking_with_notice_credits_wallet_when_policy_is_credit(client) -> None:
+    _set_refund_method("wallet_credit")
+    confirmed = _confirm_paid_deposit_booking(client)
+    booking = confirmed["booking"]
+    deposit = confirmed["service"]["depositCents"]
+    _move_booking_start(booking["id"], datetime.now(timezone.utc) + timedelta(days=5))
+
+    response = client.post(
+        f"/api/v1/bookings/manage/{booking['customerManageToken']}/cancel",
+        json={"reason": "Can't make it."},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["booking"]["status"] == "canceled"
+    assert payload["isInsideCancellationWindow"] is False
+    assert payload["cancellationRefundMethod"] == "wallet_credit"
+    snapshot = _booking_payment_snapshot(booking["id"])
+    assert "wallet_credited" in snapshot["paymentEventKinds"]
+    assert "deposit_forfeited" not in snapshot["paymentEventKinds"]
+    assert snapshot["paymentStatuses"] == ["refunded"]
+    assert _wallet_balance_for_booking(booking["id"]) == deposit
+
+
+def test_staff_cancel_with_notice_credits_wallet_when_policy_is_credit(client, demo_credentials) -> None:
+    _set_refund_method("wallet_credit")
+    confirmed = _confirm_paid_deposit_booking(client)
+    booking = confirmed["booking"]
+    deposit = confirmed["service"]["depositCents"]
+    _move_booking_start(booking["id"], datetime.now(timezone.utc) + timedelta(days=5))
+
+    response = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking['id']}/cancel",
+        json={"reason": "Client asked."},
+        headers=_auth_headers(client, demo_credentials),
+    )
+
+    assert response.status_code == 200
+    snapshot = _booking_payment_snapshot(booking["id"])
+    assert "wallet_credited" in snapshot["paymentEventKinds"]
+    assert any(event.get("walletCreditedCents") == deposit for event in snapshot["bookingEventPayloads"])
+    assert _wallet_balance_for_booking(booking["id"]) == deposit
+
+
+def test_last_minute_cancel_keeps_deposit_even_when_policy_is_credit(client) -> None:
+    _set_refund_method("wallet_credit")
+    confirmed = _confirm_paid_deposit_booking(client)
+    booking = confirmed["booking"]
+    _move_booking_start(booking["id"], datetime.now(timezone.utc) + timedelta(hours=4))
+
+    response = client.post(
+        f"/api/v1/bookings/manage/{booking['customerManageToken']}/cancel",
+        json={"reason": "Last minute."},
+    )
+
+    assert response.status_code == 200
+    snapshot = _booking_payment_snapshot(booking["id"])
+    assert "deposit_forfeited" in snapshot["paymentEventKinds"]
+    assert "wallet_credited" not in snapshot["paymentEventKinds"]
+    assert _wallet_balance_for_booking(booking["id"]) == 0

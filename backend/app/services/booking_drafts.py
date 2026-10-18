@@ -19,12 +19,14 @@ from app.db.models import (
     BookingPaymentEvent,
     Customer,
     FormDefinition,
+    FormVersion,
     Location,
     Payment,
     PaymentEvent,
     Provider,
     ResourceAllocation,
     Service,
+    ServiceCategoryFormAttachment,
     ServiceFormAttachment,
     ServiceLocation,
     SlotHold,
@@ -182,6 +184,36 @@ async def _upsert_intake_plan(
     return plan
 
 
+async def load_category_forms(
+    session: AsyncSession, tenant_id: str, service_id: str
+) -> list[tuple[FormDefinition, FormVersion]]:
+    """Active forms the service's category requires, each with its latest version."""
+    category_id = await session.scalar(
+        select(Service.category_id).where(Service.id == service_id, Service.tenant_id == tenant_id)
+    )
+    if category_id is None:
+        return []
+    forms = (
+        await session.scalars(
+            select(FormDefinition)
+            .options(selectinload(FormDefinition.versions))
+            .join(ServiceCategoryFormAttachment, ServiceCategoryFormAttachment.form_id == FormDefinition.id)
+            .where(
+                ServiceCategoryFormAttachment.tenant_id == tenant_id,
+                ServiceCategoryFormAttachment.category_id == category_id,
+                FormDefinition.tenant_id == tenant_id,
+                FormDefinition.is_active == True,
+            )
+        )
+    ).all()
+    resolved: list[tuple[FormDefinition, FormVersion]] = []
+    for form_def in forms:
+        latest = max(form_def.versions, key=lambda version: version.version_number, default=None)
+        if latest is not None:
+            resolved.append((form_def, latest))
+    return resolved
+
+
 async def _attach_form_requirements(session: AsyncSession, draft: BookingDraft) -> None:
     """Attach all form requirements for the service to the booking draft."""
     # Forms explicitly attached to this service
@@ -209,7 +241,9 @@ async def _attach_form_requirements(session: AsyncSession, draft: BookingDraft) 
         )
     ).all()
 
-    if not attachments and not all_service_forms:
+    category_forms = await load_category_forms(session, draft.tenant_id, draft.service_id)
+
+    if not attachments and not all_service_forms and not category_forms:
         return
 
     seen_form_ids: set[str] = set()
@@ -234,13 +268,18 @@ async def _attach_form_requirements(session: AsyncSession, draft: BookingDraft) 
         )
         seen_form_ids.add(attachment.form_id)
 
-    for form_def in all_service_forms:
+    # Forms for every service, then forms the service's category requires. Each form once.
+    pending_forms: list[tuple[FormDefinition, FormVersion | None]] = [(form_def, None) for form_def in all_service_forms]
+    pending_forms.extend((form_def, version) for form_def, version in category_forms)
+    for form_def, latest_version in pending_forms:
         if form_def.id in seen_form_ids:
             continue
-        latest_version = next(
-            (v for v in sorted(form_def.versions, key=lambda v: v.version_number, reverse=True)),
-            None,
-        )
+        seen_form_ids.add(form_def.id)
+        if latest_version is None:
+            latest_version = next(
+                (v for v in sorted(form_def.versions, key=lambda v: v.version_number, reverse=True)),
+                None,
+            )
         if latest_version is None:
             continue
         if form_def.scope == "customer" and (form_def.customer_prompt_timing or "pre_booking") == "pre_booking":
@@ -432,6 +471,11 @@ async def _promote_draft_to_booking(
     return booking
 
 
+def _refund_as_credit(tenant: Tenant) -> bool:
+    """A deposit refunded for a cancellation with enough notice goes to the client's wallet, not their card."""
+    return tenant.settings_json.get("cancellationRefundMethod") == "wallet_credit"
+
+
 def _cancellation_policy_for_booking(tenant: Tenant, booking: Booking) -> tuple[int, bool, datetime, bool]:
     raw_window_hours = tenant.settings_json.get("cancellationWindowHours", 24)
     cancellation_window_hours = raw_window_hours if isinstance(raw_window_hours, int) and raw_window_hours >= 0 else 24
@@ -604,14 +648,10 @@ def _build_manage_booking_response(
         booking=booking_to_summary(booking),
         cancellation_window_hours=cancellation_window_hours,
         refund_inside_window=refund_inside_window,
+        cancellation_refund_method="wallet_credit" if _refund_as_credit(tenant) else "original_payment",
         cancellation_deadline_at=cancellation_deadline_at,
         is_inside_cancellation_window=is_inside_cancellation_window,
     )
-
-
-def _default_deposit_cents(tenant: Tenant) -> int:
-    value = tenant.settings_json.get("defaultDepositCents", 0)
-    return value if isinstance(value, int) and value >= 0 else 0
 
 
 async def create_booking_draft(
@@ -768,7 +808,6 @@ async def create_booking_draft(
             service,
             provider_link,
             terms.price_cents + sum(add_on.price_cents for add_on in add_ons),
-            _default_deposit_cents(tenant),
         ),
         duration_minutes=terms.duration_minutes + add_on_minutes,
         created_by_user_id=actor.id if is_staff_draft and actor is not None else None,
@@ -897,6 +936,7 @@ async def cancel_manage_booking(
         raise api_exception(409, "conflict", "This booking no longer has the payment record required for cancellation.")
 
     refundable = requires_payment_record and (not is_inside_cancellation_window or refund_inside_window)
+    credit_deposit = refundable and _refund_as_credit(tenant)
     forfeited = requires_payment_record and not refundable
     refunded_amount_cents = 0
     forfeited_amount_cents = 0
@@ -910,7 +950,7 @@ async def cancel_manage_booking(
     booking.canceled_by = "customer"
     booking.cancel_reason = reason
 
-    if refundable:
+    if refundable and not credit_deposit:
         for payment in deposit_payments:
             # Try processor refund first (Stripe, future Clover/Square).
             # Falls back to wallet credit if the processor isn't available.
@@ -974,6 +1014,29 @@ async def cancel_manage_booking(
         else:
             booking.deposit_status = "refunded"
             booking.payment_resolution = "waived"
+    elif credit_deposit:
+        for payment in deposit_payments:
+            wallet_credited_cents += payment.amount_cents
+            payment.status = "refunded"
+            payment.deposit_status = "refunded"
+            _append_manage_payment_event(
+                session,
+                payment,
+                kind="wallet_credited",
+                amount_cents=payment.amount_cents,
+                notes="Customer canceled with enough notice; deposit issued as wallet credit per the business's refund policy.",
+            )
+        await record_wallet_transaction(
+            session,
+            customer=booking.customer,
+            amount_cents=wallet_credited_cents,
+            kind="cancellation_credit",
+            actor=None,
+            booking_id=booking.id,
+            notes="Deposit credited to wallet: customer canceled with enough notice.",
+        )
+        booking.deposit_status = "refunded"
+        booking.payment_resolution = "waived"
     elif forfeited:
         for payment in deposit_payments:
             forfeited_amount_cents += payment.amount_cents

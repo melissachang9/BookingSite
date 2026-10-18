@@ -90,6 +90,7 @@ DEMO_BRANDING = {
 DEMO_SETTINGS = {
     "cancellationWindowHours": 24,
     "refundInsideWindow": False,
+    "cancellationRefundMethod": "original_payment",
     "reminderHoursBefore": 24,
     "minLeadTimeMinutes": 60,
     "maxAdvanceBookingDays": 45,

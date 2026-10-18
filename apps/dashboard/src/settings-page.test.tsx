@@ -50,7 +50,6 @@ const tenant: TenantSummary = {
     minLeadTimeMinutes: 30,
     maxAdvanceBookingDays: 90,
     reminderHoursBefore: 24,
-    defaultDepositCents: 2500,
     noShowFeeCents: 5000,
     autoChargeNoShowFee: false,
     taxRatePercent: 0,

@@ -602,6 +602,11 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("payments", "card_last4", "VARCHAR(4)"),
     ("payments", "charge_attempt_key", "VARCHAR(80)"),
     ("payment_events", "processor_reference", "VARCHAR(255)"),
+    ("service_categories", "booking_payment_mode", "VARCHAR(32)"),
+    ("service_categories", "booking_payment_value_cents", "INTEGER"),
+    ("service_categories", "booking_payment_percent", "INTEGER"),
+    ("service_categories", "require_card_on_file", "BOOLEAN"),
+    ("service_categories", "provider_selection_mode", "VARCHAR(32)"),
 )
 
 # Reporting indexes for databases created before they were declared on the models.
@@ -616,8 +621,48 @@ _ADDED_INDEXES: tuple[str, ...] = (
 )
 
 
+async def _migrate_category_online_booking(connection) -> None:
+    """One-time move to category-level online booking rules (null on a service = inherit).
+
+    Runs only while service_categories lacks the new columns, so a service the owner later
+    sets back to "inherit" is never converted again. Every service keeps exactly the rules it
+    has today: legacy plain deposits become an explicit fixed amount, a fixed amount left blank
+    takes the old studio-wide default deposit, "card on file: off" becomes unset (inherit), and the
+    default "clients choose" artist selection becomes unset (inherit).
+    """
+    already_migrated = await connection.scalar(
+        text(
+            "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' "
+            "AND table_name = 'service_categories' AND column_name = 'booking_payment_mode'"
+        )
+    )
+    if already_migrated:
+        return
+    await connection.execute(text("ALTER TABLE services ALTER COLUMN require_card_on_file DROP NOT NULL"))
+    await connection.execute(text("UPDATE services SET require_card_on_file = NULL WHERE require_card_on_file = FALSE"))
+    # "Clients choose" was the default and the old form saved it on every edit, so it was rarely a deliberate choice.
+    await connection.execute(
+        text("UPDATE services SET provider_selection_mode = NULL WHERE provider_selection_mode = 'client_choice'")
+    )
+    await connection.execute(
+        text(
+            "UPDATE services SET booking_payment_value_cents = COALESCE("
+            "(SELECT (tenants.settings_json::jsonb ->> 'defaultDepositCents')::int FROM tenants "
+            "WHERE tenants.id = services.tenant_id), 0) "
+            "WHERE booking_payment_mode = 'partial_flat' AND booking_payment_value_cents IS NULL"
+        )
+    )
+    await connection.execute(
+        text(
+            "UPDATE services SET booking_payment_mode = 'partial_flat', booking_payment_value_cents = deposit_cents "
+            "WHERE booking_payment_mode IS NULL AND deposit_cents > 0"
+        )
+    )
+
+
 async def _ensure_added_columns() -> None:
     async with get_engine().begin() as connection:
+        await _migrate_category_online_booking(connection)
         for table, column, column_type in _ADDED_COLUMNS:
             exists = await connection.scalar(
                 text(

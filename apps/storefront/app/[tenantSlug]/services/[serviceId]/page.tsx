@@ -104,7 +104,9 @@ export default async function ServiceRoutePage({ params, searchParams }: Service
 
     // If the service is configured to auto-assign or hide provider selection,
     // skip the provider chooser and go straight to availability.
-    if (service.providerSelectionMode === "auto_assign" || service.providerSelectionMode === "hide") {
+    // Uses the rule after inheritance: the service's own setting, else its category's.
+    const selectionMode = service.effectiveProviderSelectionMode ?? service.providerSelectionMode;
+    if (selectionMode === "auto_assign" || selectionMode === "hide") {
       const noPrefAvailability = await storefrontApi.getAvailability({
         tenantSlug,
         serviceId: service.id,

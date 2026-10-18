@@ -24,25 +24,23 @@ def _service(mode: str | None, value: int | None = None, percent: int | None = N
 
 
 def test_deposit_by_payment_mode() -> None:
-    assert resolve_booking_deposit(_service("none"), None, 18000, 5000) == 0
-    assert resolve_booking_deposit(_service("full"), None, 18000, 5000) == 18000
-    assert resolve_booking_deposit(_service("partial_flat", value=5000), None, 18000, 9999) == 5000
-    assert resolve_booking_deposit(_service("partial_percent", percent=30), None, 18000, 5000) == 5400
+    assert resolve_booking_deposit(_service("none"), None, 18000) == 0
+    assert resolve_booking_deposit(_service("full"), None, 18000) == 18000
+    assert resolve_booking_deposit(_service("partial_flat", value=5000), None, 18000) == 5000
+    assert resolve_booking_deposit(_service("partial_percent", percent=30), None, 18000) == 5400
 
 
 def test_deposit_falls_back_and_caps() -> None:
-    # Blank fixed amount -> studio default deposit.
-    assert resolve_booking_deposit(_service("partial_flat"), None, 18000, 5000) == 5000
-    # Services saved before payment modes keep their own deposit.
-    assert resolve_booking_deposit(_service(None, deposit=2500), None, 18000, 5000) == 2500
+    # Services saved before payment modes existed keep their own deposit.
+    assert resolve_booking_deposit(_service(None, deposit=2500), None, 18000) == 2500
     # Never more than the visit costs.
-    assert resolve_booking_deposit(_service("partial_flat", value=50000), None, 18000, 0) == 18000
+    assert resolve_booking_deposit(_service("partial_flat", value=50000), None, 18000) == 18000
 
 
 def test_full_payment_includes_add_ons_and_provider_deposit_wins() -> None:
-    assert resolve_booking_deposit(_service("full"), None, 22000, 0) == 22000
+    assert resolve_booking_deposit(_service("full"), None, 22000) == 22000
     link = ProviderService(deposit_cents_override=1000)
-    assert resolve_booking_deposit(_service("full"), link, 22000, 0) == 1000
+    assert resolve_booking_deposit(_service("full"), link, 22000) == 1000
 
 
 # --------------------------------------------------------------------------- API
@@ -109,14 +107,13 @@ def test_payment_mode_is_validated(client) -> None:
     assert no_percent.status_code == 422
 
 
-def test_clearing_the_fixed_amount_uses_the_studio_default(client) -> None:
+def test_a_fixed_payment_needs_an_amount(client) -> None:
     headers = _auth(client)
     service = _service_named(client, "Signature Facial")
     client.patch(f"{API}/services/{service['id']}", headers=headers,
                  json={"bookingPaymentMode": "partial_flat", "bookingPaymentValueCents": 1500})
     cleared = client.patch(f"{API}/services/{service['id']}", headers=headers, json={"clearBookingPaymentValue": True})
-    assert cleared.status_code == 200, cleared.json()
-    assert cleared.json()["bookingPaymentValueCents"] is None
+    assert cleared.status_code == 422, cleared.json()
 
 
 # --------------------------------------------------------------------------- categories
@@ -159,3 +156,145 @@ def test_category_move_target_is_validated(client) -> None:
     # Nothing was deleted by the rejected requests.
     ids = [c["id"] for c in client.get(f"{API}/service-categories", headers=headers).json()["categories"]]
     assert old in ids
+
+
+# --------------------------------------------------------------------------- category inheritance
+
+
+def _category_with_rule(client, headers, name: str, **rule) -> str:
+    category_id = _category(client, headers, name)
+    response = client.patch(f"{API}/service-categories/{category_id}", headers=headers, json=rule)
+    assert response.status_code == 200, response.json()
+    return category_id
+
+
+def _move_service(client, headers, service: dict, category_id: str, **extra) -> dict:
+    response = client.patch(
+        f"{API}/services/{service['id']}", headers=headers, json={"categoryId": category_id, **extra}
+    )
+    assert response.status_code == 200, response.json()
+    return response.json()
+
+
+def test_resolver_uses_service_then_category_then_legacy() -> None:
+    from app.db.models import ServiceCategory
+    from app.services.service_terms import effective_online_booking
+
+    category = ServiceCategory(booking_payment_mode="partial_percent", booking_payment_percent=50)
+    inheriting = Service(price_cents=20000, deposit_cents=2500)
+    assert resolve_booking_deposit_with(inheriting, category, 20000) == 10000
+    assert effective_online_booking(inheriting, category).payment_source == "category"
+
+    own_rule = Service(price_cents=20000, deposit_cents=2500, booking_payment_mode="none")
+    assert resolve_booking_deposit_with(own_rule, category, 20000) == 0
+    assert effective_online_booking(own_rule, category).payment_source == "service"
+
+    # A category rule beats a leftover legacy deposit; with no rule anywhere the legacy deposit stands.
+    assert resolve_booking_deposit_with(inheriting, None, 20000) == 2500
+    assert effective_online_booking(Service(price_cents=1, deposit_cents=0), None).payment_source == "none"
+
+
+def resolve_booking_deposit_with(service: Service, category, total: int) -> int:
+    # The resolver reads the category the service already has loaded.
+    service.category = category
+    return resolve_booking_deposit(service, None, total)
+
+
+def test_resolver_inherits_card_on_file_and_provider_selection() -> None:
+    from app.db.models import ServiceCategory
+    from app.services.service_terms import effective_online_booking
+
+    category = ServiceCategory(require_card_on_file=True, provider_selection_mode="auto_assign")
+    inheriting = Service(price_cents=1, deposit_cents=0)
+    effective = effective_online_booking(inheriting, category)
+    assert (effective.require_card_on_file, effective.require_card_source) == (True, "category")
+    assert (effective.provider_selection_mode, effective.provider_selection_source) == ("auto_assign", "category")
+
+    overriding = Service(price_cents=1, deposit_cents=0, require_card_on_file=False, provider_selection_mode="hide")
+    effective = effective_online_booking(overriding, category)
+    assert (effective.require_card_on_file, effective.require_card_source) == (False, "service")
+    assert (effective.provider_selection_mode, effective.provider_selection_source) == ("hide", "service")
+
+    bare = effective_online_booking(inheriting, None)
+    assert (bare.require_card_on_file, bare.provider_selection_mode) == (False, "client_choice")
+
+
+def test_draft_deposit_inherits_the_category_rule_until_the_service_sets_its_own(client) -> None:
+    headers = _auth(client)
+    service = _service_named(client, "Signature Facial")
+    category_id = _category_with_rule(client, headers, "Laser", bookingPaymentMode="full")
+    moved = _move_service(client, headers, service, category_id, inheritBookingPayment=True)
+    assert moved["effectiveBookingPaymentSource"] == "category"
+    assert moved["effectiveBookingPaymentMode"] == "full"
+    assert _draft_deposit(client, headers, service) == service["priceCents"]
+
+    own = client.patch(f"{API}/services/{service['id']}", headers=headers, json={"bookingPaymentMode": "none"})
+    assert own.status_code == 200
+    assert own.json()["effectiveBookingPaymentSource"] == "service"
+    assert _draft_deposit(client, headers, service) == 0
+
+
+def test_category_payment_rule_is_validated(client) -> None:
+    headers = _auth(client)
+    category_id = _category(client, headers, "Laser")
+    path = f"{API}/service-categories/{category_id}"
+    assert client.patch(path, headers=headers, json={"bookingPaymentMode": "half"}).status_code == 422
+    assert client.patch(path, headers=headers, json={"bookingPaymentMode": "partial_percent"}).status_code == 422
+    assert client.patch(path, headers=headers, json={"bookingPaymentMode": "partial_flat"}).status_code == 422
+    assert client.patch(path, headers=headers, json={"providerSelectionMode": "random"}).status_code == 422
+
+    ok = client.patch(path, headers=headers, json={"bookingPaymentMode": "partial_flat", "bookingPaymentValueCents": 4000})
+    assert ok.status_code == 200
+    assert ok.json()["bookingPaymentValueCents"] == 4000
+    cleared = client.patch(path, headers=headers, json={"clearBookingPayment": True})
+    assert cleared.json()["bookingPaymentMode"] is None
+    assert cleared.json()["bookingPaymentValueCents"] is None
+
+
+def test_category_card_on_file_and_provider_selection_reach_the_service(client) -> None:
+    headers = _auth(client)
+    service = _service_named(client, "Signature Facial")
+    category_id = _category_with_rule(
+        client, headers, "Laser", requireCardOnFile=True, providerSelectionMode="auto_assign"
+    )
+    moved = _move_service(client, headers, service, category_id, inheritRequireCardOnFile=True, providerSelectionMode="")
+    assert moved["effectiveRequireCardOnFile"] is True
+    assert moved["effectiveRequireCardSource"] == "category"
+    assert moved["effectiveProviderSelectionMode"] == "auto_assign"
+    assert moved["effectiveProviderSelectionSource"] == "category"
+
+    overridden = client.patch(
+        f"{API}/services/{service['id']}", headers=headers, json={"requireCardOnFile": False, "providerSelectionMode": "hide"}
+    ).json()
+    assert overridden["effectiveRequireCardOnFile"] is False
+    assert overridden["effectiveProviderSelectionMode"] == "hide"
+
+
+def test_a_service_cannot_join_another_tenants_category(client) -> None:
+    headers = _auth(client)
+    service = _service_named(client, "Signature Facial")
+    response = client.patch(f"{API}/services/{service['id']}", headers=headers, json={"categoryId": "not-a-category"})
+    assert response.status_code == 404
+
+
+def test_category_changes_to_online_booking_rules_are_audited(client) -> None:
+    import asyncio
+
+    headers = _auth(client)
+    category_id = _category_with_rule(client, headers, "Laser", bookingPaymentMode="full")
+
+    async def _events() -> list:
+        from sqlalchemy import select
+
+        from app.db.models import AuditEvent
+        from app.db.session import get_session_maker
+
+        async with get_session_maker()() as session:
+            rows = await session.scalars(
+                select(AuditEvent).where(AuditEvent.entity_id == category_id, AuditEvent.action == "update")
+            )
+            return [(row.actor_id, row.changes_json) for row in rows]
+
+    events = asyncio.run(_events())
+    assert events and events[-1][0] is not None
+    assert events[-1][1] == {"booking_payment_mode": "full"}

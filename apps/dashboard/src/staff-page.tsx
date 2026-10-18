@@ -28,6 +28,7 @@ import type {
 } from "@booking/shared-types";
 
 import { categoryColor } from "./category-colors";
+import { effectiveDepositCents } from "./online-booking";
 import { formatMoneyShort } from "./format-money";
 import { uploadImageFile } from "./upload-image";
 import { apiBaseUrl, ensureActiveStoredSession, platformApi } from "./platform-api";
@@ -1685,7 +1686,7 @@ function ServicesTab({
           <input
             className="cs-override-table__field"
             type="text" inputMode="decimal"
-            placeholder={formatMoneyShort(svc.depositCents)}
+            placeholder={formatMoneyShort(effectiveDepositCents(svc, svc.priceCents))}
             value={ov.depositCents}
             onFocus={selectOnFocus}
             onMouseUp={keepSelection}

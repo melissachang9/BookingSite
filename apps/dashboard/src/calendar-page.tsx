@@ -6438,12 +6438,6 @@ function CheckoutPanel({
     api.updateTenantSettings(tenantSlug, { customPaymentMethods: updated }).catch(() => {});
   };
 
-  const handleWaive = () => {
-    if (window.confirm("Waive the remaining balance and complete this booking?")) {
-      void onComplete(appointment, "waived");
-    }
-  };
-
   const handleReopenSale = () => {
     if (window.confirm("Re-open this sale for adjustments? The original sale record is preserved in the audit log. Any changes will be tracked.")) {
       setIsReadOnly(false);
@@ -7098,19 +7092,6 @@ function CheckoutPanel({
                 )}
               </section>
             )}
-
-            <section className="cs-checkout-panel__resolutions" hidden>
-              <div className="cs-checkout-panel__resolutions-buttons">
-                <button
-                  type="button"
-                  className="cs-btn cs-btn--ghost cs-btn--sm"
-                  onClick={handleWaive}
-                  disabled={state === "submitting"}
-                >
-                  Waive remaining balance
-                </button>
-              </div>
-            </section>
           </>
         ) : saleCompleted || isReadOnly ? (
           <section className="cs-checkout-panel__completed-banner">
@@ -7147,16 +7128,6 @@ function CheckoutPanel({
       </div>
       <footer className="cs-checkout-panel__footer">
         <div className="cs-checkout-panel__footer-left">
-          {!isReadOnly && !isSettled ? (
-            <button
-              type="button"
-              className="cs-checkout-panel__waive-link"
-              onClick={handleWaive}
-              disabled={state === "submitting"}
-            >
-              Cancel · no-show · refund
-            </button>
-          ) : null}
         </div>
         <div className="cs-checkout-panel__footer-right">
           {!isReadOnly && remainingBalance > 0 ? (

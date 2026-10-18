@@ -880,7 +880,32 @@ async def patch_service_category(
     session: AsyncSession = Depends(get_db_session),
 ) -> ServiceCategorySummaryResponse:
     result = await update_tenant_service_category(session, tenant_slug, category_id, payload)
-    await record_audit(session, tenant_id=actor.tenant_id, entity_type="service_category", entity_id=category_id, action="update", actor=actor)
+    online_booking_fields = {
+        "booking_payment_mode",
+        "booking_payment_value_cents",
+        "booking_payment_percent",
+        "require_card_on_file",
+        "provider_selection_mode",
+        "clear_booking_payment",
+        "clear_require_card_on_file",
+        "clear_provider_selection_mode",
+    }
+    online_booking_changes = {
+        key: value
+        for key, value in payload.model_dump(exclude_unset=True).items()
+        if key in online_booking_fields
+    }
+    await record_audit(
+        session,
+        tenant_id=actor.tenant_id,
+        entity_type="service_category",
+        entity_id=category_id,
+        action="update",
+        actor=actor,
+        changes=online_booking_changes or None,
+        notes="Online booking rules changed for every service in this category." if online_booking_changes else None,
+    )
+    await session.commit()
     return result
 
 

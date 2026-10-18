@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field, model_validator
 
@@ -104,10 +105,10 @@ class CustomEmailSettingsResponse(CamelModel):
 class TenantSettingsResponse(CamelModel):
     cancellation_window_hours: int
     refund_inside_window: bool
+    cancellation_refund_method: Literal["original_payment", "wallet_credit"] = "original_payment"
     reminder_hours_before: int
     min_lead_time_minutes: int
     max_advance_booking_days: int
-    default_deposit_cents: int
     no_show_fee_cents: int
     tax_rate_percent: float = 0
     auto_charge_no_show_fee: bool | None = None
@@ -230,9 +231,9 @@ class UpdateTenantSettingsRequest(CamelModel):
     appointment_reminder_channels: list[str] | None = None
     cancellation_window_hours: int | None = Field(default=None, ge=0, le=168)
     refund_inside_window: bool | None = None
+    cancellation_refund_method: Literal["original_payment", "wallet_credit"] | None = None
     min_lead_time_minutes: int | None = Field(default=None, ge=0, le=1440)
     max_advance_booking_days: int | None = Field(default=None, ge=1, le=365)
-    default_deposit_cents: int | None = Field(default=None, ge=0, le=100000)
     no_show_fee_cents: int | None = Field(default=None, ge=0, le=100000)
     tax_rate_percent: float | None = Field(default=None, ge=0, le=100)
     auto_charge_no_show_fee: bool | None = None
@@ -288,6 +289,9 @@ class CreateTenantRequest(CamelModel):
     homepage_url: str | None = Field(default=None, max_length=255)
     primary_color: str | None = Field(default=None, max_length=32)
     accent_color: str | None = Field(default=None, max_length=32)
+    # Cancellation policy, chosen at setup. Omitted fields keep the platform defaults.
+    cancellation_window_hours: int | None = Field(default=None, ge=0, le=168)
+    cancellation_refund_method: Literal["original_payment", "wallet_credit"] | None = None
 
 
 class CreateTenantResponse(CamelModel):
@@ -407,11 +411,26 @@ class ServiceSummaryResponse(CamelModel):
     after_image_alt: str | None = None
     meta_description: str | None = None
     online_booking_description: str | None = None
-    require_card_on_file: bool = False
+    # The service's own online booking rules. None means "inherit from the category".
+    require_card_on_file: bool | None = None
     booking_payment_mode: str | None = None
     booking_payment_value_cents: int | None = None
     booking_payment_percent: int | None = None
     provider_selection_mode: str | None = None  # client_choice, auto_assign, hide
+    # What actually applies after inheritance, and where it comes from.
+    effective_booking_payment_mode: str | None = None
+    effective_booking_payment_value_cents: int | None = None
+    effective_booking_payment_percent: int | None = None
+    effective_booking_payment_source: str = "none"  # service | category | legacy | none
+    effective_require_card_on_file: bool = False
+    effective_require_card_source: str = "default"  # service | category | default
+    effective_provider_selection_mode: str = "client_choice"
+    effective_provider_selection_source: str = "default"
+
+
+def _validate_provider_selection(mode: str | None) -> None:
+    if mode and mode not in ("client_choice", "auto_assign", "hide"):
+        raise ValueError("providerSelectionMode must be one of: client_choice, auto_assign, hide.")
 
 
 def _validate_booking_payment(mode: str | None, percent: int | None) -> None:
@@ -436,7 +455,7 @@ class CreateServiceRequest(CamelModel):
     category_id: str | None = None
     slug: str | None = Field(default=None, max_length=255)
     online_booking_description: str | None = Field(default=None, max_length=2000)
-    require_card_on_file: bool = False
+    require_card_on_file: bool | None = None
     booking_payment_mode: str | None = Field(default=None, max_length=32)
     booking_payment_value_cents: int | None = Field(default=None, ge=0, le=500_000)
     booking_payment_percent: int | None = Field(default=None, ge=0, le=100)
@@ -447,6 +466,7 @@ class CreateServiceRequest(CamelModel):
         if self.deposit_cents > self.price_cents:
             raise ValueError("Deposit cannot exceed the service price.")
         _validate_booking_payment(self.booking_payment_mode, self.booking_payment_percent)
+        _validate_provider_selection(self.provider_selection_mode)
         return self
 
 
@@ -488,8 +508,10 @@ class UpdateServiceRequest(CamelModel):
     booking_payment_value_cents: int | None = Field(default=None, ge=0, le=500_000)
     booking_payment_percent: int | None = Field(default=None, ge=0, le=100)
     provider_selection_mode: str | None = Field(default=None, max_length=32)
-    # Clears a fixed amount so a partial payment uses the studio default deposit.
     clear_booking_payment_value: bool = False
+    # Back to "inherit from the category" for each online booking rule.
+    inherit_booking_payment: bool = False
+    inherit_require_card_on_file: bool = False
     clear_outcome_headline: bool = False
     clear_subheadline: bool = False
     clear_compare_at_price: bool = False
@@ -505,6 +527,7 @@ class UpdateServiceRequest(CamelModel):
     @model_validator(mode="after")
     def _validate(self) -> "UpdateServiceRequest":
         _validate_booking_payment(self.booking_payment_mode, self.booking_payment_percent)
+        _validate_provider_selection(self.provider_selection_mode)
         if (
             self.featured_label is not None
             and self.featured_label.strip()
@@ -545,6 +568,13 @@ class ServiceCategorySummaryResponse(CamelModel):
     featured_label: str | None = None
     meta_description: str | None = None
     faqs: list[CategoryFaqItem] = Field(default_factory=list)
+    # Online booking rules inherited by every service that doesn't set its own. None = not set.
+    booking_payment_mode: str | None = None
+    booking_payment_value_cents: int | None = None
+    booking_payment_percent: int | None = None
+    require_card_on_file: bool | None = None
+    provider_selection_mode: str | None = None
+    form_ids: list[str] = Field(default_factory=list)
 
 
 class ServiceCategoryListResponse(CamelModel):
@@ -572,6 +602,23 @@ class UpdateServiceCategoryRequest(CamelModel):
     featured_label: str | None = Field(default=None, max_length=32)
     meta_description: str | None = Field(default=None, max_length=320)
     faqs: list[CategoryFaqItem] | None = Field(default=None, max_length=20)
+    booking_payment_mode: str | None = Field(default=None, max_length=32)
+    booking_payment_value_cents: int | None = Field(default=None, ge=0, le=500_000)
+    booking_payment_percent: int | None = Field(default=None, ge=0, le=100)
+    require_card_on_file: bool | None = None
+    provider_selection_mode: str | None = Field(default=None, max_length=32)
+    # Clears the category's rule so its services fall back to their own / no deposit.
+    clear_booking_payment: bool = False
+    clear_require_card_on_file: bool = False
+    clear_provider_selection_mode: bool = False
+
+    @model_validator(mode="after")
+    def _validate_online_booking(self) -> "UpdateServiceCategoryRequest":
+        _validate_booking_payment(self.booking_payment_mode, self.booking_payment_percent)
+        _validate_provider_selection(self.provider_selection_mode)
+        if self.booking_payment_mode == "partial_flat" and self.booking_payment_value_cents is None:
+            raise ValueError("bookingPaymentValueCents is required for a fixed payment.")
+        return self
     clear_slug: bool = False
     clear_outcome_headline: bool = False
     clear_subheadline: bool = False

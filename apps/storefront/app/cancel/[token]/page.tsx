@@ -49,7 +49,7 @@ export default async function ManageBookingPage({ params, searchParams }: Manage
       }
     }
 
-    const { booking, cancellationDeadlineAt, cancellationWindowHours, isInsideCancellationWindow, refundInsideWindow, tenant } =
+    const { booking, cancellationDeadlineAt, cancellationWindowHours, isInsideCancellationWindow, refundInsideWindow, cancellationRefundMethod, tenant } =
       manageBooking;
     const isCanceled = booking.status === "canceled";
     const hasPaidDeposit = booking.depositStatus === "paid";
@@ -99,7 +99,9 @@ export default async function ManageBookingPage({ params, searchParams }: Manage
             : "This appointment no longer has an active payment action attached to it.";
     const cancellationActionTitle =
       hasPaidDeposit && !isInsideCancellationWindow
-        ? `Cancel now and refund ${depositAmountLabel}`
+        ? cancellationRefundMethod === "wallet_credit"
+          ? `Cancel now and get ${depositAmountLabel} as studio credit`
+          : `Cancel now and refund ${depositAmountLabel}`
         : hasPaidDeposit && refundInsideWindow
           ? `Cancel now and return ${depositAmountLabel}`
           : hasPaidDeposit
@@ -107,7 +109,9 @@ export default async function ManageBookingPage({ params, searchParams }: Manage
             : "Cancel this appointment";
     const cancellationActionDetail =
       hasPaidDeposit && !isInsideCancellationWindow
-        ? `Because this is outside the ${cancellationWindowHours}-hour window, the ${depositAmountLabel} deposit will be refunded.`
+        ? cancellationRefundMethod === "wallet_credit"
+          ? `Because this is outside the ${cancellationWindowHours}-hour window, the ${depositAmountLabel} deposit will be added to your studio credit. It can be used on any service and doesn't expire.`
+          : `Because this is outside the ${cancellationWindowHours}-hour window, the ${depositAmountLabel} deposit will be refunded to your original payment method.`
         : hasPaidDeposit && refundInsideWindow
           ? `This studio still allows refunds inside the ${cancellationWindowHours}-hour window, so the ${depositAmountLabel} deposit can be returned.`
           : hasPaidDeposit

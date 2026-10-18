@@ -62,15 +62,18 @@ export const BUSINESS_HOURS_WEEKDAY_KEYS = [
 ] as const;
 export type BusinessHoursWeekdayKey = (typeof BUSINESS_HOURS_WEEKDAY_KEYS)[number];
 
+export type CancellationRefundMethod = "original_payment" | "wallet_credit";
+
 export type TenantSettings = {
   cancellationWindowHours: number;
   refundInsideWindow: boolean;
+  /** Where a deposit goes when a client cancels with enough notice. Late cancellations keep the deposit. */
+  cancellationRefundMethod?: CancellationRefundMethod;
   reminderHoursBefore: number;
   appointmentReminderHours?: number;
   appointmentReminderChannels?: string[];
   minLeadTimeMinutes: number;
   maxAdvanceBookingDays: number;
-  defaultDepositCents: number;
   noShowFeeCents: number;
   taxRatePercent: number;
   autoChargeNoShowFee?: boolean;
@@ -116,9 +119,9 @@ export type UpdateTenantSettingsRequest = {
   appointmentReminderChannels?: string[];
   cancellationWindowHours?: number;
   refundInsideWindow?: boolean;
+  cancellationRefundMethod?: CancellationRefundMethod;
   minLeadTimeMinutes?: number;
   maxAdvanceBookingDays?: number;
-  defaultDepositCents?: number;
   noShowFeeCents?: number;
   taxRatePercent?: number;
   autoChargeNoShowFee?: boolean;
@@ -213,6 +216,8 @@ export type CreateTenantRequest = {
   homepageUrl?: string;
   primaryColor?: string;
   accentColor?: string;
+  cancellationWindowHours?: number;
+  cancellationRefundMethod?: CancellationRefundMethod;
 };
 
 export type CreateTenantResponse = {

@@ -72,7 +72,6 @@ def test_update_business_policies_saves_all_fields(client) -> None:
             "refundInsideWindow": True,
             "minLeadTimeMinutes": 120,
             "maxAdvanceBookingDays": 60,
-            "defaultDepositCents": 2500,
             "noShowFeeCents": 5000,
             "taxRatePercent": 8.25,
             "autoChargeNoShowFee": True,
@@ -85,7 +84,7 @@ def test_update_business_policies_saves_all_fields(client) -> None:
     assert settings["refundInsideWindow"] is True
     assert settings["minLeadTimeMinutes"] == 120
     assert settings["maxAdvanceBookingDays"] == 60
-    assert settings["defaultDepositCents"] == 2500
+    assert "defaultDepositCents" not in settings
     assert settings["noShowFeeCents"] == 5000
     assert settings["taxRatePercent"] == 8.25
     assert settings["autoChargeNoShowFee"] is True
@@ -117,14 +116,15 @@ def test_update_settings_rejects_excessive_cancellation_window(client) -> None:
     assert response.status_code == 422
 
 
-def test_update_settings_rejects_negative_deposit(client) -> None:
+def test_business_settings_no_longer_carry_a_default_deposit(client) -> None:
     headers = _auth_headers(client)
     response = client.patch(
         "/api/v1/tenants/brow-beauty-lab/settings",
-        json={"defaultDepositCents": -100},
+        json={"defaultDepositCents": 9900},
         headers=headers,
     )
-    assert response.status_code == 422
+    assert response.status_code == 200
+    assert "defaultDepositCents" not in response.json()["settings"]
 
 
 def test_update_settings_rejects_excessive_tax_rate(client) -> None:

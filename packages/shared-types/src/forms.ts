@@ -120,6 +120,8 @@ export type FormSummaryResponse = AuditFields &
     currentVersionNumber?: number | null;
     schema?: FormSchema | null;
     serviceIds: UUID[];
+    /** Service categories whose services all require this form. */
+    categoryIds: UUID[];
   };
 
 export type FormListResponse = {
@@ -134,6 +136,7 @@ export type CreateFormRequest = {
   reviewRequired?: boolean;
   schema?: FormSchema;
   serviceIds?: UUID[];
+  categoryIds?: UUID[];
 };
 
 export type UpdateFormRequest = {
@@ -145,6 +148,7 @@ export type UpdateFormRequest = {
   isActive?: boolean;
   schema?: FormSchema;
   serviceIds?: UUID[];
+  categoryIds?: UUID[];
 };
 
 export type FormResponseSummary = AuditFields &

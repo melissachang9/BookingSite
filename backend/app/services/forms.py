@@ -7,7 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
-from app.db.models import FormDefinition, FormVersion, Service, ServiceFormAttachment
+from app.db.models import (
+    FormDefinition,
+    FormVersion,
+    Service,
+    ServiceCategory,
+    ServiceCategoryFormAttachment,
+    ServiceFormAttachment,
+)
 from app.schemas.forms import (
     CreateFormRequest,
     FormListResponse,
@@ -43,7 +50,7 @@ async def list_tenant_forms(
     forms = (
         await session.scalars(
             select(FormDefinition)
-            .options(selectinload(FormDefinition.service_attachments))
+            .options(selectinload(FormDefinition.service_attachments), selectinload(FormDefinition.category_attachments))
             .where(FormDefinition.tenant_id == tenant.id)
             .order_by(FormDefinition.name.asc())
         )
@@ -53,7 +60,8 @@ async def list_tenant_forms(
     for form in forms:
         latest_version = await _get_latest_version(session, form.id)
         svc_ids = [att.service_id for att in form.service_attachments]
-        items.append(_form_to_summary(form, latest_version, svc_ids))
+        category_ids = [att.category_id for att in form.category_attachments]
+        items.append(_form_to_summary(form, latest_version, svc_ids, category_ids))
 
     return FormListResponse(items=items)
 
@@ -86,13 +94,19 @@ async def create_tenant_form(
     await session.flush()
 
     # Attach to services
+    category_ids = await _sync_category_attachments(session, tenant.id, form.id, payload.category_ids)
+
+    # An empty service list means "every service", unless the form is tied to categories instead.
     service_ids: list[str] = []
     if payload.service_ids is not None:
-        await _sync_service_attachments(session, tenant.id, form.id, version.id, payload.service_ids, form.customer_prompt_timing or "pre_booking")
+        await _sync_service_attachments(
+            session, tenant.id, form.id, version.id, payload.service_ids,
+            form.customer_prompt_timing or "pre_booking", all_when_empty=not category_ids,
+        )
         service_ids = payload.service_ids
 
     await session.commit()
-    return _form_to_summary(form, version, service_ids)
+    return _form_to_summary(form, version, service_ids, category_ids)
 
 
 async def update_tenant_form(
@@ -138,13 +152,32 @@ async def update_tenant_form(
         latest_version = new_version
 
     # Sync service attachments
+    category_ids: list[str] | None = None
+    if payload.category_ids is not None:
+        category_ids = await _sync_category_attachments(session, tenant.id, form.id, payload.category_ids)
+    else:
+        category_ids = [
+            att.category_id
+            for att in (
+                await session.scalars(
+                    select(ServiceCategoryFormAttachment).where(
+                        ServiceCategoryFormAttachment.tenant_id == tenant.id,
+                        ServiceCategoryFormAttachment.form_id == form.id,
+                    )
+                )
+            ).all()
+        ]
+
     service_ids: list[str] | None = None
     if payload.service_ids is not None and latest_version is not None:
-        await _sync_service_attachments(session, tenant.id, form.id, latest_version.id, payload.service_ids, form.customer_prompt_timing or "pre_booking")
+        await _sync_service_attachments(
+            session, tenant.id, form.id, latest_version.id, payload.service_ids,
+            form.customer_prompt_timing or "pre_booking", all_when_empty=not category_ids,
+        )
         service_ids = payload.service_ids
 
     await session.commit()
-    return _form_to_summary(form, latest_version, service_ids)
+    return _form_to_summary(form, latest_version, service_ids, category_ids)
 
 
 async def _get_latest_version(
@@ -163,6 +196,7 @@ def _form_to_summary(
     form: FormDefinition,
     version: FormVersion | None,
     service_ids: list[str] | None = None,
+    category_ids: list[str] | None = None,
 ) -> FormSummaryResponse:
     schema = None
     if version is not None and version.schema_json:
@@ -187,6 +221,7 @@ def _form_to_summary(
         current_version_number=version.version_number if version else None,
         schema=schema,
         service_ids=service_ids if service_ids is not None else [],
+        category_ids=category_ids if category_ids is not None else [],
     )
 
 
@@ -197,8 +232,13 @@ async def _sync_service_attachments(
     version_id: str,
     service_ids: list[str],
     timing: str = "pre_booking",
+    all_when_empty: bool = True,
 ) -> None:
-    """Replace all service attachments for a form with the given service IDs."""
+    """Replace all service attachments for a form with the given service IDs.
+
+    An empty list applies the form to every service, unless `all_when_empty` is off
+    (the form is required through service categories instead).
+    """
     # Delete existing attachments
     existing = (
         await session.scalars(
@@ -220,9 +260,8 @@ async def _sync_service_attachments(
     )
 
     if not service_ids:
-        # Empty list means "apply to all services"
         if form is not None:
-            form.applies_to_all_services = True
+            form.applies_to_all_services = all_when_empty
         return
 
     if form is not None:
@@ -238,6 +277,49 @@ async def _sync_service_attachments(
             customer_prompt_timing=timing,
         )
         session.add(att)
+
+
+async def _sync_category_attachments(
+    session: AsyncSession,
+    tenant_id: str,
+    form_id: str,
+    category_ids: list[str],
+) -> list[str]:
+    """Replace the categories that require a form. Every category must belong to the tenant."""
+    wanted = list(dict.fromkeys(category_ids))
+    if wanted:
+        found = set(
+            (
+                await session.scalars(
+                    select(ServiceCategory.id).where(
+                        ServiceCategory.tenant_id == tenant_id,
+                        ServiceCategory.id.in_(wanted),
+                    )
+                )
+            ).all()
+        )
+        if found != set(wanted):
+            raise api_exception(404, "not_found", "One or more service categories were not found for this tenant.")
+    existing = (
+        await session.scalars(
+            select(ServiceCategoryFormAttachment).where(
+                ServiceCategoryFormAttachment.tenant_id == tenant_id,
+                ServiceCategoryFormAttachment.form_id == form_id,
+            )
+        )
+    ).all()
+    keep = set()
+    for attachment in existing:
+        if attachment.category_id in wanted:
+            keep.add(attachment.category_id)
+        else:
+            await session.delete(attachment)
+    for category_id in wanted:
+        if category_id not in keep:
+            session.add(
+                ServiceCategoryFormAttachment(tenant_id=tenant_id, category_id=category_id, form_id=form_id)
+            )
+    return wanted
 
 
 async def delete_tenant_form(
@@ -263,6 +345,14 @@ async def delete_tenant_form(
         )
     )
     for att in attachments:
+        await session.delete(att)
+    category_attachments = await session.scalars(
+        select(ServiceCategoryFormAttachment).where(
+            ServiceCategoryFormAttachment.tenant_id == tenant.id,
+            ServiceCategoryFormAttachment.form_id == form_id,
+        )
+    )
+    for att in category_attachments:
         await session.delete(att)
 
     # Delete all versions

@@ -194,6 +194,7 @@ export type CustomerManageBooking = {
   booking: BookingSummary;
   cancellationWindowHours: number;
   refundInsideWindow: boolean;
+  cancellationRefundMethod?: "original_payment" | "wallet_credit";
   cancellationDeadlineAt: ISODateString;
   isInsideCancellationWindow: boolean;
 };
