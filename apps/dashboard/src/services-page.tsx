@@ -602,23 +602,9 @@ type ServiceCardState = {
   metaDescription: string;
 };
 
-function describePaymentRule(mode: string | null | undefined, valueCents?: number | null, percent?: number | null): string {
-  if (mode === "none") return "no payment at booking";
-  if (mode === "full") return "full payment at booking";
-  if (mode === "partial_flat") return `${formatMoney(valueCents ?? 0)} at booking`;
-  if (mode === "partial_percent") return `${percent ?? 0}% at booking`;
-  return "no payment at booking";
-}
-
-const PROVIDER_SELECTION_LABELS: Record<string, string> = {
-  client_choice: "clients choose their artist",
-  auto_assign: "assigned automatically",
-  hide: "artist selection hidden",
-};
-
 /** The "Taken at booking" choices, shared by services and categories. */
 function PaymentRuleChoices({
-  name, mode, valueAmount, percent, priceCents, inheritLabel, ariaLabel, onChange,
+  name, mode, valueAmount, percent, priceCents, ariaLabel, onChange,
 }: {
   name: string;
   mode: string;
@@ -626,8 +612,6 @@ function PaymentRuleChoices({
   percent: string;
   /** Used to show the amount due at the visit; null for categories (no single price). */
   priceCents: number | null;
-  /** When set, a first "same as the category" choice (mode "") is offered. */
-  inheritLabel?: string;
   ariaLabel: string;
   onChange: (patch: { mode?: string; valueAmount?: string; percent?: string }) => void;
 }) {
@@ -646,7 +630,6 @@ function PaymentRuleChoices({
   );
   return (
     <div className="cs-svc-choices" role="radiogroup" aria-label={ariaLabel}>
-      {inheritLabel ? option("", inheritLabel) : null}
       {option("none", "No payment required at booking")}
       {option("full", priceCents === null ? "Full payment" : `Full payment — ${formatMoney(priceCents)}`)}
       {option(
@@ -759,7 +742,7 @@ function ServiceDetail({
   // render) preserves the caret position and lets them type decimals like "9."
   // or trailing zeros without the value getting reformatted mid-keystroke.
   const [variantTexts, setVariantTexts] = useState<
-    Record<string, { duration: string; price: string; flat: string; percent: string }>
+    Record<string, { duration: string; price: string; deposit: string; flat: string; percent: string }>
   >({});
   const [copyHint, setCopyHint] = useState<string | null>(null);
   const copyTimerRef = useRef<number | null>(null);
@@ -775,11 +758,12 @@ function ServiceDetail({
       setSavedVariants(resp.variants);
       // Seed the display text map so the initial render shows exactly what the
       // backend returned, without .toFixed(2) fighting the operator's typing.
-      const seed: Record<string, { duration: string; price: string; flat: string; percent: string }> = {};
+      const seed: Record<string, { duration: string; price: string; deposit: string; flat: string; percent: string }> = {};
       for (const v of resp.variants) {
         seed[v.providerId] = {
           duration: v.durationMinutes != null ? String(v.durationMinutes) : "",
           price: v.priceCents != null ? (v.priceCents / 100).toFixed(2) : "",
+          deposit: v.depositCents != null ? (v.depositCents / 100).toFixed(2) : "",
           flat: v.commissionFlatCents != null ? (v.commissionFlatCents / 100).toFixed(2) : "",
           percent: v.commissionBasisPoints != null ? (v.commissionBasisPoints / 100).toString() : "",
         };
@@ -929,11 +913,11 @@ function ServiceDetail({
   // typing to feel broken before (each keystroke replaced "9." with "9").
   const patchVariantText = (
     providerId: string,
-    field: "duration" | "price" | "flat" | "percent",
+    field: "duration" | "price" | "deposit" | "flat" | "percent",
     raw: string,
   ) => {
     setVariantTexts((prev) => {
-      const current = prev[providerId] ?? { duration: "", price: "", flat: "", percent: "" };
+      const current = prev[providerId] ?? { duration: "", price: "", deposit: "", flat: "", percent: "" };
       return { ...prev, [providerId]: { ...current, [field]: raw } };
     });
     if (field === "duration") {
@@ -946,6 +930,11 @@ function ServiceDetail({
       if (!raw) { updateVariant(providerId, { priceCents: null }); return; }
       const cents = parseMoneyInput(raw);
       updateVariant(providerId, { priceCents: cents });
+      return;
+    }
+    if (field === "deposit") {
+      if (!raw) { updateVariant(providerId, { depositCents: null }); return; }
+      updateVariant(providerId, { depositCents: parseMoneyInput(raw) });
       return;
     }
     if (field === "flat") {
@@ -1456,10 +1445,10 @@ function ServiceStaffTab({
   toggleProviderAssignment: (providerId: string) => Promise<void>;
   variantByProvider: Map<string, ProviderServiceVariantEntry>;
   updateVariant: (providerId: string, patch: Partial<ProviderServiceVariantEntry>) => void;
-  variantTexts: Record<string, { duration: string; price: string; flat: string; percent: string }>;
+  variantTexts: Record<string, { duration: string; price: string; deposit: string; flat: string; percent: string }>;
   patchVariantText: (
     providerId: string,
-    field: "duration" | "price" | "flat" | "percent",
+    field: "duration" | "price" | "deposit" | "flat" | "percent",
     raw: string,
   ) => void;
   canManage: boolean;
@@ -1480,6 +1469,8 @@ function ServiceStaffTab({
 }) {
   const selectionCategoryName = category?.name ?? "its category";
   const selectionInherited = category?.providerSelectionMode ?? "client_choice";
+  // Following the category until the operator picks something else.
+  const shownSelection = form.providerSelectionMode || selectionInherited;
   if (eligibleProviders.length === 0) {
     return (
       <div className="cs-svc-detail-form">
@@ -1537,7 +1528,7 @@ function ServiceStaffTab({
       depositCents: null, commissionFlatCents: null, commissionBasisPoints: null,
     };
     const commissionMode: "flat" | "percent" = entry.commissionFlatCents != null ? "flat" : "percent";
-    const text = variantTexts[provider.id] ?? { duration: "", price: "", flat: "", percent: "" };
+    const text = variantTexts[provider.id] ?? { duration: "", price: "", deposit: "", flat: "", percent: "" };
     // Commission the provider inherits without an override: their service-percent
     // rate from the Compensation tab (payroll falls back to it).
     const inheritedPercent =
@@ -1588,13 +1579,19 @@ function ServiceStaffTab({
           </span>
         </div>
 
-        {/* Deposit overrides are edited from the provider's Services tab. */}
-        <div className="cs-override-table__cell" data-label="Deposit">
-          <span
-            className={`cs-override-table__value${entry.depositCents == null ? " cs-override-table__value--inherited" : ""}`}
-          >
-            {formatMoneyShort(entry.depositCents ?? baseDepositCents)}
-          </span>
+        <div className="cs-override-table__cell cs-override-table__cell--prefix" data-label="Deposit">
+          <input
+            className="cs-override-table__field"
+            type="text" inputMode="decimal"
+            disabled={!canManage}
+            placeholder={formatMoneyShort(baseDepositCents)}
+            value={text.deposit}
+            onFocus={selectOnFocus}
+            onMouseUp={keepSelection}
+            onChange={(e) => patchVariantText(provider.id, "deposit", e.target.value)}
+            aria-label={`${provider.name} deposit`}
+          />
+          <span className="cs-override-table__affix" aria-hidden="true">$</span>
         </div>
 
         <div className="cs-override-table__commission" data-label="Commission">
@@ -1689,14 +1686,16 @@ function ServiceStaffTab({
                     <span className="cs-override-table__dot" style={{ background: "var(--cs-mint)" }} aria-hidden="true" />
                     Offered by
                   </h4>
-                  {canManage ? (
+                </header>
+                {offered.map(renderProviderRow)}
+                {canManage ? (
+                  <footer className="cs-override-table__group-foot">
                     <button type="button" className="cs-link-btn"
                       onClick={() => {
                         for (const p of offered) toggleProviderAssignment(p.id);
                       }}>Disable all</button>
-                  ) : null}
-                </header>
-                {offered.map(renderProviderRow)}
+                  </footer>
+                ) : null}
               </section>
             ) : null}
 
@@ -1707,14 +1706,16 @@ function ServiceStaffTab({
                     <span className="cs-override-table__dot" style={{ background: "var(--cs-grey)" }} aria-hidden="true" />
                     Not offered
                   </h4>
-                  {canManage ? (
+                </header>
+                {notOffered.map(renderProviderRow)}
+                {canManage ? (
+                  <footer className="cs-override-table__group-foot">
                     <button type="button" className="cs-link-btn"
                       onClick={() => {
                         for (const p of notOffered) toggleProviderAssignment(p.id);
                       }}>Enable all</button>
-                  ) : null}
-                </header>
-                {notOffered.map(renderProviderRow)}
+                  </footer>
+                ) : null}
               </section>
             ) : null}
           </div>
@@ -1725,21 +1726,20 @@ function ServiceStaffTab({
         <span className="cs-svc-card__eyebrow">Client selection on booking</span>
         <div className="cs-svc-selection">
           {([
-            ["", `Same as ${selectionCategoryName}`, `Currently: ${PROVIDER_SELECTION_LABELS[selectionInherited] ?? selectionInherited}.`],
             ["client_choice", "Let clients choose their artist", "Clients see all eligible staff and pick one when booking online."],
             ["auto_assign", "Assign automatically", "Distribute bookings evenly across eligible staff. Best for fairness."],
             ["hide", "Hide artist selection", "Clients book the service without seeing who'll perform it. Useful for new staff or training periods."],
           ] as const).map(([mode, title, helper]) => (
             <label
               key={mode}
-              className={`cs-svc-selection-opt${form.providerSelectionMode === mode ? " cs-svc-selection-opt--active" : ""}`}
+              className={`cs-svc-selection-opt${shownSelection === mode ? " cs-svc-selection-opt--active" : ""}`}
             >
               <input type="radio" name="clientSelection" value={mode}
                 className="cs-visually-hidden"
-                checked={form.providerSelectionMode === mode}
+                checked={shownSelection === mode}
                 onChange={() => setForm((c) => ({ ...c, providerSelectionMode: mode }))}
                 disabled={!canManage} />
-              <span className={`cs-svc-radio${form.providerSelectionMode === mode ? " cs-svc-radio--on" : ""}`} aria-hidden="true" />
+              <span className={`cs-svc-radio${shownSelection === mode ? " cs-svc-radio--on" : ""}`} aria-hidden="true" />
               <span className="cs-svc-selection-opt__text">
                 <span className="cs-svc-selection-opt__title">{title}</span>
                 <span className="cs-svc-helper">{helper}</span>
@@ -1747,6 +1747,9 @@ function ServiceStaffTab({
             </label>
           ))}
         </div>
+        {form.providerSelectionMode === "" ? (
+          <p className="cs-svc-helper">Following {selectionCategoryName}. Choose another option to set this service&apos;s own.</p>
+        ) : null}
       </div>
 
       {canManage ? (
@@ -1778,15 +1781,22 @@ function ServiceOnlineBookingTab({
 }) {
   const priceCents = parseMoneyInput(form.priceAmount) ?? 0;
   const prettyUrl = schedulingHref.replace(/^https?:\/\//, "");
-  const inheritedPayment = category?.bookingPaymentMode
-    ? describePaymentRule(category.bookingPaymentMode, category.bookingPaymentValueCents, category.bookingPaymentPercent)
-    : "no payment at booking";
+  // A service starts out following its category. The category's values are shown as the
+  // current choice; changing one makes it this service's own.
   const categoryName = category?.name ?? "its category";
-  const inheritedCard = category?.requireCardOnFile ? "required" : "not required";
-  const cardChoice = (value: boolean | null, label: string) => (
-    <label className={`cs-svc-choice${form.requireCardOnFile === value ? " is-selected" : ""}`}>
+  const followingPayment = form.bookingPaymentMode === "";
+  const shownPayment = followingPayment
+    ? {
+        mode: category?.bookingPaymentMode ?? "none",
+        valueAmount: category?.bookingPaymentValueCents != null ? (category.bookingPaymentValueCents / 100).toFixed(2) : "",
+        percent: category?.bookingPaymentPercent != null ? String(category.bookingPaymentPercent) : "",
+      }
+    : { mode: form.bookingPaymentMode, valueAmount: form.bookingPaymentValueAmount, percent: form.bookingPaymentPercent };
+  const shownCard = form.requireCardOnFile ?? Boolean(category?.requireCardOnFile);
+  const cardChoice = (value: boolean, label: string) => (
+    <label className={`cs-svc-choice${shownCard === value ? " is-selected" : ""}`}>
       <input type="radio" name="requireCardOnFile" className="cs-svc-choice__radio"
-        checked={form.requireCardOnFile === value}
+        checked={shownCard === value}
         onChange={() => setForm((c) => ({ ...c, requireCardOnFile: value }))} />
       <span className="cs-svc-choice__label">{label}</span>
     </label>
@@ -1814,18 +1824,21 @@ function ServiceOnlineBookingTab({
             <PaymentRuleChoices
               name="bookingPaymentMode"
               ariaLabel="Taken at booking"
-              mode={form.bookingPaymentMode}
-              valueAmount={form.bookingPaymentValueAmount}
-              percent={form.bookingPaymentPercent}
+              mode={shownPayment.mode}
+              valueAmount={shownPayment.valueAmount}
+              percent={shownPayment.percent}
               priceCents={priceCents}
-              inheritLabel={`Same as ${categoryName} — ${inheritedPayment}`}
               onChange={(patch) => setForm((c) => ({
                 ...c,
-                ...(patch.mode !== undefined ? { bookingPaymentMode: patch.mode } : {}),
-                ...(patch.valueAmount !== undefined ? { bookingPaymentValueAmount: patch.valueAmount } : {}),
-                ...(patch.percent !== undefined ? { bookingPaymentPercent: patch.percent } : {}),
+                // The first edit turns the inherited values into this service's own.
+                bookingPaymentMode: patch.mode ?? shownPayment.mode,
+                bookingPaymentValueAmount: patch.valueAmount ?? shownPayment.valueAmount,
+                bookingPaymentPercent: patch.percent ?? shownPayment.percent,
               }))}
             />
+            {followingPayment ? (
+              <p className="cs-svc-helper">Following {categoryName}. Change it to set this service&apos;s own.</p>
+            ) : null}
             <p className="cs-svc-helper">
               A deposit set for a provider on the Staff tab takes priority, and add-ons count toward full and
               percentage payments. Refunds on cancellation follow your cancellation rules in Settings.
@@ -1840,10 +1853,12 @@ function ServiceOnlineBookingTab({
               Not active yet — clients aren&apos;t asked for a card at booking until card collection is added.
             </span>
             <div className="cs-svc-choices">
-              {cardChoice(null, `Same as ${categoryName} — ${inheritedCard}`)}
               {cardChoice(true, "Required")}
               {cardChoice(false, "Not required")}
             </div>
+            {form.requireCardOnFile === null ? (
+              <p className="cs-svc-helper">Following {categoryName}. Change it to set this service&apos;s own.</p>
+            ) : null}
           </div>
 
           <hr className="cs-svc-details__divider" />

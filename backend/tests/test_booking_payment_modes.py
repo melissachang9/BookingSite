@@ -298,3 +298,35 @@ def test_category_changes_to_online_booking_rules_are_audited(client) -> None:
     events = asyncio.run(_events())
     assert events and events[-1][0] is not None
     assert events[-1][1] == {"booking_payment_mode": "full"}
+
+
+def test_a_provider_deposit_beats_the_category_and_service_rules(client) -> None:
+    headers = _auth(client)
+    service = _service_named(client, "Signature Facial")
+    category_id = _category_with_rule(client, headers, "Laser", bookingPaymentMode="full")
+    _move_service(client, headers, service, category_id, inheritBookingPayment=True)
+    providers = client.get(f"{API}/providers/manage", headers=headers).json()["providers"]
+    provider_id = next(p["id"] for p in providers if p["isActive"] and service["id"] in p["serviceIds"])
+
+    saved = client.put(
+        f"{API}/services/{service['id']}/provider-variants",
+        headers=headers,
+        json={"variants": [{"providerId": provider_id, "depositCents": 1234}]},
+    )
+    assert saved.status_code == 200, saved.json()
+    assert _draft_deposit(client, headers, service) == 1234
+
+    too_high = client.put(
+        f"{API}/services/{service['id']}/provider-variants",
+        headers=headers,
+        json={"variants": [{"providerId": provider_id, "depositCents": service["priceCents"] + 1}]},
+    )
+    assert too_high.status_code == 422
+
+    cleared = client.put(
+        f"{API}/services/{service['id']}/provider-variants",
+        headers=headers,
+        json={"variants": [{"providerId": provider_id}]},
+    )
+    assert cleared.status_code == 200
+    assert _draft_deposit(client, headers, service) == service["priceCents"]

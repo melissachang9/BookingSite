@@ -490,7 +490,7 @@ describe("ServicesPage", () => {
     expect(updateSpy.mock.calls[0][2]).toMatchObject({ bookingPaymentMode: "partial_percent", bookingPaymentPercent: 30 });
   });
 
-  it("shows a service following its category's payment rule and saves it as inherited", async () => {
+  it("defaults a service to its category's payment rule and keeps following it when saved", async () => {
     mockLoaders({
       categories: [
         { ...baseCategories[0], bookingPaymentMode: "partial_flat", bookingPaymentValueCents: 4000 },
@@ -504,8 +504,12 @@ describe("ServicesPage", () => {
     fireEvent.click(screen.getByText("Brow Shape"));
     fireEvent.click(screen.getByRole("tab", { name: "Online booking" }));
 
-    const inherit = await screen.findByRole("radio", { name: "Same as Brows — $40.00 at booking" });
-    expect(inherit).toBeChecked();
+    // The category's rule is the current choice; there is no separate "same as" button.
+    expect(await screen.findByRole("radio", { name: /Partial payment — \$/ })).toBeChecked();
+    expect(screen.getByLabelText("Partial payment amount")).toHaveValue("40.00");
+    expect(screen.queryByRole("radio", { name: /Same as/ })).toBeNull();
+    // Payment and card on file both say they are following the category.
+    expect(screen.getAllByText(/Following Brows/)).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
@@ -513,6 +517,28 @@ describe("ServicesPage", () => {
     expect(body.inheritBookingPayment).toBe(true);
     expect(body.inheritRequireCardOnFile).toBe(true);
     expect(body.bookingPaymentMode).toBeUndefined();
+  });
+
+  it("makes the payment rule the service's own once it is changed from the category's", async () => {
+    mockLoaders({
+      categories: [{ ...baseCategories[0], bookingPaymentMode: "full" }, baseCategories[1]],
+    });
+    const updateSpy = vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("tab", { name: "Online booking" }));
+    expect(await screen.findByRole("radio", { name: /Full payment/ })).toBeChecked();
+    fireEvent.click(screen.getByRole("radio", { name: "No payment required at booking" }));
+    // Only card on file still follows the category.
+    expect(screen.getAllByText(/Following Brows/)).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    const body = updateSpy.mock.calls[0][2] as any;
+    expect(body.bookingPaymentMode).toBe("none");
+    expect(body.inheritBookingPayment).toBeUndefined();
   });
 
   it("requires an amount for a fixed payment on a service", async () => {
@@ -602,6 +628,26 @@ describe("ServicesPage", () => {
 
     await waitFor(() => expect(updateCategory).toHaveBeenCalledTimes(1));
     expect(updateCategory.mock.calls[0][2]).toMatchObject({ slug: "brow-studio" });
+  });
+
+  it("edits a provider's deposit from the service's Staff tab", async () => {
+    mockLoaders();
+    const replaceSpy = vi.spyOn(platformApi, "replaceServiceProviderVariants").mockResolvedValue({
+      variants: [{ providerId: "prov-1", priceCents: null, durationMinutes: null, depositCents: 1500, commissionFlatCents: null, commissionBasisPoints: null }],
+    } as any);
+    vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("tab", { name: "Staff" }));
+    fireEvent.change(await screen.findByLabelText("Ava Rivera deposit"), { target: { value: "15.00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(replaceSpy).toHaveBeenCalledTimes(1));
+    expect(replaceSpy.mock.calls[0][2]).toMatchObject({
+      variants: [expect.objectContaining({ providerId: "prov-1", depositCents: 1500 })],
+    });
   });
 
   it("denies access entirely when services.view is false", async () => {

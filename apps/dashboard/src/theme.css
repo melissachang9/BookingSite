@@ -7136,3 +7136,6 @@ select:disabled {
 .cs-cat-slug { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .cs-cat-slug__prefix { flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--cs-label); font: 500 13px var(--cs-font); }
 .cs-cat-slug__input { flex: 1 1 auto; min-width: 0; }
+
+/* Bulk action sits under the list it acts on, in line with the rows' content. */
+.cs-override-table__group-foot { display: flex; justify-content: flex-start; padding: 0 12px; }
