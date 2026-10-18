@@ -6652,6 +6652,11 @@ function CheckoutPanel({
               ) : null}
             </div>
           ) : null}
+          <h4 className="cs-checkout-panel__payment-kicker">Payment</h4>
+          <div className="cs-checkout-panel__totals-row cs-checkout-panel__totals-row--plain">
+            <span>Subtotal</span>
+            <span>{formatMoney(effectiveSubtotal)}</span>
+          </div>
           {adjustedTaxCents > 0 ? (
             <div className="cs-checkout-panel__totals-row">
               <span>Tax</span>
