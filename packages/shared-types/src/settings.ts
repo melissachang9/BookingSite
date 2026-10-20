@@ -75,7 +75,6 @@ export type TenantSettings = {
   minLeadTimeMinutes: number;
   maxAdvanceBookingDays: number;
   noShowFeeCents: number;
-  taxRatePercent: number;
   autoChargeNoShowFee?: boolean;
   calendarDisplayStartHour: number;
   calendarDisplayEndHour: number;
@@ -123,7 +122,6 @@ export type UpdateTenantSettingsRequest = {
   minLeadTimeMinutes?: number;
   maxAdvanceBookingDays?: number;
   noShowFeeCents?: number;
-  taxRatePercent?: number;
   autoChargeNoShowFee?: boolean;
   paymentLinkExpiryMinutes?: number;
   customPaymentMethods?: CustomPaymentMethod[];

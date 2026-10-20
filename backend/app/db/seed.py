@@ -96,7 +96,6 @@ DEMO_SETTINGS = {
     "maxAdvanceBookingDays": 45,
     "defaultDepositCents": 2500,
     "noShowFeeCents": 5000,
-    "taxRatePercent": 0,
     "autoChargeNoShowFee": False,
 }
 

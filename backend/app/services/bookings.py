@@ -393,6 +393,8 @@ async def add_booking_item(
         name=name[:255],
         price_cents=price_cents,
         quantity=payload.quantity,
+        # A line with no service or add-on behind it is a product (retail item).
+        kind="service" if (payload.source_service_id or payload.source_add_on_id) else "product",
     )
     session.add(item)
     _append_booking_event(

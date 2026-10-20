@@ -22,18 +22,33 @@ from app.schemas.catalog import (
     TenantSettingsResponse,
     TenantSummaryResponse,
 )
-from app.services.service_terms import effective_online_booking
+from app.services.service_terms import effective_online_booking, effective_taxable
 
 
-def _tenant_tax_rate_percent(tenant: Tenant | None) -> float:
+def _legacy_tenant_tax_rate_percent(tenant: Tenant | None) -> float:
+    """The business-wide rate used before rates moved onto locations; only a fallback for bookings with no location."""
     if tenant is None:
         return 0
-
     raw_value = tenant.settings_json.get("taxRatePercent", 0)
     if isinstance(raw_value, (int, float)) and raw_value >= 0:
         return float(raw_value)
-
     return 0
+
+
+def tax_rates_percent(location: Location | None, tenant: Tenant | None) -> tuple[float, float]:
+    """(service rate, product rate) charged at a location."""
+    if location is not None:
+        return float(location.service_tax_rate_percent or 0), float(location.product_tax_rate_percent or 0)
+    legacy = _legacy_tenant_tax_rate_percent(tenant)
+    return legacy, legacy
+
+
+def _loaded_location(record: object) -> Location | None:
+    """The record's location when already loaded; never triggers a lazy load (async-safe)."""
+    inspected = sa_inspect(record)
+    if inspected is None or "location" in inspected.unloaded:
+        return None
+    return record.location  # type: ignore[attr-defined]
 
 
 def _safe_form_ids(service: Service) -> list[str]:
@@ -50,6 +65,11 @@ def _safe_form_ids(service: Service) -> list[str]:
 def booking_items_total_cents(booking: Booking) -> int:
     items = booking.items if isinstance(getattr(booking, "items", None), list) else []
     return sum(item.price_cents * item.quantity for item in items)
+
+
+def _product_items_total_cents(booking: Booking) -> int:
+    items = booking.items if isinstance(getattr(booking, "items", None), list) else []
+    return sum(item.price_cents * item.quantity for item in items if item.kind == "product")
 
 
 def booking_price_cents(booking: Booking) -> int:
@@ -69,10 +89,15 @@ def booking_subtotal_cents(booking: Booking) -> int:
 
 def booking_tax_cents(booking: Booking) -> int:
     # Completed bookings carry the tax actually charged, so later tax-rate
-    # changes don't rewrite history. Open bookings derive it from the live rate.
+    # changes don't rewrite history. Open bookings derive it from the live rate,
+    # and only when the service (or its category) is taxable.
     if booking.tax_cents is not None and booking.status == "completed":
         return booking.tax_cents
-    return round(booking_subtotal_cents(booking) * (_tenant_tax_rate_percent(booking.tenant) / 100))
+    service_rate, product_rate = tax_rates_percent(_loaded_location(booking), booking.tenant)
+    product_base = _product_items_total_cents(booking)
+    service_base = booking_subtotal_cents(booking) - product_base
+    service_tax = round(service_base * (service_rate / 100)) if effective_taxable(booking.service)[0] else 0
+    return service_tax + round(product_base * (product_rate / 100))
 
 
 def booking_total_cents(booking: Booking) -> int:
@@ -190,11 +215,14 @@ def location_to_summary(location: Location) -> LocationSummaryResponse:
         state=location.state,
         postal_code=location.postal_code,
         phone=location.phone,
+        service_tax_rate_percent=location.service_tax_rate_percent,
+        product_tax_rate_percent=location.product_tax_rate_percent,
     )
 
 
 def service_to_summary(service: Service, tenant: Tenant | None = None) -> ServiceSummaryResponse:
     effective = effective_online_booking(service)
+    taxable, taxable_source = effective_taxable(service)
     fallback_image_url, fallback_image_alt = _service_media_for(service, tenant)
     image_url = service.image_url or fallback_image_url
     image_alt_text = service.image_alt_text or fallback_image_alt
@@ -249,6 +277,9 @@ def service_to_summary(service: Service, tenant: Tenant | None = None) -> Servic
         effective_require_card_source=effective.require_card_source,
         effective_provider_selection_mode=effective.provider_selection_mode,
         effective_provider_selection_source=effective.provider_selection_source,
+        is_taxable=service.is_taxable,
+        effective_is_taxable=taxable,
+        effective_tax_source=taxable_source,
     )
 
 
@@ -393,7 +424,10 @@ def booking_draft_amounts(draft: BookingDraft) -> tuple[int, int, int]:
     tenant = draft.tenant if isinstance(draft.tenant, Tenant) else None
     draft_add_ons = draft.add_ons if "add_ons" not in sa_inspect(draft).unloaded else []
     subtotal = draft.price_cents + sum(add_on.price_cents for add_on in draft_add_ons)
-    tax = round(subtotal * (_tenant_tax_rate_percent(tenant) / 100))
+    service = draft.service if "service" not in sa_inspect(draft).unloaded else None
+    taxable = effective_taxable(service)[0] if service is not None else True
+    service_rate, _ = tax_rates_percent(_loaded_location(draft), tenant)
+    tax = round(subtotal * (service_rate / 100)) if taxable else 0
     return subtotal, tax, subtotal + tax
 
 
@@ -462,6 +496,7 @@ def booking_to_summary(booking: Booking) -> BookingSummaryResponse:
     amount_paid_cents = booking_amount_paid_cents(booking)
     balance_due_cents = booking_balance_due_cents(booking)
     tax_cents = booking_tax_cents(booking)
+    booking_service_rate, booking_product_rate = tax_rates_percent(_loaded_location(booking), booking.tenant)
 
     source_draft = booking.source_draft if isinstance(booking.source_draft, BookingDraft) else None
     customer_manage_token, _ = create_customer_manage_token(
@@ -502,6 +537,7 @@ def booking_to_summary(booking: Booking) -> BookingSummaryResponse:
             quantity=item.quantity,
             source_service_id=item.source_service_id,
             source_add_on_id=item.source_add_on_id,
+            kind=item.kind,
         )
         for item in sorted(booking_items, key=lambda i: i.created_at)
     ]
@@ -537,6 +573,9 @@ def booking_to_summary(booking: Booking) -> BookingSummaryResponse:
         amount_paid_cents=amount_paid_cents,
         balance_due_cents=balance_due_cents,
         tax_cents=tax_cents,
+        service_tax_rate_percent=booking_service_rate,
+        product_tax_rate_percent=booking_product_rate,
+        service_is_taxable=effective_taxable(booking.service)[0],
         wallet_balance_cents=booking.customer.wallet_balance_cents,
         customer_manage_token=customer_manage_token,
         service=service_to_summary(booking.service, tenant),

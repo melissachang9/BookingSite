@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Link, useInRouterContext } from "react-router-dom";
 import type {
   AuthenticatedUser,
   CategoryFaqItem,
@@ -292,6 +293,16 @@ export function ServicesPage({
     setCategoryModal({ kind: "create" });
   };
 
+  const handleCopyCategoryLink = async (category: ServiceCategorySummary) => {
+    if (!category.slug) return;
+    try {
+      await navigator.clipboard.writeText(`${storefrontBaseUrl}/${tenantSlug}/c/${category.slug}`);
+      setStatus(`Booking link for ${category.name} copied.`);
+    } catch {
+      setStatus("Copy failed — open the category to copy its link manually.");
+    }
+  };
+
   const handleRenameCategory = (category: ServiceCategorySummary) => {
     if (!canManage) return;
     setCategoryModal({ kind: "rename", category });
@@ -436,7 +447,11 @@ export function ServicesPage({
                         <OverflowMenu
                           label={`${category.name} actions`}
                           items={[
+                            { label: "Settings", onSelect: () => setSelection({ kind: "category", categoryId: category.id }) },
                             { label: "Rename", onSelect: () => handleRenameCategory(category) },
+                            ...(category.slug
+                              ? [{ label: "Copy booking link", onSelect: () => void handleCopyCategoryLink(category) }]
+                              : []),
                             { label: "Delete", onSelect: () => handleDeleteCategory(category), danger: true },
                           ]}
                         />
@@ -603,6 +618,7 @@ type ServiceCardState = {
   isActive: boolean;
   onlineBookingDescription: string;
   requireCardOnFile: boolean | null; // null = same as the category
+  isTaxable: boolean | null; // null = same as the category (taxable when it has none)
   bookingPaymentMode: string; // '' (same as the category) | 'none' | 'full' | 'partial_flat' | 'partial_percent'
   bookingPaymentValueAmount: string; // dollar amount for partial_flat
   bookingPaymentPercent: string; // percentage for partial_percent
@@ -697,6 +713,7 @@ function toCardState(service: ServiceSummary): ServiceCardState {
     isActive: service.isActive,
     onlineBookingDescription: service.onlineBookingDescription ?? "",
     requireCardOnFile: service.requireCardOnFile ?? null,
+    isTaxable: service.isTaxable ?? null,
     // Empty means the service follows its category.
     bookingPaymentMode: service.bookingPaymentMode ?? "",
     bookingPaymentValueAmount:
@@ -838,6 +855,8 @@ function ServiceDetail({
     };
     if (form.requireCardOnFile === null) body.inheritRequireCardOnFile = true;
     else body.requireCardOnFile = form.requireCardOnFile;
+    if (form.isTaxable === null) body.inheritIsTaxable = true;
+    else body.isTaxable = form.isTaxable;
     const desc = form.description.trim();
     if (desc) body.description = desc;
     else if (service.description) body.clearDescription = true;
@@ -1018,6 +1037,32 @@ function ServiceDetail({
     }
   };
 
+  /** Returns an error message, or null when the booking link was saved. */
+  const setProviderBookingSlug = async (providerId: string, slug: string): Promise<string | null> => {
+    const provider = providers.find((p) => p.id === providerId);
+    if (!provider || !canManage) return "You can't change this booking link.";
+    try {
+      await platformApi.updateProvider(tenantSlug, providerId, { bookingSlug: slug });
+      await refreshProviders();
+      onSaved(`${provider.name}'s booking link saved.`);
+      return null;
+    } catch (error) {
+      return readErrorMessage(error, "Unable to save the booking link.");
+    }
+  };
+
+  const setProviderBookable = async (providerId: string, bookable: boolean) => {
+    const provider = providers.find((p) => p.id === providerId);
+    if (!provider || !canManage) return;
+    try {
+      await platformApi.updateProvider(tenantSlug, providerId, { isBookableOnline: bookable });
+      await refreshProviders();
+      onSaved(`${provider.name} is ${bookable ? "now bookable online" : "now calendar only"}.`);
+    } catch (error) {
+      onSaved(readErrorMessage(error, "Unable to update online booking."));
+    }
+  };
+
   const isVariantsDirty = useMemo(() => {
     const normalize = (entries: ProviderServiceVariantEntry[]) => {
       const map = new Map<string, string>();
@@ -1131,6 +1176,8 @@ function ServiceDetail({
           storefrontBaseUrl={storefrontBaseUrl}
           form={form} setForm={setForm}
           saving={saving} handleSave={handleSave}
+          setProviderBookable={setProviderBookable}
+          setProviderBookingSlug={setProviderBookingSlug}
           category={categories.find((c) => c.id === form.categoryId) ?? null} />
       ) : null}
       {activeTab === "resources" ? (
@@ -1296,6 +1343,34 @@ function ServiceDetailsTab({
 
           <hr className="cs-svc-details__divider" />
 
+          {(() => {
+            const taxCategory = categories.find((c) => c.id === form.categoryId) ?? null;
+            // Follows the category until the operator changes it; taxable when neither says otherwise.
+            const taxed = form.isTaxable ?? taxCategory?.isTaxable ?? true;
+            return (
+              <div className="cs-svc-setting">
+                <span className="cs-svc-setting__text">
+                  <span className="cs-svc-card__title">Charge tax</span>
+                  <span className="cs-svc-section__lead">
+                    {taxed
+                      ? "Tax is added at the service tax rate of the location it's booked at. Set rates under Locations."
+                      : "No tax is added to this service."}
+                    {form.isTaxable === null && taxCategory ? ` Following ${taxCategory.name}.` : ""}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className={`cs-switch${taxed ? "" : " cs-switch--off"}`}
+                  aria-label="Charge tax toggle"
+                  aria-pressed={taxed}
+                  onClick={() => setForm((c) => ({ ...c, isTaxable: !taxed }))}
+                />
+              </div>
+            );
+          })()}
+
+          <hr className="cs-svc-details__divider" />
+
           <label className="cs-svc-details__field">
             <span className="cs-svc-details__label">Client-facing description</span>
             <textarea
@@ -1444,15 +1519,54 @@ function ServiceDetailsTab({
   );
 }
 
+/** A link into the Staff page: in-app navigation when inside the router, a plain link otherwise. */
+function StaffLink({ to, className, children }: { to: string; className?: string; children: ReactNode }) {
+  const inRouter = useInRouterContext();
+  return inRouter ? (
+    <Link to={to} className={className}>{children}</Link>
+  ) : (
+    <a href={to} className={className}>{children}</a>
+  );
+}
+
+/** How a provider is paid by default, from their Team pay setting. */
+function describeTeamPay(provider: ProviderSummary): string {
+  switch (provider.compensationMode) {
+    case "service_percent":
+      return `${(provider.compensationServicePercentBp ?? 0) / 100}% of service revenue`;
+    case "flat_per_booking":
+      return `${formatMoney(provider.compensationFlatCents ?? 0)} per booking`;
+    case "hourly":
+      return `${formatMoney(provider.compensationHourlyCents ?? 0)} per hour`;
+    case "sliding_scale":
+      return "a sliding scale";
+    default:
+      return "no pay set";
+  }
+}
+
+/** What the default pay setting earns on one booking, when it can be worked out from the price alone. */
+function teamPayEarnsCents(provider: ProviderSummary, priceCents: number): number | null {
+  if (provider.compensationMode === "service_percent") {
+    return Math.round((priceCents * (provider.compensationServicePercentBp ?? 0)) / 10_000);
+  }
+  if (provider.compensationMode === "flat_per_booking") return provider.compensationFlatCents ?? 0;
+  return null;
+}
+
 function ServiceStaffTab({
   service, eligibleProviders, assignedProviderIds, toggleProviderAssignment,
   variantByProvider, updateVariant, variantTexts, patchVariantText, canManage,
   variantsLoaded, isVariantsDirty, variantsSaving, handleSaveVariants,
   handleSaveStaffTab,
   baseDurationMinutes, basePriceCents, baseDepositCents, tenantSlug, storefrontBaseUrl,
-  form, setForm, saving, handleSave, category,
+  form, setForm, saving, handleSave, category, setProviderBookable, setProviderBookingSlug,
 }: {
   category: ServiceCategorySummary | null;
+  /** Saves the provider's booking link straight away; resolves to an error message or null. */
+  setProviderBookingSlug: (providerId: string, slug: string) => Promise<string | null>;
+  /** Online booking is a setting on the provider, so it saves straight away and applies to every treatment. */
+  setProviderBookable: (providerId: string, bookable: boolean) => Promise<void>;
   service: ServiceSummary;
   eligibleProviders: ProviderSummary[];
   assignedProviderIds: Set<string>;
@@ -1485,6 +1599,16 @@ function ServiceStaffTab({
   const selectionInherited = category?.providerSelectionMode ?? "client_choice";
   // Following the category until the operator picks something else.
   const shownSelection = form.providerSelectionMode || selectionInherited;
+  // The provider whose settings panel is open.
+  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
+  const [linkHint, setLinkHint] = useState<string | null>(null);
+  // The booking link being typed, and any problem saving it.
+  // The ending being typed, remembered per provider so switching people never shows someone else's draft.
+  const [slugEdit, setSlugEdit] = useState<{ providerId: string; value: string } | null>(null);
+  const [slugError, setSlugError] = useState<string | null>(null);
+  const [slugSaving, setSlugSaving] = useState(false);
+  useEffect(() => { setSelectedProviderId(null); setLinkHint(null); }, [service.id]);
+  useEffect(() => { setLinkHint(null); setSlugError(null); }, [selectedProviderId]);
   if (eligibleProviders.length === 0) {
     return (
       <div className="cs-svc-detail-form">
@@ -1497,64 +1621,76 @@ function ServiceStaffTab({
 
   const offered = eligibleProviders.filter((p) => assignedProviderIds.has(p.id));
   const notOffered = eligibleProviders.filter((p) => !assignedProviderIds.has(p.id));
+  const selectedProvider = offered.find((p) => p.id === selectedProviderId) ?? null;
+
+  const selectOnFocus = (event: React.FocusEvent<HTMLInputElement>) => event.target.select();
+  const keepSelection = (event: React.MouseEvent<HTMLInputElement>) => event.preventDefault();
 
   const renderProviderRow = (provider: ProviderSummary) => {
     const isAssigned = assignedProviderIds.has(provider.id);
-    const lead = (
-      <label className="cs-override-table__lead">
-        <input
-          type="checkbox"
-          className="cs-check"
-          aria-label={`Toggle ${provider.name}`}
-          checked={isAssigned}
-          disabled={!canManage}
-          onChange={() => toggleProviderAssignment(provider.id)}
-        />
-        <span
-          className="cs-override-table__avatar"
-          style={provider.imageUrl ? undefined : { background: avatarColorFor(provider.id) }}
-          aria-hidden="true"
-        >
-          {provider.imageUrl ? <img src={provider.imageUrl} alt="" /> : initialsFor(provider.name)}
-        </span>
-        <span className="cs-override-table__lead-text">
-          <span className="cs-override-table__name">{provider.name}</span>
-          {provider.description ? (
-            <span className="cs-override-table__meta">{provider.description}</span>
-          ) : null}
-        </span>
-      </label>
+    const avatar = (
+      <span
+        className="cs-override-table__avatar"
+        style={provider.imageUrl ? undefined : { background: avatarColorFor(provider.id) }}
+        aria-hidden="true"
+      >
+        {provider.imageUrl ? <img src={provider.imageUrl} alt="" /> : initialsFor(provider.name)}
+      </span>
+    );
+    const names = (
+      <span className="cs-override-table__lead-text">
+        <span className="cs-override-table__name">{provider.name}</span>
+        {provider.description ? <span className="cs-override-table__meta">{provider.description}</span> : null}
+      </span>
+    );
+    const checkbox = (
+      <input
+        type="checkbox"
+        className="cs-check"
+        aria-label={`Toggle ${provider.name}`}
+        checked={isAssigned}
+        disabled={!canManage}
+        onChange={() => {
+          if (isAssigned && selectedProviderId === provider.id) setSelectedProviderId(null);
+          void toggleProviderAssignment(provider.id);
+        }}
+      />
     );
 
     if (!isAssigned) {
       return (
         <div key={provider.id} className="cs-override-table__row cs-override-table__row--off">
-          {lead}
+          <span className="cs-override-table__lead cs-override-table__lead--static">
+            {checkbox}
+            {avatar}
+            {names}
+          </span>
           <p className="cs-override-table__note">
-            {canManage ? "Tick to add this service to their menu" : "Doesn't offer this service"}
+            {canManage ? "Not offering this treatment — tick to add it to their menu" : "Doesn't offer this treatment"}
           </p>
         </div>
       );
     }
 
-    const entry = variantByProvider.get(provider.id) ?? {
-      providerId: provider.id, priceCents: null, durationMinutes: null,
-      depositCents: null, commissionFlatCents: null, commissionBasisPoints: null,
-    };
-    const commissionMode: "flat" | "percent" = entry.commissionFlatCents != null ? "flat" : "percent";
     const text = variantTexts[provider.id] ?? { duration: "", price: "", deposit: "", flat: "", percent: "" };
-    // Commission the provider inherits without an override: their service-percent
-    // rate from the Compensation tab (payroll falls back to it).
-    const inheritedPercent =
-      provider.compensationMode === "service_percent" && provider.compensationServicePercentBp
-        ? provider.compensationServicePercentBp / 100
-        : null;
-    const selectOnFocus = (event: React.FocusEvent<HTMLInputElement>) => event.target.select();
-    const keepSelection = (event: React.MouseEvent<HTMLInputElement>) => event.preventDefault();
+    const selected = selectedProviderId === provider.id;
+    const open = () => setSelectedProviderId(selected ? null : provider.id);
 
     return (
-      <div key={provider.id} className="cs-override-table__row">
-        {lead}
+      <div key={provider.id} className={`cs-override-table__row cs-override-table__row--staff${selected ? " is-selected" : ""}`}>
+        <span className="cs-override-table__lead cs-override-table__lead--static">
+          {checkbox}
+          <button
+            type="button"
+            className="cs-override-table__open"
+            aria-label={`Open settings for ${provider.name}`}
+            aria-expanded={selected}
+            onClick={open}
+          >
+            {avatar}
+            {names}
+          </button>
+        </span>
 
         <div className="cs-override-table__cell cs-override-table__cell--prefix" data-label="Price">
           <input
@@ -1608,133 +1744,305 @@ function ServiceStaffTab({
           <span className="cs-override-table__affix" aria-hidden="true">$</span>
         </div>
 
-        <div className="cs-override-table__commission" data-label="Commission">
-          <div className="cs-override-table__mode" role="group" aria-label="Commission type">
+        <button type="button" className="cs-override-table__online" onClick={open} aria-label={`${provider.name} online booking: ${provider.isBookableOnline ? "online" : "calendar only"}`} tabIndex={-1}>
+          <span className={`cs-override-table__status${provider.isBookableOnline ? " is-online" : ""}`}>
+            {provider.isBookableOnline ? "Online" : "Calendar only"}
+          </span>
+          <span className="cs-override-table__chevron" aria-hidden="true">›</span>
+        </button>
+      </div>
+    );
+  };
+
+  // What clients see on the storefront: the cheapest price among providers they can book online.
+  const bookableOnline = offered.filter((p) => p.isBookableOnline);
+  const onlinePrices = bookableOnline.map((p) => variantByProvider.get(p.id)?.priceCents ?? basePriceCents);
+  const lowestOnlinePrice = onlinePrices.length > 0 ? Math.min(...onlinePrices) : null;
+  const storefrontPrice =
+    lowestOnlinePrice === null
+      ? null
+      : onlinePrices.some((price) => price !== lowestOnlinePrice)
+        ? `from ${formatMoney(lowestOnlinePrice)}`
+        : formatMoney(lowestOnlinePrice);
+
+  const renderPanel = (provider: ProviderSummary) => {
+    const entry = variantByProvider.get(provider.id) ?? {
+      providerId: provider.id, priceCents: null, durationMinutes: null,
+      depositCents: null, commissionFlatCents: null, commissionBasisPoints: null,
+    };
+    const text = variantTexts[provider.id] ?? { duration: "", price: "", deposit: "", flat: "", percent: "" };
+    const firstName = provider.name.split(" ")[0] ?? provider.name;
+    const payMode: "default" | "percent" | "flat" =
+      entry.commissionFlatCents != null ? "flat" : entry.commissionBasisPoints != null ? "percent" : "default";
+    const visitPrice = entry.priceCents ?? basePriceCents;
+    const visitDuration = entry.durationMinutes ?? baseDurationMinutes;
+    const teamPay = describeTeamPay(provider);
+    const earns =
+      payMode === "flat"
+        ? entry.commissionFlatCents
+        : payMode === "percent"
+          ? Math.round((visitPrice * (entry.commissionBasisPoints ?? 0)) / 10_000)
+          : teamPayEarnsCents(provider, visitPrice);
+    const setPayMode = (mode: "default" | "percent" | "flat") => {
+      if (mode === payMode) return;
+      patchVariantText(provider.id, "flat", "");
+      patchVariantText(provider.id, "percent", "");
+      if (mode === "default") updateVariant(provider.id, { commissionFlatCents: null, commissionBasisPoints: null });
+      else if (mode === "percent") updateVariant(provider.id, { commissionFlatCents: null, commissionBasisPoints: 0 });
+      else updateVariant(provider.id, { commissionBasisPoints: null, commissionFlatCents: 0 });
+    };
+    const bookingLink = provider.bookingUrl ?? null;
+    const savedSlug = provider.bookingSlug ?? "";
+    const slugDraft = slugEdit?.providerId === provider.id ? slugEdit.value : savedSlug;
+    const slugChanged = slugDraft.trim() !== savedSlug;
+
+    return (
+      <aside className="cs-svc-staff-panel" aria-label={`${provider.name} settings`}>
+        <header className="cs-svc-staff-panel__head">
+          <span
+            className="cs-override-table__avatar cs-svc-staff-panel__avatar"
+            style={provider.imageUrl ? undefined : { background: avatarColorFor(provider.id) }}
+            aria-hidden="true"
+          >
+            {provider.imageUrl ? <img src={provider.imageUrl} alt="" /> : initialsFor(provider.name)}
+          </span>
+          <span className="cs-svc-staff-panel__who">
+            <h4 className="cs-svc-staff-panel__name">{provider.name}</h4>
+            <span className="cs-svc-staff-panel__meta">
+              {[service.name, formatMoney(visitPrice), formatDurationMinutes(visitDuration)].join(" · ")}
+            </span>
+          </span>
+          <button type="button" className="cs-svc-staff-panel__close" aria-label="Close" onClick={() => setSelectedProviderId(null)}>
+            ×
+          </button>
+        </header>
+
+        <section className="cs-svc-staff-panel__section">
+          <h5 className="cs-svc-staff-panel__label">Pay for this treatment</h5>
+          <div className="cs-svc-staff-panel__segments" role="group" aria-label="Pay for this treatment">
+            {([
+              ["default", "Staff default"],
+              ["percent", "% of price"],
+              ["flat", "Flat per booking"],
+            ] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                className={`cs-svc-staff-panel__segment${payMode === mode ? " is-active" : ""}`}
+                aria-pressed={payMode === mode}
+                disabled={!canManage}
+                onClick={() => setPayMode(mode)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {payMode === "default" ? (
+            <div className="cs-svc-staff-panel__note">
+              <span>
+                Uses {firstName}&apos;s Team pay setting: <strong>{teamPay}</strong>
+              </span>
+              <StaffLink className="cs-svc-staff-panel__link" to={`/staff?provider=${provider.id}&tab=compensation`}>
+                Edit in Staff
+              </StaffLink>
+            </div>
+          ) : payMode === "percent" ? (
+            <label className="cs-svc-staff-panel__field">
+              <span>Percent of the price</span>
+              <span className="cs-svc-staff-panel__input">
+                <input
+                  type="text" inputMode="decimal"
+                  disabled={!canManage}
+                  placeholder="0"
+                  value={text.percent}
+                  onFocus={selectOnFocus}
+                  onChange={(e) => patchVariantText(provider.id, "percent", e.target.value)}
+                  aria-label={`${provider.name} pay percent`}
+                />
+                <span aria-hidden="true">%</span>
+              </span>
+            </label>
+          ) : (
+            <label className="cs-svc-staff-panel__field">
+              <span>Amount per booking</span>
+              <span className="cs-svc-staff-panel__input">
+                <span aria-hidden="true">$</span>
+                <input
+                  type="text" inputMode="decimal"
+                  disabled={!canManage}
+                  placeholder="0.00"
+                  value={text.flat}
+                  onFocus={selectOnFocus}
+                  onChange={(e) => patchVariantText(provider.id, "flat", e.target.value)}
+                  aria-label={`${provider.name} pay flat amount`}
+                />
+              </span>
+            </label>
+          )}
+          <div className="cs-svc-staff-panel__earns">
+            <span>Earns per booking</span>
+            <strong>{earns == null ? "—" : formatMoney(earns)}</strong>
+          </div>
+        </section>
+
+        <section className="cs-svc-staff-panel__section">
+          <h5 className="cs-svc-staff-panel__label">Online booking</h5>
+          <div className="cs-svc-staff-panel__toggle">
+            <span className="cs-svc-staff-panel__toggle-text">
+              <span className="cs-svc-staff-panel__toggle-title">Bookable online</span>
+              <span className="cs-svc-staff-panel__hint">
+                Clients can choose {firstName} on the storefront and through their link.
+              </span>
+            </span>
             <button
               type="button"
-              className={`cs-override-table__mode-btn${commissionMode === "percent" ? " is-active" : ""}`}
-              aria-pressed={commissionMode === "percent"}
-              title="Percent of the service price"
+              className={`cs-switch${provider.isBookableOnline ? "" : " cs-switch--off"}`}
+              aria-label={`${provider.name} bookable online toggle`}
+              aria-pressed={provider.isBookableOnline}
               disabled={!canManage}
-              onClick={() => {
-                if (commissionMode === "percent") return;
-                patchVariantText(provider.id, "flat", "");
-                updateVariant(provider.id, { commissionFlatCents: null, commissionBasisPoints: entry.commissionBasisPoints ?? 0 });
-              }}
+              onClick={() => void setProviderBookable(provider.id, !provider.isBookableOnline)}
+            />
+          </div>
+          <p className="cs-svc-staff-panel__hint">Applies to all of {firstName}&apos;s treatments, not just this one.</p>
+        </section>
+
+        <section className="cs-svc-staff-panel__section">
+          <h5 className="cs-svc-staff-panel__label">Booking link</h5>
+          <div className="cs-svc-staff-panel__link-box">
+            <span
+              className="cs-svc-staff-panel__prefix"
+              title={`${storefrontBaseUrl}/${tenantSlug}/p/`}
+              aria-hidden="true"
             >
-              %
-            </button>
+              {`…/${tenantSlug}/p/`}
+            </span>
+            <input
+              className="cs-svc-staff-panel__slug"
+              type="text"
+              aria-label={`${provider.name} booking link`}
+              value={slugDraft}
+              disabled={!canManage || slugSaving}
+              placeholder="your-name"
+              maxLength={100}
+              spellCheck={false}
+              autoCapitalize="off"
+              onChange={(e) => { setSlugEdit({ providerId: provider.id, value: e.target.value.toLowerCase().replace(/\s+/g, "-") }); setSlugError(null); setLinkHint(null); }}
+            />
+          </div>
+          {slugError ? <p role="alert" className="cs-svc-helper cs-svc-helper--error">{slugError}</p> : null}
+          <div className="cs-svc-staff-panel__link-actions">
+            {canManage ? (
+              <button
+                type="button"
+                className="cs-svc-pill-btn cs-svc-pill-btn--primary"
+                disabled={slugSaving || !slugChanged}
+                onClick={async () => {
+                  const trimmed = slugDraft.trim();
+                  if (trimmed && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(trimmed)) {
+                    setSlugError("Use letters, numbers and single hyphens only.");
+                    return;
+                  }
+                  setSlugSaving(true);
+                  const problem = await setProviderBookingSlug(provider.id, trimmed);
+                  setSlugError(problem);
+                  if (problem === null) setSlugEdit(null);
+                  setSlugSaving(false);
+                }}
+              >
+                {slugSaving ? "Saving…" : "Save link"}
+              </button>
+            ) : null}
             <button
               type="button"
-              className={`cs-override-table__mode-btn${commissionMode === "flat" ? " is-active" : ""}`}
-              aria-pressed={commissionMode === "flat"}
-              title="Flat amount per service"
-              disabled={!canManage}
+              className="cs-svc-pill-btn"
+              disabled={!bookingLink || slugChanged}
+              title={slugChanged ? "Save the link first" : undefined}
               onClick={() => {
-                if (commissionMode === "flat") return;
-                patchVariantText(provider.id, "percent", "");
-                updateVariant(provider.id, { commissionBasisPoints: null, commissionFlatCents: entry.commissionFlatCents ?? 0 });
+                if (!bookingLink) return;
+                void navigator.clipboard.writeText(bookingLink).then(
+                  () => setLinkHint("Link copied!"),
+                  () => setLinkHint("Copy failed."),
+                );
               }}
             >
-              $
+              Copy link
             </button>
           </div>
-          {commissionMode === "flat" ? (
-            <input
-              className="cs-override-table__field"
-              type="text" inputMode="decimal"
-              disabled={!canManage}
-              placeholder="0.00"
-              value={text.flat}
-              onFocus={selectOnFocus}
-              onMouseUp={keepSelection}
-              onChange={(e) => patchVariantText(provider.id, "flat", e.target.value)}
-              aria-label={`${provider.name} commission flat`}
-            />
-          ) : (
-            <input
-              className="cs-override-table__field"
-              type="text" inputMode="decimal"
-              disabled={!canManage}
-              placeholder={inheritedPercent != null ? String(inheritedPercent) : "0"}
-              value={text.percent}
-              onFocus={selectOnFocus}
-              onMouseUp={keepSelection}
-              onChange={(e) => patchVariantText(provider.id, "percent", e.target.value)}
-              aria-label={`${provider.name} commission percent`}
-            />
-          )}
-        </div>
-      </div>
+          {linkHint ? <p className="cs-svc-helper cs-svc-helper--ok">{linkHint}</p> : null}
+          <p className="cs-svc-staff-panel__hint">
+            {bookingLink
+              ? `Opens ${firstName}'s storefront page with only their times. Share it in bios, emails or texts.`
+              : `${firstName} has no booking link yet. Pick one above and save it.`}
+          </p>
+        </section>
+
+        <footer className="cs-svc-staff-panel__foot">
+          <button type="button" className="cs-svc-pill-btn cs-svc-pill-btn--primary" onClick={() => setSelectedProviderId(null)}>
+            Done
+          </button>
+        </footer>
+      </aside>
     );
   };
 
   return (
     <div className="cs-svc-detail-form">
-      <section className="cs-svc-card" aria-label="Staff">
-        <header className="cs-svc-card__head">
-          <h3 className="cs-svc-card__title">
-            Staff <span className="cs-svc-card__count">{offered.length} of {eligibleProviders.length}</span>
-          </h3>
-          <span className="cs-svc-card__meta">
-            Base {formatDurationMinutes(baseDurationMinutes)} · {formatMoney(basePriceCents)} · {formatMoney(baseDepositCents)} deposit
-          </span>
-        </header>
+      <div className={`cs-svc-staff-layout${selectedProvider ? " has-panel" : ""}`}>
+        <section className="cs-svc-card" aria-label="Staff">
+          <header className="cs-svc-card__head cs-svc-card__head--stack">
+            <h3 className="cs-svc-card__title">Who performs this</h3>
+            <p className="cs-svc-helper">
+              {canManage ? "Click a name for pay, online booking and their booking link. " : ""}
+              Blank fields inherit the base treatment — inherited values show <em>italic and dotted</em>.
+            </p>
+          </header>
 
-        {!variantsLoaded ? (
-          <p className="cs-svc-helper">Loading…</p>
-        ) : (
-          <div className="cs-override-table">
-            <div className="cs-override-table__columns" aria-hidden="true">
-              <span>Provider</span>
-              <span>Price</span>
-              <span>Duration</span>
-              <span>Deposit</span>
-              <span>Commission</span>
-            </div>
+          {!variantsLoaded ? (
+            <p className="cs-svc-helper">Loading…</p>
+          ) : (
+            <div className="cs-override-table">
+              <div className="cs-override-table__columns" aria-hidden="true">
+                <span>Provider</span>
+                <span>Price</span>
+                <span>Duration</span>
+                <span>Deposit</span>
+                <span>Online booking</span>
+              </div>
 
-            {offered.length > 0 ? (
-              <section className="cs-override-table__group" aria-label="Offered by">
-                <header className="cs-override-table__group-head">
-                  <h4 className="cs-override-table__group-title">
-                    <span className="cs-override-table__dot" style={{ background: "var(--cs-mint)" }} aria-hidden="true" />
-                    Offered by
-                  </h4>
-                </header>
+              <div className="cs-override-table__list">
                 {offered.map(renderProviderRow)}
-                {canManage ? (
-                  <footer className="cs-override-table__group-foot">
-                    <button type="button" className="cs-link-btn"
-                      onClick={() => {
-                        for (const p of offered) toggleProviderAssignment(p.id);
-                      }}>Disable all</button>
-                  </footer>
-                ) : null}
-              </section>
-            ) : null}
-
-            {notOffered.length > 0 ? (
-              <section className="cs-override-table__group cs-override-table__group--off" aria-label="Not offered">
-                <header className="cs-override-table__group-head">
-                  <h4 className="cs-override-table__group-title">
-                    <span className="cs-override-table__dot" style={{ background: "var(--cs-grey)" }} aria-hidden="true" />
-                    Not offered
-                  </h4>
-                </header>
                 {notOffered.map(renderProviderRow)}
-                {canManage ? (
-                  <footer className="cs-override-table__group-foot">
+              </div>
+
+              {canManage && (offered.length > 0 || notOffered.length > 0) ? (
+                <div className="cs-override-table__group-foot">
+                  {offered.length > 0 ? (
                     <button type="button" className="cs-link-btn"
                       onClick={() => {
-                        for (const p of notOffered) toggleProviderAssignment(p.id);
+                        setSelectedProviderId(null);
+                        for (const p of offered) void toggleProviderAssignment(p.id);
+                      }}>Disable all</button>
+                  ) : null}
+                  {notOffered.length > 0 ? (
+                    <button type="button" className="cs-link-btn"
+                      onClick={() => {
+                        for (const p of notOffered) void toggleProviderAssignment(p.id);
                       }}>Enable all</button>
-                  </footer>
-                ) : null}
-              </section>
-            ) : null}
-          </div>
-        )}
-      </section>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <p className="cs-svc-staff-summary">
+                {storefrontPrice === null
+                  ? "No one is bookable online for this treatment yet."
+                  : <>Storefront shows <strong>{storefrontPrice}</strong> · {bookableOnline.length} of {offered.length} bookable online</>}
+              </p>
+            </div>
+          )}
+        </section>
+
+        {selectedProvider ? renderPanel(selectedProvider) : null}
+      </div>
 
       <div className="cs-svc-card">
         <span className="cs-svc-card__eyebrow">Client selection on booking</span>
@@ -2760,6 +3068,7 @@ type CategoryFormState = {
   requireCardOnFile: boolean;
   providerSelectionMode: string; // '' = not set (clients choose their artist)
   formIds: string[];
+  isTaxable: boolean; // false stops the business tax rate applying to services that don't say otherwise
 };
 
 function categoryToFormState(category: ServiceCategorySummary): CategoryFormState {
@@ -2788,6 +3097,7 @@ function categoryToFormState(category: ServiceCategorySummary): CategoryFormStat
     requireCardOnFile: category.requireCardOnFile ?? false,
     providerSelectionMode: category.providerSelectionMode ?? "",
     formIds: category.formIds ?? [],
+    isTaxable: category.isTaxable ?? true,
   };
 }
 
@@ -2972,6 +3282,8 @@ function CategoryDetailPanel({
         body.bookingPaymentPercent = pct;
       }
     }
+    if (!form.isTaxable) body.isTaxable = false;
+    else if (category.isTaxable === false) body.clearIsTaxable = true;
     if (form.requireCardOnFile) body.requireCardOnFile = true;
     else if (category.requireCardOnFile !== null && category.requireCardOnFile !== undefined) body.clearRequireCardOnFile = true;
     if (form.providerSelectionMode) body.providerSelectionMode = form.providerSelectionMode;
@@ -3039,7 +3351,15 @@ function CategoryDetailPanel({
               </button>
               <OverflowMenu
                 label="More category actions"
-                items={[{ label: "Delete category", danger: true, onSelect: onDelete }]}
+                items={[
+                  ...(landingHref
+                    ? [
+                        { label: "Copy booking link", onSelect: () => void handleCopyLink() },
+                        { label: "View booking page", onSelect: () => { window.open(landingHref, "_blank", "noopener"); } },
+                      ]
+                    : []),
+                  { label: "Delete category", danger: true, onSelect: onDelete },
+                ]}
               />
             </>
           ) : null}
@@ -3077,6 +3397,26 @@ function CategoryDetailPanel({
                 {copyHint ? <span className="cs-svc-helper cs-svc-helper--ok">{copyHint}</span> : null}
               </p>
             ) : null}
+
+            <div className="cs-svc-setting">
+              <span className="cs-svc-setting__text">
+                <span className="cs-svc-card__title">Charge tax</span>
+                <span className="cs-svc-section__lead">
+                  {form.isTaxable
+                    ? "Services here are taxed at their location's service tax rate unless they say otherwise."
+                    : "No tax is added to services here unless they say otherwise."}
+                </span>
+              </span>
+              <button
+                type="button"
+                className={`cs-switch${form.isTaxable ? "" : " cs-switch--off"}`}
+                aria-label="Category charge tax toggle"
+                aria-pressed={form.isTaxable}
+                onClick={() => setForm((prev) => ({ ...prev, isTaxable: !prev.isTaxable }))}
+              />
+            </div>
+
+            <hr className="cs-svc-details__divider" />
 
             <label className="cs-svc-details__field">
               <span className="cs-svc-details__label">Outcome headline</span>

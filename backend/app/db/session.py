@@ -607,6 +607,11 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("service_categories", "booking_payment_percent", "INTEGER"),
     ("service_categories", "require_card_on_file", "BOOLEAN"),
     ("service_categories", "provider_selection_mode", "VARCHAR(32)"),
+    ("service_categories", "is_taxable", "BOOLEAN"),
+    ("services", "is_taxable", "BOOLEAN"),
+    ("booking_items", "kind", "VARCHAR(16) NOT NULL DEFAULT 'service'"),
+    ("locations", "service_tax_rate_percent", "DOUBLE PRECISION NOT NULL DEFAULT 0"),
+    ("locations", "product_tax_rate_percent", "DOUBLE PRECISION NOT NULL DEFAULT 0"),
 )
 
 # Reporting indexes for databases created before they were declared on the models.
@@ -660,9 +665,36 @@ async def _migrate_category_online_booking(connection) -> None:
     )
 
 
+async def _migrate_location_tax_rates(connection) -> None:
+    """One-time move of the business-wide tax rate onto each location.
+
+    Runs only while locations lacks the rate columns. Every location starts with the
+    business's old rate for both services and products, so existing tax is unchanged.
+    """
+    already_migrated = await connection.scalar(
+        text(
+            "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' "
+            "AND table_name = 'locations' AND column_name = 'service_tax_rate_percent'"
+        )
+    )
+    if already_migrated:
+        return
+    await connection.execute(text("ALTER TABLE locations ADD COLUMN service_tax_rate_percent DOUBLE PRECISION NOT NULL DEFAULT 0"))
+    await connection.execute(text("ALTER TABLE locations ADD COLUMN product_tax_rate_percent DOUBLE PRECISION NOT NULL DEFAULT 0"))
+    for column in ("service_tax_rate_percent", "product_tax_rate_percent"):
+        await connection.execute(
+            text(
+                f"UPDATE locations SET {column} = COALESCE("
+                "(SELECT (tenants.settings_json::jsonb ->> 'taxRatePercent')::double precision FROM tenants "
+                "WHERE tenants.id = locations.tenant_id), 0)"
+            )
+        )
+
+
 async def _ensure_added_columns() -> None:
     async with get_engine().begin() as connection:
         await _migrate_category_online_booking(connection)
+        await _migrate_location_tax_rates(connection)
         for table, column, column_type in _ADDED_COLUMNS:
             exists = await connection.scalar(
                 text(

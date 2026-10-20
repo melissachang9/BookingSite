@@ -164,7 +164,8 @@ async def seed_report_history(tenant_slug: str = "brow-beauty-lab", days: int = 
                 await session.refresh(booking, attribute_names=["items"])
                 await session.refresh(tenant)
                 subtotal = booking_subtotal_cents(booking)
-                tax_rate = float((tenant.settings_json or {}).get("taxRatePercent", 0) or 0)
+                location = await session.get(Location, booking.location_id) if booking.location_id else None
+                tax_rate = float(location.service_tax_rate_percent) if location is not None else 0.0
                 booking.tax_cents = round(subtotal * tax_rate / 100)
 
                 discount = 0

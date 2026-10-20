@@ -2253,7 +2253,7 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .cs-override-table__row > .cs-override-table__note { grid-column: 2 / -1; justify-self: end; max-width: 360px; text-align: right; }
 
 /* Narrow pane: stack the row and label each field. */
-@container override-table (max-width: 560px) {
+@container override-table (max-width: 440px) {
   .cs-override-table__columns { display: none; }
   .cs-override-table__row { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; }
   .cs-override-table__lead,
@@ -7139,3 +7139,132 @@ select:disabled {
 
 /* Bulk action sits under the list it acts on, in line with the rows' content. */
 .cs-override-table__group-foot { display: flex; justify-content: flex-start; padding: 0 12px; }
+
+/* ---- Service › Staff: provider table with a settings panel on the right ---- */
+.cs-svc-staff-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.cs-svc-staff-layout.has-panel { grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); }
+@media (max-width: 1100px) {
+  .cs-svc-staff-layout.has-panel { grid-template-columns: minmax(0, 1fr); }
+}
+.cs-svc-card__head--stack { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.cs-svc-card__head--stack .cs-svc-helper { margin: 0; }
+
+.cs-override-table__list { display: flex; flex-direction: column; gap: 8px; }
+.cs-override-table__lead--static { cursor: default; }
+.cs-override-table__open {
+  display: flex; align-items: center; gap: 11px; min-width: 0;
+  padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.cs-override-table__open:focus-visible { outline: 2px solid var(--cs-ink); outline-offset: 3px; border-radius: 8px; }
+.cs-override-table__row--staff { border: 1.5px solid transparent; }
+.cs-override-table__row--staff.is-selected { border-color: var(--cs-ink); background: var(--cs-surface); }
+.cs-override-table__online {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0;
+  padding: 0; border: 0; background: transparent; cursor: pointer; font: inherit; color: inherit;
+}
+.cs-override-table__status {
+  display: inline-flex; align-items: center; padding: 5px 12px; border-radius: var(--cs-r-pill);
+  background: var(--cs-hover-2); color: var(--cs-secondary); font: 600 12px var(--cs-font); white-space: nowrap;
+}
+.cs-override-table__status.is-online { background: var(--cs-mint); color: var(--cs-ok-text); }
+.cs-override-table__chevron { flex: none; font-size: 20px; line-height: 1; color: var(--cs-label); padding-right: 4px; }
+.cs-override-table__group-foot { gap: 16px; }
+.cs-svc-staff-summary {
+  margin: 4px 0 0; padding: 12px 14px; border-radius: var(--cs-r-inner);
+  background: var(--cs-canvas); font: 500 13px var(--cs-font); color: var(--cs-secondary);
+}
+.cs-svc-staff-summary strong { color: var(--cs-ink); }
+
+.cs-svc-staff-panel {
+  display: flex; flex-direction: column; gap: 18px; padding: 22px;
+  background: var(--cs-surface); border-radius: 20px; box-shadow: var(--cs-shadow-sm, 0 1px 2px rgba(20, 17, 15, .06));
+  min-width: 0;
+}
+.cs-svc-staff-panel__head { display: flex; align-items: flex-start; gap: 12px; }
+.cs-svc-staff-panel__avatar { width: 44px; height: 44px; flex: none; }
+.cs-svc-staff-panel__who { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.cs-svc-staff-panel__name { margin: 0; font: 700 20px var(--cs-font); color: var(--cs-ink); }
+.cs-svc-staff-panel__meta { font: 500 12px/1.4 var(--cs-font); color: var(--cs-secondary); }
+.cs-svc-staff-panel__close {
+  flex: none; width: 32px; height: 32px; border: 0; border-radius: 50%; background: var(--cs-canvas);
+  color: var(--cs-ink); font-size: 18px; line-height: 1; cursor: pointer;
+}
+.cs-svc-staff-panel__close:hover { background: var(--cs-hover-2); }
+.cs-svc-staff-panel__section { display: flex; flex-direction: column; gap: 10px; }
+.cs-svc-staff-panel__section + .cs-svc-staff-panel__section { padding-top: 16px; border-top: 1px solid var(--cs-hairline); }
+.cs-svc-staff-panel__label { margin: 0; font: 700 10px var(--cs-font); letter-spacing: .12em; text-transform: uppercase; color: var(--cs-label); }
+.cs-svc-staff-panel__segments { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: var(--cs-r-pill); background: var(--cs-canvas); }
+.cs-svc-staff-panel__segment {
+  padding: 8px 6px; border: 0; border-radius: var(--cs-r-pill); background: transparent; color: var(--cs-secondary);
+  font: 600 13px var(--cs-font); cursor: pointer; white-space: nowrap;
+}
+.cs-svc-staff-panel__segment.is-active { background: var(--cs-ink); color: var(--cs-surface); }
+.cs-svc-staff-panel__segment:disabled { cursor: not-allowed; }
+.cs-svc-staff-panel__note {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px;
+  border-radius: var(--cs-r-inner); background: var(--cs-canvas); font: 500 13px/1.45 var(--cs-font); color: var(--cs-secondary);
+}
+.cs-svc-staff-panel__note strong { color: var(--cs-ink); }
+.cs-svc-staff-panel__link { flex: none; color: var(--cs-ink); font: 600 12px var(--cs-font); text-decoration: underline; white-space: nowrap; }
+.cs-svc-staff-panel__field { display: flex; align-items: center; justify-content: space-between; gap: 12px; font: 500 13px var(--cs-font); color: var(--cs-secondary); }
+.cs-svc-staff-panel__input { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: var(--cs-r-pill); background: var(--cs-canvas); color: var(--cs-ink); font: 600 14px var(--cs-font); }
+.cs-svc-staff-panel__input input { width: 72px; border: 0; background: transparent; font: inherit; color: inherit; text-align: right; outline: none; }
+.cs-svc-staff-panel__earns { display: flex; align-items: baseline; justify-content: space-between; padding-top: 12px; border-top: 1px solid var(--cs-hairline); font: 500 13px var(--cs-font); color: var(--cs-secondary); }
+.cs-svc-staff-panel__earns strong { font: 800 24px var(--cs-font); color: var(--cs-ink); letter-spacing: -.01em; }
+.cs-svc-staff-panel__toggle { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 16px; border-radius: var(--cs-r-inner); background: var(--cs-canvas); }
+.cs-svc-staff-panel__toggle-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cs-svc-staff-panel__toggle-title { font: 600 14px var(--cs-font); color: var(--cs-ink); }
+.cs-svc-staff-panel__hint { margin: 0; font: 500 12px/1.45 var(--cs-font); color: var(--cs-secondary); }
+.cs-svc-staff-panel__link-box { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 8px 8px 16px; border-radius: var(--cs-r-pill); background: var(--cs-canvas); }
+.cs-svc-staff-panel__url { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 13px var(--cs-font); color: var(--cs-ink); }
+.cs-svc-staff-panel__foot { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding-top: 16px; border-top: 1px solid var(--cs-hairline); }
+
+/* With the provider panel open the table is narrower, so its columns tighten up before it stacks. */
+.cs-svc-staff-layout.has-panel .cs-override-table__columns,
+.cs-svc-staff-layout.has-panel .cs-override-table__row {
+  grid-template-columns: minmax(120px, 1.5fr) minmax(64px, 76px) minmax(56px, 66px) minmax(52px, 62px) minmax(88px, 0.8fr);
+  column-gap: 6px;
+}
+.cs-svc-staff-layout.has-panel { grid-template-columns: minmax(0, 1fr) 330px; }
+.cs-svc-staff-layout.has-panel .cs-override-table__meta,
+.cs-svc-staff-layout.has-panel .cs-override-table__chevron { display: none; }
+.cs-svc-staff-layout.has-panel .cs-override-table__status { padding: 4px 9px; font-size: 11px; }
+.cs-svc-staff-layout.has-panel .cs-override-table__online { justify-content: flex-start; }
+.cs-svc-staff-layout.has-panel .cs-override-table__row { padding: 10px 10px; }
+.cs-svc-staff-layout.has-panel .cs-svc-staff-panel { min-width: 0; }
+.cs-svc-staff-panel .cs-svc-pill-btn { white-space: nowrap; }
+.cs-override-table__row--off .cs-override-table__note { text-align: right; }
+
+/* Narrow table (panel open on a smaller screen): the Online booking chip gets its own line instead of overflowing. */
+@container override-table (max-width: 440px) {
+  .cs-override-table__online { grid-column: 1 / -1; justify-content: space-between; }
+  .cs-override-table__status { padding: 4px 10px; font-size: 11px; }
+  .cs-override-table__chevron { display: inline; }
+}
+.cs-svc-staff-panel__segments { gap: 2px; padding: 3px; }
+.cs-svc-staff-panel__segment { padding: 7px 4px; font-size: 12px; letter-spacing: 0; }
+
+/* Editable booking link: fixed address on the left, editable ending on the right. */
+.cs-svc-staff-panel__link-box { gap: 4px; padding: 6px 14px 6px 16px; }
+.cs-svc-staff-panel__prefix { flex: none; max-width: 62%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 13px var(--cs-font); color: var(--cs-label); }
+.cs-svc-staff-panel__slug { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; padding: 6px 0; font: 600 13px var(--cs-font); color: var(--cs-ink); outline: none; }
+.cs-svc-staff-panel__slug::placeholder { color: var(--cs-label); font-weight: 500; }
+.cs-svc-staff-panel__link-box:focus-within { box-shadow: 0 0 0 2px var(--cs-ink); }
+.cs-svc-staff-panel__link-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.cs-svc-staff-panel__link-actions:empty { display: none; }
+/* The panel is narrow, so the fixed address sits above the editable ending instead of squeezing it. */
+.cs-svc-staff-panel__link-box { flex-direction: column; align-items: stretch; gap: 0; border-radius: var(--cs-r-inner); padding: 10px 16px; }
+.cs-svc-staff-panel__prefix { max-width: none; font-size: 12px; }
+.cs-svc-staff-panel__slug { padding: 4px 0 2px; font-size: 14px; }
+
+/* Booking link: the fixed address stays put on the left of one line; only the ending is editable. */
+.cs-svc-staff-panel__link-box { flex-direction: row; align-items: center; gap: 2px; border-radius: var(--cs-r-pill); padding: 4px 16px; }
+.cs-svc-staff-panel__prefix { flex: none; max-width: 60%; font-size: 13px; color: var(--cs-label); user-select: none; }
+.cs-svc-staff-panel__slug { padding: 8px 0; font-size: 13px; }
+/* Make the editable ending read as a field, set against the fixed grey address. */
+.cs-svc-staff-panel__link-box { padding: 5px 5px 5px 16px; }
+.cs-svc-staff-panel__slug { background: var(--cs-surface); border-radius: var(--cs-r-pill); padding: 8px 14px; margin-left: 2px; box-shadow: inset 0 0 0 1px var(--cs-hairline); }
+.cs-svc-staff-panel__slug:focus { box-shadow: inset 0 0 0 1.5px var(--cs-ink); }
+.cs-svc-staff-panel__link-box:focus-within { box-shadow: none; }
+
+.cs-svc-staff-panel .cs-svc-pill-btn:disabled { opacity: .5; cursor: not-allowed; }

@@ -330,3 +330,106 @@ def test_a_provider_deposit_beats_the_category_and_service_rules(client) -> None
     )
     assert cleared.status_code == 200
     assert _draft_deposit(client, headers, service) == service["priceCents"]
+
+
+# --------------------------------------------------------------------------- tax
+
+
+def _draft_amounts(client, headers, service: dict) -> dict:
+    providers = client.get(f"{API}/providers/manage", headers=headers).json()["providers"]
+    provider_id = next(p["id"] for p in providers if p["isActive"] and service["id"] in p["serviceIds"])
+    location_id = client.get(f"{API}/locations").json()["locations"][0]["id"]
+    client.put(
+        f"{API}/providers/{provider_id}/schedule",
+        headers=headers,
+        json={"locationId": location_id, "entries": [
+            {"weekday": 0, "locationId": location_id, "startTime": "09:00", "endTime": "17:00", "isActive": True},
+        ]},
+    )
+    today = datetime.now(timezone.utc).date()
+    monday = (today + timedelta(days=(7 - today.weekday()) % 7 or 7)).isoformat()
+    slot = client.get(
+        f"{API}/availability",
+        params={"serviceId": service["id"], "providerId": provider_id, "locationId": location_id, "date": monday, "windowDays": 1},
+    ).json()["slots"][0]
+    draft = client.post(
+        f"{API}/booking-drafts",
+        json={"tenantSlug": TENANT, "serviceId": service["id"], "providerId": provider_id,
+              "locationId": location_id, "startsAt": slot["startAt"]},
+    )
+    assert draft.status_code in (200, 201), draft.json()
+    return draft.json()
+
+
+def _set_tax_rate(client, headers, percent: float) -> None:
+    """Service tax rate at every location (the rate lives on locations)."""
+    for location in client.get(f"{API}/locations/manage", headers=headers).json()["locations"]:
+        response = client.patch(
+            f"{API}/locations/{location['id']}", headers=headers, json={"serviceTaxRatePercent": percent}
+        )
+        assert response.status_code == 200, response.json()
+
+
+def test_tax_resolver_follows_service_then_category_then_taxable() -> None:
+    from app.db.models import ServiceCategory
+    from app.services.service_terms import effective_taxable
+
+    assert effective_taxable(Service(price_cents=1, deposit_cents=0), None) == (True, "default")
+    exempt = ServiceCategory(is_taxable=False)
+    assert effective_taxable(Service(price_cents=1, deposit_cents=0), exempt) == (False, "category")
+    own = Service(price_cents=1, deposit_cents=0, is_taxable=True)
+    assert effective_taxable(own, exempt) == (True, "service")
+
+
+def test_a_non_taxable_category_removes_tax_until_a_service_opts_back_in(client) -> None:
+    headers = _auth(client)
+    _set_tax_rate(client, headers, 10)
+    service = _service_named(client, "Signature Facial")
+    base = _draft_amounts(client, headers, service)
+    assert base["taxCents"] > 0
+
+    category_id = _category_with_rule(client, headers, "Wellness", isTaxable=False)
+    moved = _move_service(client, headers, service, category_id)
+    assert (moved["effectiveIsTaxable"], moved["effectiveTaxSource"]) == (False, "category")
+    assert _draft_amounts(client, headers, service)["taxCents"] == 0
+
+    opted_in = client.patch(f"{API}/services/{service['id']}", headers=headers, json={"isTaxable": True}).json()
+    assert (opted_in["effectiveIsTaxable"], opted_in["effectiveTaxSource"]) == (True, "service")
+    assert _draft_amounts(client, headers, service)["taxCents"] == base["taxCents"]
+
+    back = client.patch(f"{API}/services/{service['id']}", headers=headers, json={"inheritIsTaxable": True}).json()
+    assert back["isTaxable"] is None
+    assert back["effectiveIsTaxable"] is False
+
+
+def test_a_service_can_be_exempt_on_its_own(client) -> None:
+    headers = _auth(client)
+    _set_tax_rate(client, headers, 10)
+    service = _service_named(client, "Signature Facial")
+    exempt = client.patch(f"{API}/services/{service['id']}", headers=headers, json={"isTaxable": False})
+    assert exempt.status_code == 200
+    assert exempt.json()["effectiveTaxSource"] == "service"
+    amounts = _draft_amounts(client, headers, service)
+    assert amounts["taxCents"] == 0
+    assert amounts["fullAmountCents"] == service["priceCents"]
+
+
+def test_clearing_a_category_tax_setting_makes_it_taxable_again(client) -> None:
+    headers = _auth(client)
+    category_id = _category_with_rule(client, headers, "Wellness", isTaxable=False)
+    path = f"{API}/service-categories/{category_id}"
+    assert client.get(f"{API}/service-categories", headers=headers).json()["categories"][-1]["isTaxable"] is False
+    cleared = client.patch(path, headers=headers, json={"clearIsTaxable": True})
+    assert cleared.status_code == 200
+    assert cleared.json()["isTaxable"] is None
+
+
+def test_a_duplicated_service_keeps_its_tax_and_booking_rules(client) -> None:
+    headers = _auth(client)
+    service = _service_named(client, "Signature Facial")
+    client.patch(f"{API}/services/{service['id']}", headers=headers,
+                 json={"isTaxable": False, "bookingPaymentMode": "full"})
+    copy = client.post(f"{API}/services/{service['id']}/duplicate", headers=headers)
+    assert copy.status_code in (200, 201), copy.json()
+    assert copy.json()["isTaxable"] is False
+    assert copy.json()["bookingPaymentMode"] == "full"

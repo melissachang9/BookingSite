@@ -73,7 +73,6 @@ def test_update_business_policies_saves_all_fields(client) -> None:
             "minLeadTimeMinutes": 120,
             "maxAdvanceBookingDays": 60,
             "noShowFeeCents": 5000,
-            "taxRatePercent": 8.25,
             "autoChargeNoShowFee": True,
         },
         headers=headers,
@@ -86,7 +85,7 @@ def test_update_business_policies_saves_all_fields(client) -> None:
     assert settings["maxAdvanceBookingDays"] == 60
     assert "defaultDepositCents" not in settings
     assert settings["noShowFeeCents"] == 5000
-    assert settings["taxRatePercent"] == 8.25
+    assert "taxRatePercent" not in settings
     assert settings["autoChargeNoShowFee"] is True
 
     # Persisted across reads
@@ -125,16 +124,6 @@ def test_business_settings_no_longer_carry_a_default_deposit(client) -> None:
     )
     assert response.status_code == 200
     assert "defaultDepositCents" not in response.json()["settings"]
-
-
-def test_update_settings_rejects_excessive_tax_rate(client) -> None:
-    headers = _auth_headers(client)
-    response = client.patch(
-        "/api/v1/tenants/brow-beauty-lab/settings",
-        json={"taxRatePercent": 150},
-        headers=headers,
-    )
-    assert response.status_code == 422
 
 
 def test_update_settings_rejects_zero_max_advance_days(client) -> None:

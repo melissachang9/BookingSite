@@ -540,7 +540,6 @@ function BusinessPoliciesSection({
   const [minLeadTimeMinutes, setMinLeadTimeMinutes] = useState<number>(tenant?.settings.minLeadTimeMinutes ?? 60);
   const [maxAdvanceBookingDays, setMaxAdvanceBookingDays] = useState<number>(tenant?.settings.maxAdvanceBookingDays ?? 45);
   const [noShowFeeCents, setNoShowFeeCents] = useState<number>(tenant?.settings.noShowFeeCents ?? 0);
-  const [taxRatePercent, setTaxRatePercent] = useState<number>(tenant?.settings.taxRatePercent ?? 0);
   const [autoChargeNoShowFee, setAutoChargeNoShowFee] = useState<boolean>(tenant?.settings.autoChargeNoShowFee ?? false);
   const [paymentLinkExpiryMinutes, setPaymentLinkExpiryMinutes] = useState<number>(
     tenant?.settings.paymentLinkExpiryMinutes ?? 30,
@@ -554,7 +553,6 @@ function BusinessPoliciesSection({
       setMinLeadTimeMinutes(tenant.settings.minLeadTimeMinutes);
       setMaxAdvanceBookingDays(tenant.settings.maxAdvanceBookingDays);
       setNoShowFeeCents(tenant.settings.noShowFeeCents);
-      setTaxRatePercent(tenant.settings.taxRatePercent);
       setAutoChargeNoShowFee(tenant.settings.autoChargeNoShowFee ?? false);
       setPaymentLinkExpiryMinutes(tenant.settings.paymentLinkExpiryMinutes ?? 30);
     }
@@ -573,7 +571,6 @@ function BusinessPoliciesSection({
         minLeadTimeMinutes,
         maxAdvanceBookingDays,
         noShowFeeCents,
-        taxRatePercent,
         autoChargeNoShowFee,
         paymentLinkExpiryMinutes,
       });
@@ -673,19 +670,6 @@ function BusinessPoliciesSection({
       </div>
 
       <div className="cs-form-row">
-        <label className="cs-field">
-          <span>Tax rate (%)</span>
-          <input
-            type="number"
-            min={0}
-            max={100}
-            step={0.01}
-            value={taxRatePercent}
-            onChange={(event) => setTaxRatePercent(parseFloat(event.target.value || "0"))}
-            disabled={!canManageSettings || saveState.kind === "submitting"}
-          />
-          <small>Sales tax percentage applied to service subtotal.</small>
-        </label>
         <div className="cs-field">
           <span>Auto-charge no-show fee</span>
           <label className="cs-switch-row">

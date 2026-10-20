@@ -52,7 +52,6 @@ const tenant: TenantSummary = {
     reminderHoursBefore: 24,
     noShowFeeCents: 5000,
     autoChargeNoShowFee: false,
-    taxRatePercent: 0,
     calendarDisplayStartHour: 9,
     calendarDisplayEndHour: 19,
     weekStartsOn: 0,

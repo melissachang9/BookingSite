@@ -107,6 +107,9 @@ type CalendarAppointment = {
   amountPaidCents: number;
   balanceDueCents: number;
   taxCents: number;
+  serviceTaxRatePercent?: number;
+  productTaxRatePercent?: number;
+  serviceIsTaxable?: boolean;
   walletBalanceCents: number;
   durationMinutes: number;
   notes?: string | null;
@@ -713,6 +716,9 @@ function createCalendarAppointment(booking: BookingSummary): CalendarAppointment
     amountPaidCents: booking.amountPaidCents,
     balanceDueCents: booking.balanceDueCents,
     taxCents: booking.taxCents ?? 0,
+    serviceTaxRatePercent: booking.serviceTaxRatePercent,
+    productTaxRatePercent: booking.productTaxRatePercent,
+    serviceIsTaxable: booking.serviceIsTaxable,
     walletBalanceCents: booking.walletBalanceCents ?? 0,
     durationMinutes: Math.round((Date.parse(booking.endsAt) - Date.parse(booking.startsAt)) / 60000),
     notes: booking.notes ?? null,
@@ -6045,6 +6051,7 @@ function CheckoutPanel({
     id: i.id,
     name: i.name,
     priceCents: i.priceCents * i.quantity,
+    kind: i.kind ?? "service",
   }));
   const addedItemsTotal = addedItems.reduce((sum, item) => sum + item.priceCents, 0);
   const effectiveSubtotal = adjustedSubtotal + addedItemsTotal;
@@ -6055,7 +6062,15 @@ function CheckoutPanel({
   // (service price + already-saved items), so adding items doesn't double-count.
   const persistedTaxableBase = appointment.priceCents + addedItemsTotal;
   const taxRate = persistedTaxableBase > 0 ? (appointment.taxCents ?? 0) / persistedTaxableBase : 0;
-  const adjustedTaxCents = Math.round(effectiveSubtotal * taxRate);
+  // With the booking's own rates, services and products are taxed separately (and an exempt service pays none).
+  const productItemsTotal = addedItems.filter((i) => i.kind === "product").reduce((sum, item) => sum + item.priceCents, 0);
+  const adjustedTaxCents =
+    appointment.serviceTaxRatePercent !== undefined && appointment.productTaxRatePercent !== undefined
+      ? (appointment.serviceIsTaxable === false
+          ? 0
+          : Math.round((effectiveSubtotal - productItemsTotal) * (appointment.serviceTaxRatePercent / 100))) +
+        Math.round(productItemsTotal * (appointment.productTaxRatePercent / 100))
+      : Math.round(effectiveSubtotal * taxRate);
   const total = effectiveSubtotal + adjustedTaxCents + tipCents - discountCents;
   const remainingBalance = Math.max(total - totalPaid, 0);
   const setTipFromPercent = (percent: number) => {

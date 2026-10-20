@@ -111,6 +111,19 @@ def effective_online_booking(service: Service, category: object = _UNSET) -> Eff
     )
 
 
+def effective_taxable(service: Service, category: object = _UNSET) -> tuple[bool, str]:
+    """Whether the business tax rate applies to this service, and where that comes from.
+
+    The service's own setting wins, then its category's; with neither set it is taxable.
+    """
+    resolved = loaded_category(service) if category is _UNSET else category
+    if service.is_taxable is not None:
+        return service.is_taxable, "service"
+    if resolved is not None and resolved.is_taxable is not None:
+        return resolved.is_taxable, "category"
+    return True, "default"
+
+
 def resolve_booking_deposit(
     service: Service,
     link: ProviderService | None,

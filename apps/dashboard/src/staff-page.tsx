@@ -52,6 +52,24 @@ type ModalState =
 
 type TabKey = "details" | "services" | "workHours" | "permissions" | "compensation";
 
+/** A roster entry: a sign-in user, or a provider who has no sign-in account (shown so their pay and hours can still be managed). */
+type RosterUser = TenantUserSummary & { providerOnly?: boolean; providerId?: string };
+
+function providerOnlyEntry(provider: ProviderSummary): RosterUser {
+  return {
+    id: `provider:${provider.id}`,
+    email: provider.email ?? "",
+    name: provider.name,
+    role: "provider",
+    isActive: provider.isActive,
+    createdAt: provider.createdAt,
+    phone: null,
+    avatarUrl: provider.imageUrl ?? null,
+    providerOnly: true,
+    providerId: provider.id,
+  };
+}
+
 const ROLE_LABELS: Record<string, string> = {
   owner: "Owner",
   manager: "Manager",
@@ -459,6 +477,21 @@ export function StaffPage({
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
   const [refreshKey, setRefreshKey] = useState(0);
   const hasLoadedRef = useRef(false);
+  const appliedDeepLinkRef = useRef("");
+
+  // Deep link from other pages, e.g. /staff?provider=<id>&tab=compensation opens that person's tab.
+  useEffect(() => {
+    if (state.kind !== "ready" || appliedDeepLinkRef.current === location.search) return;
+    appliedDeepLinkRef.current = location.search;
+    const params = new URLSearchParams(location.search);
+    const provider = providers.find((item) => item.id === params.get("provider"));
+    if (!provider) return;
+    setSelectedUserId(provider.userId ?? `provider:${provider.id}`);
+    const tab = params.get("tab");
+    if (tab === "details" || tab === "services" || tab === "workHours" || tab === "compensation" || tab === "permissions") {
+      setActiveTab(tab);
+    }
+  }, [state.kind, providers, location.search]);
 
   useEffect(() => {
     if (!canManage) return;
@@ -505,28 +538,38 @@ export function StaffPage({
     setRefreshKey((value) => value + 1);
   };
 
+  // Providers without a sign-in account still belong on the roster.
+  const rosterUsers = useMemo<RosterUser[]>(
+    () => [...users, ...providers.filter((p) => !p.userId).map(providerOnlyEntry)],
+    [users, providers],
+  );
+  const providerFor = (user: RosterUser) =>
+    user.providerOnly
+      ? providers.find((p) => p.id === user.providerId) ?? null
+      : providers.find((p) => p.userId === user.id) ?? null;
   const selectedUser = useMemo(
-    () => users.find((u) => u.id === selectedUserId) ?? null,
-    [users, selectedUserId],
+    () => rosterUsers.find((u) => u.id === selectedUserId) ?? null,
+    [rosterUsers, selectedUserId],
   );
   const selectedProvider = useMemo(
-    () => (selectedUser ? providers.find((p) => p.userId === selectedUser.id) ?? null : null),
+    () => (selectedUser ? providerFor(selectedUser) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [providers, selectedUser],
   );
 
   // Split the roster into booking providers vs front-desk/admin so each group
   // can be labelled and filtered independently.
   const providerUsers = useMemo(
-    () => users.filter((u) => providers.some((p) => p.userId === u.id)),
-    [users, providers],
+    () => rosterUsers.filter((u) => u.providerOnly || providers.some((p) => p.userId === u.id)),
+    [rosterUsers, providers],
   );
   const adminUsers = useMemo(
-    () => users.filter((u) => !providers.some((p) => p.userId === u.id)),
-    [users, providers],
+    () => rosterUsers.filter((u) => !u.providerOnly && !providers.some((p) => p.userId === u.id)),
+    [rosterUsers, providers],
   );
 
-  const renderRosterItem = (user: TenantUserSummary) => {
-    const provider = providers.find((p) => p.userId === user.id);
+  const renderRosterItem = (user: RosterUser) => {
+    const provider = providerFor(user);
     const isActive = user.id === selectedUserId;
     return (
       <li key={user.id}>
@@ -553,7 +596,7 @@ export function StaffPage({
             <span className="cs-md-list__name">{user.name}</span>
             <span className="cs-md-list__role">
               {ROLE_LABELS[user.role] ?? user.role}
-              {provider ? " · Provider" : ""}
+              {user.providerOnly ? " · No sign-in" : provider ? " · Provider" : ""}
               {!user.isActive ? " · Inactive" : ""}
             </span>
           </span>
@@ -601,7 +644,7 @@ export function StaffPage({
                   </button>
                 ))}
               </div>
-              {users.length === 0 ? (
+              {rosterUsers.length === 0 ? (
                 <p className="cs-settings-form-help">No users configured yet.</p>
               ) : (
                 <div className="cs-md-groups">
@@ -722,7 +765,7 @@ function StaffDetail({
 }: {
   tenantSlug: string;
   tenant: TenantSummary | null;
-  user: TenantUserSummary;
+  user: RosterUser;
   provider: ProviderSummary | null;
   locations: LocationSummary[];
   services: ServiceSummary[];
@@ -733,12 +776,13 @@ function StaffDetail({
   onLinkProvider: () => void;
   onSaved: () => void;
 }) {
+  // A provider with no sign-in account has nothing to grant permissions to.
   const tabs: Array<{ key: TabKey; label: string; disabled?: boolean }> = [
     { key: "details", label: "Details" },
     { key: "services", label: "Services" },
     { key: "workHours", label: "Work hours" },
     { key: "compensation", label: "Compensation" },
-    { key: "permissions", label: "Permissions" },
+    ...(user.providerOnly ? [] : [{ key: "permissions" as TabKey, label: "Permissions" }]),
   ];
 
   const bookingLinkBase = `${storefrontBaseUrl}/${tenantSlug}/p/`;
@@ -749,7 +793,7 @@ function StaffDetail({
   // real editing UI immediately. `onLinkProvider` still opens the full
   // location/service picker from the header action.
   const providerTabActive =
-    activeTab === "services" || activeTab === "workHours" || activeTab === "compensation";
+    !user.providerOnly && (activeTab === "services" || activeTab === "workHours" || activeTab === "compensation");
   const [creatingProvider, setCreatingProvider] = useState(false);
   const [providerCreateError, setProviderCreateError] = useState<string | null>(null);
 
@@ -815,10 +859,12 @@ function StaffDetail({
           </div>
         </div>
         <div className="cs-md-detail__actions">
-          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onResetPassword}>
-            Reset password
-          </button>
-          {provider === null ? (
+          {user.providerOnly ? null : (
+            <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onResetPassword}>
+              Reset password
+            </button>
+          )}
+          {provider === null && !user.providerOnly ? (
             <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onLinkProvider}>
               Make service provider
             </button>
@@ -892,7 +938,7 @@ function StaffDetail({
           />
         )
       ) : null}
-      {activeTab === "permissions" ? (
+      {activeTab === "permissions" && !user.providerOnly ? (
         <PermissionsTab tenantSlug={tenantSlug} user={user} />
       ) : null}
     </div>
@@ -908,7 +954,7 @@ function DetailsTab({
   onSaved,
 }: {
   tenantSlug: string;
-  user: TenantUserSummary;
+  user: RosterUser;
   provider: ProviderSummary | null;
   locations: LocationSummary[];
   bookingLinkBase: string;
@@ -953,23 +999,28 @@ function DetailsTab({
   }, [user]);
 
   const isProvider = provider !== null;
+  // No sign-in account: the user-level fields below (name, role, phone, photo, access) don't exist to edit.
+  const providerOnly = user.providerOnly === true;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
     const payload: UpdateTenantUserRequest = {};
-    if (form.name.trim() !== user.name) payload.name = form.name.trim();
+    if (!providerOnly && form.name.trim() !== user.name) payload.name = form.name.trim();
     // Service providers cannot change their in-system role.
-    if (!isProvider && form.role !== user.role) payload.role = form.role;
-    if (form.isActive !== user.isActive) payload.isActive = form.isActive;
-    const phone = form.phone.trim();
-    if (phone !== (user.phone ?? "")) payload.phone = phone || null;
-    const avatar = form.avatarUrl.trim();
-    if (avatar !== (user.avatarUrl ?? "")) payload.avatarUrl = avatar || null;
+    if (!providerOnly) {
+      if (!isProvider && form.role !== user.role) payload.role = form.role;
+      if (form.isActive !== user.isActive) payload.isActive = form.isActive;
+      const phone = form.phone.trim();
+      if (phone !== (user.phone ?? "")) payload.phone = phone || null;
+      const avatar = form.avatarUrl.trim();
+      if (avatar !== (user.avatarUrl ?? "")) payload.avatarUrl = avatar || null;
+    }
 
     const providerPayload: UpdateProviderRequest = {};
     if (provider) {
+      if (providerOnly && form.name.trim() !== provider.name) providerPayload.name = form.name.trim();
       const title = providerForm.title.trim();
       if (title !== (provider.availabilityLabel ?? "")) providerPayload.availabilityLabel = title || null;
       const bio = providerForm.bio.trim();
@@ -1010,6 +1061,14 @@ function DetailsTab({
               required
             />
           </div>
+          {providerOnly ? (
+            <div className="cs-dt-field">
+              <span className="cs-dt-label">Sign-in</span>
+              <span className="cs-dt-helper">
+                No sign-in account. Their profile, hours and pay are managed here.
+              </span>
+            </div>
+          ) : (
           <div className="cs-dt-field">
             <span className="cs-dt-label">Role</span>
             <div className="cs-dt-role-pills" role="group" aria-label="Role">
@@ -1030,12 +1089,14 @@ function DetailsTab({
               <span className="cs-dt-helper">Role is locked while this person takes bookings.</span>
             ) : null}
           </div>
+          )}
         </div>
         <div className="cs-dt-row">
           <div className="cs-dt-field">
             <span className="cs-dt-label">Email</span>
             <input className="cs-dt-input" type="email" value={user.email} disabled readOnly />
           </div>
+          {providerOnly ? <div className="cs-dt-field" aria-hidden="true" /> : (
           <div className="cs-dt-field">
             <span className="cs-dt-label">Phone</span>
             <input
@@ -1046,6 +1107,7 @@ function DetailsTab({
               placeholder="+1 555-555-1212"
             />
           </div>
+          )}
         </div>
       </div>
 
@@ -1054,6 +1116,7 @@ function DetailsTab({
       {/* Section 2 — profile */}
       <div className="cs-dt-section">
         <div className="cs-dt-row">
+          {providerOnly ? <div className="cs-dt-field" aria-hidden="true" /> : (
           <div className="cs-dt-field">
             <span className="cs-dt-label">Profile photo</span>
             <div className="cs-dt-photo">
@@ -1070,6 +1133,7 @@ function DetailsTab({
               </small>
             </div>
           </div>
+          )}
           {provider ? (
             <div className="cs-dt-field">
               <span className="cs-dt-label">Title shown to clients</span>
@@ -1155,6 +1219,7 @@ function DetailsTab({
             </div>
           </div>
         ) : null}
+        {providerOnly ? null : (
         <div className="cs-dt-row">
           <div className="cs-dt-field">
             <span className="cs-dt-label">Can sign in</span>
@@ -1169,6 +1234,7 @@ function DetailsTab({
           </div>
           <div className="cs-dt-field" aria-hidden="true" />
         </div>
+        )}
       </div>
 
       {provider ? (

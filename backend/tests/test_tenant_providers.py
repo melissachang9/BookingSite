@@ -222,3 +222,40 @@ def test_provider_service_locations_round_trip(client) -> None:
     )
     assert resp.status_code == 200, resp.json()
     assert svc_id not in resp.json()["serviceLocations"]
+
+
+def _provider_ids(client, headers) -> list[str]:
+    providers = client.get("/api/v1/tenants/brow-beauty-lab/providers/manage", headers=headers).json()["providers"]
+    return [p["id"] for p in providers]
+
+
+def test_a_provider_booking_link_can_be_changed_and_cleared(client) -> None:
+    headers = _auth_headers(client)
+    provider_id = _provider_ids(client, headers)[0]
+    path = f"/api/v1/tenants/brow-beauty-lab/providers/{provider_id}"
+
+    saved = client.patch(path, headers=headers, json={"bookingSlug": "  Amara-Okafor "})
+    assert saved.status_code == 200, saved.json()
+    assert saved.json()["bookingSlug"] == "amara-okafor"
+    assert saved.json()["bookingUrl"].endswith("/p/amara-okafor")
+
+    cleared = client.patch(path, headers=headers, json={"bookingSlug": ""})
+    assert cleared.status_code == 200
+    assert cleared.json()["bookingSlug"] is None
+
+
+def test_a_booking_link_must_be_well_formed_and_unique(client) -> None:
+    headers = _auth_headers(client)
+    first, second = _provider_ids(client, headers)[:2]
+    base = "/api/v1/tenants/brow-beauty-lab/providers"
+
+    for bad in ("has spaces", "under_score", "-leading", "double--hyphen", "emoji🙂"):
+        response = client.patch(f"{base}/{first}", headers=headers, json={"bookingSlug": bad})
+        assert response.status_code == 422, bad
+
+    assert client.patch(f"{base}/{first}", headers=headers, json={"bookingSlug": "taken-link"}).status_code == 200
+    clash = client.patch(f"{base}/{second}", headers=headers, json={"bookingSlug": "taken-link"})
+    assert clash.status_code == 409
+    assert clash.json()["error"]["code"] == "conflict"
+    # The owner of a link can keep saving it.
+    assert client.patch(f"{base}/{first}", headers=headers, json={"bookingSlug": "taken-link"}).status_code == 200

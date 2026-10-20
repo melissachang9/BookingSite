@@ -11,6 +11,9 @@ export type LocationSummary = AuditFields &
     state?: string;
     postalCode?: string;
     phone?: string | null;
+    /** Tax charged at this location, as a percent. Services can opt out individually. */
+    serviceTaxRatePercent?: number;
+    productTaxRatePercent?: number;
   };
 
 export type CreateLocationRequest = {
@@ -22,6 +25,8 @@ export type CreateLocationRequest = {
   state?: string;
   postalCode?: string;
   phone?: string | null;
+  serviceTaxRatePercent?: number;
+  productTaxRatePercent?: number;
 };
 
 export type UpdateLocationRequest = {
@@ -33,6 +38,8 @@ export type UpdateLocationRequest = {
   state?: string | null;
   postalCode?: string | null;
   phone?: string | null;
+  serviceTaxRatePercent?: number;
+  productTaxRatePercent?: number;
   isActive?: boolean;
 };
 
@@ -68,6 +75,10 @@ export type ServiceSummary = AuditFields &
     effectiveRequireCardSource?: OnlineBookingSource | "default";
     effectiveProviderSelectionMode?: string;
     effectiveProviderSelectionSource?: OnlineBookingSource | "default";
+    /** Whether the business tax rate applies. null/undefined on the service means "inherit from the category". */
+    isTaxable?: boolean | null;
+    effectiveIsTaxable?: boolean;
+    effectiveTaxSource?: OnlineBookingSource | "default";
     featuredLabel?: CategoryFeaturedLabel | null;
     slug?: string | null;
     scarcityHint?: string | null;
@@ -87,6 +98,7 @@ export type CreateServiceRequest = {
   categoryId?: string | null;
   onlineBookingDescription?: string;
   requireCardOnFile?: boolean;
+  isTaxable?: boolean | null;
   bookingPaymentMode?: string | null;
   bookingPaymentValueCents?: number | null;
   bookingPaymentPercent?: number | null;
@@ -116,6 +128,8 @@ export type UpdateServiceRequest = {
   /** Back to "inherit from the category". */
   inheritBookingPayment?: boolean;
   inheritRequireCardOnFile?: boolean;
+  isTaxable?: boolean | null;
+  inheritIsTaxable?: boolean;
   featuredLabel?: CategoryFeaturedLabel | null;
   clearFeaturedLabel?: boolean;
   imageUrl?: string | null;
@@ -174,6 +188,8 @@ export type ServiceCategorySummary = AuditFields &
     featuredLabel?: CategoryFeaturedLabel | null;
     metaDescription?: string | null;
     faqs?: CategoryFaqItem[];
+    /** null/undefined = taxable. false stops the business tax rate applying to services that don't say otherwise. */
+    isTaxable?: boolean | null;
     /** Online booking rules inherited by services that don't set their own. null = not set. */
     bookingPaymentMode?: string | null;
     bookingPaymentValueCents?: number | null;
@@ -214,6 +230,8 @@ export type UpdateServiceCategoryRequest = {
   bookingPaymentPercent?: number | null;
   requireCardOnFile?: boolean | null;
   providerSelectionMode?: string | null;
+  isTaxable?: boolean | null;
+  clearIsTaxable?: boolean;
   clearBookingPayment?: boolean;
   clearRequireCardOnFile?: boolean;
   clearProviderSelectionMode?: boolean;

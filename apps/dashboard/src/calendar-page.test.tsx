@@ -540,6 +540,53 @@ describe("CalendarPage", () => {
     }
   });
 
+  it("taxes services and products at their own rates at checkout, and nothing on an exempt service", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    const openCheckout = async (booking: any) => {
+      render(
+        <CalendarPage
+          definition={{
+            eyebrow: "Calendar-first booking",
+            description: "Provider openings, manual booking entry, and hold-backed scheduling from calendar context.",
+          }}
+          tenantSlug="brow-beauty-lab"
+          api={createApi([booking])}
+        />,
+      );
+      await screen.findByText("24 – 30 May");
+      fireEvent.click(await screen.findByRole("button", { name: /Taylor Guest booked/i }));
+      const details = await screen.findByRole("dialog", { name: "Appointment details" });
+      fireEvent.click(within(details).getByRole("button", { name: "Complete & check out" }));
+      return screen.findByRole("dialog", { name: "Checkout" });
+    };
+
+    try {
+      // $100 service at 10% plus a $40 product at 20%: $10 + $8 tax.
+      const taxed = {
+        ...baseBooking,
+        taxCents: 1800,
+        serviceTaxRatePercent: 10,
+        productTaxRatePercent: 20,
+        serviceIsTaxable: true,
+        items: [{ id: "item-1", name: "Retail serum", priceCents: 4000, quantity: 1, kind: "product" }],
+      };
+      const first = await openCheckout(taxed);
+      const taxRow = within(first).getByText("Tax").closest(".cs-checkout-panel__totals-row") as HTMLElement;
+      expect(within(taxRow).getByText("$18.00")).toBeInTheDocument();
+      cleanup();
+
+      // The same sale with an exempt service only pays tax on the product.
+      const exempt = { ...taxed, taxCents: 800, serviceIsTaxable: false };
+      const second = await openCheckout(exempt);
+      const exemptRow = within(second).getByText("Tax").closest(".cs-checkout-panel__totals-row") as HTMLElement;
+      expect(within(exemptRow).getByText("$8.00")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("settles the balance with a payment taken on the Clover device", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));

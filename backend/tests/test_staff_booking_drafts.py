@@ -311,7 +311,11 @@ def test_online_draft_stays_anonymous(client) -> None:
 
 def test_draft_summary_includes_tax_and_full_amount(client) -> None:
     owner = _login(client)
-    client.patch(f"/api/v1/tenants/{TENANT}/settings", headers=owner, json={"taxRatePercent": 13})
+    locations = client.get(f"/api/v1/tenants/{TENANT}/locations/manage", headers=owner).json()["locations"]
+    for location in locations:
+        client.patch(
+            f"/api/v1/tenants/{TENANT}/locations/{location['id']}", headers=owner, json={"serviceTaxRatePercent": 13}
+        )
     draft = _create_staff_draft(client, owner)
     subtotal = draft["priceCents"] + draft["addOnsTotalCents"]
     assert draft["taxCents"] == round(subtotal * 0.13)

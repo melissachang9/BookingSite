@@ -36,6 +36,7 @@ class BookingItemSummary(CamelModel):
     quantity: int
     source_service_id: str | None = None
     source_add_on_id: str | None = None
+    kind: str = "service"
 
 
 class AddBookingItemRequest(CamelModel):
@@ -78,6 +79,10 @@ class BookingSummaryResponse(CamelModel):
     amount_paid_cents: int
     balance_due_cents: int
     tax_cents: int = 0
+    # The rates behind tax_cents, so a checkout can re-price a sale without guessing.
+    service_tax_rate_percent: float = 0
+    product_tax_rate_percent: float = 0
+    service_is_taxable: bool = True
     wallet_balance_cents: int = 0
     customer_manage_token: str
     service: ServiceSummaryResponse

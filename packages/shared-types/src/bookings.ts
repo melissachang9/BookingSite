@@ -151,6 +151,10 @@ export type BookingSummary = AuditFields &
     amountPaidCents: number;
     balanceDueCents: number;
     taxCents: number;
+    /** The rates and exemption behind taxCents, so checkout can re-price a sale. */
+    serviceTaxRatePercent?: number;
+    productTaxRatePercent?: number;
+    serviceIsTaxable?: boolean;
     walletBalanceCents?: number;
     customerManageToken: string;
     service: ServiceSummary;
@@ -168,6 +172,8 @@ export type BookingItemSummary = {
   quantity: number;
   sourceServiceId?: string | null;
   sourceAddOnId?: string | null;
+  /** "product" lines pay the location's product tax rate; "service" lines follow the booking's service. */
+  kind?: "service" | "product";
 };
 
 export type BookingPaymentSummary = {

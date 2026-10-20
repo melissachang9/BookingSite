@@ -696,6 +696,258 @@ describe("ServicesPage", () => {
     expect(screen.getByText("Facials", { selector: ".cs-svc-detail-head__eyebrow" })).toBeInTheDocument();
   });
 
+  it("offers the booking link in a category's more-actions menu", async () => {
+    mockLoaders({ categories: [{ ...baseCategories[0], slug: "brows" }, baseCategories[1]] });
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brows")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Brows" }));
+    fireEvent.click(await screen.findByRole("button", { name: "More category actions" }));
+    expect(screen.getByRole("menuitem", { name: "View booking page" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Delete category" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy booking link" }));
+
+    await waitFor(() =>
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringMatching(/\/brow-beauty-lab\/c\/brows$/)),
+    );
+  });
+
+  it("opens a category's settings from the list menu", async () => {
+    mockLoaders();
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Facials")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Facials actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Settings" }));
+
+    expect(await screen.findByLabelText("Category name")).toHaveValue("Facials");
+    expect(screen.getByRole("button", { name: "More category actions" })).toBeInTheDocument();
+  });
+
+  it("copies a category's booking link from the list menu", async () => {
+    mockLoaders({ categories: [{ ...baseCategories[0], slug: "brows" }, baseCategories[1]] });
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brows")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Brows actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy booking link" }));
+
+    await waitFor(() =>
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringMatching(/\/brow-beauty-lab\/c\/brows$/)),
+    );
+    expect(await screen.findByText("Booking link for Brows copied.")).toBeInTheDocument();
+  });
+
+  it("lets tax be switched off for a service and saves it as the service's own", async () => {
+    mockLoaders();
+    const updateSpy = vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    const toggle = await screen.findByRole("button", { name: "Charge tax toggle" });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/Following Brows\./)).toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText("No tax is added to this service.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(updateSpy.mock.calls[0][2]).toMatchObject({ isTaxable: false });
+  });
+
+  it("shows a service following a non-taxable category and keeps following it when saved", async () => {
+    mockLoaders({ categories: [{ ...baseCategories[0], isTaxable: false }, baseCategories[1]] });
+    const updateSpy = vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    const toggle = await screen.findByRole("button", { name: "Charge tax toggle" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(updateSpy.mock.calls[0][2]).toMatchObject({ inheritIsTaxable: true });
+  });
+
+  it("saves a category as not charging tax", async () => {
+    mockLoaders();
+    const updateCategory = vi.spyOn(platformApi, "updateServiceCategory").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Facials")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Facials" }));
+    const toggle = await screen.findByRole("button", { name: "Category charge tax toggle" });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateCategory).toHaveBeenCalledTimes(1));
+    expect(updateCategory.mock.calls[0][2]).toMatchObject({ isTaxable: false });
+  });
+
+  it("turns a category's tax setting back to the default when it is switched on again", async () => {
+    mockLoaders({ categories: [baseCategories[0], { ...baseCategories[1], isTaxable: false }] });
+    const updateCategory = vi.spyOn(platformApi, "updateServiceCategory").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Facials")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Facials" }));
+    const toggle = await screen.findByRole("button", { name: "Category charge tax toggle" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateCategory).toHaveBeenCalledTimes(1));
+    expect(updateCategory.mock.calls[0][2]).toMatchObject({ clearIsTaxable: true });
+  });
+
+  describe("provider settings panel on the Staff tab", () => {
+    const provider = {
+      ...baseProviders[0],
+      description: "Lead therapist",
+      isBookableOnline: true,
+      bookingSlug: "ava",
+      bookingUrl: "https://shop.example.com/brow-beauty-lab/p/ava",
+      compensationMode: "service_percent",
+      compensationServicePercentBp: 4000,
+    };
+
+    async function openPanel(providers: any[] = [provider]) {
+      mockLoaders();
+      vi.spyOn(platformApi, "listProvidersAdmin").mockResolvedValue({ providers } as any);
+      render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+      await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+      fireEvent.click(screen.getByText("Brow Shape"));
+      fireEvent.click(screen.getByRole("tab", { name: "Staff" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Open settings for Ava Rivera" }));
+      return screen.findByRole("complementary", { name: "Ava Rivera settings" });
+    }
+
+    it("opens when a provider is clicked and shows their pay, online booking and link", async () => {
+      const panel = await openPanel();
+      expect(within(panel).getByText("Pay for this treatment")).toBeInTheDocument();
+      expect(within(panel).getByRole("button", { name: "Staff default" })).toHaveAttribute("aria-pressed", "true");
+      expect(within(panel).getByText("40% of service revenue")).toBeInTheDocument();
+      expect(within(panel).getByRole("link", { name: "Edit in Staff" })).toHaveAttribute(
+        "href",
+        "/staff?provider=prov-1&tab=compensation",
+      );
+      // 40% of the $50.00 service price.
+      expect(within(panel).getByText("$20.00")).toBeInTheDocument();
+      expect(within(panel).getByRole("button", { name: "Ava Rivera bookable online toggle" })).toHaveAttribute("aria-pressed", "true");
+      expect(within(panel).getByLabelText("Ava Rivera booking link")).toHaveValue("ava");
+
+      fireEvent.click(within(panel).getByRole("button", { name: "Done" }));
+      expect(screen.queryByRole("complementary", { name: "Ava Rivera settings" })).toBeNull();
+    });
+
+    it("sets a percent or flat pay override for this treatment and saves it with the variants", async () => {
+      const panel = await openPanel();
+      const replaceSpy = vi.spyOn(platformApi, "replaceServiceProviderVariants").mockResolvedValue({ variants: [] } as any);
+      vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+
+      fireEvent.click(within(panel).getByRole("button", { name: "% of price" }));
+      fireEvent.change(within(panel).getByLabelText("Ava Rivera pay percent"), { target: { value: "50" } });
+      expect(within(panel).getByText("$25.00")).toBeInTheDocument();
+      fireEvent.click(within(panel).getByRole("button", { name: "Flat per booking" }));
+      fireEvent.change(within(panel).getByLabelText("Ava Rivera pay flat amount"), { target: { value: "12" } });
+      expect(within(panel).getByText("$12.00")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(replaceSpy).toHaveBeenCalledTimes(1));
+      expect(replaceSpy.mock.calls[0][2]).toMatchObject({
+        variants: [expect.objectContaining({ providerId: "prov-1", commissionFlatCents: 1200, commissionBasisPoints: null })],
+      });
+    });
+
+    it("lets the booking link be edited and saved", async () => {
+      const panel = await openPanel();
+      const updateProvider = vi.spyOn(platformApi, "updateProvider").mockResolvedValue({} as any);
+      // Both buttons are always there; Save only does something once the ending changes.
+      expect(within(panel).getByRole("button", { name: "Save link" })).toBeDisabled();
+      expect(within(panel).getByRole("button", { name: "Copy link" })).toBeEnabled();
+
+      fireEvent.change(within(panel).getByLabelText("Ava Rivera booking link"), { target: { value: "Ava Brow Studio" } });
+      expect(within(panel).getByLabelText("Ava Rivera booking link")).toHaveValue("ava-brow-studio");
+      // A link that isn't saved yet can't be copied.
+      expect(within(panel).getByRole("button", { name: "Copy link" })).toBeDisabled();
+      fireEvent.click(within(panel).getByRole("button", { name: "Save link" }));
+
+      await waitFor(() =>
+        expect(updateProvider).toHaveBeenCalledWith("brow-beauty-lab", "prov-1", { bookingSlug: "ava-brow-studio" }),
+      );
+    });
+
+    it("shows the same two buttons for every provider and never carries a draft to someone else", async () => {
+      const other = { ...provider, id: "prov-2", name: "Ben Cole", bookingSlug: null, bookingUrl: null, serviceIds: ["svc-shape"] };
+      const panel = await openPanel([provider, other]);
+      fireEvent.change(within(panel).getByLabelText("Ava Rivera booking link"), { target: { value: "draft-only" } });
+      expect(within(panel).getByRole("button", { name: "Save link" })).toBeEnabled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Open settings for Ben Cole" }));
+      const benPanel = await screen.findByRole("complementary", { name: "Ben Cole settings" });
+      expect(within(benPanel).getByLabelText("Ben Cole booking link")).toHaveValue("");
+      // No link yet: Save and Copy are both there, neither usable until there is something to save or copy.
+      expect(within(benPanel).getByRole("button", { name: "Save link" })).toBeDisabled();
+      expect(within(benPanel).getByRole("button", { name: "Copy link" })).toBeDisabled();
+    });
+
+    it("shows why a booking link couldn't be saved, such as one already taken", async () => {
+      const panel = await openPanel();
+      vi.spyOn(platformApi, "updateProvider").mockRejectedValue(new Error("That booking link is already taken. Try another."));
+      fireEvent.change(within(panel).getByLabelText("Ava Rivera booking link"), { target: { value: "jordan" } });
+      fireEvent.click(within(panel).getByRole("button", { name: "Save link" }));
+
+      expect(await within(panel).findByText("That booking link is already taken. Try another.")).toBeInTheDocument();
+    });
+
+    it("blocks a malformed booking link before saving", async () => {
+      const panel = await openPanel();
+      const updateProvider = vi.spyOn(platformApi, "updateProvider").mockResolvedValue({} as any);
+      fireEvent.change(within(panel).getByLabelText("Ava Rivera booking link"), { target: { value: "bad_link!" } });
+      fireEvent.click(within(panel).getByRole("button", { name: "Save link" }));
+
+      expect(await within(panel).findByText("Use letters, numbers and single hyphens only.")).toBeInTheDocument();
+      expect(updateProvider).not.toHaveBeenCalled();
+    });
+
+    it("turns online booking on or off for the provider straight away", async () => {
+      const panel = await openPanel();
+      const updateProvider = vi.spyOn(platformApi, "updateProvider").mockResolvedValue({} as any);
+      fireEvent.click(within(panel).getByRole("button", { name: "Ava Rivera bookable online toggle" }));
+      await waitFor(() =>
+        expect(updateProvider).toHaveBeenCalledWith("brow-beauty-lab", "prov-1", { isBookableOnline: false }),
+      );
+      expect(within(panel).getByText(/Applies to all of Ava's treatments/)).toBeInTheDocument();
+    });
+
+    it("has no separate remove link, and unticking the provider closes the panel and removes them", async () => {
+      const panel = await openPanel();
+      expect(within(panel).queryByRole("button", { name: /Remove from this treatment/ })).toBeNull();
+      const updateProvider = vi.spyOn(platformApi, "updateProvider").mockResolvedValue({} as any);
+      fireEvent.click(screen.getByRole("checkbox", { name: "Toggle Ava Rivera" }));
+      await waitFor(() =>
+        expect(updateProvider).toHaveBeenCalledWith("brow-beauty-lab", "prov-1", { serviceIds: [] }),
+      );
+      expect(screen.queryByRole("complementary", { name: "Ava Rivera settings" })).toBeNull();
+    });
+
+    it("shows what the storefront will display for this treatment", async () => {
+      mockLoaders();
+      const other = { ...provider, id: "prov-2", name: "Ben Cole", isBookableOnline: false, serviceIds: ["svc-shape"] };
+      vi.spyOn(platformApi, "listProvidersAdmin").mockResolvedValue({ providers: [provider, other] } as any);
+      render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+      await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+      fireEvent.click(screen.getByText("Brow Shape"));
+      fireEvent.click(screen.getByRole("tab", { name: "Staff" }));
+      expect(await screen.findByText(/1 of 2 bookable online/)).toBeInTheDocument();
+      expect(screen.getByText("Calendar only")).toBeInTheDocument();
+    });
+  });
+
   it("denies access entirely when services.view is false", async () => {
     mockLoaders();
     render(<ServicesPage definition={definition} currentUser={readOnlyUser} />);

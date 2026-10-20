@@ -886,6 +886,8 @@ async def patch_service_category(
         "booking_payment_percent",
         "require_card_on_file",
         "provider_selection_mode",
+        "is_taxable",
+        "clear_is_taxable",
         "clear_booking_payment",
         "clear_require_card_on_file",
         "clear_provider_selection_mode",

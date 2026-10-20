@@ -33,6 +33,8 @@ type FormState = {
   state: string;
   postalCode: string;
   phone: string;
+  serviceTaxRate: string; // percent, as typed
+  productTaxRate: string;
 };
 
 const TIMEZONE_OPTIONS = [
@@ -74,6 +76,8 @@ function emptyForm(): FormState {
     state: "",
     postalCode: "",
     phone: "",
+    serviceTaxRate: "0",
+    productTaxRate: "0",
   };
 }
 
@@ -87,6 +91,8 @@ function formFromLocation(location: LocationSummary): FormState {
     state: location.state ?? "",
     postalCode: location.postalCode ?? "",
     phone: location.phone ?? "",
+    serviceTaxRate: String(location.serviceTaxRatePercent ?? 0),
+    productTaxRate: String(location.productTaxRatePercent ?? 0),
   };
 }
 
@@ -246,6 +252,13 @@ export function LocationsPage({
                   </p>
                 </section>
 
+                <section className="cs-md-detail-panel__section">
+                  <p className="cs-kicker">Tax</p>
+                  <p className="cs-md-detail-panel__notes" style={{ fontStyle: "normal" }}>
+                    Services {selectedLocation.serviceTaxRatePercent ?? 0}% · Products {selectedLocation.productTaxRatePercent ?? 0}%
+                  </p>
+                </section>
+
                 {selectedLocation.phone ? (
                   <section className="cs-md-detail-panel__section">
                     <p className="cs-kicker">Phone</p>
@@ -326,6 +339,15 @@ function LocationModal({
       return;
     }
 
+    const serviceTaxRate = Number(form.serviceTaxRate);
+    const productTaxRate = Number(form.productTaxRate);
+    for (const rate of [serviceTaxRate, productTaxRate]) {
+      if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+        setError("Tax rates must be between 0 and 100.");
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       if (isEdit) {
@@ -338,6 +360,8 @@ function LocationModal({
           state: form.state.trim() || null,
           postalCode: form.postalCode.trim() || null,
           phone: form.phone.trim() || null,
+          serviceTaxRatePercent: serviceTaxRate,
+          productTaxRatePercent: productTaxRate,
         };
         await platformApi.updateLocation(tenantSlug, modal.location.id, body);
         await onSaved(`"${name}" updated.`);
@@ -351,6 +375,8 @@ function LocationModal({
           state: form.state.trim() || undefined,
           postalCode: form.postalCode.trim() || undefined,
           phone: form.phone.trim() || null,
+          serviceTaxRatePercent: serviceTaxRate,
+          productTaxRatePercent: productTaxRate,
         };
         await platformApi.createLocation(tenantSlug, body);
         await onSaved(`"${name}" created.`);
@@ -463,6 +489,30 @@ function LocationModal({
                 }
                 placeholder="(555) 123-4567"
               />
+            </label>
+            <label>
+              <span>Service tax rate (%)</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step="0.01"
+                value={form.serviceTaxRate}
+                onChange={(event) => setForm((prev) => ({ ...prev, serviceTaxRate: event.target.value }))}
+              />
+              <small>Added to services here. Turn tax off for a single service on its Details tab.</small>
+            </label>
+            <label>
+              <span>Product tax rate (%)</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step="0.01"
+                value={form.productTaxRate}
+                onChange={(event) => setForm((prev) => ({ ...prev, productTaxRate: event.target.value }))}
+              />
+              <small>Added to retail items sold here.</small>
             </label>
           </div>
           <div className="cs-modal__actions">

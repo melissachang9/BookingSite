@@ -88,7 +88,6 @@ DEFAULT_TENANT_SETTINGS = {
     "minLeadTimeMinutes": 60,
     "maxAdvanceBookingDays": 45,
     "noShowFeeCents": 5000,
-    "taxRatePercent": 0,
     "autoChargeNoShowFee": False,
     "calendarDisplayStartHour": 9,
     "calendarDisplayEndHour": 19,
@@ -198,8 +197,6 @@ async def update_tenant_settings(
     if payload.no_show_fee_cents is not None:
         current["noShowFeeCents"] = payload.no_show_fee_cents
 
-    if payload.tax_rate_percent is not None:
-        current["taxRatePercent"] = payload.tax_rate_percent
 
     if payload.auto_charge_no_show_fee is not None:
         current["autoChargeNoShowFee"] = payload.auto_charge_no_show_fee
@@ -524,6 +521,7 @@ async def create_tenant_service(
         category_id=category.id if category is not None else None,
         online_booking_description=payload.online_booking_description.strip() if isinstance(payload.online_booking_description, str) and payload.online_booking_description.strip() else None,
         require_card_on_file=payload.require_card_on_file,
+        is_taxable=payload.is_taxable,
         booking_payment_mode=payment_mode,
         booking_payment_value_cents=payment_value,
         booking_payment_percent=payload.booking_payment_percent,
@@ -597,6 +595,8 @@ async def create_tenant_location(
         state=_normalize_optional_text(payload.state),
         postal_code=_normalize_optional_text(payload.postal_code),
         phone=_normalize_optional_text(payload.phone),
+        service_tax_rate_percent=payload.service_tax_rate_percent,
+        product_tax_rate_percent=payload.product_tax_rate_percent,
     )
     session.add(location)
     await session.commit()
@@ -643,6 +643,10 @@ async def update_tenant_location(
         location.postal_code = _normalize_optional_text(payload.postal_code)
     if payload.phone is not None:
         location.phone = _normalize_optional_text(payload.phone)
+    if payload.service_tax_rate_percent is not None:
+        location.service_tax_rate_percent = payload.service_tax_rate_percent
+    if payload.product_tax_rate_percent is not None:
+        location.product_tax_rate_percent = payload.product_tax_rate_percent
     if payload.is_active is not None:
         if not payload.is_active and tenant.default_location_id == location.id:
             raise api_exception(
@@ -968,7 +972,17 @@ async def update_tenant_provider(
     if payload.is_bookable_online is not None:
         provider.is_bookable_online = payload.is_bookable_online
     if payload.booking_slug is not None:
-        provider.booking_slug = payload.booking_slug.strip() or None
+        slug = payload.booking_slug.strip().lower()
+        if slug and not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
+            raise api_exception(422, "validation_error", "Use letters, numbers and single hyphens only.")
+        if slug:
+            # Links are unique across the platform; don't say whose it is.
+            taken = await session.scalar(
+                select(Provider.id).where(Provider.booking_slug == slug, Provider.id != provider.id)
+            )
+            if taken is not None:
+                raise api_exception(409, "conflict", "That booking link is already taken. Try another.")
+        provider.booking_slug = slug or None
 
     if payload.description is not None or payload.availability_label is not None:
         branding = dict(tenant.branding_json or {})
@@ -1834,6 +1848,7 @@ def _category_to_summary(category: ServiceCategory, form_ids: list[str] | None =
         booking_payment_percent=category.booking_payment_percent,
         require_card_on_file=category.require_card_on_file,
         provider_selection_mode=category.provider_selection_mode,
+        is_taxable=category.is_taxable,
         form_ids=form_ids or [],
     )
 
@@ -2134,6 +2149,10 @@ async def update_tenant_service_category(
         category.booking_payment_percent = (
             payload.booking_payment_percent if payload.booking_payment_mode == "partial_percent" else None
         )
+    if payload.clear_is_taxable:
+        category.is_taxable = None
+    elif payload.is_taxable is not None:
+        category.is_taxable = payload.is_taxable
     if payload.clear_require_card_on_file:
         category.require_card_on_file = None
     elif payload.require_card_on_file is not None:
@@ -2395,6 +2414,10 @@ async def update_tenant_service(
     elif getattr(payload, "online_booking_description", None) is not None:
         cleaned = payload.online_booking_description.strip()
         service.online_booking_description = cleaned or None
+    if getattr(payload, "inherit_is_taxable", False):
+        service.is_taxable = None
+    elif getattr(payload, "is_taxable", None) is not None:
+        service.is_taxable = payload.is_taxable
     if getattr(payload, "inherit_require_card_on_file", False):
         service.require_card_on_file = None
     elif getattr(payload, "require_card_on_file", None) is not None:
@@ -2455,6 +2478,13 @@ async def duplicate_tenant_service(session: AsyncSession, tenant_slug: str, serv
         deposit_cents=source.deposit_cents,
         is_active=source.is_active,
         category_id=source.category_id,
+        # Keep the source's own online booking and tax rules; unset ones keep following the category.
+        is_taxable=source.is_taxable,
+        require_card_on_file=source.require_card_on_file,
+        booking_payment_mode=source.booking_payment_mode,
+        booking_payment_value_cents=source.booking_payment_value_cents,
+        booking_payment_percent=source.booking_payment_percent,
+        provider_selection_mode=source.provider_selection_mode,
         sort_order=(int(max_sort) + 1) if max_sort is not None else 0,
     )
     duplicate.location_links = [

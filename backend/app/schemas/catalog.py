@@ -110,7 +110,6 @@ class TenantSettingsResponse(CamelModel):
     min_lead_time_minutes: int
     max_advance_booking_days: int
     no_show_fee_cents: int
-    tax_rate_percent: float = 0
     auto_charge_no_show_fee: bool | None = None
     calendar_display_start_hour: int = 9
     calendar_display_end_hour: int = 19
@@ -235,7 +234,6 @@ class UpdateTenantSettingsRequest(CamelModel):
     min_lead_time_minutes: int | None = Field(default=None, ge=0, le=1440)
     max_advance_booking_days: int | None = Field(default=None, ge=1, le=365)
     no_show_fee_cents: int | None = Field(default=None, ge=0, le=100000)
-    tax_rate_percent: float | None = Field(default=None, ge=0, le=100)
     auto_charge_no_show_fee: bool | None = None
     payment_link_expiry_minutes: int | None = Field(default=None, ge=30, le=1440)
     custom_payment_methods: list[CustomPaymentMethodRequest] | None = None
@@ -314,6 +312,9 @@ class LocationSummaryResponse(CamelModel):
     state: str | None = None
     postal_code: str | None = None
     phone: str | None = None
+    # Tax charged at this location, as a percent.
+    service_tax_rate_percent: float = 0
+    product_tax_rate_percent: float = 0
 
 
 class CreateLocationRequest(CamelModel):
@@ -325,6 +326,8 @@ class CreateLocationRequest(CamelModel):
     state: str | None = Field(default=None, max_length=120)
     postal_code: str | None = Field(default=None, max_length=20)
     phone: str | None = Field(default=None, max_length=40)
+    service_tax_rate_percent: float = Field(default=0, ge=0, le=100)
+    product_tax_rate_percent: float = Field(default=0, ge=0, le=100)
 
     @model_validator(mode="after")
     def _validate(self) -> "CreateLocationRequest":
@@ -345,6 +348,8 @@ class UpdateLocationRequest(CamelModel):
     state: str | None = Field(default=None, max_length=120)
     postal_code: str | None = Field(default=None, max_length=20)
     phone: str | None = Field(default=None, max_length=40)
+    service_tax_rate_percent: float | None = Field(default=None, ge=0, le=100)
+    product_tax_rate_percent: float | None = Field(default=None, ge=0, le=100)
     is_active: bool | None = None
 
     @model_validator(mode="after")
@@ -426,6 +431,10 @@ class ServiceSummaryResponse(CamelModel):
     effective_require_card_source: str = "default"  # service | category | default
     effective_provider_selection_mode: str = "client_choice"
     effective_provider_selection_source: str = "default"
+    # Whether the business tax rate applies. None on the service means "inherit from the category".
+    is_taxable: bool | None = None
+    effective_is_taxable: bool = True
+    effective_tax_source: str = "default"  # service | category | default
 
 
 def _validate_provider_selection(mode: str | None) -> None:
@@ -456,6 +465,7 @@ class CreateServiceRequest(CamelModel):
     slug: str | None = Field(default=None, max_length=255)
     online_booking_description: str | None = Field(default=None, max_length=2000)
     require_card_on_file: bool | None = None
+    is_taxable: bool | None = None
     booking_payment_mode: str | None = Field(default=None, max_length=32)
     booking_payment_value_cents: int | None = Field(default=None, ge=0, le=500_000)
     booking_payment_percent: int | None = Field(default=None, ge=0, le=100)
@@ -512,6 +522,8 @@ class UpdateServiceRequest(CamelModel):
     # Back to "inherit from the category" for each online booking rule.
     inherit_booking_payment: bool = False
     inherit_require_card_on_file: bool = False
+    is_taxable: bool | None = None
+    inherit_is_taxable: bool = False
     clear_outcome_headline: bool = False
     clear_subheadline: bool = False
     clear_compare_at_price: bool = False
@@ -568,6 +580,8 @@ class ServiceCategorySummaryResponse(CamelModel):
     featured_label: str | None = None
     meta_description: str | None = None
     faqs: list[CategoryFaqItem] = Field(default_factory=list)
+    # None = taxable. False stops the business tax rate applying to services that don't say otherwise.
+    is_taxable: bool | None = None
     # Online booking rules inherited by every service that doesn't set its own. None = not set.
     booking_payment_mode: str | None = None
     booking_payment_value_cents: int | None = None
@@ -609,6 +623,8 @@ class UpdateServiceCategoryRequest(CamelModel):
     provider_selection_mode: str | None = Field(default=None, max_length=32)
     # Clears the category's rule so its services fall back to their own / no deposit.
     clear_booking_payment: bool = False
+    is_taxable: bool | None = None
+    clear_is_taxable: bool = False
     clear_require_card_on_file: bool = False
     clear_provider_selection_mode: bool = False
 

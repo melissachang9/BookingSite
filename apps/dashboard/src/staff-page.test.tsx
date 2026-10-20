@@ -784,3 +784,86 @@ describe("StaffPage", () => {
     expect(save).not.toBeDisabled();
   });
 });
+
+
+describe("StaffPage deep links", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("opens a provider's Compensation tab from /staff?provider=...&tab=compensation", async () => {
+    mockListEndpoints();
+    render(
+      <MemoryRouter initialEntries={["/staff?provider=p1&tab=compensation"]}>
+        <StaffPage definition={definition} currentUser={ownerUser} tenant={null} />
+      </MemoryRouter>,
+    );
+
+    const tab = await screen.findByRole("tab", { name: "Compensation" });
+    await waitFor(() => expect(tab).toHaveAttribute("aria-selected", "true"));
+    expect(screen.getByRole("heading", { name: "Riley Park", level: 4 })).toBeInTheDocument();
+  });
+
+  it("ignores a link to a provider that doesn't exist", async () => {
+    mockListEndpoints();
+    render(
+      <MemoryRouter initialEntries={["/staff?provider=nobody&tab=compensation"]}>
+        <StaffPage definition={definition} currentUser={ownerUser} tenant={null} />
+      </MemoryRouter>,
+    );
+
+    const detailsTab = await screen.findByRole("tab", { name: "Details" });
+    expect(detailsTab).toHaveAttribute("aria-selected", "true");
+  });
+
+  const noLoginProvider = {
+    id: "p9",
+    tenantId: "tenant-1",
+    createdAt: "2026-03-01T00:00:00.000Z",
+    updatedAt: "2026-03-01T00:00:00.000Z",
+    userId: null,
+    name: "Jordan Rivera",
+    email: null,
+    isActive: true,
+    isBookableOnline: true,
+    serviceIds: ["svc1"],
+    locationIds: ["loc1"],
+  };
+
+  it("lists a provider who has no sign-in account and opens their Compensation tab from a link", async () => {
+    mockListEndpoints({ providers: [...baseProviders, noLoginProvider] });
+    render(
+      <MemoryRouter initialEntries={["/staff?provider=p9&tab=compensation"]}>
+        <StaffPage definition={definition} currentUser={ownerUser} tenant={null} />
+      </MemoryRouter>,
+    );
+
+    const tab = await screen.findByRole("tab", { name: "Compensation" });
+    await waitFor(() => expect(tab).toHaveAttribute("aria-selected", "true"));
+    expect(screen.getByRole("heading", { name: "Jordan Rivera", level: 4 })).toBeInTheDocument();
+    // In the roster, marked as having no sign-in; with no permissions tab or password reset to offer.
+    expect(screen.getByText(/Provider · No sign-in/)).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Permissions" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reset password" })).toBeNull();
+  });
+
+  it("shows only profile fields in Details for a provider with no sign-in account", async () => {
+    mockListEndpoints({ providers: [...baseProviders, noLoginProvider] });
+    const updateProvider = vi.spyOn(platformApi, "updateProvider").mockResolvedValue({} as any);
+    const updateUser = vi.spyOn(platformApi, "updateTenantUser").mockResolvedValue({} as any);
+    render(
+      <MemoryRouter initialEntries={["/staff?provider=p9"]}>
+        <StaffPage definition={definition} currentUser={ownerUser} tenant={null} />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("heading", { name: "Jordan Rivera", level: 4 });
+    expect(screen.getByText(/No sign-in account/)).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Role" })).toBeNull();
+    expect(screen.queryByText("Can sign in")).toBeNull();
+
+    fireEvent.change(screen.getByPlaceholderText("Lead therapist"), { target: { value: "Brow artist" } });
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+    await waitFor(() => expect(updateProvider).toHaveBeenCalledWith("brow-beauty-lab", "p9", { availabilityLabel: "Brow artist" }));
+    expect(updateUser).not.toHaveBeenCalled();
+  });
+});
+

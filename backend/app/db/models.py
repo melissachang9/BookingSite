@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, time
 from typing import Any, Optional
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, Time, UniqueConstraint, text
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, Time, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, IdMixin, TimestampMixin
@@ -125,6 +125,9 @@ class Location(Base, IdMixin, TimestampMixin):
     state: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     postal_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    # Tax charged at this location, as a percent. Services can opt out individually; products always pay the product rate.
+    service_tax_rate_percent: Mapped[float] = mapped_column(Float, nullable=False, default=0, server_default="0")
+    product_tax_rate_percent: Mapped[float] = mapped_column(Float, nullable=False, default=0, server_default="0")
 
     tenant: Mapped[Tenant] = relationship(back_populates="locations", foreign_keys=[tenant_id])
     provider_links: Mapped[list[ProviderLocation]] = relationship(back_populates="location", cascade="all, delete-orphan")
@@ -166,6 +169,8 @@ class Service(Base, IdMixin, TimestampMixin):
     after_image_alt: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     meta_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     online_booking_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Whether the business tax rate applies to this service. NULL means "inherit from the category" (default: taxable).
+    is_taxable: Mapped[Optional[bool]] = mapped_column(Boolean, default=None, nullable=True)
     # Online booking rules. NULL means "inherit from the service category" (see service_terms.effective_online_booking).
     require_card_on_file: Mapped[Optional[bool]] = mapped_column(Boolean, default=None, nullable=True)
     booking_payment_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # none, partial_percent, partial_flat, full
@@ -226,6 +231,8 @@ class ServiceCategory(Base, IdMixin, TimestampMixin):
     featured_label: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     meta_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     faqs: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
+    # Whether the business tax rate applies to services in the category that don't say otherwise (NULL = taxable).
+    is_taxable: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     # Online booking rules every service in the category inherits unless it sets its own.
     booking_payment_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # none, partial_percent, partial_flat, full
     booking_payment_value_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -400,6 +407,8 @@ class Booking(Base, IdMixin, TimestampMixin):
     )
 
     tenant: Mapped[Tenant] = relationship(back_populates="bookings")
+    # Loaded with the booking: its tax rates come from here.
+    location: Mapped[Optional["Location"]] = relationship(lazy="joined", viewonly=True)
     customer: Mapped[Customer] = relationship(back_populates="bookings")
     service: Mapped[Service] = relationship(back_populates="bookings")
     provider: Mapped[Provider] = relationship(back_populates="bookings")
@@ -429,6 +438,8 @@ class BookingItem(Base, IdMixin, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    # "service" follows the booking's service for tax; "product" always pays the location's product tax rate.
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="service", server_default="service")
 
     booking: Mapped[Booking] = relationship(back_populates="items")
 
@@ -586,6 +597,7 @@ class BookingDraft(Base, IdMixin, TimestampMixin):
     payment_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="booking_drafts")
+    location: Mapped[Optional["Location"]] = relationship(lazy="joined", viewonly=True)
     customer: Mapped[Optional[Customer]] = relationship(back_populates="booking_drafts")
     service: Mapped[Service] = relationship(back_populates="booking_drafts")
     provider: Mapped[Provider] = relationship(back_populates="booking_drafts")
