@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { BookingSteps } from "../../../components/booking-steps";
 import { storefrontApi, isApiClientError, isApiNotFoundError } from "../../../lib/storefront-api";
 import {
   findServiceByRouteKey,
@@ -14,7 +15,16 @@ import {
 
 type ServicePageProps = {
   params: Promise<{ tenantSlug: string; serviceId: string }>;
-  searchParams: Promise<{ error?: string; locationId?: string; screening?: string; providerId?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    locationId?: string;
+    screening?: string;
+    providerId?: string;
+    // Set once the add-ons screen has been passed (continued or skipped).
+    addOnsDone?: string;
+    addOns?: string;
+    addOn?: string | string[];
+  }>;
 };
 
 export const dynamic = "force-dynamic";
@@ -44,7 +54,7 @@ const initialsFor = (name: string) =>
 
 export default async function ServiceRoutePage({ params, searchParams }: ServicePageProps) {
   const { tenantSlug, serviceId } = await params;
-  const { error, locationId, screening, providerId: preselectedProviderId } = await searchParams;
+  const { error, locationId, screening, providerId: preselectedProviderId, addOnsDone, addOns, addOn } = await searchParams;
 
   try {
     const [tenant, serviceResponse, locationResponse] = await Promise.all([
@@ -64,9 +74,32 @@ export default async function ServiceRoutePage({ params, searchParams }: Service
       notFound();
     }
 
-    const availabilityPath = `/${tenantSlug}/services/${slugify(service.name)}/availability`;
-    const selectionQuery = { locationId: selectedLocation?.id, screening };
-    const providerStepNumber = (screening ? 1 : 0) + (selectedLocation ? 1 : 0) + 2;
+    const servicePath = `/${tenantSlug}/services/${slugify(service.name)}`;
+    const availabilityPath = `${servicePath}/availability`;
+
+    // Extras are chosen first, on their own screen, before any provider is offered.
+    const { items: availableAddOns } = await storefrontApi.listServiceAddOns(tenantSlug, service.id);
+    if (availableAddOns.length > 0 && !addOnsDone) {
+      redirect(
+        pathWithQuery(`${servicePath}/add-ons`, {
+          locationId: selectedLocation?.id,
+          screening,
+          providerId: preselectedProviderId,
+        }),
+      );
+    }
+    const requestedAddOnIds = [
+      ...(addOns ? addOns.split(",") : []),
+      ...(Array.isArray(addOn) ? addOn : addOn ? [addOn] : []),
+    ];
+    // Only extras this service offers; anything else in the URL is ignored.
+    const chosenAddOnIds = availableAddOns.filter((item) => requestedAddOnIds.includes(item.id)).map((item) => item.id);
+    const selectionQuery = {
+      locationId: selectedLocation?.id,
+      screening,
+      addOns: chosenAddOnIds.length > 0 ? chosenAddOnIds.join(",") : undefined,
+    };
+    const providerStepNumber = (screening ? 1 : 0) + (selectedLocation ? 1 : 0) + 2 + (availableAddOns.length > 0 ? 1 : 0);
     const today = isoDateForTimeZone(tenant.timezone);
 
     // If a specific provider was pre-selected (via direct booking link),
@@ -165,19 +198,34 @@ export default async function ServiceRoutePage({ params, searchParams }: Service
     };
     const servicePriceLabel = formatCurrency(service.priceCents);
 
+    const openingLabel = (startAt: string | undefined, withTime: boolean) => {
+      if (!startAt) {
+        return null;
+      }
+      const day = new Intl.DateTimeFormat("en-GB", {
+        timeZone: tenant.timezone,
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      })
+        .format(new Date(startAt))
+        .replace(",", "");
+      if (!withTime) {
+        return day;
+      }
+      const time = new Intl.DateTimeFormat("en-US", {
+        timeZone: tenant.timezone,
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: false,
+      }).format(new Date(startAt));
+      return `${day}, ${time.replace(/^0/, "")}`;
+    };
+    const anyoneOpening = openingLabel(noPreferenceAvailability.nextAvailableSlot?.startAt, true);
+
     return (
-      <main className="page-stack">
-        <section className="booking-intro booking-intro--compact booking-intro--service">
-          <div>
-            <Link href={pathWithQuery(`/${tenantSlug}/services`, selectionQuery)} className="back-link">
-              Services
-            </Link>
-            <p className="store-eyebrow">Provider preference</p>
-            <h2>{service.name}</h2>
-            {service.onlineBookingDescription ? <p className="booking-entry-intro">{service.onlineBookingDescription}</p> : null}
-            {service.scarcityHint ? <p className="category-scarcity">{service.scarcityHint}</p> : null}
-          </div>
-        </section>
+      <main className="sf-flow">
+        <BookingSteps current={2} />
 
         {error === "slot-unavailable" ? (
           <section className="status-banner" aria-live="polite">
@@ -186,30 +234,37 @@ export default async function ServiceRoutePage({ params, searchParams }: Service
           </section>
         ) : null}
 
-        <section className="store-section">
-          <div className="section-header">
+        <section className="sf-provider-step" aria-labelledby="provider-title">
+          <header className="sf-head">
             <div>
-              <p className="store-eyebrow">Step {providerStepNumber}</p>
-              <h2>Choose your provider preference</h2>
-              <p className="booking-entry-intro">Choose who you would like to see, or let the studio match you with the earliest opening.</p>
+              <p className="sf-eyebrow">
+                Step {providerStepNumber} · {service.name}
+              </p>
+              <h1 id="provider-title" className="sf-title sf-title--page">Choose your provider</h1>
+              <p className="sf-lead">
+                {service.onlineBookingDescription ??
+                  "Choose who you'd like to see, or let the studio match you with the earliest opening."}
+              </p>
+              {service.scarcityHint ? <p className="sf-note">{service.scarcityHint}</p> : null}
             </div>
-            <span className="panel-badge">{providerResponse.providers.length} providers</span>
-          </div>
+          </header>
 
-          <div className="provider-choice-list">
+          <div className="sf-providers">
             <Link
               href={nextAvailabilityHref(noPreferenceAvailability.nextAvailableSlot?.startAt)}
-              className="provider-choice-row provider-choice-row--featured"
+              className="sf-provider sf-provider--featured"
               aria-label="Choose anyone"
             >
-              <span className="provider-choice-avatar provider-choice-avatar--any" aria-hidden="true">
+              <span className="sf-provider__tile sf-provider__tile--any" aria-hidden="true">
                 Any
               </span>
-              <span className="provider-choice-copy">
+              <span className="sf-provider__copy">
                 <strong>Anyone</strong>
-                <small>All providers</small>
+                <small>
+                  All providers{anyoneOpening ? ` · earliest opening ${anyoneOpening}` : " · no openings in this window"}
+                </small>
               </span>
-              <span className="provider-choice-price">{servicePriceLabel}</span>
+              <span className="sf-provider__price">{servicePriceLabel}</span>
             </Link>
 
             {providersWithAvailability.map(({ provider, availability }) => {
@@ -217,22 +272,27 @@ export default async function ServiceRoutePage({ params, searchParams }: Service
               const locationLabel = selectedLocation
                 ? selectedLocation.name
                 : `${provider.locationIds.length} location${provider.locationIds.length === 1 ? "" : "s"} available`;
+              const nextOpening = openingLabel(availability.nextAvailableSlot?.startAt, false);
+              const subtitle = [
+                provider.availabilityLabel ?? locationLabel,
+                nextOpening ? `next opening ${nextOpening}` : "no openings in this window",
+              ].join(" · ");
 
               return (
-                <Link key={provider.id} href={providerHref} className="provider-choice-row" aria-label={`Choose ${provider.name}`}>
+                <Link key={provider.id} href={providerHref} className="sf-provider" aria-label={`Choose ${provider.name}`}>
                   {provider.imageUrl ? (
-                    <img src={provider.imageUrl} alt={provider.imageAltText ?? provider.name} className="provider-choice-avatar" />
+                    <img src={provider.imageUrl} alt={provider.imageAltText ?? provider.name} className="sf-provider__tile sf-provider__tile--image" />
                   ) : (
-                    <span className="provider-choice-avatar" aria-hidden="true">
+                    <span className="sf-provider__tile" aria-hidden="true">
                       {initialsFor(provider.name)}
                     </span>
                   )}
-                  <span className="provider-choice-copy">
+                  <span className="sf-provider__copy">
                     <strong>{provider.name}</strong>
-                    <small>{provider.availabilityLabel ?? locationLabel}</small>
-                    {provider.description ? <span>{provider.description}</span> : <span>{availability.nextAvailableSlot ? "Next opening available" : "No openings in this window"}</span>}
+                    <small>{subtitle}</small>
+                    {provider.description ? <span>{provider.description}</span> : null}
                   </span>
-                  <span className="provider-choice-price">{servicePriceLabel}</span>
+                  <span className="sf-provider__price">{servicePriceLabel}</span>
                 </Link>
               );
             })}

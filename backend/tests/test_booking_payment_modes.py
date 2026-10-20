@@ -433,3 +433,67 @@ def test_a_duplicated_service_keeps_its_tax_and_booking_rules(client) -> None:
     assert copy.status_code in (200, 201), copy.json()
     assert copy.json()["isTaxable"] is False
     assert copy.json()["bookingPaymentMode"] == "full"
+
+
+# --------------------------------------------------------------------------- storefront category list
+
+
+def test_the_storefront_lists_only_active_categories_without_signing_in(client) -> None:
+    headers = _auth(client)
+    active = _category(client, headers, "Lasers")
+    hidden = _category(client, headers, "Hidden menu")
+    client.patch(f"{API}/service-categories/{hidden}", headers=headers, json={"isActive": False})
+
+    response = client.get(f"{API}/categories")  # no Authorization header
+    assert response.status_code == 200
+    ids = [c["id"] for c in response.json()["categories"]]
+    assert active in ids and hidden not in ids
+    # Staff-only details stay off the public list.
+    assert all(c.get("formIds") in ([], None) for c in response.json()["categories"])
+
+
+def test_the_public_category_list_is_per_tenant(client) -> None:
+    assert client.get("/api/v1/tenants/not-a-studio/categories").status_code == 404
+
+
+# --------------------------------------------------------------------------- availability counts
+
+
+def test_availability_counts_distinct_times_and_never_repeats_a_provider_slot(client) -> None:
+    headers = _auth(client)
+    service = _service_named(client, "Signature Facial")
+    providers = client.get(f"{API}/providers/manage", headers=headers).json()["providers"]
+    provider_id = next(p["id"] for p in providers if p["isActive"] and service["id"] in p["serviceIds"])
+    location_id = client.get(f"{API}/locations").json()["locations"][0]["id"]
+    # Two overlapping schedule entries for the same weekday used to offer every time twice.
+    entries = [
+        {"weekday": 0, "locationId": location_id, "startTime": "09:00", "endTime": "13:00", "isActive": True},
+        {"weekday": 0, "locationId": location_id, "startTime": "10:00", "endTime": "15:00", "isActive": True},
+    ]
+    client.put(f"{API}/providers/{provider_id}/schedule", headers=headers, json={"locationId": location_id, "entries": entries})
+    today = datetime.now(timezone.utc).date()
+    monday = (today + timedelta(days=(7 - today.weekday()) % 7 or 7)).isoformat()
+
+    availability = client.get(
+        f"{API}/availability",
+        params={"serviceId": service["id"], "providerId": provider_id, "locationId": location_id, "date": monday, "windowDays": 1},
+    ).json()
+    keys = [(s["providerId"], s["locationId"], s["startAt"]) for s in availability["slots"]]
+    assert keys and len(keys) == len(set(keys))
+    day = availability["days"][0]
+    assert day["slotCount"] == len(keys)
+    assert day["openingCount"] == len({s["startAt"] for s in availability["slots"]})
+
+
+def test_openings_count_each_time_once_however_many_providers_are_free(client) -> None:
+    service = _service_named(client, "Signature Facial")
+    availability = client.get(
+        f"{API}/availability", params={"serviceId": service["id"], "date": _next_monday(), "windowDays": 7}
+    ).json()
+    for day in availability["days"]:
+        assert day["openingCount"] <= day["slotCount"]
+
+
+def _next_monday() -> str:
+    today = datetime.now(timezone.utc).date()
+    return (today + timedelta(days=(7 - today.weekday()) % 7 or 7)).isoformat()

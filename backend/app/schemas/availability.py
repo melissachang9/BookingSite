@@ -18,7 +18,10 @@ class SlotAvailabilityResponse(CamelModel):
 
 class AvailabilityDayResponse(CamelModel):
     date: str
+    # Every bookable provider/time combination that day.
     slot_count: int
+    # Distinct start times (per location) a client can pick from, however many providers are free at each.
+    opening_count: int = 0
 
 
 class AvailabilityResponse(CamelModel):

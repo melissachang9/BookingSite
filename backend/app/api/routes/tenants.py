@@ -850,6 +850,20 @@ async def list_service_categories(
     return await list_tenant_service_categories(session, tenant_slug)
 
 
+@router.get(
+    "/{tenant_slug}/categories",
+    response_model=ServiceCategoryListResponse,
+    summary="List active service categories for the storefront",
+)
+async def list_public_service_categories(
+    tenant_slug: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> ServiceCategoryListResponse:
+    from app.services.tenants import list_public_service_categories as list_public
+
+    return await list_public(session, tenant_slug)
+
+
 @router.post(
     "/{tenant_slug}/service-categories",
     response_model=ServiceCategorySummaryResponse,

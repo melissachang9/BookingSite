@@ -22,10 +22,20 @@ export type TenantBranding = {
   } | null;
   bookingAd?: {
     enabled?: boolean;
+    /** The small line above each panel's headline, e.g. "This season". */
+    label?: string | null;
+    /** Background of the first screen's marketing card (#RGB / #RRGGBB). Empty means the default. */
+    panelColor?: string | null;
+    serviceLabel?: string | null;
+    locationLabel?: string | null;
     headline?: string | null;
     body?: string | null;
     imageUrl?: string | null;
     imageAltText?: string | null;
+    serviceImageUrl?: string | null;
+    serviceImageAltText?: string | null;
+    locationImageUrl?: string | null;
+    locationImageAltText?: string | null;
     serviceHeadline?: string | null;
     serviceBody?: string | null;
     locationHeadline?: string | null;
@@ -149,10 +159,20 @@ export type UpdateTenantBrandingRequest = {
   photos?: string[];
   bookingAd?: {
     enabled?: boolean;
+    /** The small line above each panel's headline, e.g. "This season". */
+    label?: string | null;
+    /** Background of the first screen's marketing card (#RGB / #RRGGBB). Empty means the default. */
+    panelColor?: string | null;
+    serviceLabel?: string | null;
+    locationLabel?: string | null;
     headline?: string | null;
     body?: string | null;
     imageUrl?: string | null;
     imageAltText?: string | null;
+    serviceImageUrl?: string | null;
+    serviceImageAltText?: string | null;
+    locationImageUrl?: string | null;
+    locationImageAltText?: string | null;
     serviceHeadline?: string | null;
     serviceBody?: string | null;
     locationHeadline?: string | null;

@@ -23,10 +23,21 @@ class BookingScreeningResponse(CamelModel):
 
 class BookingAdResponse(CamelModel):
     enabled: bool = True
+    # The small line above each panel's headline, e.g. "This season".
+    label: str | None = None
+    # Background of the first screen's marketing card, as a #RGB / #RRGGBB hex. Empty means the default.
+    panel_color: str | None = None
+    service_label: str | None = None
+    location_label: str | None = None
     headline: str | None = None
     body: str | None = None
     image_url: str | None = None
     image_alt_text: str | None = None
+    # Each screen can have its own photo; empty falls back to image_url.
+    service_image_url: str | None = None
+    service_image_alt_text: str | None = None
+    location_image_url: str | None = None
+    location_image_alt_text: str | None = None
     service_headline: str | None = None
     service_body: str | None = None
     location_headline: str | None = None
@@ -71,10 +82,13 @@ class UpdateTenantBrandingRequest(CamelModel):
                 if len(url) > 2048:
                     raise ValueError("photos entries must be 2048 characters or fewer.")
         if self.booking_ad is not None:
-            for value in (self.booking_ad.image_url,):
+            panel_color = self.booking_ad.panel_color
+            if panel_color is not None and panel_color.strip() and not _HEX_COLOR_RE.match(panel_color.strip()):
+                raise ValueError("booking_ad.panel_color must be a #RGB or #RRGGBB hex color.")
+            for value in (self.booking_ad.image_url, self.booking_ad.service_image_url, self.booking_ad.location_image_url):
                 if value is not None and len(value) > 2048:
                     raise ValueError("booking_ad.image_url must be 2048 characters or fewer.")
-            for value in (self.booking_ad.headline, self.booking_ad.body, self.booking_ad.image_alt_text, self.booking_ad.service_headline, self.booking_ad.service_body, self.booking_ad.location_headline, self.booking_ad.location_body, self.booking_ad.review_headline, self.booking_ad.review_body):
+            for value in (self.booking_ad.label, self.booking_ad.service_label, self.booking_ad.location_label, self.booking_ad.headline, self.booking_ad.body, self.booking_ad.image_alt_text, self.booking_ad.service_image_alt_text, self.booking_ad.location_image_alt_text, self.booking_ad.service_headline, self.booking_ad.service_body, self.booking_ad.location_headline, self.booking_ad.location_body, self.booking_ad.review_headline, self.booking_ad.review_body):
                 if value is not None and len(value) > 512:
                     raise ValueError("booking_ad text fields must be 512 characters or fewer.")
         return self

@@ -125,3 +125,66 @@ def test_update_branding_requires_auth(client) -> None:
         json={"primaryColor": "#112233"},
     )
     assert response.status_code == 401
+
+
+def test_booking_panel_labels_are_saved_trimmed_and_length_checked(client) -> None:
+    headers = _auth_headers(client)
+    saved = client.patch(
+        "/api/v1/tenants/brow-beauty-lab/branding",
+        headers=headers,
+        json={"bookingAd": {"enabled": True, "label": "  This season ", "serviceLabel": "Membership", "locationLabel": "Our studios"}},
+    )
+    assert saved.status_code == 200, saved.json()
+    ad = saved.json()["branding"]["bookingAd"]
+    assert (ad["label"], ad["serviceLabel"], ad["locationLabel"]) == ("This season", "Membership", "Our studios")
+
+    too_long = client.patch(
+        "/api/v1/tenants/brow-beauty-lab/branding",
+        headers=headers,
+        json={"bookingAd": {"enabled": True, "label": "x" * 513}},
+    )
+    assert too_long.status_code == 422
+
+
+def test_each_booking_screen_can_have_its_own_photo(client) -> None:
+    headers = _auth_headers(client)
+    saved = client.patch(
+        "/api/v1/tenants/brow-beauty-lab/branding",
+        headers=headers,
+        json={"bookingAd": {
+            "enabled": True,
+            "imageUrl": "https://cdn.example.com/home.jpg",
+            "serviceImageUrl": "https://cdn.example.com/service.jpg",
+            "serviceImageAltText": " A treatment room ",
+            "locationImageUrl": "https://cdn.example.com/location.jpg",
+        }},
+    )
+    assert saved.status_code == 200, saved.json()
+    ad = saved.json()["branding"]["bookingAd"]
+    assert ad["imageUrl"].endswith("home.jpg")
+    assert ad["serviceImageUrl"].endswith("service.jpg")
+    assert ad["serviceImageAltText"] == "A treatment room"
+    assert ad["locationImageUrl"].endswith("location.jpg")
+
+    too_long = client.patch(
+        "/api/v1/tenants/brow-beauty-lab/branding",
+        headers=headers,
+        json={"bookingAd": {"enabled": True, "locationImageUrl": "https://x.example/" + "a" * 2050}},
+    )
+    assert too_long.status_code == 422
+
+
+def test_the_begin_booking_card_colour_is_validated_and_clearable(client) -> None:
+    headers = _auth_headers(client)
+    path = "/api/v1/tenants/brow-beauty-lab/branding"
+    saved = client.patch(path, headers=headers, json={"bookingAd": {"enabled": True, "panelColor": " #f6dfd0 "}})
+    assert saved.status_code == 200, saved.json()
+    assert saved.json()["branding"]["bookingAd"]["panelColor"] == "#f6dfd0"
+
+    for bad in ("peach", "#12", "#12345", "rgb(1,2,3)", "#ggg"):
+        response = client.patch(path, headers=headers, json={"bookingAd": {"enabled": True, "panelColor": bad}})
+        assert response.status_code == 422, bad
+
+    cleared = client.patch(path, headers=headers, json={"bookingAd": {"enabled": True, "panelColor": ""}})
+    assert cleared.status_code == 200
+    assert cleared.json()["branding"]["bookingAd"]["panelColor"] is None

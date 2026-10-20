@@ -344,6 +344,7 @@ async def list_availability(
     for day_offset in range(resolved_window_days):
         current_date = requested_date + timedelta(days=day_offset)
         day_slots: list[SlotAvailabilityResponse] = []
+        seen_slot_keys: set[tuple[str, str | None, datetime]] = set()
         business_window: tuple[time, time] | None
         if restrict_to_business_hours:
             business_window = _business_window_for_weekday(
@@ -434,6 +435,12 @@ async def list_availability(
                             is_next_available=False,
                             price_cents=context.terms.price_cents,
                         )
+                        slot_key = (response.provider_id, response.location_id, response.start_at)
+                        if slot_key in seen_slot_keys:
+                            # Overlapping schedule entries can offer the same time twice.
+                            cursor += _SLOT_GRANULARITY
+                            continue
+                        seen_slot_keys.add(slot_key)
                         day_slots.append(response)
                         if earliest_slot is None or response.start_at < earliest_slot.start_at:
                             earliest_slot = response
@@ -458,6 +465,7 @@ async def list_availability(
             AvailabilityDayResponse(
                 date=(requested_date + timedelta(days=index)).isoformat(),
                 slot_count=len(day_slots),
+                opening_count=len({(slot.start_at, slot.location_id) for slot in day_slots}),
             )
             for index, day_slots in enumerate(all_slots_by_day)
         ],

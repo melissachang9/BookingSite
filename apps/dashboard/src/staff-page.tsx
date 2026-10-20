@@ -158,8 +158,9 @@ export function CropModal({
     offsetRef.current = { x: offsetX, y: offsetY };
   }, [offsetX, offsetY]);
 
-  const maskW = maskShape === "rectangle" ? 450 : 260;
-  const maskH = maskShape === "rectangle" ? 300 : 260;
+  // Rectangle crops are 4:3, the shape the storefront's photos are shown in.
+  const maskW = maskShape === "rectangle" ? 440 : 260;
+  const maskH = maskShape === "rectangle" ? 330 : 260;
 
   // When image loads, compute the fit scale so the shorter side fills the mask
   const onImageLoad = useCallback(() => {

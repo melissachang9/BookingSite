@@ -88,25 +88,34 @@ async function startBookingForService(
 
   await goToServiceCatalog(page, tenant.slug);
 
-  const serviceCard = page.locator(".service-row-card").filter({
+  const serviceCard = page.locator(".sf-service").filter({
     has: page.getByRole("heading", { name: service.name }),
   });
   await expect(serviceCard).toBeVisible();
 
   await Promise.all([
-    page.waitForURL(new RegExp(`/${tenant.slug}/services/[^/?]+(\\?|$)`)),
-    serviceCard.getByRole("link", { name: "Choose service" }).click(),
+    page.waitForURL(new RegExp(`/${tenant.slug}/services/[^/?]+(/add-ons)?(\\?|$)`)),
+    serviceCard.getByRole("link", { name: `Choose ${service.name}` }).click(),
   ]);
 
-  await expect(page.getByRole("heading", { name: service.name })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Choose your provider preference" })).toBeVisible({ timeout: 15_000 });
+  // Services with extras show them on their own screen first; the booking continues without any.
+  if (new URL(page.url()).pathname.endsWith("/add-ons")) {
+    await expect(page.getByRole("heading", { name: "Add to your visit" })).toBeVisible();
+    await Promise.all([
+      page.waitForURL(new RegExp(`/${tenant.slug}/services/[^/?]+(\\?|$)`)),
+      page.getByRole("link", { name: "No thanks, skip" }).click(),
+    ]);
+  }
+
+  await expect(page.getByRole("heading", { name: "Choose your provider" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(new RegExp(`Step \\d+ · ${service.name}`))).toBeVisible();
 
   await Promise.all([
     page.waitForURL(new RegExp(`/${tenant.slug}/services/[^/]+/availability`)),
     page.getByRole("link", { name: "Choose anyone" }).click(),
   ]);
 
-  await expect(page.getByRole("heading", { name: "Your Appointment" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Your appointment" })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("heading", { name: "Select a date" })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Select a time for/ })).toBeVisible();
 
@@ -132,7 +141,7 @@ async function startBookingForService(
     await expect(page.getByRole("heading", { name: /Select a time for/ })).toBeVisible({ timeout: 15_000 });
   }
 
-  const firstSlotButton = page.locator(".slot-button").first();
+  const firstSlotButton = page.locator(".sf-slot").first();
   await expect(firstSlotButton).toBeVisible();
 
   await Promise.all([
@@ -166,12 +175,14 @@ async function saveContactDetails(
     phone: string;
   },
 ) {
-  const contactForm = page.locator(".contact-details-form");
+  const contactForm = page.locator(".sf-details__form");
 
   await expect(contactForm).toBeVisible();
-  await contactForm.getByLabel("Full name").fill(details.name);
+  const [firstName, ...lastName] = details.name.split(" ");
+  await contactForm.getByLabel("First name").fill(firstName);
+  await contactForm.getByLabel("Last name").fill(lastName.join(" ") || "Guest");
   await contactForm.getByRole("textbox", { name: "Email" }).fill(details.email);
-  await contactForm.getByLabel("Phone number").fill(details.phone);
+  await contactForm.getByLabel("Mobile").fill(details.phone);
   await contactForm.getByRole("radio", { name: /Later, before my appointment/ }).check();
   await contactForm.getByRole("button", { name: "Continue" }).click();
 

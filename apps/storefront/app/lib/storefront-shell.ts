@@ -181,3 +181,49 @@ export function findServiceByRouteKey<T extends { id: string; name: string; slug
 ): T | undefined {
   return services.find((entry) => entry.id === key || (entry.slug ? entry.slug === key : false) || slugify(entry.name) === key);
 }
+
+
+const WEEKDAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+
+/** "Open today 9:00–19:00" / "Closed today", or null when the business hasn't set opening hours. */
+export function todaysHoursLabel(
+  settings: { businessHoursEnabled?: boolean; businessHours?: Record<string, { open: string; close: string; closed: boolean }> } | undefined,
+  timeZone: string,
+  now: Date = new Date(),
+): string | null {
+  if (!settings?.businessHoursEnabled || !settings.businessHours) {
+    return null;
+  }
+
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(now).toLowerCase().slice(0, 3);
+  const key = WEEKDAY_KEYS.find((entry) => entry === weekday);
+  const day = key ? settings.businessHours[key] : undefined;
+  if (!day) {
+    return null;
+  }
+
+  if (day.closed) {
+    return "Closed today";
+  }
+
+  const clean = (value: string) => value.replace(/^0(\d:)/, "$1");
+  return `Open today ${clean(day.open)}–${clean(day.close)}`;
+}
+
+const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+/** A valid hex colour from settings, or null (so a bad value never reaches a style attribute). */
+export function validHexColor(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed && HEX_COLOR.test(trimmed) ? trimmed : null;
+}
+
+/** Dark text on a light colour and white text on a dark one. */
+export function readableTextColor(background: string): string {
+  const raw = background.trim().slice(1);
+  const full = raw.length === 3 ? raw.split("").map((c) => c + c).join("") : raw;
+  const [r, g, b] = [0, 2, 4]
+    .map((i) => parseInt(full.slice(i, i + 2), 16) / 255)
+    .map((unit) => (unit <= 0.03928 ? unit / 12.92 : ((unit + 0.055) / 1.055) ** 2.4)) as [number, number, number];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? "#15110f" : "#ffffff";
+}

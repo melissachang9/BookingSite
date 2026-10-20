@@ -265,10 +265,18 @@ async def update_tenant_branding(
     if payload.booking_ad is not None:
         current_branding["bookingAd"] = {
             "enabled": payload.booking_ad.enabled,
+            "panelColor": payload.booking_ad.panel_color.strip() if payload.booking_ad.panel_color and payload.booking_ad.panel_color.strip() else None,
+            "label": payload.booking_ad.label.strip() if payload.booking_ad.label else None,
+            "serviceLabel": payload.booking_ad.service_label.strip() if payload.booking_ad.service_label else None,
+            "locationLabel": payload.booking_ad.location_label.strip() if payload.booking_ad.location_label else None,
             "headline": payload.booking_ad.headline.strip() if payload.booking_ad.headline else None,
             "body": payload.booking_ad.body.strip() if payload.booking_ad.body else None,
             "imageUrl": payload.booking_ad.image_url.strip() if payload.booking_ad.image_url else None,
             "imageAltText": payload.booking_ad.image_alt_text.strip() if payload.booking_ad.image_alt_text else None,
+            "serviceImageUrl": payload.booking_ad.service_image_url.strip() if payload.booking_ad.service_image_url else None,
+            "serviceImageAltText": payload.booking_ad.service_image_alt_text.strip() if payload.booking_ad.service_image_alt_text else None,
+            "locationImageUrl": payload.booking_ad.location_image_url.strip() if payload.booking_ad.location_image_url else None,
+            "locationImageAltText": payload.booking_ad.location_image_alt_text.strip() if payload.booking_ad.location_image_alt_text else None,
             "serviceHeadline": payload.booking_ad.service_headline.strip() if payload.booking_ad.service_headline else None,
             "serviceBody": payload.booking_ad.service_body.strip() if payload.booking_ad.service_body else None,
             "locationHeadline": payload.booking_ad.location_headline.strip() if payload.booking_ad.location_headline else None,
@@ -1949,6 +1957,21 @@ async def list_tenant_service_categories(session: AsyncSession, tenant_slug: str
     ).all()
     form_ids = await _category_form_ids(session, tenant.id, [c.id for c in categories])
     return ServiceCategoryListResponse(categories=[_category_to_summary(c, form_ids[c.id]) for c in categories])
+
+
+async def list_public_service_categories(session: AsyncSession, tenant_slug: str):
+    """Active categories in menu order, for the storefront's treatment filters. No staff-only data."""
+    from app.schemas.catalog import ServiceCategoryListResponse
+
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    categories = (
+        await session.scalars(
+            select(ServiceCategory)
+            .where(ServiceCategory.tenant_id == tenant.id, ServiceCategory.is_active.is_(True))
+            .order_by(ServiceCategory.sort_order.asc(), ServiceCategory.created_at.asc())
+        )
+    ).all()
+    return ServiceCategoryListResponse(categories=[_category_to_summary(c) for c in categories])
 
 
 async def get_public_category_by_slug(

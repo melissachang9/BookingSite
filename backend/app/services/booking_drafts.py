@@ -98,6 +98,15 @@ def _clean_text(value: str | None) -> str | None:
     return cleaned or None
 
 
+def _apply_sms_consent(customer: Customer, consent: object, phone: str | None) -> None:
+    """Record the client's own choice on the booking page; reminders text the number they gave."""
+    if consent is None:
+        return
+    customer.sms_consent = bool(consent)
+    if consent and phone:
+        customer.sms_phone = phone
+
+
 async def _upsert_customer(
     session: AsyncSession,
     tenant_id: str,
@@ -108,6 +117,7 @@ async def _upsert_customer(
     email = payload.get("email")
     phone = payload.get("phone")
     referred_by = payload.get("referred_by")
+    sms_consent = payload.get("sms_consent")
     query = select(Customer).where(Customer.tenant_id == tenant_id)
     if email:
         query = query.where(Customer.email == email)
@@ -128,6 +138,7 @@ async def _upsert_customer(
             acquired_at=now,
             source_channel=source_channel,
         )
+        _apply_sms_consent(customer, sms_consent, phone)
         session.add(customer)
         await session.flush()
         return customer
@@ -135,6 +146,7 @@ async def _upsert_customer(
     customer.name = payload["name"] or customer.name
     customer.email = email or customer.email
     customer.phone = phone or customer.phone
+    _apply_sms_consent(customer, sms_consent, phone)
     if customer.acquired_at is None:
         customer.acquired_at = now
         customer.source_channel = source_channel

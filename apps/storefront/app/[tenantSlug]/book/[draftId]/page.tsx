@@ -1,3 +1,4 @@
+import { BookingSteps } from "../../../components/booking-steps";
 import { notFound } from "next/navigation";
 
 import type { FormAnswers, FormField, FormRequirement } from "@booking/shared-types";
@@ -13,10 +14,10 @@ import {
 import {
   confirmBookingDraftAction,
   saveBookingRequirementDraftAction,
-  saveContactDetailsAction,
   startDepositCheckoutAction,
   submitBookingRequirementAction,
 } from "./actions";
+import ContactDetailsForm from "./contact-details-form";
 import DateFieldInput from "./date-field-input";
 import DeferrableFormCard from "./deferrable-form-card";
 import HoldCountdown from "./hold-countdown";
@@ -301,9 +302,11 @@ export default async function BookingDraftPage({ params, searchParams }: Booking
           : "The next step opens checkout for this deposit. If secure online payment is enabled, you will be redirected there and brought back automatically."
         : null;
     const paymentCtaLabel = needsContactDetails
-      ? "Add contact details first"
+      ? "Fill in your details to continue"
       : hasBlockingForms
-        ? "Complete forms first"
+        ? blockingRequirements.length > 1
+          ? "Complete the required forms to continue"
+          : "Complete the required form to continue"
         : draft.depositCents > 0
           ? draft.status === "awaiting_payment"
             ? "Resume payment"
@@ -317,225 +320,227 @@ export default async function BookingDraftPage({ params, searchParams }: Booking
     const bookingAdBody = bookingAd?.reviewBody ?? null;
     const holdStatusLabel = `${formatExpiryWindow(draft.expiresAt)} remaining`;
 
-    // Step 1: Contact details only — minimal, centered, no rail
-    if (needsContactDetails) {
-      return (
-        <main className="page-stack">
-          <ProgressSteps
-            steps={[
-              { label: "Contact", active: true, complete: false },
-              { label: "Forms", active: false, complete: false },
-              { label: "Confirm", active: false, complete: false },
-            ]}
-          />
+    const money = (cents: number) => formatCurrency(cents, tenant.settings.currency);
+    const location = draft.locationId
+      ? (await storefrontApi.listLocations(tenantSlug)).locations.find((l) => l.id === draft.locationId)
+      : undefined;
+    const visitTotalCents = draft.fullAmountCents ?? draft.priceCents + (draft.addOnsTotalCents ?? 0);
+    const remainingCents = Math.max(0, visitTotalCents - draft.depositCents);
+    const cancellationHours = tenant.settings.cancellationWindowHours;
+    const completedRequirements = draft.formRequirements.filter((r) => r.status !== "pending");
+    const [firstName, ...restName] = (draft.customer?.name ?? "").split(" ");
+    const whenLabel = formatInTenantTime(draft.startsAt, tenant.timezone, {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    });
 
-          <section className="store-section visit-review-panel visit-review-panel--compact">
-            <div className="visit-review-panel__header">
-              <div className="visit-review-panel__copy">
-                <p className="store-eyebrow">Selected visit</p>
-                <h1>{draft.service.name}</h1>
+    const requiredForms = draft.formRequirements.filter((r) => r.customerPromptTiming === "pre_booking");
+    const otherForms = draft.formRequirements.filter((r) => r.customerPromptTiming !== "pre_booking");
+    const lockedFormRow = (id: string, title: string, hint: string) => (
+      <div key={id} className="sf-formrow sf-formrow--locked">
+        <span className="sf-formrow__icon sf-formrow__icon--peach" aria-hidden="true">▤</span>
+        <span className="sf-formrow__text">
+          <strong>{title}</strong>
+          <small>{hint}</small>
+        </span>
+        <span className="sf-formrow__cta sf-formrow__cta--locked">Fill in your details first</span>
+      </div>
+    );
+    const completedFormRow = (id: string, title: string, status: string) => (
+      <div key={id} className="sf-formrow">
+        <span className="sf-formrow__icon" aria-hidden="true">✓</span>
+        <span className="sf-formrow__text">
+          <strong>{title}</strong>
+          <small>{status.replaceAll("_", " ")}</small>
+        </span>
+      </div>
+    );
+
+    const summaryCta = canConfirmWithoutPayment ? (
+      <form action={confirmBookingDraftAction}>
+        <input type="hidden" name="tenantSlug" value={tenantSlug} />
+        <input type="hidden" name="bookingDraftId" value={draft.id} />
+        <button type="submit" className="sf-btn sf-btn--dark sf-summary__cta">{paymentCtaLabel}</button>
+      </form>
+    ) : canStartDepositCheckout ? (
+      <form action={startDepositCheckoutAction}>
+        <input type="hidden" name="tenantSlug" value={tenantSlug} />
+        <input type="hidden" name="bookingDraftId" value={draft.id} />
+        <PendingSubmitButton
+          label={`${paymentCtaLabel} · ${money(draft.depositCents)}`}
+          pendingLabel={paymentPendingLabel}
+          className="sf-btn sf-btn--dark sf-summary__cta"
+        />
+      </form>
+    ) : (
+      <button type="button" className="sf-btn sf-btn--dark sf-summary__cta" disabled>
+        {paymentCtaLabel}
+      </button>
+    );
+
+    return (
+      <main className="sf-flow">
+        <BookingSteps current={4} />
+        <div className="sf-flow__grid sf-flow__grid--aside">
+          <div className="sf-details">
+            <header className="sf-head sf-head--stack">
+              <div>
+                <p className="sf-eyebrow">Step 4</p>
+                <h1 className="sf-title sf-title--page">A few details</h1>
               </div>
-              <div className="visit-review-panel__status">
-                <span className="panel-badge panel-badge--visit">Slot held</span>
-                <HoldCountdown expiresAt={draft.expiresAt} />
-              </div>
+            </header>
+
+            <section className="sf-card sf-details__card" aria-labelledby="contact-title">
+              <h2 id="contact-title" className="sf-card__title">Your contact details</h2>
+              <ContactDetailsForm
+                tenantSlug={tenantSlug}
+                bookingDraftId={draft.id}
+                initial={
+                  draft.customer
+                    ? {
+                        firstName,
+                        lastName: restName.join(" "),
+                        email: draft.customer.email ?? "",
+                        phone: draft.customer.phone ?? "",
+                        smsConsent: Boolean(draft.customer.smsConsent),
+                      }
+                    : null
+                }
+              />
+            </section>
+
+            {draft.formRequirements.length > 0 ? (
+              <>
+                {requiredForms.length > 0 ? (
+                  <section className="sf-card sf-details__card" aria-labelledby="forms-title">
+                    <div className="sf-details__cardhead">
+                      <h2 id="forms-title" className="sf-card__title">Required before booking</h2>
+                      {blockingRequirements.length > 0 ? (
+                        <span className="sf-tag sf-tag--peach">{blockingRequirements.length} required</span>
+                      ) : (
+                        <span className="sf-tag sf-tag--sage">Complete</span>
+                      )}
+                    </div>
+                    <div className="requirement-stack">
+                      {requiredForms.map((requirement) => {
+                        const title = requirement.formTitle?.trim() || "Required form";
+                        if (requirement.status !== "pending") return completedFormRow(requirement.id, title, requirement.status);
+                        if (needsContactDetails) return lockedFormRow(requirement.id, title, "Must be completed before payment");
+                        const fieldCount = (requirement.schema?.fields ?? []).filter(
+                          (f) => f.type !== "section" && f.type !== "static_text",
+                        ).length;
+                        const minutes = Math.max(1, Math.ceil(fieldCount / 2));
+                        return (
+                          <details key={requirement.id} className="sf-formitem">
+                            <summary className="sf-formrow sf-formrow--action">
+                              <span className="sf-formrow__icon sf-formrow__icon--peach" aria-hidden="true">▤</span>
+                              <span className="sf-formrow__text">
+                                <strong>{title}</strong>
+                                <small>About {minutes} {minutes === 1 ? "minute" : "minutes"} · must be completed before payment</small>
+                              </span>
+                              <span className="sf-formrow__cta sf-formrow__cta--start">Start form</span>
+                              <span className="sf-formrow__cta sf-formrow__cta--close">Close</span>
+                            </summary>
+                            <div className="sf-formitem__body">
+                              {renderRequirementPanel(requirement, tenantSlug, draft.id, false, tenant.id)}
+                            </div>
+                          </details>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ) : null}
+
+                {otherForms.length > 0 ? (
+                  <section className="sf-card sf-details__card" aria-labelledby="other-forms-title">
+                    <div className="sf-details__cardhead">
+                      <h2 id="other-forms-title" className="sf-card__title">Other forms</h2>
+                      {deferrableRequirements.length > 0 ? (
+                        <span className="sf-tag">{deferrableRequirements.length} optional now</span>
+                      ) : (
+                        <span className="sf-tag sf-tag--sage">Complete</span>
+                      )}
+                    </div>
+                    <p className="sf-help">You can fill these in now or later. We&rsquo;ll remind you before your appointment.</p>
+                    {saved === "1" ? (
+                      <p className="sf-note" role="status">
+                        Draft saved. You can come back and finish this form before your appointment.
+                      </p>
+                    ) : null}
+                    <div className="requirement-stack">
+                      {otherForms.map((requirement) => {
+                        const title = requirement.formTitle?.trim() || "Form";
+                        if (requirement.status !== "pending") return completedFormRow(requirement.id, title, requirement.status);
+                        if (needsContactDetails) return lockedFormRow(requirement.id, title, "Complete now or before your appointment");
+                        return (
+                          <DeferrableFormCard
+                            key={requirement.id}
+                            requirement={requirement}
+                            tenantSlug={tenantSlug}
+                            bookingDraftId={draft.id}
+                            tenantId={tenant.id}
+                          />
+                        );
+                      })}
+                    </div>
+                  </section>
+                ) : null}
+              </>
+            ) : !needsContactDetails ? (
+              <section className="sf-card sf-details__card">
+                <h2 className="sf-card__title">Forms</h2>
+                <p className="sf-help">
+                  {draft.intakePlan && deferredIntakeSelected
+                    ? `No forms are required to book. We'll remind you ${draft.intakePlan.reminderHoursBefore} hours before the appointment.`
+                    : "No forms are required for this service."}
+                </p>
+              </section>
+            ) : null}
+          </div>
+
+          <aside className="sf-card sf-summary" aria-label="Booking summary">
+            <div className="sf-summary__hold">
+              <span>We&rsquo;re holding this time</span>
+              <HoldCountdown expiresAt={draft.expiresAt} />
             </div>
 
-            <dl className="summary-list booking-summary-list">
-              <div>
-                <dt>Duration</dt>
-                <dd>{formatDuration(draft.durationMinutes)}</dd>
-              </div>
-              <div>
-                <dt>Price</dt>
-                <dd>{formatCurrency(draft.priceCents)}</dd>
-              </div>
+            <div className="sf-summary__service">
+              <span className="sf-summary__initial" aria-hidden="true">{draft.service.name.slice(0, 1)}</span>
+              <span>
+                <strong>{draft.service.name}</strong>
+                <small>{money(draft.priceCents)} · {formatDuration(draft.durationMinutes)}</small>
+              </span>
+            </div>
+
+            <dl className="sf-summary__rows">
+              <div><dt>When</dt><dd>{whenLabel}</dd></div>
+              <div><dt>With</dt><dd>{draft.provider.name}</dd></div>
+              {location ? <div><dt>Where</dt><dd>{location.addressLine1 ?? location.name}</dd></div> : null}
               {(draft.addOns ?? []).map((item, index) => (
                 <div key={`${item.addOnId ?? item.name}-${index}`}>
                   <dt>+ {item.name}</dt>
-                  <dd>{formatCurrency(item.priceCents)}</dd>
+                  <dd>{money(item.priceCents)}</dd>
                 </div>
               ))}
-              {(draft.addOnsTotalCents ?? 0) > 0 ? (
-                <div>
-                  <dt>Total</dt>
-                  <dd>{formatCurrency(draft.priceCents + (draft.addOnsTotalCents ?? 0))}</dd>
-                </div>
-              ) : null}
-            </dl>
-          </section>
-
-          <section className="store-section contact-details-panel contact-details-panel--standalone">
-            <div className="section-header">
               <div>
-                <p className="store-eyebrow">Step 1 of 2</p>
-                <h2>Your contact details</h2>
+                <dt>{draft.depositCents > 0 ? "Deposit due today" : "Due today"}</dt>
+                <dd>{money(draft.depositCents)}</dd>
               </div>
-            </div>
+            </dl>
 
-            <form action={saveContactDetailsAction} className="contact-details-form">
-              <input type="hidden" name="tenantSlug" value={tenantSlug} />
-              <input type="hidden" name="bookingDraftId" value={draft.id} />
+            {summaryCta}
 
-              <label>
-                <span>Full name</span>
-                <input name="name" type="text" autoComplete="name" required />
-              </label>
-              <label>
-                <span>Email</span>
-                <input name="email" type="email" autoComplete="email" required />
-              </label>
-              <label>
-                <span>Phone number</span>
-                <input name="phone" type="tel" autoComplete="tel" required />
-              </label>
-
-              <fieldset className="intake-timing-fieldset">
-                <legend>When would you like to complete forms?</legend>
-                <label className="intake-timing-option">
-                  <input type="radio" name="intakeCompletionTiming" value="before_booking" required />
-                  <span>
-                    <strong>Now, before I confirm</strong>
-                    <small>Complete all forms now. Required forms marked "Required to confirm" must be finished before payment.</small>
-                  </span>
-                </label>
-                <label className="intake-timing-option">
-                  <input type="radio" name="intakeCompletionTiming" value="before_visit" defaultChecked required />
-                  <span>
-                    <strong>Later, before my appointment</strong>
-                    <small>Only forms marked "Required to confirm" need to be done now. The rest can wait — we'll send reminders.</small>
-                  </span>
-                </label>
-              </fieldset>
-
-              <button type="submit" className="store-button contact-details-submit">
-                Continue
-              </button>
-            </form>
-          </section>
-        </main>
-      );
-    }
-
-    // Step 2: Contact details saved — forms + payment inline, no right rail
-    return (
-      <main className="page-stack">
-        <ProgressSteps
-          steps={[
-            { label: "Contact", active: false, complete: true },
-            { label: "Forms", active: true, complete: false },
-            { label: "Confirm", active: false, complete: false },
-          ]}
-        />
-
-        <section className="store-section visit-review-panel visit-review-panel--compact">
-          <div className="visit-review-panel__header">
-            <div className="visit-review-panel__copy">
-              <p className="store-eyebrow">Selected visit</p>
-              <h1>{draft.service.name}</h1>
-            </div>
-            <div className="visit-review-panel__status">
-              <span className="panel-badge panel-badge--visit">Slot held</span>
-              <HoldCountdown expiresAt={draft.expiresAt} />
-            </div>
-          </div>
-        </section>
-
-        <section className="store-section">
-          <div className="section-header">
-            <div>
-              <p className="store-eyebrow">Step 2 of 2</p>
-              <h2>Forms and consent</h2>
-            </div>
-            {pendingRequirements.length > 0 ? (
-              <span className="panel-badge">{pendingRequirements.length} pending</span>
-            ) : (
-              <span className="panel-badge panel-badge--done">All done</span>
-            )}
-          </div>
-
-          {saved === "1" ? (
-            <section className="status-banner" aria-live="polite">
-              <strong>Draft saved.</strong>
-              <span>Your progress is saved. You can come back and finish this form before your appointment.</span>
-            </section>
-          ) : null}
-
-          {pendingRequirements.length > 0 ? (
-            <div className="requirement-stack">
-              {blockingRequirements.map((requirement) =>
-                renderRequirementPanel(requirement, tenantSlug, draft.id, false, tenant.id),
-              )}
-              {deferrableRequirements.map((requirement) => (
-                <DeferrableFormCard
-                  key={requirement.id}
-                  requirement={requirement}
-                  tenantSlug={tenantSlug}
-                  bookingDraftId={draft.id}
-                  tenantId={tenant.id}
-                />
-              ))}
-            </div>
-          ) : draft.formRequirements.length === 0 ? (
-            <div className="empty-panel empty-panel--compact">
-              <strong>No intake forms are required for this service.</strong>
-              <span>
-                {draft.intakePlan
-                  ? deferredIntakeSelected
-                    ? `Reminder email and text scheduled ${draft.intakePlan.reminderHoursBefore} hours before the appointment.`
-                    : "Intake is marked to complete before booking."
-                  : "You can choose when to complete intake after adding contact details."}
-              </span>
-            </div>
-          ) : (
-            <div className="empty-panel empty-panel--compact">
-              <strong>All required forms are complete.</strong>
-              <span>You can review completed forms below or continue to payment.</span>
-            </div>
-          )}
-
-          {draft.formRequirements.filter((r) => r.status !== "pending").length > 0 && (
-            <details className="completed-forms-details">
-              <summary>
-                Completed forms ({draft.formRequirements.filter((r) => r.status !== "pending").length})
-              </summary>
-              <div className="requirement-stack">
-                {draft.formRequirements
-                  .filter((r) => r.status !== "pending")
-                  .map((requirement) =>
-                    renderRequirementPanel(requirement, tenantSlug, draft.id, false, tenant.id),
-                  )}
-              </div>
-            </details>
-          )}
-        </section>
-
-        <section className="store-section booking-finalize">
-          <div className="booking-finalize__inner">
-            <div>
-              <p className="store-eyebrow">Due now</p>
-              <strong>{draft.depositCents > 0 ? formatCurrency(draft.depositCents) : "$0"}</strong>
-              <span>{draft.depositCents > 0 ? "Deposit required to confirm" : "No payment required to confirm"}</span>
-            </div>
-            {canConfirmWithoutPayment ? (
-              <form action={confirmBookingDraftAction}>
-                <input type="hidden" name="tenantSlug" value={tenantSlug} />
-                <input type="hidden" name="bookingDraftId" value={draft.id} />
-                <button type="submit" className="store-button">{paymentCtaLabel}</button>
-              </form>
-            ) : canStartDepositCheckout ? (
-              <form action={startDepositCheckoutAction}>
-                <input type="hidden" name="tenantSlug" value={tenantSlug} />
-                <input type="hidden" name="bookingDraftId" value={draft.id} />
-                <PendingSubmitButton label={paymentCtaLabel} pendingLabel={paymentPendingLabel} className="store-button" />
-              </form>
-            ) : (
-              <button type="button" className="store-button" disabled>
-                {paymentCtaLabel}
-              </button>
-            )}
-          </div>
-        </section>
+            <p className="sf-summary__note">
+              {cancellationHours ? `Free cancellation up to ${cancellationHours} hours before. ` : ""}
+              {draft.depositCents > 0 && remainingCents > 0
+                ? `The remaining ${money(remainingCents)} is paid at the studio.`
+                : ""}
+            </p>
+          </aside>
+        </div>
       </main>
     );
   } catch (error) {

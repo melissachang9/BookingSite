@@ -67,6 +67,8 @@ export type SlotAvailability = {
 export type AvailabilityDay = {
   date: string;
   slotCount: number;
+  /** Distinct start times a client can pick from, however many providers are free at each. */
+  openingCount?: number;
 };
 
 export type AvailabilityRequest = {
@@ -257,6 +259,7 @@ export type UpdateBookingDraftRequest = {
     email: string;
     phone: string;
     referredBy?: string;
+    smsConsent?: boolean;
   };
   intakeCompletionTiming?: IntakeCompletionTiming;
 };

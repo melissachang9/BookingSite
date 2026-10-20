@@ -209,75 +209,87 @@ export default function DeferrableFormCard({
 
   if (requirement.status !== "pending" || !requirement.schema) {
     return (
-      <article className="requirement-card">
-        <span>{timingLabel}</span>
-        <strong>{title}</strong>
-        <p>{requirement.status.replaceAll("_", " ")}</p>
-      </article>
+      <div className="sf-formrow">
+        <span className="sf-formrow__icon" aria-hidden="true">✓</span>
+        <span className="sf-formrow__text">
+          <strong>{title}</strong>
+          <small>{requirement.status.replaceAll("_", " ")}</small>
+        </span>
+      </div>
     );
   }
 
   if (skipped) {
     return (
-      <article className="requirement-card">
-        <span>{timingLabel}</span>
-        <strong>{title}</strong>
-        <p>Will complete later</p>
-      </article>
+      <div className="sf-formrow">
+        <span className="sf-formrow__icon sf-formrow__icon--peach" aria-hidden="true">▤</span>
+        <span className="sf-formrow__text">
+          <strong>{title}</strong>
+          <small>You&rsquo;ll complete this before your appointment</small>
+        </span>
+        <button type="button" className="sf-formrow__cta sf-formrow__btn" onClick={() => setSkipped(false)}>
+          Undo
+        </button>
+      </div>
     );
   }
 
   if (!expanded) {
     return (
-      <article className="requirement-card requirement-card--deferrable">
-        <span>{timingLabel}</span>
-        <strong>{title}</strong>
-        {description ? <p>{description}</p> : null}
-        <div className="deferrable-actions">
-          <button type="button" className="store-button" onClick={() => setExpanded(true)}>
-            Complete now
+      <div className="sf-formrow sf-formrow--deferrable">
+        <span className="sf-formrow__icon sf-formrow__icon--peach" aria-hidden="true">▤</span>
+        <span className="sf-formrow__text">
+          <strong>{title}</strong>
+          <small>{description ?? timingLabel}</small>
+        </span>
+        <span className="sf-formrow__actions">
+          <button type="button" className="sf-formrow__cta sf-formrow__btn" onClick={() => setExpanded(true)}>
+            Start form
           </button>
-          <button type="button" className="ghost-link" onClick={() => setSkipped(true)}>
+          <button type="button" className="sf-formrow__cta sf-formrow__btn sf-formrow__btn--quiet" onClick={() => setSkipped(true)}>
             Complete later
           </button>
-        </div>
-      </article>
+        </span>
+      </div>
     );
   }
 
   return (
-    <section className="requirement-form-card">
-      <div className="section-header">
-        <div>
-          <p className="store-eyebrow">{timingLabel}</p>
-          <h3>{title}</h3>
-        </div>
-        <span className="panel-badge">Optional</span>
+    <div className="sf-formitem sf-formitem--open">
+      <div className="sf-formrow sf-formrow--action">
+        <span className="sf-formrow__icon sf-formrow__icon--peach" aria-hidden="true">▤</span>
+        <span className="sf-formrow__text">
+          <strong>{title}</strong>
+          <small>{timingLabel}</small>
+        </span>
+        <button type="button" className="sf-formrow__cta sf-formrow__btn" onClick={() => setExpanded(false)}>
+          Close
+        </button>
       </div>
+      <div className="sf-formitem__body">
+        <section className="requirement-form-card">
+          {description ? <p className="requirement-form-description">{description}</p> : null}
 
-      {description ? <p className="requirement-form-description">{description}</p> : null}
+          <form action={submitBookingRequirementAction} className="requirement-form">
+            <input type="hidden" name="tenantSlug" value={tenantSlug} />
+            <input type="hidden" name="bookingDraftId" value={bookingDraftId} />
+            <input type="hidden" name="requirementId" value={requirement.id} />
+            <input type="hidden" name="tenantId" value={tenantId} />
+            <input type="hidden" name="schemaJson" value={JSON.stringify(requirement.schema)} />
 
-      <form action={submitBookingRequirementAction} className="requirement-form">
-        <input type="hidden" name="tenantSlug" value={tenantSlug} />
-        <input type="hidden" name="bookingDraftId" value={bookingDraftId} />
-        <input type="hidden" name="requirementId" value={requirement.id} />
-        <input type="hidden" name="tenantId" value={tenantId} />
-        <input type="hidden" name="schemaJson" value={JSON.stringify(requirement.schema)} />
+            {requirement.schema.fields.map((field) => renderRequirementField(field, draftAnswers?.[field.id]))}
 
-        {requirement.schema.fields.map((field) => renderRequirementField(field, draftAnswers?.[field.id]))}
-
-        <div className="deferrable-actions">
-          <button type="submit" className="ghost-link" formAction={saveBookingRequirementDraftAction} formNoValidate>
-            Save draft
-          </button>
-          <button type="submit" className="store-button">
-            Submit form
-          </button>
-          <button type="button" className="ghost-link" onClick={() => setExpanded(false)}>
-            Cancel
-          </button>
-        </div>
-      </form>
-    </section>
+            <div className="deferrable-actions">
+              <button type="submit" className="ghost-link" formAction={saveBookingRequirementDraftAction} formNoValidate>
+                Save draft
+              </button>
+              <button type="submit" className="store-button">
+                Submit form
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </div>
   );
 }

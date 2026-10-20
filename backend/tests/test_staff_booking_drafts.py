@@ -309,6 +309,30 @@ def test_online_draft_stays_anonymous(client) -> None:
     assert row["created_by_user_id"] is None
 
 
+def test_online_client_can_opt_in_to_sms_reminders(client) -> None:
+    service = _service(client, "Signature Facial")
+    slot = _slot(client, service["id"])
+    draft = client.post(
+        f"/api/v1/tenants/{TENANT}/booking-drafts", json=_draft_body(service["id"], slot, staff=False)
+    ).json()
+    details = {"name": "Rina Patel", "email": "rina.sms@example.com", "phone": "+13105550198"}
+
+    declined = client.patch(
+        f"/api/v1/tenants/{TENANT}/booking-drafts/{draft['id']}", json={"customer": details}
+    )
+    assert declined.status_code == 200, declined.json()
+    assert declined.json()["customer"]["smsConsent"] is False
+
+    accepted = client.patch(
+        f"/api/v1/tenants/{TENANT}/booking-drafts/{draft['id']}",
+        json={"customer": {**details, "smsConsent": True}},
+    )
+    assert accepted.status_code == 200, accepted.json()
+    customer = accepted.json()["customer"]
+    assert customer["smsConsent"] is True
+    assert customer["smsPhone"] == "+13105550198"
+
+
 def test_draft_summary_includes_tax_and_full_amount(client) -> None:
     owner = _login(client)
     locations = client.get(f"/api/v1/tenants/{TENANT}/locations/manage", headers=owner).json()["locations"]

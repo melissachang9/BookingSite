@@ -100,9 +100,13 @@ export async function saveContactDetailsAction(formData: FormData) {
 
   await storefrontApi.updateBookingDraft(tenantSlug, bookingDraftId, {
     customer: {
-      name: readRequiredField(formData, "name"),
+      name: [formData.get("firstName"), formData.get("lastName")]
+        .map((part) => (typeof part === "string" ? part.trim() : ""))
+        .filter(Boolean)
+        .join(" ") || readRequiredField(formData, "name"),
       email: readRequiredField(formData, "email"),
       phone: readRequiredField(formData, "phone"),
+      smsConsent: formData.get("smsConsent") === "on",
     },
     intakeCompletionTiming: readIntakeTiming(formData),
   });

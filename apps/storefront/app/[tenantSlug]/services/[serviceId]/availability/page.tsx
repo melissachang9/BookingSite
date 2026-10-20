@@ -2,11 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { SlotAvailability } from "@booking/shared-types";
 
+import { BookingSteps } from "../../../../components/booking-steps";
 import { startBookingDraftAction } from "../actions";
 import { storefrontApi, isApiClientError, isApiNotFoundError } from "../../../../lib/storefront-api";
 import {
   findServiceByRouteKey,
   formatCurrency,
+  formatDuration,
   isoDateForTimeZone,
   isoDateFromValueInTimeZone,
   pathWithQuery,
@@ -178,7 +180,7 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
       windowDays: monthDays,
       addOnIds: selectedAddOnIds,
     });
-    const firstAvailableDate = monthlyAvailability.days.find((day) => day.slotCount > 0)?.date;
+    const firstAvailableDate = monthlyAvailability.days.find((day) => (day.openingCount ?? day.slotCount) > 0)?.date;
     const selectedDate = date ?? firstAvailableDate ?? monthStart;
     const selectedAvailability = await storefrontApi.getAvailability({
       tenantSlug,
@@ -198,6 +200,7 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
       windowDays: 62,
       addOnIds: selectedAddOnIds,
     });
+    const appointmentStepNumber = (screening ? 1 : 0) + (selectedLocation ? 1 : 0) + 3 + (availableAddOns.length > 0 ? 1 : 0);
     const availabilityPath = `/${tenantSlug}/services/${slugify(service.name)}/availability`;
     const baseQuery = {
       locationId: selectedLocation?.id,
@@ -206,7 +209,7 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
       addOns: selectedAddOnIds.length > 0 ? selectedAddOnIds.join(",") : undefined,
     };
     const returnTo = pathWithQuery(availabilityPath, { ...baseQuery, month: activeMonth, date: selectedDate });
-    const dayMap = new Map(monthlyAvailability.days.map((day) => [day.date, day.slotCount]));
+    const dayMap = new Map(monthlyAvailability.days.map((day) => [day.date, day.openingCount ?? day.slotCount]));
     const monthCells: MonthCell[] = Array.from({ length: monthDays }, (_, index) => {
       const cellDate = addDays(monthStart, index);
       return {
@@ -221,60 +224,49 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
     const nextAvailable = nextAvailabilitySearch.nextAvailableSlot;
     const nextAvailableDate = nextAvailable ? isoDateFromValueInTimeZone(nextAvailable.startAt, tenant.timezone) : undefined;
     const locationById = new Map(activeLocations.map((location) => [location.id, location.name]));
-    const slotGroups = groupSlotsByDaypart(selectedAvailability.slots, tenant.timezone);
+    // One card per start time and location: with "any provider" the first free provider is offered.
+    const seenTimes = new Set<string>();
+    const pickableSlots = selectedAvailability.slots.filter((slot) => {
+      const key = `${slot.startAt}|${slot.locationId ?? ""}`;
+      if (seenTimes.has(key)) {
+        return false;
+      }
+      seenTimes.add(key);
+      return true;
+    });
+    const slotGroups = groupSlotsByDaypart(pickableSlots, tenant.timezone);
     const previousMonth = shiftMonth(activeMonth, -1);
     const nextMonth = shiftMonth(activeMonth, 1);
     const nextAvailabilityLink = nextAvailableDate
       ? pathWithQuery(availabilityPath, { ...baseQuery, month: monthKeyFromDate(nextAvailableDate), date: nextAvailableDate })
       : undefined;
 
+    // Days before the last open day with nothing left read "Full"; days past it just stay quiet.
+    const lastOpenDate = [...monthlyAvailability.days].reverse().find((day) => (day.openingCount ?? day.slotCount) > 0)?.date;
+    const helpPhone = (selectedLocation ?? (activeLocations.length === 1 ? activeLocations[0] : undefined))?.phone;
+    const providerStepHref = pathWithQuery(`/${tenantSlug}/services/${slugify(service.name)}`, {
+      locationId: selectedLocation?.id,
+      screening,
+    });
+
     return (
-      <main className="appointment-page">
-        <Link href={pathWithQuery(`/${tenantSlug}/services/${slugify(service.name)}`, { locationId: selectedLocation?.id, screening })} className="appointment-back-link">
-          Provider preference
-        </Link>
+      <main className="sf-flow">
+        <BookingSteps current={3} />
 
-        <section className="appointment-heading">
-          <p className="store-eyebrow">Your appointment</p>
-          <h2>Your Appointment</h2>
-          <div className="appointment-filters" aria-label="Selected appointment filters">
-            <span>{selectedProvider?.name ?? "Any Provider"}</span>
-            <span>{selectedLocation?.name ?? "Any Location"}</span>
-            <span>{service.name}</span>
-            {selectedAddOns.map((item) => <span key={item.id}>+ {item.name}</span>)}
+        <header className="sf-head sf-head--stack">
+          <div>
+            <p className="sf-eyebrow">Step {appointmentStepNumber}</p>
+            <h1 className="sf-title sf-title--page">Your appointment</h1>
           </div>
-        </section>
-
-        {availableAddOns.length > 0 ? (
-          <section className="appointment-addons" aria-labelledby="appointment-addons-title">
-            <div className="appointment-panel-header">
-              <h3 id="appointment-addons-title">Add to your appointment</h3>
-            </div>
-            <form method="get" action={availabilityPath} className="appointment-addons__form">
-              {selectedLocation ? <input type="hidden" name="locationId" value={selectedLocation.id} /> : null}
-              {screening ? <input type="hidden" name="screening" value={screening} /> : null}
-              {providerId ? <input type="hidden" name="providerId" value={providerId} /> : null}
-              <input type="hidden" name="month" value={activeMonth} />
-              <input type="hidden" name="date" value={selectedDate} />
-              <div className="appointment-addons__list">
-                {availableAddOns.map((item) => (
-                  <label key={item.id} className="appointment-addon">
-                    <input type="checkbox" name="addOn" value={item.id} defaultChecked={selectedAddOnIds.includes(item.id)} />
-                    <span className="appointment-addon__text">
-                      <strong>{item.name}</strong>
-                      {item.description ? <small>{item.description}</small> : null}
-                    </span>
-                    <span className="appointment-addon__terms">
-                      +{formatCurrency(item.priceCents)}
-                      {item.durationMinutes > 0 ? ` · +${item.durationMinutes} min` : ""}
-                    </span>
-                  </label>
-                ))}
-              </div>
-              <button type="submit" className="ghost-link appointment-addons__update">Update times</button>
-            </form>
-          </section>
-        ) : null}
+          <div className="sf-chips" aria-label="Selected appointment filters">
+            <Link href={providerStepHref} className="sf-pill sf-pill--link">{selectedProvider?.name ?? "Any provider"}</Link>
+            <span className="sf-pill">{selectedLocation?.name ?? "Any location"}</span>
+            <span className="sf-pill sf-pill--rose">
+              {service.name} · {formatDuration(service.durationMinutes + selectedAddOns.reduce((sum, item) => sum + item.durationMinutes, 0))}
+            </span>
+            {selectedAddOns.map((item) => <span key={item.id} className="sf-pill">+ {item.name}</span>)}
+          </div>
+        </header>
 
         {error === "slot-unavailable" ? (
           <section className="status-banner" aria-live="polite">
@@ -283,76 +275,93 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
           </section>
         ) : null}
 
-        <section className="appointment-scheduler">
-          <section className="appointment-calendar-panel">
-            <div className="appointment-panel-header">
-              <h3>Select a date</h3>
-              <div className="appointment-month-nav">
-                <Link href={pathWithQuery(availabilityPath, { ...baseQuery, month: previousMonth })} aria-label="Previous month">
+        <div className="sf-scheduler">
+          <section className="sf-card sf-calendar" aria-labelledby="calendar-title">
+            <div className="sf-calendar__head">
+              <h2 id="calendar-title" className="sf-card__title">Select a date</h2>
+              <div className="sf-month-nav">
+                <Link href={pathWithQuery(availabilityPath, { ...baseQuery, month: previousMonth })} aria-label="Previous month" className="sf-month-nav__btn">
                   ‹
                 </Link>
                 <strong>{monthTitle(activeMonth)}</strong>
-                <Link href={pathWithQuery(availabilityPath, { ...baseQuery, month: nextMonth })} aria-label="Next month">
+                <Link href={pathWithQuery(availabilityPath, { ...baseQuery, month: nextMonth })} aria-label="Next month" className="sf-month-nav__btn">
                   ›
                 </Link>
               </div>
             </div>
 
-            <div className="appointment-month-grid" aria-label={`Availability for ${monthTitle(activeMonth)}`}>
+            <div className="sf-month" aria-label={`Availability for ${monthTitle(activeMonth)}`}>
               {weekdayLabels.map((weekday) => (
-                <span key={weekday} className="appointment-weekday">
-                  {weekday}
-                </span>
+                <span key={weekday} className="sf-weekday">{weekday}</span>
               ))}
               {Array.from({ length: leadingBlankCount }, (_, index) => (
-                <span key={`blank-${index}`} className="appointment-day appointment-day--blank" />
+                <span key={`blank-${index}`} className="sf-day sf-day--blank" />
               ))}
-              {monthCells.map((cell) =>
-                cell.isPast ? (
-                  <span
+              {monthCells.map((cell) => {
+                const isToday = cell.date === today;
+                if (cell.isPast) {
+                  return (
+                    <span key={cell.date} className="sf-day sf-day--quiet" aria-label={`${cell.date}, past`}>
+                      <strong>{cell.dayNumber}</strong>
+                    </span>
+                  );
+                }
+                if (cell.slotCount === 0) {
+                  const full = lastOpenDate !== undefined && cell.date < lastOpenDate;
+                  return (
+                    <span
+                      key={cell.date}
+                      className={`sf-day sf-day--quiet${isToday ? " sf-day--today" : ""}`}
+                      aria-label={`${cell.date}, ${full ? "fully booked" : "no openings"}`}
+                    >
+                      <strong>{cell.dayNumber}</strong>
+                      {full ? <small>Full</small> : null}
+                    </span>
+                  );
+                }
+                return (
+                  <Link
                     key={cell.date}
-                    className="appointment-day appointment-day--past"
-                    aria-label={`${cell.date}, past`}
+                    href={pathWithQuery(availabilityPath, { ...baseQuery, month: activeMonth, date: cell.date })}
+                    className={[
+                      "sf-day",
+                      "sf-day--open",
+                      isToday ? "sf-day--today" : "",
+                      cell.isSelected ? "sf-day--selected" : "",
+                    ].filter(Boolean).join(" ")}
+                    aria-label={`${cell.date}, ${cell.slotCount} openings`}
+                    aria-current={cell.isSelected ? "date" : undefined}
                   >
                     <strong>{cell.dayNumber}</strong>
-                  </span>
-                ) : (
-                <Link
-                  key={cell.date}
-                  href={pathWithQuery(availabilityPath, { ...baseQuery, month: activeMonth, date: cell.date })}
-                  className={[
-                    "appointment-day",
-                    cell.slotCount > 0 ? "appointment-day--available" : "",
-                    cell.isSelected ? "appointment-day--selected" : "",
-                  ].filter(Boolean).join(" ")}
-                  aria-label={`${cell.date}, ${cell.slotCount} openings`}
-                >
-                  <strong>{cell.dayNumber}</strong>
-                  <span>{cell.slotCount > 0 ? `${cell.slotCount}` : ""}</span>
-                </Link>
-              ))}
+                    <small>{cell.slotCount} open</small>
+                  </Link>
+                );
+              })}
             </div>
+
+            <p className="sf-legend">
+              <span><i className="sf-legend__dot" aria-hidden="true" /> Today</span>
+              <span>Number under date = openings</span>
+            </p>
           </section>
 
-          <section className="appointment-times-panel">
-            <div className="appointment-times-header">
+          <section className="sf-card sf-times" aria-labelledby="times-title">
+            <div className="sf-times__head">
               <div>
-                <p className="store-eyebrow">{selectedAvailability.slots.length} openings</p>
-                <h3>Select a time for {dateTitle(selectedDate)}</h3>
+                <p className="sf-eyebrow">{pickableSlots.length} {pickableSlots.length === 1 ? "opening" : "openings"}</p>
+                <h2 id="times-title" className="sf-card__title sf-card__title--lg">Select a time for {dateTitle(selectedDate)}</h2>
               </div>
               {nextAvailabilityLink ? (
-                <Link href={nextAvailabilityLink} className="ghost-link appointment-next-link">
-                  Show next availability
-                </Link>
+                <Link href={nextAvailabilityLink} className="sf-btn">Show next availability</Link>
               ) : null}
             </div>
 
             {slotGroups.length > 0 ? (
-              <div className="appointment-slot-groups">
+              <div className="sf-slot-groups">
                 {slotGroups.map((group) => (
-                  <section key={group.key} className="appointment-slot-group">
-                    <h4>{group.label}</h4>
-                    <div className="appointment-slot-list">
+                  <section key={group.key} className="sf-slot-group">
+                    <h3>{group.label}</h3>
+                    <div className="sf-slots">
                       {group.slots.map((slot) => {
                         const slotLocationName = slot.locationId ? locationById.get(slot.locationId) : undefined;
                         return (
@@ -364,9 +373,9 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
                             <input type="hidden" name="locationId" value={slot.locationId ?? ""} />
                             <input type="hidden" name="returnTo" value={returnTo} />
                             {selectedAddOnIds.map((id) => <input key={id} type="hidden" name="addOnId" value={id} />)}
-                            <button type="submit" className="slot-button appointment-slot-button" data-provider-name={slot.providerName}>
-                              <span>{timeTitle(slot.startAt, tenant.timezone)}</span>
-                              <strong>{slot.providerName}</strong>
+                            <button type="submit" className="sf-slot" data-provider-name={slot.providerName}>
+                              <strong>{timeTitle(slot.startAt, tenant.timezone)}</strong>
+                              <span>{slot.providerName}</span>
                               <small>{slotLocationName ?? "Location to confirm"}</small>
                             </button>
                           </form>
@@ -377,15 +386,21 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
                 ))}
               </div>
             ) : (
-              <div className="empty-panel appointment-empty-panel">
+              <div className="sf-empty sf-empty--flat">
                 <strong>No openings on this date.</strong>
-                <span>Choose a highlighted date or use Show next availability.</span>
+                <span>Choose a date with openings or use Show next availability.</span>
               </div>
             )}
 
-            <p className="appointment-help-text">Need help scheduling your appointment? Contact the studio directly.</p>
+            <p className="sf-help">
+              {helpPhone ? (
+                <>Need help scheduling? Call the studio on <a href={`tel:${helpPhone.replace(/[^+\d]/g, "")}`}>{helpPhone}</a>.</>
+              ) : (
+                "Need help scheduling your appointment? Contact the studio directly."
+              )}
+            </p>
           </section>
-        </section>
+        </div>
       </main>
     );
   } catch (error) {

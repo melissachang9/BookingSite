@@ -1,9 +1,12 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser, TenantSummary } from "@booking/shared-types";
 
 import { SettingsPage } from "./settings-page";
 import { platformApi } from "./platform-api";
+import { uploadImageFile } from "./upload-image";
+
+vi.mock("./upload-image", () => ({ uploadImageFile: vi.fn() }));
 
 const ownerUser: AuthenticatedUser = {
   id: "user-1",
@@ -350,14 +353,19 @@ describe("SettingsPage", () => {
       />,
     );
 
-    const logoInput = screen.getByLabelText(/logo url/i);
-    fireEvent.change(logoInput, { target: { value: "https://cdn.example.com/logo.png" } });
+    vi.mocked(uploadImageFile)
+      .mockResolvedValueOnce({ url: "https://cdn.example.com/logo.png", fileName: "logo.png" })
+      .mockResolvedValueOnce({ url: "https://cdn.example.com/a.jpg", fileName: "a.jpg" })
+      .mockResolvedValueOnce({ url: "https://cdn.example.com/b.jpg", fileName: "b.jpg" });
+    const picture = (name: string) => new File(["x"], name, { type: "image/jpeg" });
+    fireEvent.change(screen.getByLabelText("Logo file"), { target: { files: [picture("logo.png")] } });
+    expect(await screen.findByAltText("Logo preview")).toHaveAttribute("src", "https://cdn.example.com/logo.png");
     const primaryHex = screen.getByLabelText(/primary color hex/i);
     fireEvent.change(primaryHex, { target: { value: "#112233" } });
-    const photosTextarea = screen.getByLabelText(/gallery photo urls/i);
-    fireEvent.change(photosTextarea, {
-      target: { value: "https://cdn.example.com/a.jpg\nhttps://cdn.example.com/b.jpg\n" },
-    });
+    fireEvent.change(screen.getByLabelText("Add gallery photo"), { target: { files: [picture("a.jpg")] } });
+    expect(await screen.findByAltText("Gallery photo 1")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Add gallery photo"), { target: { files: [picture("b.jpg")] } });
+    expect(await screen.findByAltText("Gallery photo 2")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /save branding/i }));
 
     await waitFor(() => {
@@ -368,6 +376,163 @@ describe("SettingsPage", () => {
       }));
     });
     expect(onTenantUpdated).toHaveBeenCalled();
+  });
+
+  it("edits the storefront panel's labels and text from the Marketing section", async () => {
+    const spy = vi.spyOn(platformApi, "updateTenantBranding").mockResolvedValue(tenant as any);
+    render(<SettingsPage definition={definition} currentUser={ownerUser} tenant={tenant} onTenantUpdated={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText(/label above the headline/i), { target: { value: "This autumn" } });
+    fireEvent.change(screen.getByLabelText(/marketing headline/i), { target: { value: "The Autumn Reset" } });
+    fireEvent.change(screen.getByLabelText(/^marketing body/i), { target: { value: "Book by 30 November." } });
+    fireEvent.change(screen.getByLabelText(/service screen label/i), { target: { value: "Membership" } });
+    fireEvent.change(screen.getByLabelText(/location screen label/i), { target: { value: "Our studios" } });
+    fireEvent.click(screen.getByRole("button", { name: /save branding/i }));
+
+    await waitFor(() => {
+      expect(spy).toHaveBeenCalledWith("brow-beauty-lab", expect.objectContaining({
+        bookingAd: expect.objectContaining({
+          label: "This autumn",
+          headline: "The Autumn Reset",
+          body: "Book by 30 November.",
+          serviceLabel: "Membership",
+          locationLabel: "Our studios",
+        }),
+      }));
+    });
+  });
+
+  it("takes marketing images as uploads, never as typed URLs", async () => {
+    const spy = vi.spyOn(platformApi, "updateTenantBranding").mockResolvedValue(tenant as any);
+    render(<SettingsPage definition={definition} currentUser={ownerUser} tenant={tenant} onTenantUpdated={vi.fn()} />);
+
+    // No URL boxes for any image.
+    expect(screen.queryByLabelText(/image url/i)).toBeNull();
+    expect(screen.queryByLabelText(/logo url/i)).toBeNull();
+    expect(screen.queryByLabelText(/gallery photo urls/i)).toBeNull();
+
+    // Panel images open the crop dialog first, so nothing uploads until it is confirmed.
+    fireEvent.change(screen.getByLabelText("Service screen image file"), {
+      target: { files: [new File(["x"], "service.jpg", { type: "image/jpeg" })] },
+    });
+    expect(await screen.findByRole("dialog", { name: "Crop photo" })).toBeInTheDocument();
+    expect(uploadImageFile).not.toHaveBeenCalled();
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Crop photo" })).getByRole("button", { name: /cancel/i }));
+    expect(screen.queryByRole("dialog", { name: "Crop photo" })).toBeNull();
+
+    // Alt text for each screen's image is saved with the rest.
+    fireEvent.change(screen.getByLabelText(/service screen image alt text/i), { target: { value: "A treatment room" } });
+    fireEvent.click(screen.getByRole("button", { name: /save branding/i }));
+    await waitFor(() =>
+      expect(spy).toHaveBeenCalledWith("brow-beauty-lab", expect.objectContaining({
+        bookingAd: expect.objectContaining({ serviceImageAltText: "A treatment room" }),
+      })),
+    );
+  });
+
+  it("sets the Begin booking card color, previews it, and can reset it", async () => {
+    const spy = vi.spyOn(platformApi, "updateTenantBranding").mockResolvedValue(tenant as any);
+    render(<SettingsPage definition={definition} currentUser={ownerUser} tenant={tenant} onTenantUpdated={vi.fn()} />);
+
+    const preview = screen.getByLabelText("Begin booking card preview");
+    fireEvent.change(screen.getByLabelText("Card color hex"), { target: { value: "#1a2b3c" } });
+    expect(preview).toHaveStyle({ background: "#1a2b3c" });
+    // A dark card gets light text so it stays readable.
+    expect(preview).toHaveStyle({ color: "#ffffff" });
+    fireEvent.change(screen.getByLabelText("Card color hex"), { target: { value: "#fbe9dd" } });
+    expect(preview).toHaveStyle({ color: "#15110f" });
+
+    fireEvent.click(screen.getByRole("button", { name: /save branding/i }));
+    await waitFor(() =>
+      expect(spy).toHaveBeenCalledWith("brow-beauty-lab", expect.objectContaining({
+        bookingAd: expect.objectContaining({ panelColor: "#fbe9dd" }),
+      })),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(screen.getByLabelText("Card color hex")).toHaveValue("");
+    fireEvent.click(screen.getByRole("button", { name: /save branding/i }));
+    await waitFor(() =>
+      expect(spy).toHaveBeenLastCalledWith("brow-beauty-lab", expect.objectContaining({
+        bookingAd: expect.objectContaining({ panelColor: null }),
+      })),
+    );
+  });
+
+  it("opens the photo picker when the card preview is clicked", () => {
+    const withPhoto = {
+      ...tenant,
+      branding: { ...tenant.branding, bookingAd: { enabled: true, imageUrl: "https://cdn.example.com/home.jpg" } },
+    };
+    render(<SettingsPage definition={definition} currentUser={ownerUser} tenant={withPhoto as any} onTenantUpdated={vi.fn()} />);
+
+    const input = screen.getByLabelText("Marketing image file");
+    const preview = screen.getByLabelText("Begin booking card preview");
+    // The preview's photo and the upload thumbnail are both labels for the same file input, so clicking them opens it.
+    const photo = within(preview).getByText("Replace photo").closest("label") as HTMLLabelElement;
+    expect(photo).toHaveAttribute("for", input.id);
+    expect(screen.getByAltText("Marketing image preview").closest("label")).toHaveAttribute("for", input.id);
+  });
+
+  it("uses the card preview as the only control for the Begin booking photo", () => {
+    const withPhoto = {
+      ...tenant,
+      branding: { ...tenant.branding, bookingAd: { enabled: true, imageUrl: "https://cdn.example.com/home.jpg" } },
+    };
+    render(<SettingsPage definition={definition} currentUser={ownerUser} tenant={withPhoto as any} onTenantUpdated={vi.fn()} />);
+
+    // One picker and one preview for this photo; no separate thumbnail or upload button above it.
+    expect(screen.getAllByLabelText("Marketing image file")).toHaveLength(1);
+    expect(screen.getAllByAltText("Marketing image preview")).toHaveLength(1);
+    expect(screen.getByAltText("Marketing image preview").closest(".cs-promo-preview")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Remove Marketing image" })).toBeInTheDocument();
+  });
+
+  it("groups each screen's marketing settings in its own collapsible section", () => {
+    render(<SettingsPage definition={definition} currentUser={ownerUser} tenant={tenant} onTenantUpdated={vi.fn()} />);
+    const titles = ["Marketing panel", "Select service screen", "Choose location screen", "Booking review screen"];
+    const sections = titles.map((t) => screen.getByText(t, { selector: "summary" }).closest("details") as HTMLDetailsElement);
+    expect(sections.map((d) => d.open)).toEqual([true, false, false, false]);
+    fireEvent.click(screen.getByText("Select service screen", { selector: "summary" }));
+    expect(sections[1].open).toBe(true);
+  });
+
+  it("turns the Begin booking marketing panel off and saves it", async () => {
+    const spy = vi.spyOn(platformApi, "updateTenantBranding").mockResolvedValue(tenant as any);
+    render(<SettingsPage definition={definition} currentUser={ownerUser} tenant={tenant} onTenantUpdated={vi.fn()} />);
+    const toggle = screen.getByLabelText(/show marketing panel on begin booking/i);
+    expect(toggle).toBeChecked();
+    fireEvent.click(toggle);
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: /save branding/i }));
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    const body = spy.mock.calls.at(-1)![1] as any;
+    expect(body.bookingAd.enabled).toBe(false);
+  });
+
+  it("asks for an upload in the card preview when there is no photo yet", () => {
+    render(<SettingsPage definition={definition} currentUser={ownerUser} tenant={tenant} onTenantUpdated={vi.fn()} />);
+    const preview = screen.getByLabelText("Begin booking card preview");
+    const prompt = within(preview).getByText("Upload photo").closest("label") as HTMLLabelElement;
+    expect(prompt).toHaveAttribute("for", screen.getByLabelText("Marketing image file").id);
+  });
+
+  it("doesn't offer to replace photos to someone who can't edit settings", () => {
+    const viewer = { ...ownerUser, permissions: [{ key: "settings.view", allowed: true }, { key: "settings.manage", allowed: false }] } as unknown as AuthenticatedUser;
+    const withPhoto = {
+      ...tenant,
+      branding: { ...tenant.branding, bookingAd: { enabled: true, imageUrl: "https://cdn.example.com/home.jpg" } },
+    };
+    render(<SettingsPage definition={definition} currentUser={viewer} tenant={withPhoto as any} onTenantUpdated={vi.fn()} />);
+    expect(screen.queryByText("Replace photo")).toBeNull();
+    expect(screen.getByLabelText("Marketing image file")).toBeDisabled();
+  });
+
+  it("won't save a card color that isn't a hex value", () => {
+    render(<SettingsPage definition={definition} currentUser={ownerUser} tenant={tenant} onTenantUpdated={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Card color hex"), { target: { value: "peach" } });
+    expect(screen.getByRole("button", { name: /save branding/i })).toBeDisabled();
+    expect(screen.getByText(/card color must be a #rgb or #rrggbb/i)).toBeInTheDocument();
   });
 
   it("disables the branding save button on invalid hex color", () => {

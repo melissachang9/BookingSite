@@ -1,3 +1,4 @@
+import { BookingSteps } from "../../../../components/booking-steps";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -68,6 +69,7 @@ export default async function BookingSuccessPage({ params, searchParams }: Booki
 
       return (
         <main className="page-stack">
+          <BookingSteps current={5} />
           <section className="state-panel state-panel--success">
             <p className="store-eyebrow">Booking confirmed</p>
             <h2>Your appointment is confirmed.</h2>
@@ -132,6 +134,7 @@ export default async function BookingSuccessPage({ params, searchParams }: Booki
 
     return (
       <main className="page-stack">
+        <BookingSteps current={5} />
         <section className="state-panel state-panel--success">
           <p className="store-eyebrow">Booking status</p>
           <h2>We are checking your appointment confirmation.</h2>
@@ -231,6 +234,7 @@ export default async function BookingSuccessPage({ params, searchParams }: Booki
 
         return (
           <main className="page-stack">
+            <BookingSteps current={5} />
             <section className="state-panel state-panel--checkout">
               <p className="store-eyebrow">{isCheckoutPending ? "Returning from checkout" : "Checkout expired"}</p>
               <h2>{isCheckoutPending ? "We are finishing your appointment confirmation." : "This checkout session expired before confirmation."}</h2>

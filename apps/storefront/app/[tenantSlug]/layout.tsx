@@ -26,25 +26,33 @@ export default async function TenantLayout({ children, params }: TenantLayoutPro
     }
   }
 
+  // "Brow Beauty Lab" sets as a bold name followed by the last word in italic serif.
+  const nameWords = tenantName.trim().split(/\s+/);
+  const lastWord = nameWords.length > 1 ? nameWords[nameWords.length - 1] : null;
+  const leadingWords = lastWord ? nameWords.slice(0, -1).join(" ") : tenantName;
+
   return (
     <div className="tenant-shell">
-      <header className="tenant-header tenant-header--minimal">
-        <TenantBackButton ariaLabel={`Back within ${tenantName} booking`} fallbackHref={`/${tenantSlug}`} />
+      <div className="tenant-frame">
+        <header className="tenant-header tenant-header--minimal">
+          <TenantBackButton ariaLabel={`Back within ${tenantName} booking`} fallbackHref={`/${tenantSlug}`} />
 
-        <Link href={`/${tenantSlug}`} className="tenant-wordmark">
-          {tenantName}
-        </Link>
+          <Link href={`/${tenantSlug}`} className="tenant-wordmark" aria-label={tenantName}>
+            <span className="tenant-wordmark__lead">{leadingWords}</span>
+            {lastWord ? <span className="tenant-wordmark__tail"> {lastWord}</span> : null}
+          </Link>
 
-        <nav className="tenant-nav tenant-nav--minimal" aria-label="Customer booking routes">
-          {homepageUrl ? (
-            <a href={homepageUrl} target="_blank" rel="noreferrer">
-              Visit website
-            </a>
-          ) : null}
-        </nav>
-      </header>
+          <nav className="tenant-nav tenant-nav--minimal" aria-label="Customer booking routes">
+            {homepageUrl ? (
+              <a href={homepageUrl} target="_blank" rel="noreferrer">
+                Visit website
+              </a>
+            ) : null}
+          </nav>
+        </header>
 
-      <div className="tenant-content">{children}</div>
+        <div className="tenant-content">{children}</div>
+      </div>
     </div>
   );
 }

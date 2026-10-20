@@ -55,42 +55,52 @@ export default async function LocationsPage({ params, searchParams }: LocationsP
   }
 
   const bookingAd = tenant.branding.bookingAd;
+  // This screen's own photo, falling back to the first screen's.
+  const panelImageUrl = bookingAd?.locationImageUrl ?? bookingAd?.imageUrl ?? null;
+  const panelImageAlt = bookingAd?.locationImageUrl ? bookingAd.locationImageAltText : bookingAd?.imageAltText;
   const stepNumber = screening ? 2 : 1;
 
   return (
-    <main className="booking-flow-layout">
-      <section className="booking-flow-panel">
-        <div className="booking-entry-copy">
-          <p className="store-eyebrow">Step {stepNumber}</p>
-          <h2>Choose a location</h2>
-        </div>
+    <main className="sf-entry">
+      <section className="sf-entry__panel" aria-labelledby="locations-title">
+        <p className="sf-eyebrow">Step {stepNumber}</p>
+        <h1 id="locations-title" className="sf-title">Choose a location</h1>
 
-        <div className="location-option-list">
+        <div className="sf-entry__options">
           {locations.map((location) => {
             const address = formatLocationAddress(location);
             return (
               <Link
                 key={location.id}
                 href={pathWithQuery(`/${tenantSlug}/services`, { screening, locationId: location.id })}
-                className="location-option-card"
+                className="sf-option"
               >
-                <span>
+                <span className="sf-option__text">
                   <strong>{location.name}</strong>
-                  {address ? <small>{address}</small> : <small>{location.timeZone}</small>}
+                  <small>{address || location.timeZone}</small>
                 </span>
-                <b aria-hidden="true">→</b>
+                <span className="sf-option__arrow" aria-hidden="true">→</span>
               </Link>
             );
           })}
         </div>
       </section>
 
-      <aside className="booking-ad-panel booking-ad-panel--quiet" aria-label="Studio highlight">
-        {bookingAd?.imageUrl ? <img src={bookingAd.imageUrl} alt={bookingAd.imageAltText ?? tenantName} /> : null}
-        <div>
-          {bookingAd?.locationHeadline ? <strong>{bookingAd.locationHeadline}</strong> : null}
-          {bookingAd?.locationBody ? <p>{bookingAd.locationBody}</p> : null}
+      <aside className="sf-promo" aria-label="Studio highlight">
+        <div className="sf-promo__media">
+          {panelImageUrl ? (
+            <img src={panelImageUrl} alt={panelImageAlt ?? tenantName} />
+          ) : (
+            <span className="sf-promo__placeholder">Studio photograph</span>
+          )}
         </div>
+        {bookingAd?.locationHeadline || bookingAd?.locationBody ? (
+          <div className="sf-promo__copy">
+            <p className="sf-eyebrow sf-eyebrow--dark">{bookingAd?.locationLabel ?? "Our studios"}</p>
+            {bookingAd?.locationHeadline ? <h2>{bookingAd.locationHeadline}</h2> : null}
+            {bookingAd?.locationBody ? <p>{bookingAd.locationBody}</p> : null}
+          </div>
+        ) : null}
       </aside>
     </main>
   );

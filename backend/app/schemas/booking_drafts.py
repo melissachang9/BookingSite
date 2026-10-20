@@ -18,6 +18,8 @@ class CustomerInput(CamelModel):
     email: str = Field(min_length=1)
     phone: str = Field(min_length=1)
     referred_by: str | None = None
+    # The client ticked "Text me appointment reminders" on the booking page.
+    sms_consent: bool | None = None
 
 
 class IntakePlanResponse(CamelModel):

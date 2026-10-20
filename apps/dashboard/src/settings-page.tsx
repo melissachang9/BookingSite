@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
   BUSINESS_HOURS_WEEKDAY_KEYS,
   SUPPORTED_CURRENCIES,
@@ -14,7 +14,9 @@ import {
   type TenantSummary,
 } from "@booking/shared-types";
 
-import { platformApi, apiBaseUrl } from "./platform-api";
+import { platformApi } from "./platform-api";
+import { uploadImageFile } from "./upload-image";
+import { DEFAULT_PANEL_COLOR, isHexColor, readableTextColor } from "./color";
 import { CropModal } from "./staff-page";
 import { ReportsSection } from "./reports-section";
 import { PaymentsSettingsSection } from "./payments-settings-section";
@@ -1771,6 +1773,220 @@ function LocationForm({
     </form>
   );
 }
+/** An image that is uploaded (never typed in as a URL): preview, replace, remove, and an optional crop step. */
+function ImageUploadField({
+  label,
+  value,
+  onChange,
+  disabled,
+  tenantSlug,
+  crop = false,
+  help,
+  inputId,
+  render,
+}: {
+  label: string;
+  value: string;
+  onChange: (url: string) => void;
+  disabled: boolean;
+  tenantSlug: string;
+  /** Show the crop dialog before uploading. */
+  crop?: boolean;
+  help?: string;
+  /** The file input's id, so other parts of the page (like a live preview) can open the same picker. */
+  inputId?: string;
+  /** Replaces the default thumbnail and buttons, e.g. with a live preview that is itself the upload control. */
+  render?: (state: { inputId: string; uploading: boolean; error: string | null; remove: () => void }) => ReactNode;
+}) {
+  const generatedId = useId();
+  const fileInputId = inputId ?? generatedId;
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+
+  const upload = async (file: File) => {
+    setError(null);
+    setUploading(true);
+    try {
+      const uploaded = await uploadImageFile(tenantSlug, file);
+      onChange(uploaded.url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to upload image.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const cropDialog = cropFile ? (
+    <CropModal
+      file={cropFile}
+      maskShape="rectangle"
+      onCancel={() => setCropFile(null)}
+      onSave={(blob) => {
+        const cropped = new File([blob], "marketing.png", { type: "image/png" });
+        setCropFile(null);
+        void upload(cropped);
+      }}
+    />
+  ) : null;
+  const fileInput = (
+    <input
+      id={fileInputId}
+      type="file"
+      className="cs-visually-hidden"
+      aria-label={`${label} file`}
+      accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
+      disabled={disabled || uploading}
+      onChange={(event) => {
+        const file = event.target.files?.[0] ?? null;
+        event.target.value = "";
+        if (!file) return;
+        if (crop) setCropFile(file);
+        else void upload(file);
+      }}
+    />
+  );
+
+  if (render) {
+    return (
+      <div className="cs-image-upload cs-image-upload--custom">
+        {cropDialog}
+        {fileInput}
+        {render({ inputId: fileInputId, uploading, error, remove: () => onChange("") })}
+        {help ? <span className="cs-field-help">{help}</span> : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="cs-field cs-image-upload">
+      <span>{label}</span>
+      {cropFile ? (
+        <CropModal
+          file={cropFile}
+          maskShape="rectangle"
+          onCancel={() => setCropFile(null)}
+          onSave={(blob) => {
+            const cropped = new File([blob], "marketing.png", { type: "image/png" });
+            setCropFile(null);
+            void upload(cropped);
+          }}
+        />
+      ) : null}
+      <div className="cs-marketing-upload">
+        {value ? (
+          <label
+            htmlFor={fileInputId}
+            className={`cs-marketing-upload__preview${disabled || uploading ? "" : " is-clickable"}`}
+            title={disabled ? undefined : "Click to replace"}
+          >
+            <img src={value} alt={`${label} preview`} />
+            {disabled ? null : <span className="cs-marketing-upload__replace">Replace</span>}
+          </label>
+        ) : null}
+        <div className="cs-marketing-upload__controls">
+          <label className={`cs-btn cs-btn--ghost cs-btn--sm${disabled || uploading ? " is-disabled" : ""}`}>
+            {value ? "Replace image" : "Upload image"}
+            <input
+              id={fileInputId}
+              type="file"
+              className="cs-visually-hidden"
+              aria-label={`${label} file`}
+              accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
+              disabled={disabled || uploading}
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                event.target.value = "";
+                if (!file) return;
+                if (crop) setCropFile(file);
+                else void upload(file);
+              }}
+            />
+          </label>
+          {value ? (
+            <button
+              type="button"
+              className="cs-btn cs-btn--ghost cs-btn--sm"
+              onClick={() => onChange("")}
+              disabled={disabled || uploading}
+              aria-label={`Remove ${label}`}
+            >
+              Remove
+            </button>
+          ) : null}
+          {uploading ? <small className="cs-field-help">Uploading…</small> : null}
+          {error ? <small role="alert" className="cs-error">{error}</small> : null}
+        </div>
+      </div>
+      {help ? <span className="cs-field-help">{help}</span> : null}
+    </div>
+  );
+}
+
+/** A row of uploaded gallery photos. */
+function GalleryUploadField({
+  photos,
+  onChange,
+  disabled,
+  tenantSlug,
+}: {
+  photos: string[];
+  onChange: (photos: string[]) => void;
+  disabled: boolean;
+  tenantSlug: string;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="cs-field cs-image-upload">
+      <span>Gallery photos</span>
+      <div className="cs-gallery-upload">
+        {photos.map((url, index) => (
+          <div key={`${url}-${index}`} className="cs-gallery-upload__item">
+            <img src={url} alt={`Gallery photo ${index + 1}`} />
+            <button
+              type="button"
+              className="cs-gallery-upload__remove"
+              aria-label={`Remove gallery photo ${index + 1}`}
+              disabled={disabled}
+              onClick={() => onChange(photos.filter((_, position) => position !== index))}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        <label className={`cs-gallery-upload__add${disabled || uploading ? " is-disabled" : ""}`}>
+          {uploading ? "Uploading…" : "+ Add photo"}
+          <input
+            type="file"
+            className="cs-visually-hidden"
+            aria-label="Add gallery photo"
+            accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
+            disabled={disabled || uploading || photos.length >= 24}
+            onChange={async (event) => {
+              const file = event.target.files?.[0] ?? null;
+              event.target.value = "";
+              if (!file) return;
+              setError(null);
+              setUploading(true);
+              try {
+                const uploaded = await uploadImageFile(tenantSlug, file);
+                onChange([...photos, uploaded.url]);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Unable to upload image.");
+              } finally {
+                setUploading(false);
+              }
+            }}
+          />
+        </label>
+      </div>
+      {error ? <small role="alert" className="cs-error">{error}</small> : null}
+      <span className="cs-field-help">Up to 24 photos.</span>
+    </div>
+  );
+}
+
 const HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 function BrandingSection({
@@ -1788,21 +2004,26 @@ function BrandingSection({
   const [faviconUrl, setFaviconUrl] = useState<string>("");
   const [primaryColor, setPrimaryColor] = useState<string>("#9f5323");
   const [accentColor, setAccentColor] = useState<string>("#7a3c13");
-  const [photosText, setPhotosText] = useState<string>("");
+  const [photos, setPhotos] = useState<string[]>([]);
   const [bookingAdEnabled, setBookingAdEnabled] = useState<boolean>(true);
+  const [bookingAdPanelColor, setBookingAdPanelColor] = useState<string>("");
+  const [bookingAdLabel, setBookingAdLabel] = useState<string>("");
+  const [bookingAdServiceLabel, setBookingAdServiceLabel] = useState<string>("");
+  const [bookingAdLocationLabel, setBookingAdLocationLabel] = useState<string>("");
   const [bookingAdHeadline, setBookingAdHeadline] = useState<string>("");
   const [bookingAdBody, setBookingAdBody] = useState<string>("");
   const [bookingAdImageUrl, setBookingAdImageUrl] = useState<string>("");
   const [bookingAdImageAltText, setBookingAdImageAltText] = useState<string>("");
+  const [bookingAdServiceImageUrl, setBookingAdServiceImageUrl] = useState<string>("");
+  const [bookingAdServiceImageAltText, setBookingAdServiceImageAltText] = useState<string>("");
+  const [bookingAdLocationImageUrl, setBookingAdLocationImageUrl] = useState<string>("");
+  const [bookingAdLocationImageAltText, setBookingAdLocationImageAltText] = useState<string>("");
   const [bookingAdServiceHeadline, setBookingAdServiceHeadline] = useState<string>("");
   const [bookingAdServiceBody, setBookingAdServiceBody] = useState<string>("");
   const [bookingAdLocationHeadline, setBookingAdLocationHeadline] = useState<string>("");
   const [bookingAdLocationBody, setBookingAdLocationBody] = useState<string>("");
   const [bookingAdReviewHeadline, setBookingAdReviewHeadline] = useState<string>("");
   const [bookingAdReviewBody, setBookingAdReviewBody] = useState<string>("");
-  const [marketingImageUploading, setMarketingImageUploading] = useState(false);
-  const [marketingImageError, setMarketingImageError] = useState<string | null>(null);
-  const [marketingCropFile, setMarketingCropFile] = useState<File | null>(null);
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
   useEffect(() => {
@@ -1812,12 +2033,20 @@ function BrandingSection({
       setFaviconUrl(branding.faviconUrl ?? "");
       setPrimaryColor(branding.primaryColor ?? "#9f5323");
       setAccentColor(branding.accentColor ?? "#7a3c13");
-      setPhotosText((branding.photos ?? []).join("\n"));
+      setPhotos(branding.photos ?? []);
       setBookingAdEnabled(branding.bookingAd?.enabled ?? true);
+      setBookingAdPanelColor(branding.bookingAd?.panelColor ?? "");
+      setBookingAdLabel(branding.bookingAd?.label ?? "");
+      setBookingAdServiceLabel(branding.bookingAd?.serviceLabel ?? "");
+      setBookingAdLocationLabel(branding.bookingAd?.locationLabel ?? "");
       setBookingAdHeadline(branding.bookingAd?.headline ?? "");
       setBookingAdBody(branding.bookingAd?.body ?? "");
       setBookingAdImageUrl(branding.bookingAd?.imageUrl ?? "");
       setBookingAdImageAltText(branding.bookingAd?.imageAltText ?? "");
+      setBookingAdServiceImageUrl(branding.bookingAd?.serviceImageUrl ?? "");
+      setBookingAdServiceImageAltText(branding.bookingAd?.serviceImageAltText ?? "");
+      setBookingAdLocationImageUrl(branding.bookingAd?.locationImageUrl ?? "");
+      setBookingAdLocationImageAltText(branding.bookingAd?.locationImageAltText ?? "");
       setBookingAdServiceHeadline(branding.bookingAd?.serviceHeadline ?? "");
       setBookingAdServiceBody(branding.bookingAd?.serviceBody ?? "");
       setBookingAdLocationHeadline(branding.bookingAd?.locationHeadline ?? "");
@@ -1827,15 +2056,6 @@ function BrandingSection({
     }
   }, [tenant]);
 
-  const parsedPhotos = useMemo(
-    () =>
-      photosText
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0),
-    [photosText],
-  );
-
   const validationMessage = useMemo(() => {
     if (primaryColor.trim() && !HEX_COLOR_RE.test(primaryColor.trim())) {
       return "Primary color must be a #RGB or #RRGGBB hex value.";
@@ -1843,52 +2063,11 @@ function BrandingSection({
     if (accentColor.trim() && !HEX_COLOR_RE.test(accentColor.trim())) {
       return "Accent color must be a #RGB or #RRGGBB hex value.";
     }
-    return null;
-  }, [primaryColor, accentColor]);
-
-  const handleMarketingImageUpload = async (file: File | null) => {
-    if (!file) return;
-    setMarketingImageError(null);
-    setMarketingImageUploading(true);
-    try {
-      const body = new FormData();
-      body.append("file", file);
-      body.append("tenant_id", tenantSlug);
-      const response = await fetch(`${apiBaseUrl}/forms/upload`, {
-        method: "POST",
-        body,
-      });
-      if (!response.ok) {
-        let detail = "Unable to upload image.";
-        try {
-          const data = (await response.json()) as { detail?: string };
-          if (typeof data.detail === "string" && data.detail.trim()) {
-            detail = data.detail;
-          }
-        } catch { /* ignore */ }
-        throw new Error(detail);
-      }
-      const data = (await response.json()) as { url?: string };
-      if (!data.url) {
-        throw new Error("Upload did not return a URL.");
-      }
-      setBookingAdImageUrl(data.url);
-    } catch (err) {
-      setMarketingImageError(err instanceof Error ? err.message : "Unable to upload image.");
-    } finally {
-      setMarketingImageUploading(false);
+    if (bookingAdPanelColor.trim() && !HEX_COLOR_RE.test(bookingAdPanelColor.trim())) {
+      return "Card color must be a #RGB or #RRGGBB hex value.";
     }
-  };
-
-  const handleMarketingCropSave = async (blob: Blob) => {
-    setMarketingCropFile(null);
-    const croppedFile = new File([blob], "marketing.png", { type: "image/png" });
-    await handleMarketingImageUpload(croppedFile);
-  };
-
-  const handleMarketingCropCancel = () => {
-    setMarketingCropFile(null);
-  };
+    return null;
+  }, [primaryColor, accentColor, bookingAdPanelColor]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1900,13 +2079,21 @@ function BrandingSection({
         faviconUrl: faviconUrl.trim(),
         primaryColor: primaryColor.trim() || null,
         accentColor: accentColor.trim() || null,
-        photos: parsedPhotos,
+        photos,
         bookingAd: {
           enabled: bookingAdEnabled,
+          panelColor: bookingAdPanelColor.trim() || null,
+          label: bookingAdLabel.trim() || null,
+          serviceLabel: bookingAdServiceLabel.trim() || null,
+          locationLabel: bookingAdLocationLabel.trim() || null,
           headline: bookingAdHeadline.trim() || null,
           body: bookingAdBody.trim() || null,
           imageUrl: bookingAdImageUrl.trim() || null,
           imageAltText: bookingAdImageAltText.trim() || null,
+          serviceImageUrl: bookingAdServiceImageUrl.trim() || null,
+          serviceImageAltText: bookingAdServiceImageAltText.trim() || null,
+          locationImageUrl: bookingAdLocationImageUrl.trim() || null,
+          locationImageAltText: bookingAdLocationImageAltText.trim() || null,
           serviceHeadline: bookingAdServiceHeadline.trim() || null,
           serviceBody: bookingAdServiceBody.trim() || null,
           locationHeadline: bookingAdLocationHeadline.trim() || null,
@@ -1933,38 +2120,10 @@ function BrandingSection({
 
   return (
     <>
-      {marketingCropFile ? (
-        <CropModal
-          file={marketingCropFile}
-          onSave={handleMarketingCropSave}
-          onCancel={handleMarketingCropCancel}
-          maskShape="rectangle"
-        />
-      ) : null}
       <form className="cs-form cs-branding-section" onSubmit={handleSubmit}>
       <div className="cs-form-row">
-        <label className="cs-field">
-          <span>Logo URL</span>
-          <input
-            type="url"
-            value={logoUrl}
-            onChange={(event) => setLogoUrl(event.target.value)}
-            disabled={disabled}
-            maxLength={2048}
-            placeholder="https://cdn.example.com/logo.png"
-          />
-        </label>
-        <label className="cs-field">
-          <span>Favicon URL</span>
-          <input
-            type="url"
-            value={faviconUrl}
-            onChange={(event) => setFaviconUrl(event.target.value)}
-            disabled={disabled}
-            maxLength={2048}
-            placeholder="https://cdn.example.com/favicon.ico"
-          />
-        </label>
+        <ImageUploadField label="Logo" value={logoUrl} onChange={setLogoUrl} disabled={disabled} tenantSlug={tenantSlug} />
+        <ImageUploadField label="Favicon" value={faviconUrl} onChange={setFaviconUrl} disabled={disabled} tenantSlug={tenantSlug} />
       </div>
 
       <div className="cs-form-row">
@@ -2010,17 +2169,7 @@ function BrandingSection({
         </label>
       </div>
 
-      <label className="cs-field">
-        <span>Gallery photo URLs</span>
-        <textarea
-          value={photosText}
-          onChange={(event) => setPhotosText(event.target.value)}
-          disabled={disabled}
-          rows={4}
-          placeholder={"https://cdn.example.com/photo1.jpg\nhttps://cdn.example.com/photo2.jpg"}
-        />
-        <span className="cs-field-help">One URL per line.</span>
-      </label>
+      <GalleryUploadField photos={photos} onChange={setPhotos} disabled={disabled} tenantSlug={tenantSlug} />
 
       <label className="cs-toggle-field">
         <input
@@ -2035,9 +2184,120 @@ function BrandingSection({
         </span>
       </label>
 
-      <fieldset className="cs-fieldset">
-        <legend>Marketing panel</legend>
+      <details className="cs-fieldset cs-collapsible" open>
+        <summary>Marketing panel</summary>
         <p className="cs-fieldset-help">Customize the marketing panel shown on the Begin booking screen.</p>
+        <ImageUploadField
+          label="Marketing image"
+          inputId="begin-booking-photo"
+          value={bookingAdImageUrl}
+          onChange={setBookingAdImageUrl}
+          disabled={disabled}
+          tenantSlug={tenantSlug}
+          crop
+          help="This card is how the first booking screen looks. Click the photo to upload or replace it; the other screens use it unless they have their own."
+          render={({ inputId, uploading, error, remove }) => (
+            <div className="cs-field">
+              <span>Photo and card</span>
+              <div
+                className="cs-promo-preview"
+                aria-label="Begin booking card preview"
+                style={{
+                  background: isHexColor(bookingAdPanelColor) ? bookingAdPanelColor.trim() : DEFAULT_PANEL_COLOR,
+                  color: readableTextColor(isHexColor(bookingAdPanelColor) ? bookingAdPanelColor.trim() : DEFAULT_PANEL_COLOR),
+                }}
+              >
+                {disabled ? (
+                  <div className="cs-promo-preview__media">
+                    {bookingAdImageUrl ? <img src={bookingAdImageUrl} alt="" /> : <span>Photo</span>}
+                  </div>
+                ) : (
+                  <label
+                    htmlFor={inputId}
+                    className="cs-promo-preview__media is-clickable"
+                    data-busy={uploading || undefined}
+                    title={bookingAdImageUrl ? "Click to replace the photo" : "Click to upload a photo"}
+                  >
+                    {bookingAdImageUrl ? <img src={bookingAdImageUrl} alt="Marketing image preview" /> : null}
+                    <span className="cs-promo-preview__replace">
+                      {uploading ? "Uploading…" : bookingAdImageUrl ? "Replace photo" : "Upload photo"}
+                    </span>
+                  </label>
+                )}
+                <p className="cs-promo-preview__label">{bookingAdLabel || "This season"}</p>
+                <h4>{bookingAdHeadline || "Your headline"}</h4>
+                <p>{bookingAdBody || "A line or two about what's on offer."}</p>
+              </div>
+              {bookingAdImageUrl && !disabled ? (
+                <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm cs-promo-preview__remove" onClick={remove} aria-label="Remove Marketing image">
+                  Remove photo
+                </button>
+              ) : null}
+              {error ? <small role="alert" className="cs-error">{error}</small> : null}
+            </div>
+          )}
+        />
+        <div className="cs-form-row">
+          <label className="cs-field">
+            <span>Marketing image alt text</span>
+            <input
+              type="text"
+              value={bookingAdImageAltText}
+              onChange={(event) => setBookingAdImageAltText(event.target.value)}
+              disabled={disabled}
+              maxLength={512}
+              placeholder="Studio reception area"
+            />
+          </label>
+        </div>
+        <div className="cs-form-row">
+          <label className="cs-field cs-branding-color-field">
+            <span>Card color</span>
+            <div className="cs-branding-color-input">
+              <input
+                type="color"
+                value={isHexColor(bookingAdPanelColor) ? bookingAdPanelColor.trim() : DEFAULT_PANEL_COLOR}
+                onChange={(event) => setBookingAdPanelColor(event.target.value)}
+                disabled={disabled}
+                aria-label="Card color picker"
+              />
+              <input
+                type="text"
+                value={bookingAdPanelColor}
+                onChange={(event) => setBookingAdPanelColor(event.target.value)}
+                disabled={disabled}
+                maxLength={16}
+                placeholder={DEFAULT_PANEL_COLOR}
+                aria-label="Card color hex"
+              />
+              {bookingAdPanelColor ? (
+                <button
+                  type="button"
+                  className="cs-btn cs-btn--ghost cs-btn--sm"
+                  onClick={() => setBookingAdPanelColor("")}
+                  disabled={disabled}
+                >
+                  Reset
+                </button>
+              ) : null}
+            </div>
+            <span className="cs-field-help">The background of the card that holds the photo and text. Text turns light or dark to stay readable.</span>
+          </label>
+        </div>
+        <div className="cs-form-row">
+          <label className="cs-field">
+            <span>Label above the headline</span>
+            <input
+              type="text"
+              value={bookingAdLabel}
+              onChange={(event) => setBookingAdLabel(event.target.value)}
+              disabled={disabled}
+              maxLength={60}
+              placeholder="This season"
+            />
+            <span className="cs-field-help">A short line shown in small capitals above the headline.</span>
+          </label>
+        </div>
         <div className="cs-form-row">
           <label className="cs-field">
             <span>Marketing headline</span>
@@ -2048,58 +2308,6 @@ function BrandingSection({
               disabled={disabled}
               maxLength={512}
               placeholder="Quiet booking, clear next steps."
-            />
-          </label>
-          <label className="cs-field">
-            <span>Marketing image</span>
-            <div className="cs-marketing-upload">
-              {bookingAdImageUrl ? (
-                <div className="cs-marketing-upload__preview">
-                  <img src={bookingAdImageUrl} alt="Marketing preview" />
-                </div>
-              ) : null}
-              <div className="cs-marketing-upload__controls">
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0] ?? null;
-                    if (file) {
-                      setMarketingCropFile(file);
-                    }
-                    event.target.value = "";
-                  }}
-                  disabled={disabled || marketingImageUploading}
-                />
-                {bookingAdImageUrl ? (
-                  <button
-                    type="button"
-                    className="cs-btn cs-btn--ghost cs-btn--sm"
-                    onClick={() => setBookingAdImageUrl("")}
-                    disabled={disabled || marketingImageUploading}
-                  >
-                    Remove
-                  </button>
-                ) : null}
-                {marketingImageUploading ? <small className="cs-field-help">Uploading…</small> : null}
-                {marketingImageError ? (
-                  <small role="alert" className="cs-error">{marketingImageError}</small>
-                ) : null}
-              </div>
-            </div>
-            <span className="cs-field-help">Upload a photo or paste a URL below.</span>
-          </label>
-        </div>
-        <div className="cs-form-row">
-          <label className="cs-field">
-            <span>Marketing image URL</span>
-            <input
-              type="url"
-              value={bookingAdImageUrl}
-              onChange={(event) => setBookingAdImageUrl(event.target.value)}
-              disabled={disabled}
-              maxLength={2048}
-              placeholder="https://cdn.example.com/booking-hero.jpg"
             />
           </label>
         </div>
@@ -2115,23 +2323,47 @@ function BrandingSection({
               placeholder="Choose the visit type, location, provider preference, and time without losing context."
             />
           </label>
+        </div>
+      </details>
+
+      <details className="cs-fieldset cs-collapsible">
+        <summary>Select service screen</summary>
+        <p className="cs-fieldset-help">Customize the marketing panel text shown on the &ldquo;Select a service&rdquo; step.</p>
+        <ImageUploadField
+          label="Service screen image"
+          value={bookingAdServiceImageUrl}
+          onChange={setBookingAdServiceImageUrl}
+          disabled={disabled}
+          tenantSlug={tenantSlug}
+          crop
+          help="Leave empty to use the marketing image."
+        />
+        <div className="cs-form-row">
           <label className="cs-field">
-            <span>Marketing image alt text</span>
+            <span>Service screen image alt text</span>
             <input
               type="text"
-              value={bookingAdImageAltText}
-              onChange={(event) => setBookingAdImageAltText(event.target.value)}
+              value={bookingAdServiceImageAltText}
+              onChange={(event) => setBookingAdServiceImageAltText(event.target.value)}
               disabled={disabled}
               maxLength={512}
-              placeholder="Studio reception area"
+              placeholder="A treatment room"
             />
           </label>
         </div>
-      </fieldset>
-
-      <fieldset className="cs-fieldset">
-        <legend>Select service screen</legend>
-        <p className="cs-fieldset-help">Customize the marketing panel text shown on the &ldquo;Select a service&rdquo; step.</p>
+        <div className="cs-form-row">
+          <label className="cs-field">
+            <span>Service screen label</span>
+            <input
+              type="text"
+              value={bookingAdServiceLabel}
+              onChange={(event) => setBookingAdServiceLabel(event.target.value)}
+              disabled={disabled}
+              maxLength={60}
+              placeholder="From the studio"
+            />
+          </label>
+        </div>
         <div className="cs-form-row">
           <label className="cs-field">
             <span>Service screen headline</span>
@@ -2158,11 +2390,46 @@ function BrandingSection({
             />
           </label>
         </div>
-      </fieldset>
+      </details>
 
-      <fieldset className="cs-fieldset">
-        <legend>Choose location screen</legend>
+      <details className="cs-fieldset cs-collapsible">
+        <summary>Choose location screen</summary>
         <p className="cs-fieldset-help">Customize the marketing panel text shown on the &ldquo;Choose a location&rdquo; step.</p>
+        <ImageUploadField
+          label="Location screen image"
+          value={bookingAdLocationImageUrl}
+          onChange={setBookingAdLocationImageUrl}
+          disabled={disabled}
+          tenantSlug={tenantSlug}
+          crop
+          help="Leave empty to use the marketing image."
+        />
+        <div className="cs-form-row">
+          <label className="cs-field">
+            <span>Location screen image alt text</span>
+            <input
+              type="text"
+              value={bookingAdLocationImageAltText}
+              onChange={(event) => setBookingAdLocationImageAltText(event.target.value)}
+              disabled={disabled}
+              maxLength={512}
+              placeholder="The studio entrance"
+            />
+          </label>
+        </div>
+        <div className="cs-form-row">
+          <label className="cs-field">
+            <span>Location screen label</span>
+            <input
+              type="text"
+              value={bookingAdLocationLabel}
+              onChange={(event) => setBookingAdLocationLabel(event.target.value)}
+              disabled={disabled}
+              maxLength={60}
+              placeholder="Our studios"
+            />
+          </label>
+        </div>
         <div className="cs-form-row">
           <label className="cs-field">
             <span>Location screen headline</span>
@@ -2189,10 +2456,10 @@ function BrandingSection({
             />
           </label>
         </div>
-      </fieldset>
+      </details>
 
-      <fieldset className="cs-fieldset">
-        <legend>Booking review screen</legend>
+      <details className="cs-fieldset cs-collapsible">
+        <summary>Booking review screen</summary>
         <p className="cs-fieldset-help">Customize the marketing panel text shown on the booking review step.</p>
         <div className="cs-form-row">
           <label className="cs-field">
@@ -2220,7 +2487,7 @@ function BrandingSection({
             />
           </label>
         </div>
-      </fieldset>
+      </details>
 
       {validationMessage ? <p role="alert" className="cs-error">{validationMessage}</p> : null}
       {saveState.kind === "success" ? <p role="status" className="cs-status">{saveState.message}</p> : null}

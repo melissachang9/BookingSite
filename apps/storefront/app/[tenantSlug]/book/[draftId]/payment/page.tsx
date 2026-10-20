@@ -1,3 +1,4 @@
+import { BookingSteps } from "../../../../components/booking-steps";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -170,6 +171,7 @@ export default async function BookingPaymentPage({ params, searchParams }: Booki
 
     return (
       <main className="page-stack">
+        <BookingSteps current={4} />
         <section className="state-panel">
           <p className="store-eyebrow">Payment unavailable</p>
           <h2>{tenantName}</h2>
