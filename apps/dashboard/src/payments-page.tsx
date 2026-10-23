@@ -8,6 +8,11 @@ import type {
   SendPaymentReminderResponse,
 } from "@booking/shared-types";
 
+import { useMoneyFormat } from "./money-format";
+import { MoneyHeldTab, type MoneyHeldTabApi } from "./payments-money-held-tab";
+import { MoneyOwedPanel, type MoneyOwedApi } from "./payments-money-owed";
+import { SalesTab, type SalesTabApi } from "./payments-sales-tab";
+import { TransactionsTab, type TransactionsTabApi } from "./payments-transactions-tab";
 import { platformApi } from "./platform-api";
 
 type PaymentFollowUpState =
@@ -27,7 +32,7 @@ export type PaymentsPageDefinition = {
   metric: string;
 };
 
-export type PaymentsPageApi = {
+export type PaymentsPageApi = TransactionsTabApi & SalesTabApi & MoneyHeldTabApi & MoneyOwedApi & {
   listPaymentFollowUp: (tenantSlug: string) => Promise<DepositPaymentFollowUpListResponse>;
   createCheckoutSession: (body: CreateCheckoutSessionRequest) => Promise<CreateCheckoutSessionResponse>;
   sendPaymentReminder: (tenantSlug: string, bookingDraftId: string) => Promise<SendPaymentReminderResponse>;
@@ -42,35 +47,8 @@ type PaymentsPageProps = {
 
 const defaultStorefrontBaseUrl = import.meta.env.VITE_PUBLIC_STOREFRONT_BASE_URL ?? "http://127.0.0.1:3001";
 
-const dayLabelFormatter = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/Los_Angeles",
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-});
-
-const timeFormatter = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/Los_Angeles",
-  hour: "numeric",
-  minute: "2-digit",
-});
-
-const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-});
-
 function hasPermission(user: AuthenticatedUser, key: string): boolean {
   return user.permissions.some((permission) => permission.key === key && permission.allowed);
-}
-
-function formatMoney(cents: number): string {
-  return currencyFormatter.format(cents / 100);
-}
-
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-  return `${dayLabelFormatter.format(date)} at ${timeFormatter.format(date)}`;
 }
 
 async function copyTextToClipboard(value: string): Promise<void> {
@@ -105,7 +83,12 @@ function getPaymentLinkTone(item: DepositPaymentFollowUpItem): "ready" | "progre
   return "planned";
 }
 
-function buildDepositReminderMailto(item: DepositPaymentFollowUpItem, checkoutUrl: string): string {
+function buildDepositReminderMailto(
+  item: DepositPaymentFollowUpItem,
+  checkoutUrl: string,
+  formatMoney: (cents: number) => string,
+  formatDateTime: (iso: string) => string,
+): string {
   const customerEmail = item.bookingDraft.customer?.email?.trim();
   if (!customerEmail) {
     throw new Error("Customer email is required before drafting a reminder.");
@@ -126,12 +109,17 @@ function buildDepositReminderMailto(item: DepositPaymentFollowUpItem, checkoutUr
   return `mailto:${encodeURIComponent(customerEmail)}?${new URLSearchParams({ subject, body }).toString()}`;
 }
 
-export function PaymentsPage({
-  definition,
+function DepositFollowUpPanel({
   currentUser,
-  api = platformApi,
-  storefrontBaseUrl = defaultStorefrontBaseUrl,
-}: PaymentsPageProps) {
+  api,
+  storefrontBaseUrl,
+}: {
+  currentUser: AuthenticatedUser | null;
+  api: PaymentsPageApi;
+  storefrontBaseUrl: string;
+}) {
+  const { money: formatMoney, dateTime: rawDateTime } = useMoneyFormat();
+  const formatDateTime = (iso: string) => rawDateTime(iso).replace(", ", " at ");
   const [followUpState, setFollowUpState] = useState<PaymentFollowUpState>({ kind: "loading" });
   const [actionState, setActionState] = useState<PaymentActionState>({ kind: "idle" });
   const canViewPayments = currentUser !== null && hasPermission(currentUser, "payments.view");
@@ -300,7 +288,7 @@ export function PaymentsPage({
 
     try {
       const checkoutSession = await ensureCheckoutLink(item);
-      window.open(buildDepositReminderMailto(item, checkoutSession.checkoutUrl), "_blank", "noopener,noreferrer");
+      window.open(buildDepositReminderMailto(item, checkoutSession.checkoutUrl, formatMoney, formatDateTime), "_blank", "noopener,noreferrer");
 
       startTransition(() => {
         setActionState({
@@ -319,20 +307,7 @@ export function PaymentsPage({
   };
 
   return (
-    <main className="cs-page-stack">
-      <section className="cs-hero cs-hero--compact">
-        <div className="cs-hero__copy">
-          <p className="cs-eyebrow">{definition.eyebrow}</p>
-          <h3>Keep unpaid deposits from going cold.</h3>
-          <p>{definition.description}</p>
-        </div>
-        <div className="cs-hero__panel">
-          <p className="cs-eyebrow">Deposit queue</p>
-          <strong>{followUpState.kind === "ready" ? `${followUpState.items.length} awaiting payment` : definition.metric}</strong>
-          <span>Operators can send or prepare deposit reminders without losing tenant context.</span>
-        </div>
-      </section>
-
+    <div className="cs-page-stack">
       <section className="cs-catalog-layout">
         <article className="cs-panel-card">
           <div className="cs-panel-title-row">
@@ -469,6 +444,75 @@ export function PaymentsPage({
           </ul>
         </aside>
       </section>
+    </div>
+  );
+}
+
+type PaymentsTab = "transactions" | "sales" | "held" | "follow-up";
+
+const PAYMENT_TABS: Array<[PaymentsTab, string]> = [
+  ["transactions", "Transactions"],
+  ["sales", "Sales"],
+  ["held", "Money held"],
+  ["follow-up", "Follow-up"],
+];
+
+export function PaymentsPage({
+  definition,
+  currentUser,
+  api = platformApi,
+  storefrontBaseUrl = defaultStorefrontBaseUrl,
+}: PaymentsPageProps) {
+  const [tab, setTab] = useState<PaymentsTab>("transactions");
+  const canViewPayments = currentUser !== null && hasPermission(currentUser, "payments.view");
+  const canManagePayments = currentUser !== null && hasPermission(currentUser, "payments.manage");
+  const tenantSlug = currentUser?.tenantSlug ?? "";
+
+  return (
+    <main className="cs-page-stack">
+      <header className="cs-pay-header">
+        <p className="cs-eyebrow">{definition.eyebrow}</p>
+        <h3>Payments</h3>
+        <p>{definition.description}</p>
+      </header>
+
+      {!canViewPayments || !tenantSlug ? (
+        <div className="cs-empty cs-empty--muted">
+          {canViewPayments
+            ? "Tenant session is missing tenant context."
+            : "Your role can access the dashboard, but it cannot view payments."}
+        </div>
+      ) : (
+        <>
+          <div className="cs-pay-tabs" role="tablist" aria-label="Payments sections">
+            {PAYMENT_TABS.map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                id={`payments-tab-${key}`}
+                aria-selected={tab === key}
+                aria-controls={`payments-panel-${key}`}
+                className={tab === key ? "cs-pay-tab is-active" : "cs-pay-tab"}
+                onClick={() => setTab(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div role="tabpanel" id={`payments-panel-${tab}`} aria-labelledby={`payments-tab-${tab}`}>
+            {tab === "transactions" ? <TransactionsTab api={api} tenantSlug={tenantSlug} canEmailReceipts={canManagePayments} /> : null}
+            {tab === "sales" ? <SalesTab api={api} tenantSlug={tenantSlug} canEmailReceipts={canManagePayments} /> : null}
+            {tab === "held" ? <MoneyHeldTab api={api} tenantSlug={tenantSlug} /> : null}
+            {tab === "follow-up" ? (
+              <div className="cs-page-stack">
+                <MoneyOwedPanel api={api} tenantSlug={tenantSlug} />
+                <DepositFollowUpPanel currentUser={currentUser} api={api} storefrontBaseUrl={storefrontBaseUrl} />
+              </div>
+            ) : null}
+          </div>
+        </>
+      )}
     </main>
   );
 }

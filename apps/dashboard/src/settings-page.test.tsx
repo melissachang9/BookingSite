@@ -215,10 +215,47 @@ describe("SettingsPage", () => {
         country: "CA",
         currency: "CAD",
         smsPhone: "+1 416 555 0199",
+        timezone: "America/Toronto",
       });
     });
     expect(onTenantUpdated).toHaveBeenCalledWith(updated);
     expect(await screen.findByText(/business details saved/i)).toBeInTheDocument();
+  });
+
+  it("shows the saved timezone and saves a different one", async () => {
+    const updated = { ...tenant, timezone: "America/Vancouver" };
+    const spy = vi.spyOn(platformApi, "updateTenantBusiness").mockResolvedValue(updated);
+    render(<SettingsPage definition={definition} currentUser={ownerUser} tenant={tenant} onTenantUpdated={vi.fn()} />);
+
+    const select = screen.getByLabelText(/timezone/i) as HTMLSelectElement;
+    expect(select.value).toBe("America/Toronto");
+    expect(screen.getByText(/appointments keep their exact time/i)).toBeInTheDocument();
+
+    fireEvent.change(select, { target: { value: "America/Vancouver" } });
+    fireEvent.click(screen.getByRole("button", { name: /save business details/i }));
+    await waitFor(() =>
+      expect(spy).toHaveBeenCalledWith("brow-beauty-lab", expect.objectContaining({ timezone: "America/Vancouver" })),
+    );
+  });
+
+  it("keeps a saved timezone selectable even if the browser's list lacks it", () => {
+    const odd = { ...tenant, timezone: "Etc/Custom-Zone" };
+    render(<SettingsPage definition={definition} currentUser={ownerUser} tenant={odd} onTenantUpdated={vi.fn()} />);
+    expect((screen.getByLabelText(/timezone/i) as HTMLSelectElement).value).toBe("Etc/Custom-Zone");
+  });
+
+  it("does not let someone without settings access change the timezone", () => {
+    const viewer = { ...ownerUser, permissions: [{ key: "settings.view", allowed: true }, { key: "settings.manage", allowed: false }] } as unknown as AuthenticatedUser;
+    render(<SettingsPage definition={definition} currentUser={viewer} tenant={tenant} onTenantUpdated={vi.fn()} />);
+    expect(screen.getByLabelText(/timezone/i)).toBeDisabled();
+  });
+
+  it("shows the server's message when business details can't be saved", async () => {
+    vi.spyOn(platformApi, "updateTenantBusiness").mockRejectedValue(new Error("Unsupported currency."));
+    render(<SettingsPage definition={definition} currentUser={ownerUser} tenant={tenant} onTenantUpdated={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/currency/i), { target: { value: "EUR" } });
+    fireEvent.click(screen.getByRole("button", { name: /save business details/i }));
+    expect(await screen.findByText(/unsupported currency/i)).toBeInTheDocument();
   });
 
   it("hides the weekday editor and disables the restrict toggle when Set business hours is off", () => {

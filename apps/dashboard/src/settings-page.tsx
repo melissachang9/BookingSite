@@ -504,6 +504,7 @@ function CalendarDisplaySection({
         </select>
       </label>
 
+
       {validationMessage ? <p role="alert" className="cs-error">{validationMessage}</p> : null}
       {saveState.kind === "success" ? <p role="status" className="cs-status">{saveState.message}</p> : null}
       {saveState.kind === "error" ? <p role="alert" className="cs-error">{saveState.message}</p> : null}
@@ -940,6 +941,37 @@ function AppointmentRemindersSection({
   );
 }
 
+const COMMON_TIME_ZONES = [
+  "America/St_Johns",
+  "America/Halifax",
+  "America/Toronto",
+  "America/Winnipeg",
+  "America/Edmonton",
+  "America/Vancouver",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Phoenix",
+  "America/Los_Angeles",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+  "Europe/London",
+  "Europe/Paris",
+  "Australia/Sydney",
+];
+
+/** Every IANA zone the browser knows, always including the one currently saved. */
+function timezoneOptions(current: string): string[] {
+  let zones: string[] = COMMON_TIME_ZONES;
+  try {
+    const supported = (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.("timeZone");
+    if (supported && supported.length > 0) zones = supported;
+  } catch {
+    // older browsers: the short list above is enough
+  }
+  return current && !zones.includes(current) ? [current, ...zones] : zones;
+}
+
 function BusinessDetailsSection({
   canManageSettings,
   tenant,
@@ -956,10 +988,12 @@ function BusinessDetailsSection({
   const [country, setCountry] = useState<string>("US");
   const [currency, setCurrency] = useState<string>("USD");
   const [smsPhone, setSmsPhone] = useState<string>("");
+  const [timezone, setTimezone] = useState<string>("");
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
   useEffect(() => {
     if (tenant) {
+      setTimezone(tenant.timezone);
       setName(tenant.name);
       setHomepageUrl(tenant.branding.homepageUrl ?? "");
       setCountry(tenant.settings.country ?? "US");
@@ -984,6 +1018,7 @@ function BusinessDetailsSection({
         country: country.trim().toUpperCase(),
         currency: currency.trim().toUpperCase(),
         smsPhone: smsPhone.trim() === "" ? null : smsPhone.trim(),
+        timezone,
       });
       onTenantUpdated(updated);
       setSaveState({ kind: "success", message: "Business details saved." });
@@ -1062,6 +1097,26 @@ function BusinessDetailsSection({
             maxLength={32}
             placeholder="+1 555 123 4567"
           />
+        </label>
+      </div>
+
+      <div className="cs-form-row">
+        <label className="cs-field">
+          <span>Timezone</span>
+          <select
+            value={timezone}
+            onChange={(event) => setTimezone(event.target.value)}
+            disabled={!canManageSettings || saveState.kind === "submitting"}
+          >
+            {timezoneOptions(timezone).map((zone) => (
+              <option key={zone} value={zone}>
+                {zone.replaceAll("_", " ")}
+              </option>
+            ))}
+          </select>
+          <small className="cs-field-help">
+            Appointments keep their exact time. Times, weekly hours and business hours are shown and read in this timezone.
+          </small>
         </label>
       </div>
 

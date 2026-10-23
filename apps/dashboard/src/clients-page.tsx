@@ -12,6 +12,7 @@ import type {
 
 import { platformApi } from "./platform-api";
 import { FormResponseViewer } from "./form-response-viewer";
+import { ClientPaymentsTab } from "./client-payments-tab";
 import { ContactIcon, buildContactRows, memberMonthsSince } from "./client-profile-parts";
 
 type RouteDefinitionLike = {
@@ -37,7 +38,7 @@ type FormResponsesState =
   | { kind: "ready"; items: BookingFormResponseEntry[] }
   | { kind: "error"; message: string };
 
-type ClientTab = "history" | "forms" | "photos" | "notes" | "messages";
+type ClientTab = "history" | "payments" | "forms" | "photos" | "notes" | "messages";
 
 function hasPermission(user: AuthenticatedUser, key: string): boolean {
   return user.permissions.some(
@@ -329,6 +330,7 @@ export function CustomersPage({
           {(
             [
               ["history", "History"],
+              ["payments", "Payments"],
               ["forms", "Forms"],
               ["photos", "Photos"],
               ["notes", "Notes"],
@@ -353,6 +355,14 @@ export function CustomersPage({
         <section className="cs-client-detail-page__tab-panel">
           {activeTab === "history" ? (
             <ClientHistoryTab profileState={profileState} />
+          ) : activeTab === "payments" ? (
+            <ClientPaymentsTab
+              api={platformApi}
+              tenantSlug={tenantSlug}
+              customerId={selectedCustomer.id}
+              canViewPayments={hasPermission(currentUser, "payments.view")}
+              canManagePayments={hasPermission(currentUser, "payments.manage")}
+            />
           ) : activeTab === "forms" ? (
             <ClientFormsTab formResponsesState={formResponsesState} />
           ) : activeTab === "photos" ? (

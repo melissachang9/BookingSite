@@ -24,6 +24,7 @@ import {
   writeStoredSession,
 } from "./platform-api";
 import { CalendarPage } from "./calendar-page";
+import { MoneyFormatProvider } from "./money-format";
 import { PaymentsPage } from "./payments-page";
 import { SettingsPage } from "./settings-page";
 import { CloverCallbackPage } from "./payments-settings-section";
@@ -127,12 +128,12 @@ const routeDefinitions: RouteDefinition[] = [
   {
     path: "/payments",
     title: "Payments",
-    eyebrow: "Deposits & follow-up",
-    description: "Held slots waiting on a deposit: resend links, copy them, or follow up before they lapse.",
-    metric: "Follow-up",
+    eyebrow: "Money record",
+    description: "Transactions, money held for clients until checkout, and the refunds and balances that still need a person.",
+    metric: "Money record",
     tone: "progress",
-    workstreams: ["Unpaid deposit links", "Payment reminders"],
-    actions: ["Send reminder", "Copy link", "Release hold"],
+    workstreams: ["Transactions", "Money held", "Follow-up"],
+    actions: ["Review transactions", "Send reminder", "Copy link"],
   },
   {
     path: "/forms",
@@ -806,6 +807,7 @@ export function App() {
   const weekStartsOn = tenantSummary?.settings.weekStartsOn ?? 0;
 
   return (
+    <MoneyFormatProvider currency={tenantSummary?.settings.currency} timeZone={tenantSummary?.timezone}>
     <Routes>
       <Route path="/" element={<Navigate to={session === null ? "/login" : "/calendar"} replace />} />
       <Route path="/login" element={<LoginPage session={session} onSessionCreated={handleSessionCreated} />} />
@@ -884,6 +886,7 @@ export function App() {
         </Route>
       )}
     </Routes>
+    </MoneyFormatProvider>
   );
 }
 

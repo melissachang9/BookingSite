@@ -7350,3 +7350,66 @@ select:disabled {
 .cs-collapsible > summary::after { content: "+"; font-size: 18px; font-weight: 500; color: var(--cs-secondary); }
 .cs-collapsible[open] > summary::after { content: "\2212"; }
 .cs-collapsible[open] > summary { margin-bottom: 4px; }
+
+/* ---- Payments page: tabs, filters, transaction table ---- */
+.cs-pay-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.cs-pay-tab {
+  padding: 8px 16px; border: 0; border-radius: 999px; cursor: pointer;
+  background: var(--cs-canvas); color: var(--cs-secondary); font: 600 13px var(--cs-font);
+}
+.cs-pay-tab:hover { color: var(--cs-ink); }
+.cs-pay-tab.is-active { background: var(--cs-ink); color: #fff; }
+.cs-pay-filters { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin: 4px 0 12px; }
+.cs-pay-filters .cs-field { min-width: 150px; }
+.cs-pay-table-wrap { overflow-x: auto; }
+.cs-pay-table { min-width: 560px; }
+.cs-pay-table th[scope="row"] { background: transparent; font-weight: 500; }
+.cs-pay-table__num { text-align: right !important; white-space: nowrap; }
+.cs-pay-table__num small { display: block; color: var(--cs-secondary); font-weight: 500; }
+.cs-pay-table__notes { color: var(--cs-secondary); max-width: 280px; }
+.cs-pay-total th, .cs-pay-total td { font-weight: 700 !important; border-top: 2px solid var(--cs-hairline); }
+.cs-pay-pager { font: 500 12.5px var(--cs-font); color: var(--cs-secondary); align-self: center; }
+.cs-pay-held { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
+.cs-pay-held h5 { margin: 0 0 8px; display: flex; gap: 8px; align-items: baseline; }
+.cs-pay-held h5 small { color: var(--cs-secondary); font-weight: 600; }
+.cs-pay-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.cs-pay-list li { display: grid; gap: 2px; padding: 10px 12px; border-radius: var(--cs-r-16); background: var(--cs-canvas); }
+.cs-pay-list small { color: var(--cs-secondary); }
+.cs-pay-header { display: grid; gap: 4px; }
+.cs-pay-header h3 { margin: 0; font: 700 22px var(--cs-font); letter-spacing: -0.02em; }
+.cs-pay-header p:last-child { margin: 0; color: var(--cs-secondary); font: 500 13.5px var(--cs-font); }
+
+/* ---- Receipts ---- */
+.cs-link-btn { background: none; border: 0; padding: 0; font: 600 13px var(--cs-font); color: var(--cs-ink); text-decoration: underline; cursor: pointer; }
+.cs-receipt {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 60; width: min(460px, 100vw);
+  overflow-y: auto; padding: 20px; background: var(--cs-canvas, #fff); box-shadow: -8px 0 32px rgba(0, 0, 0, .12);
+  display: flex; flex-direction: column; gap: 14px;
+}
+.cs-receipt__bar { display: flex; align-items: center; justify-content: space-between; }
+.cs-receipt__bar h3 { margin: 0; font: 700 16px var(--cs-font); }
+.cs-receipt__paper { background: #fff; border-radius: var(--cs-r-16); padding: 20px; display: grid; gap: 4px; }
+.cs-receipt__paper h4 { margin: 0; font: 700 18px var(--cs-font); }
+.cs-receipt__paper h5 { margin: 14px 0 4px; font: 700 12px var(--cs-font); letter-spacing: .06em; text-transform: uppercase; color: var(--cs-label); }
+.cs-receipt__paper p { margin: 0; font: 500 13px var(--cs-font); color: var(--cs-secondary); }
+.cs-receipt__meta { margin-top: 8px !important; color: var(--cs-ink) !important; }
+.cs-receipt__table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+.cs-receipt__table td { padding: 6px 0; font: 500 13px var(--cs-font); border-bottom: 1px solid var(--cs-hairline); }
+.cs-receipt__table small { display: block; color: var(--cs-secondary); }
+.cs-receipt__table tfoot td { border-bottom: 0; }
+.cs-receipt__num { text-align: right; white-space: nowrap; }
+.cs-receipt__total td { font-weight: 700 !important; border-top: 2px solid var(--cs-hairline); }
+.cs-receipt__due { margin-top: 12px !important; font-weight: 700 !important; color: var(--cs-ink) !important; }
+.cs-receipt__paid { margin-top: 12px !important; font-weight: 700 !important; color: var(--cs-ok-text) !important; }
+.cs-receipt__actions { display: grid; gap: 10px; }
+.cs-receipt__email { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.cs-receipt__email .cs-field { flex: 1 1 200px; }
+.cs-client-payments { display: grid; gap: 22px; }
+.cs-client-payments h4 { margin: 0 0 8px; }
+@media print {
+  body * { visibility: hidden !important; }
+  .cs-receipt-print, .cs-receipt-print * { visibility: visible !important; }
+  .cs-receipt { position: static; box-shadow: none; width: auto; padding: 0; }
+  .cs-receipt-print { position: absolute; inset: 0; box-shadow: none; }
+  .cs-receipt__actions, .cs-receipt__bar, .cs-scrim { display: none !important; }
+}
