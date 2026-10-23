@@ -824,3 +824,9 @@ html { background: #ebe7e3; }
 .sf-summary__rows > div { padding: 8px 0; font-size: 13px; }
 .sf-summary__cta { padding: 0.75rem 1.2rem; font-size: 14px; }
 .sf-summary__note { font-size: 12px; }
+
+/* Form rows: sentence case, buttons pinned right, tight help text. */
+.sf-formrow .sf-formrow__text { flex: 1 1 auto; min-width: 0; }
+.sf-formrow .sf-formrow__text small { text-transform: none; }
+.sf-formrow .sf-formrow__text small::first-letter { text-transform: uppercase; }
+.sf-details__card > .sf-help, .sf-details__card > .sf-note { margin: 0; }
