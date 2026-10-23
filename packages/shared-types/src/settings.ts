@@ -143,6 +143,8 @@ export type UpdateTenantBusinessRequest = {
   country?: string;
   currency?: string;
   smsPhone?: string | null;
+  /** IANA name, e.g. "America/Vancouver". Changes how times and weekly hours are read, not stored instants. */
+  timezone?: string;
 };
 
 export type UpdateTenantBusinessHoursRequest = {

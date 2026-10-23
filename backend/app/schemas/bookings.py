@@ -79,6 +79,9 @@ class BookingSummaryResponse(CamelModel):
     amount_paid_cents: int
     balance_due_cents: int
     tax_cents: int = 0
+    # Set when the visit is checked out; null on bookings completed before sales were numbered.
+    sale_id: str | None = None
+    sale_number: int | None = None
     # The rates behind tax_cents, so a checkout can re-price a sale without guessing.
     service_tax_rate_percent: float = 0
     product_tax_rate_percent: float = 0
@@ -133,6 +136,33 @@ class UpdateBookingStatusRequest(CamelModel):
     payment_resolution: Literal["collected", "follow_up", "waived"] | None = None
     discount_cents: int = Field(default=0, ge=0)
     discount_type: Literal["percent", "amount"] | None = None
+
+
+class GroupCheckoutItem(CamelModel):
+    booking_id: str
+    discount_cents: int = Field(default=0, ge=0)
+    discount_type: Literal["percent", "amount"] | None = None
+    payment_resolution: Literal["collected", "follow_up", "waived"] | None = None
+
+
+class TipShare(CamelModel):
+    provider_id: str
+    amount_cents: int = Field(ge=0)
+
+
+class GroupCheckoutRequest(CamelModel):
+    """Check out several of one client's visits as a single sale."""
+
+    items: list[GroupCheckoutItem] = Field(min_length=2, max_length=10)
+    notes: str | None = Field(default=None, max_length=500)
+    # Optional override of how the tip is shared; must add up to the tip left on these visits.
+    tip_split: list[TipShare] | None = None
+
+
+class GroupCheckoutResponse(CamelModel):
+    sale_id: str
+    sale_number: int
+    bookings: list[BookingSummaryResponse]
 
 
 class BookingProgressRequest(CamelModel):

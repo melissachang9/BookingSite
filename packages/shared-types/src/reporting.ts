@@ -221,3 +221,14 @@ export type AppointmentsReport = {
 };
 
 export type ReportKind = "sales" | "team" | "clients" | "appointments";
+
+export type TaxReport = {
+  startDate: string;
+  endDate: string;
+  salesCount: number;
+  salesCents: number;
+  taxableSalesCents: number;
+  taxCollectedCents: number;
+  byKind: Array<{ kind: "service" | "add_on" | "product"; salesCents: number; taxCents: number }>;
+  byLocation: Array<{ locationId?: string | null; locationName?: string | null; salesCents: number; taxCents: number }>;
+};

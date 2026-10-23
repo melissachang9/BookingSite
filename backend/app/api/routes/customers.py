@@ -115,7 +115,7 @@ async def update_customer_route(
     actor: User = Depends(require_tenant_permission("customers.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> CustomerProfileResponse:
-    result = await update_customer(session, tenant_slug, customer_id, payload)
+    result = await update_customer(session, tenant_slug, customer_id, payload, actor)
     await record_audit(session, tenant_id=result.customer.tenant_id, entity_type="customer", entity_id=customer_id, action="update", actor=actor)
     return result
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 import re
 from datetime import datetime
 from typing import Literal
@@ -262,9 +264,17 @@ class UpdateTenantBusinessRequest(CamelModel):
     country: str | None = Field(default=None, min_length=2, max_length=3, pattern=r"^[A-Za-z]{2,3}$")
     currency: str | None = Field(default=None, min_length=3, max_length=3, pattern=r"^[A-Za-z]{3}$")
     sms_phone: str | None = Field(default=None, max_length=32)
+    # IANA name such as "America/Vancouver". Appointment times are stored exactly; this decides
+    # how they are shown and how weekly hours and business hours are read.
+    timezone: str | None = Field(default=None, min_length=1, max_length=64)
 
     @model_validator(mode="after")
     def _validate(self) -> "UpdateTenantBusinessRequest":
+        if self.timezone is not None:
+            try:
+                ZoneInfo(self.timezone.strip())
+            except (ZoneInfoNotFoundError, ValueError, OSError):
+                raise ValueError("timezone must be a valid IANA timezone, such as America/Vancouver.")
         if self.currency is not None and self.currency.upper() not in SUPPORTED_CURRENCIES:
             raise ValueError(
                 f"Unsupported currency. Supported: {', '.join(SUPPORTED_CURRENCIES)}."

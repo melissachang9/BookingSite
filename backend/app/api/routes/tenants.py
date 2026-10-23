@@ -134,9 +134,7 @@ async def patch_tenant_business(
     actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantSummaryResponse:
-    result = await update_tenant_business(session, tenant_slug, payload)
-    await record_audit(session, tenant_id=result.tenant_id, entity_type="tenant", entity_id=result.id, action="update_business", actor=actor)
-    return result
+    return await update_tenant_business(session, tenant_slug, payload, actor)
 
 
 @router.patch(

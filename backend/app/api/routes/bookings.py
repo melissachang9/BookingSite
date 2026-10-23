@@ -15,6 +15,8 @@ from app.schemas.bookings import (
     CancelBookingRequest,
     CancelManageBookingRequest,
     CustomerManageBookingResponse,
+    GroupCheckoutRequest,
+    GroupCheckoutResponse,
     RescheduleManageBookingRequest,
     UpdateBookingRequest,
     BookingProgressRequest,
@@ -38,7 +40,7 @@ from app.services.booking_forms import (
     send_booking_form_reminder,
     submit_booking_form_requirement_by_token,
 )
-from app.services.bookings import record_booking_progress, add_booking_item, apply_wallet_credit, cancel_booking, list_bookings, record_manual_payment, refund_payment, remove_booking_item, update_booking, update_booking_status
+from app.services.bookings import complete_bookings_as_one_sale, record_booking_progress, add_booking_item, apply_wallet_credit, cancel_booking, list_bookings, record_manual_payment, refund_payment, remove_booking_item, update_booking, update_booking_status
 
 
 router = APIRouter(tags=["bookings"])
@@ -214,6 +216,20 @@ async def refund_payment_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingSummaryResponse:
     return await refund_payment(session, tenant_slug, booking_id, payment_id, payload, current_user)
+
+
+@router.post(
+    "/tenants/{tenant_slug}/bookings/group-checkout",
+    response_model=GroupCheckoutResponse,
+    summary="Check out several of one client's visits as a single numbered sale",
+)
+async def group_checkout_route(
+    tenant_slug: str,
+    payload: GroupCheckoutRequest,
+    current_user: User = Depends(require_tenant_permission("bookings.complete")),
+    session: AsyncSession = Depends(get_db_session),
+) -> GroupCheckoutResponse:
+    return await complete_bookings_as_one_sale(session, tenant_slug, payload, current_user)
 
 
 @router.post(

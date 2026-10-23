@@ -1,4 +1,16 @@
 import type {
+  EmailReceiptResponse,
+  SaleListQuery,
+  SaleListResponse,
+  SaleReceipt,
+  WalletHistory,
+  GroupCheckoutRequest,
+  GroupCheckoutResponse,
+  LiabilitySummary,
+  MoneyOwed,
+  TaxReport,
+  TransactionListResponse,
+  TransactionQuery,
   ApiRootResponse,
   AvailabilityRequest,
   AvailabilityResponse,
@@ -543,6 +555,23 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.post<PaymentCapabilities, CloverApiKeysRequest>(`tenants/${tenantSlug}/payments/clover/api-keys`, body),
   disconnectClover: (tenantSlug: string) =>
     client.request<PaymentCapabilities>(`tenants/${tenantSlug}/payments/clover/disconnect`, { method: "POST" }),
+  listTransactions: (tenantSlug: string, query: TransactionQuery = {}) =>
+    client.get<TransactionListResponse>(`tenants/${tenantSlug}/payments/transactions`, { query: { ...query } }),
+  getLiabilitySummary: (tenantSlug: string, query: { occurredFrom?: string; occurredTo?: string } = {}) =>
+    client.get<LiabilitySummary>(`tenants/${tenantSlug}/payments/liabilities`, { query }),
+  listSales: (tenantSlug: string, query: SaleListQuery = {}) =>
+    client.get<SaleListResponse>(`tenants/${tenantSlug}/sales`, { query: { ...query } }),
+  getSaleReceipt: (tenantSlug: string, saleId: string) =>
+    client.get<SaleReceipt>(`tenants/${tenantSlug}/sales/${saleId}/receipt`),
+  emailSaleReceipt: (tenantSlug: string, saleId: string, email?: string) =>
+    client.post<EmailReceiptResponse, { email?: string }>(`tenants/${tenantSlug}/sales/${saleId}/receipt/email`, { email }),
+  getCustomerWallet: (tenantSlug: string, customerId: string) =>
+    client.get<WalletHistory>(`tenants/${tenantSlug}/customers/${customerId}/wallet`),
+  getMoneyOwed: (tenantSlug: string) => client.get<MoneyOwed>(`tenants/${tenantSlug}/payments/money-owed`),
+  groupCheckout: (tenantSlug: string, request: GroupCheckoutRequest) =>
+    client.post<GroupCheckoutResponse, GroupCheckoutRequest>(`tenants/${tenantSlug}/bookings/group-checkout`, request),
+  getTaxReport: (tenantSlug: string, query: ReportQuery) =>
+    client.get<TaxReport>(`tenants/${tenantSlug}/reports/tax`, { query: reportQuery(query) }),
   listPaymentFollowUp: (tenantSlug: string) =>
     client.get<DepositPaymentFollowUpListResponse>(`tenants/${tenantSlug}/payments/follow-up`),
   sendPaymentReminder: (tenantSlug: string, bookingDraftId: string) =>

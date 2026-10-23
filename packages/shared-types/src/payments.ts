@@ -20,8 +20,16 @@ export type PaymentEventKind =
   | "checkout_completed"
   | "checkout_expired"
   | "checkout_reminder_sent"
+  | "late_payment_received"
+  | "payment_link_sent"
   | "payment_recorded"
+  | "wallet_applied"
+  | "no_show_fee_charged"
   | "refund_recorded"
+  | "refund_processed"
+  | "refund_owed"
+  | "wallet_returned"
+  | "wallet_credited"
   | "deposit_forfeited"
   | "manual_credit_applied";
 
@@ -235,3 +243,212 @@ export type PaymentLinkResponse = {
 };
 
 export type BookingDraftList = { items: BookingDraftSummary[] };
+
+// ---- Money record: transactions, money held, money owed ---------------------------------------
+
+export type TransactionType =
+  | "payment"
+  | "deposit_collected"
+  | "refund"
+  | "deposit_redeemed"
+  | "deposit_forfeited"
+  | "deposit_to_wallet";
+
+/**
+ * One money movement. `cashCents` is signed: money in is positive, money out negative, and
+ * movements that only reclassify held money (redeemed, forfeited, to wallet) are 0.
+ */
+export type TransactionRow = {
+  id: string;
+  occurredAt: ISODateString;
+  type: TransactionType;
+  amountCents: number;
+  cashCents: number;
+  tipCents: number;
+  method?: string | null;
+  status?: string | null;
+  customerId?: UUID | null;
+  customerName?: string | null;
+  bookingId?: UUID | null;
+  saleId?: UUID | null;
+  saleNumber?: number | null;
+  paymentId?: UUID | null;
+  providerId?: UUID | null;
+  locationId?: UUID | null;
+  actorName?: string | null;
+  notes?: string | null;
+};
+
+export type TransactionListResponse = {
+  transactions: TransactionRow[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type TransactionQuery = {
+  occurredFrom?: string;
+  occurredTo?: string;
+  type?: TransactionType[];
+  method?: string;
+  customerId?: string;
+  locationId?: string;
+  providerId?: string;
+  limit?: number;
+  offset?: number;
+};
+
+/** Opening + collected - redeemed - refunded - moved to wallet - forfeited = closing. */
+export type HeldMoneyBucket = {
+  openingCents: number;
+  collectedCents: number;
+  redeemedCents: number;
+  refundedCents: number;
+  movedToWalletCents: number;
+  forfeitedCents: number;
+  closingCents: number;
+};
+
+export type WalletBucket = {
+  openingCents: number;
+  addedCents: number;
+  usedCents: number;
+  closingCents: number;
+};
+
+export type LiabilitySummary = {
+  periodStart?: ISODateString | null;
+  periodEnd?: ISODateString | null;
+  deposits: HeldMoneyBucket;
+  wallet: WalletBucket;
+};
+
+export type RefundOwedItem = {
+  paymentId: UUID;
+  bookingId?: UUID | null;
+  customerId: UUID;
+  customerName?: string | null;
+  amountCents: number;
+  owedSince: ISODateString;
+  notes?: string | null;
+};
+
+export type BalanceOwedItem = {
+  bookingId: UUID;
+  saleNumber?: number | null;
+  customerId: UUID;
+  customerName?: string | null;
+  serviceName?: string | null;
+  balanceDueCents: number;
+  completedAt?: ISODateString | null;
+};
+
+export type MoneyOwed = {
+  refundsOwed: RefundOwedItem[];
+  balancesOwed: BalanceOwedItem[];
+  refundsOwedTotalCents: number;
+  balancesOwedTotalCents: number;
+};
+
+// ---- Sales and receipts -----------------------------------------------------------------------
+
+export type SaleSummary = {
+  id: UUID;
+  saleNumber: number;
+  customerId: UUID;
+  customerName?: string | null;
+  completedAt: ISODateString;
+  currency: string;
+  subtotalCents: number;
+  discountCents: number;
+  taxCents: number;
+  tipCents: number;
+  totalCents: number;
+  paidCents: number;
+  balanceDueCents: number;
+};
+
+export type SaleListResponse = {
+  sales: SaleSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type SaleListQuery = {
+  customerId?: string;
+  occurredFrom?: string;
+  occurredTo?: string;
+  limit?: number;
+  offset?: number;
+};
+
+export type ReceiptLine = {
+  name: string;
+  kind: "service" | "add_on" | "product" | string;
+  quantity: number;
+  unitPriceCents: number;
+  lineTotalCents: number;
+  taxCents: number;
+  providerName?: string | null;
+};
+
+export type ReceiptPayment = {
+  paymentId?: UUID | null;
+  /** "deposit" for money taken before the visit and applied at checkout. */
+  method: string;
+  receivedCents: number;
+  refundedCents: number;
+  netCents: number;
+  tipCents: number;
+  cardBrand?: string | null;
+  cardLast4?: string | null;
+  paidAt?: ISODateString | null;
+};
+
+export type SaleReceipt = {
+  saleId: UUID;
+  saleNumber: number;
+  completedAt: ISODateString;
+  currency: string;
+  timeZone: string;
+  business: {
+    name: string;
+    phone?: string | null;
+    website?: string | null;
+    locationName?: string | null;
+    addressLines: string[];
+  };
+  customer: { id: UUID; name: string; email?: string | null };
+  lines: ReceiptLine[];
+  subtotalCents: number;
+  discountCents: number;
+  taxCents: number;
+  tipCents: number;
+  totalCents: number;
+  payments: ReceiptPayment[];
+  paidCents: number;
+  balanceDueCents: number;
+};
+
+export type EmailReceiptResponse = {
+  saleId: UUID;
+  recipientEmail: string;
+  sentAt: ISODateString;
+};
+
+export type WalletTransactionRow = {
+  id: UUID;
+  createdAt: ISODateString;
+  amountCents: number;
+  kind: string;
+  notes?: string | null;
+  actorName?: string | null;
+  bookingId?: UUID | null;
+};
+
+export type WalletHistory = {
+  customerId: UUID;
+  balanceCents: number;
+  transactions: WalletTransactionRow[];
+};

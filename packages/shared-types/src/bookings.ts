@@ -153,6 +153,9 @@ export type BookingSummary = AuditFields &
     amountPaidCents: number;
     balanceDueCents: number;
     taxCents: number;
+    /** Set when the visit is checked out; absent on bookings completed before sales were numbered. */
+    saleId?: string | null;
+    saleNumber?: number | null;
     /** The rates and exemption behind taxCents, so checkout can re-price a sale. */
     serviceTaxRatePercent?: number;
     productTaxRatePercent?: number;
@@ -306,4 +309,23 @@ export type UpdateBookingRequest = {
 };
 export type BookingProgressRequest = {
   action: "check_in" | "start_service";
+};
+
+/** Check out several of one client's visits as a single numbered sale. */
+export type GroupCheckoutRequest = {
+  items: Array<{
+    bookingId: UUID;
+    discountCents?: number;
+    discountType?: "percent" | "amount";
+    paymentResolution?: "collected" | "follow_up" | "waived";
+  }>;
+  notes?: string;
+  /** Overrides the default tip split; shares must add up to the tip left on these visits. */
+  tipSplit?: Array<{ providerId: UUID; amountCents: number }>;
+};
+
+export type GroupCheckoutResponse = {
+  saleId: UUID;
+  saleNumber: number;
+  bookings: BookingSummary[];
 };

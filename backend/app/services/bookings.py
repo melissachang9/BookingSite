@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
 from app.db.models import Booking, BookingDraft, BookingItem, BookingPaymentEvent, Payment, PaymentEvent, Provider, ResourceAllocation, Service, ServiceAddOn, Tenant, User
-from app.schemas.bookings import AddBookingItemRequest, BookingListResponse, BookingProgressRequest, BookingSummaryResponse, CancelBookingRequest, PaginationMetaResponse, UpdateBookingRequest, UpdateBookingStatusRequest
+from app.schemas.bookings import AddBookingItemRequest, BookingListResponse, BookingProgressRequest, BookingSummaryResponse, CancelBookingRequest, GroupCheckoutRequest, GroupCheckoutResponse, PaginationMetaResponse, UpdateBookingRequest, UpdateBookingStatusRequest
 from app.schemas.payments import ApplyWalletCreditRequest, RecordManualPaymentRequest, RefundPaymentRequest
 from app.services.booking_drafts import (
     _cancellation_policy_for_booking,
@@ -19,7 +19,8 @@ from app.services.booking_drafts import (
     load_category_forms,
 )
 from app.services.payment_processor import charge_stripe_no_show_fee, refund_payment_via_processor
-from app.services.presenters import booking_balance_due_cents, booking_price_cents, booking_tax_cents, booking_to_summary
+from app.services.presenters import booking_balance_due_cents, booking_discount_cents, booking_price_cents, booking_tax_cents, booking_to_summary
+from app.services.sales import create_sale_for_booking, create_sale_for_bookings
 from app.services.service_terms import provider_service_link, resolve_service_terms
 
 logger = logging.getLogger(__name__)
@@ -572,6 +573,9 @@ async def refund_payment(
             idempotency_key=f"staff-refund-{payment.id}-{payment.amount_cents}-{refund_amount_cents}",
         )
 
+    if payment.original_amount_cents is None:
+        # Keep the amount actually received; refund events record what went back.
+        payment.original_amount_cents = payment.amount_cents
     if is_partial:
         # Reduce the payment amount; keep it succeeded unless fully refunded.
         payment.amount_cents -= refund_amount_cents
@@ -760,6 +764,128 @@ async def _deliver_post_visit_forms(session: AsyncSession, booking: Booking) -> 
                 )
 
 
+async def _complete_confirmed_booking(
+    session: AsyncSession,
+    booking: Booking,
+    *,
+    discount_cents: int,
+    discount_type: str | None,
+    payment_resolution: str | None,
+    notes: str | None,
+    actor: User,
+) -> None:
+    """Validate and apply completion of a confirmed booking (no commit, no sale)."""
+    payment_resolution_in = payment_resolution
+    if discount_cents > booking_balance_due_cents(booking):
+        raise api_exception(409, "conflict", "Discount cannot exceed the remaining booking balance.")
+    if discount_cents > 0:
+        _append_booking_event(
+            session,
+            booking,
+            event_kind="discount_applied",
+            actor=actor,
+            amount_cents=discount_cents,
+            extra_payload={"discountType": discount_type or "amount"},
+        )
+
+    remaining_balance_cents = booking_balance_due_cents(booking) - discount_cents
+    payment_resolution = payment_resolution_in
+    if payment_resolution is None:
+        if remaining_balance_cents > 0:
+            raise api_exception(
+                409,
+                "conflict",
+                "Completion requires an explicit payment outcome while a balance remains due.",
+            )
+        payment_resolution = "collected"
+
+    if payment_resolution == "collected" and remaining_balance_cents > 0:
+        raise api_exception(
+            409,
+            "conflict",
+            "Record the remaining balance before marking this booking completed as collected.",
+        )
+
+    if payment_resolution == "follow_up" and remaining_balance_cents <= 0:
+        raise api_exception(409, "conflict", "Follow-up is only valid when a balance still remains due.")
+
+    guard_transition("booking", booking.id, booking.status, "completed")
+    booking.status = "completed"
+    booking.completed_at = datetime.now(timezone.utc)
+    booking.tax_cents = booking_tax_cents(booking)
+    booking.notes = notes
+    _apply_payment_resolution(booking, payment_resolution)
+    _append_booking_event(
+        session,
+        booking,
+        event_kind="booking_completed",
+        actor=actor,
+        amount_cents=remaining_balance_cents,
+        notes=notes,
+        extra_payload={
+            "fromStatus": "confirmed",
+            "toStatus": "completed",
+            "paymentResolution": payment_resolution,
+            "balanceDueCents": remaining_balance_cents,
+        },
+    )
+
+
+async def complete_bookings_as_one_sale(
+    session: AsyncSession,
+    tenant_slug: str,
+    payload: GroupCheckoutRequest,
+    actor: User,
+) -> GroupCheckoutResponse:
+    """Complete several of one client's visits together under one sale number.
+
+    All or nothing: any visit that can't be completed rolls the whole checkout back.
+    """
+    tenant = await _load_tenant(session, tenant_slug)
+    tenant_id = tenant.id
+    booking_ids = [item.booking_id for item in payload.items]
+    if len(set(booking_ids)) != len(booking_ids):
+        raise api_exception(409, "conflict", "Each visit can appear only once in a group checkout.")
+
+    bookings = [await _load_booking(session, booking_id, tenant_id) for booking_id in booking_ids]
+    if len({booking.customer_id for booking in bookings}) != 1:
+        raise api_exception(409, "conflict", "A group checkout must be for one client.")
+    notes = _clean_notes(payload.notes)
+
+    discounts: dict[str, int] = {}
+    for booking, item in zip(bookings, payload.items):
+        if booking.status != "confirmed":
+            raise api_exception(409, "conflict", "Only confirmed bookings can be checked out.")
+        existing_discount = booking_discount_cents(booking)
+        await _complete_confirmed_booking(
+            session,
+            booking,
+            discount_cents=item.discount_cents,
+            discount_type=item.discount_type,
+            payment_resolution=item.payment_resolution,
+            notes=notes,
+            actor=actor,
+        )
+        discounts[booking.id] = existing_discount + item.discount_cents
+
+    tip_split = (
+        [(share.provider_id, share.amount_cents) for share in payload.tip_split]
+        if payload.tip_split is not None
+        else None
+    )
+    sale = await create_sale_for_bookings(session, bookings, discounts=discounts, actor=actor, tip_split=tip_split)
+    sale_id, sale_number = sale.id, sale.sale_number
+    await session.commit()
+    session.expire_all()
+
+    summaries: list[BookingSummaryResponse] = []
+    for booking_id in booking_ids:
+        updated = await _load_booking(session, booking_id, tenant_id)
+        await _deliver_post_visit_forms(session, updated)
+        summaries.append(booking_to_summary(updated))
+    return GroupCheckoutResponse(sale_id=sale_id, sale_number=sale_number, bookings=summaries)
+
+
 async def update_booking_status(
     session: AsyncSession,
     tenant_slug: str,
@@ -787,58 +913,20 @@ async def update_booking_status(
         if booking.status != "confirmed":
             raise api_exception(409, "conflict", "Only confirmed bookings can be marked completed.")
 
-        if payload.discount_cents > booking_balance_due_cents(booking):
-            raise api_exception(409, "conflict", "Discount cannot exceed the remaining booking balance.")
-        if payload.discount_cents > 0:
-            _append_booking_event(
-                session,
-                booking,
-                event_kind="discount_applied",
-                actor=actor,
-                amount_cents=payload.discount_cents,
-                extra_payload={"discountType": payload.discount_type or "amount"},
-            )
-
-        remaining_balance_cents = booking_balance_due_cents(booking) - payload.discount_cents
-        payment_resolution = payload.payment_resolution
-        if payment_resolution is None:
-            if remaining_balance_cents > 0:
-                raise api_exception(
-                    409,
-                    "conflict",
-                    "Completion requires an explicit payment outcome while a balance remains due.",
-                )
-            payment_resolution = "collected"
-
-        if payment_resolution == "collected" and remaining_balance_cents > 0:
-            raise api_exception(
-                409,
-                "conflict",
-                "Record the remaining balance before marking this booking completed as collected.",
-            )
-
-        if payment_resolution == "follow_up" and remaining_balance_cents <= 0:
-            raise api_exception(409, "conflict", "Follow-up is only valid when a balance still remains due.")
-
-        guard_transition("booking", booking.id, booking.status, "completed")
-        booking.status = "completed"
-        booking.completed_at = datetime.now(timezone.utc)
-        booking.tax_cents = booking_tax_cents(booking)
-        booking.notes = notes
-        _apply_payment_resolution(booking, payment_resolution)
-        _append_booking_event(
+        await _complete_confirmed_booking(
             session,
             booking,
-            event_kind="booking_completed",
-            actor=actor,
-            amount_cents=remaining_balance_cents,
+            discount_cents=payload.discount_cents,
+            discount_type=payload.discount_type,
+            payment_resolution=payload.payment_resolution,
             notes=notes,
-            extra_payload={
-                "fromStatus": "confirmed",
-                "toStatus": "completed",
-                "paymentResolution": payment_resolution,
-                "balanceDueCents": remaining_balance_cents,
-            },
+            actor=actor,
+        )
+        await create_sale_for_booking(
+            session,
+            booking,
+            discount_cents=booking_discount_cents(booking) + payload.discount_cents,
+            actor=actor,
         )
 
         reload_booking_id = booking.id

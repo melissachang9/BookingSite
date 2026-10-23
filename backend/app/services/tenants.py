@@ -63,6 +63,7 @@ from app.schemas.catalog import (
     WorkHoursSummary,
     CopyDayRequest,
 )
+from app.services.audit import record_audit
 from app.services.compensation import CompletedService, compute_service_payout
 from app.services.presenters import location_to_summary, provider_to_summary, service_to_summary, tenant_to_summary
 
@@ -216,11 +217,12 @@ async def update_tenant_settings(
 
 
 async def update_tenant_business(
-    session: AsyncSession, tenant_slug: str, payload: UpdateTenantBusinessRequest
+    session: AsyncSession, tenant_slug: str, payload: UpdateTenantBusinessRequest, actor: User | None = None
 ) -> TenantSummaryResponse:
     tenant = await get_tenant_by_slug(session, tenant_slug)
     current_settings = dict(tenant.settings_json or {})
     current_branding = dict(tenant.branding_json or {})
+    changes: dict[str, dict[str, object]] = {}
 
     if payload.name is not None:
         tenant.name = payload.name.strip()
@@ -230,13 +232,35 @@ async def update_tenant_business(
     if payload.country is not None:
         current_settings["country"] = payload.country.strip().upper()
     if payload.currency is not None:
-        current_settings["currency"] = payload.currency.strip().upper()
+        new_currency = payload.currency.strip().upper()
+        old_currency = tenant_currency(tenant)
+        if new_currency != old_currency:
+            # A connected card processor with another currency is surfaced as a mismatch (and its
+            # card features switch off) by the payment capabilities, so the change is allowed here.
+            changes["currency"] = {"from": old_currency, "to": new_currency}
+        current_settings["currency"] = new_currency
+    if payload.timezone is not None:
+        new_timezone = payload.timezone.strip()
+        if new_timezone != tenant.timezone:
+            changes["timezone"] = {"from": tenant.timezone, "to": new_timezone}
+            tenant.timezone = new_timezone
     if payload.sms_phone is not None:
         sms = payload.sms_phone.strip()
         current_settings["smsPhone"] = sms or None
 
     tenant.branding_json = current_branding
     tenant.settings_json = current_settings
+    if changes:
+        # Sensitive: it changes how every time and amount is read. Audited in the same transaction.
+        await record_audit(
+            session,
+            tenant_id=tenant.id,
+            entity_type="tenant",
+            entity_id=tenant.id,
+            action="update_business_regional",
+            actor=actor,
+            changes=changes,
+        )
     await session.commit()
     await session.refresh(tenant)
     return tenant_to_summary(tenant)

@@ -16,6 +16,7 @@ from app.schemas.reports import (
     AppointmentsReportResponse,
     ClientsReportResponse,
     SalesReportResponse,
+    TaxReportResponse,
     TeamReportResponse,
 )
 from app.services.auth import effective_permissions_for_user
@@ -31,6 +32,7 @@ from app.services.reports.csv_export import (
 )
 from app.services.reports.ranges import ReportRange, build_range
 from app.services.reports.sales import build_sales_report
+from app.services.reports.tax import build_tax_report
 from app.services.reports.team import build_team_report
 from app.services.tenants import get_tenant_by_slug
 
@@ -121,6 +123,21 @@ async def sales_report_route(
     if filters.export_format == "csv":
         return _csv_response("Sales report", report, sales_sections(report), _filename("sales", rng))
     return report
+
+
+@router.get("/tax", response_model=TaxReportResponse, summary="Tax collected on completed sales")
+async def tax_report_route(
+    tenant_slug: str,
+    filters: _Filters = Depends(report_filters),
+    _: User = Depends(require_tenant_permission("reports.financial")),
+    session: AsyncSession = Depends(get_db_session),
+):
+    if filters.export_format != "json":
+        raise api_exception(422, "validation_error", "The tax report is only available as json for now.")
+    tenant, rng = await _resolve(session, tenant_slug, filters)
+    return await build_tax_report(
+        session, tenant, rng, location_id=filters.location_id, provider_id=filters.provider_id
+    )
 
 
 @router.get("/team", response_model=TeamReportResponse, summary="Team report")

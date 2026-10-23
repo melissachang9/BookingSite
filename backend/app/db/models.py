@@ -399,6 +399,9 @@ class Booking(Base, IdMixin, TimestampMixin):
     service_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Tax charged, snapshotted at completion so later rate changes don't rewrite history.
     tax_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # The sale this visit was checked out on (set at completion; null on bookings completed before sales existed).
+    sale_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    sale_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     last_form_reminder_sent_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -498,6 +501,9 @@ class Payment(Base, IdMixin, TimestampMixin):
     card_brand: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     card_last4: Mapped[Optional[str]] = mapped_column(String(4), nullable=True)
     charge_attempt_key: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    # What was received before any refund reduced `amount_cents` (set on the first refund;
+    # null means amount_cents is still the amount received).
+    original_amount_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     customer: Mapped[Customer] = relationship(back_populates="payments")
     booking: Mapped[Optional[Booking]] = relationship(back_populates="payments")
@@ -524,6 +530,95 @@ class PaymentEvent(Base, IdMixin, TimestampMixin):
     processor_reference: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     payment: Mapped[Payment] = relationship(back_populates="events")
+
+
+class SaleSequence(Base):
+    """Last sale number handed out per business (numbers are gap-free and tenant-scoped)."""
+
+    __tablename__ = "sale_sequences"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), primary_key=True)
+    last_number: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+
+class Sale(Base, IdMixin, TimestampMixin):
+    """A completed checkout. Numbered when checkout completes, never edited afterwards.
+
+    Totals are snapshots: later price or tax-rate changes don't rewrite a sale.
+    One sale can cover several bookings (group checkout); its lines carry the booking.
+    """
+
+    __tablename__ = "sales"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "sale_number", name="uq_sale_tenant_number"),
+        Index("ix_sales_tenant_completed_at", "tenant_id", "completed_at"),
+    )
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    sale_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    customer_id: Mapped[str] = mapped_column(String(36), ForeignKey("customers.id"), index=True, nullable=False)
+    location_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("locations.id"), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="completed")
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="USD")
+    subtotal_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    discount_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tax_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tip_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+
+    lines: Mapped[list["SaleLine"]] = relationship(back_populates="sale", cascade="all, delete-orphan")
+    tips: Mapped[list["SaleTip"]] = relationship(back_populates="sale", cascade="all, delete-orphan")
+    tenders: Mapped[list["SaleTender"]] = relationship(back_populates="sale", cascade="all, delete-orphan")
+
+
+class SaleLine(Base, IdMixin, TimestampMixin):
+    __tablename__ = "sale_lines"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    sale_id: Mapped[str] = mapped_column(String(36), ForeignKey("sales.id"), index=True, nullable=False)
+    booking_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("bookings.id"), index=True, nullable=True)
+    # service | add_on | product (gift_card, package and membership arrive with those features)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    unit_price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    tax_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Who performed it, for commission and tip sharing.
+    provider_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("providers.id"), nullable=True)
+
+    sale: Mapped[Sale] = relationship(back_populates="lines")
+
+
+class SaleTender(Base, IdMixin, TimestampMixin):
+    """A payment applied to a sale. A deposit taken earlier shows up here as a `deposit` tender:
+    that is the moment the money held for the client is redeemed."""
+
+    __tablename__ = "sale_tenders"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    sale_id: Mapped[str] = mapped_column(String(36), ForeignKey("sales.id"), index=True, nullable=False)
+    payment_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("payments.id"), index=True, nullable=True)
+    # deposit | wallet | card | cash | external_pos | manual | stripe | <custom method id>
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    tip_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    sale: Mapped[Sale] = relationship(back_populates="tenders")
+
+
+class SaleTip(Base, IdMixin, TimestampMixin):
+    """A provider's share of the tip left on a sale. Shares add up to the sale's tip."""
+
+    __tablename__ = "sale_tips"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    sale_id: Mapped[str] = mapped_column(String(36), ForeignKey("sales.id"), index=True, nullable=False)
+    provider_id: Mapped[str] = mapped_column(String(36), ForeignKey("providers.id"), index=True, nullable=False)
+    amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    sale: Mapped[Sale] = relationship(back_populates="tips")
 
 
 class ProcessorConnection(Base, IdMixin, TimestampMixin):

@@ -251,3 +251,29 @@ class AppointmentsReportResponse(CamelModel):
     heatmap: list[HeatCell]
     drafts: DraftFunnel
     resources: list[ResourceUtilizationRow]
+
+
+class TaxKindRow(CamelModel):
+    kind: str  # service | add_on | product
+    sales_cents: int
+    tax_cents: int
+
+
+class TaxLocationRow(CamelModel):
+    location_id: str | None = None
+    location_name: str | None = None
+    sales_cents: int
+    tax_cents: int
+
+
+class TaxReportResponse(CamelModel):
+    """Tax collected on completed sales in the period (by sale completion date)."""
+
+    start_date: date
+    end_date: date
+    sales_count: int
+    sales_cents: int
+    taxable_sales_cents: int
+    tax_collected_cents: int
+    by_kind: list[TaxKindRow]
+    by_location: list[TaxLocationRow]

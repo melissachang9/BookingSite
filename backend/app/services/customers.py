@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
-from app.db.models import Booking, Customer, Payment, Tenant
+from app.db.models import Booking, Customer, Payment, Tenant, User
 from app.schemas.customers import CustomerBookingEntry, CustomerListResponse, CustomerLookupResponse, CustomerPaymentEntry, CustomerProfileResponse, UpdateCustomerRequest, UpsertCustomerRequest, UpsertCustomerResponse
 from app.schemas.bookings import PaginationMetaResponse
 from app.services.presenters import (
@@ -18,6 +18,7 @@ from app.services.presenters import (
     customer_to_summary,
 )
 from app.services.tenants import get_tenant_by_slug
+from app.services.wallet import record_wallet_transaction
 
 
 _OWNERSHIP_BYPASS_ROLES = frozenset({"owner", "manager"})
@@ -207,6 +208,7 @@ async def update_customer(
     tenant_slug: str,
     customer_id: str,
     payload: UpdateCustomerRequest,
+    actor: User,
 ) -> CustomerProfileResponse:
     tenant = await get_tenant_by_slug(session, tenant_slug)
     customer = await session.scalar(

@@ -573,6 +573,8 @@ def booking_to_summary(booking: Booking) -> BookingSummaryResponse:
         amount_paid_cents=amount_paid_cents,
         balance_due_cents=balance_due_cents,
         tax_cents=tax_cents,
+        sale_id=booking.sale_id,
+        sale_number=booking.sale_number,
         service_tax_rate_percent=booking_service_rate,
         product_tax_rate_percent=booking_product_rate,
         service_is_taxable=effective_taxable(booking.service)[0],
