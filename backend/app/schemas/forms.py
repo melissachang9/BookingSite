@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Literal, Any
 
 from pydantic import Field
 
 from app.schemas.base import CamelModel
+
+# Customer forms are shown to clients; internal forms stay with staff. Timing applies to customer forms.
+FormScope = Literal["customer", "internal"]
+CustomerPromptTiming = Literal["pre_booking", "pre_visit", "post_visit"]
 
 
 class FormFieldOptionSchema(CamelModel):
@@ -58,8 +62,8 @@ class FormListResponse(CamelModel):
 class CreateFormRequest(CamelModel):
     name: str = Field(min_length=1, max_length=255)
     category: str | None = Field(default=None, max_length=100)
-    scope: str = Field(default="customer")
-    customer_prompt_timing: str | None = None
+    scope: FormScope = Field(default="customer")
+    customer_prompt_timing: CustomerPromptTiming | None = None
     review_required: bool = False
     schema: FormSchemaPayload = Field(default_factory=FormSchemaPayload)
     service_ids: list[str] = Field(default_factory=list)
@@ -69,8 +73,8 @@ class CreateFormRequest(CamelModel):
 class UpdateFormRequest(CamelModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     category: str | None = Field(default=None, max_length=100)
-    scope: str | None = None
-    customer_prompt_timing: str | None = None
+    scope: FormScope | None = None
+    customer_prompt_timing: CustomerPromptTiming | None = None
     review_required: bool | None = None
     is_active: bool | None = None
     schema: FormSchemaPayload | None = None

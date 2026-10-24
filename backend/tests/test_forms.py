@@ -66,7 +66,7 @@ def test_list_forms_returns_empty_when_no_forms(client: TestClient) -> None:
     response = client.get("/api/v1/tenants/brow-beauty-lab/forms", headers=headers)
     assert response.status_code == 200
     data = response.json()
-    assert isinstance(data["forms"], list)
+    assert isinstance(data["items"], list)
 
 
 def test_create_form_returns_summary(client: TestClient) -> None:
@@ -86,7 +86,7 @@ def test_list_forms_includes_created_form(client: TestClient) -> None:
     headers = _auth_headers(client)
     response = client.get("/api/v1/tenants/brow-beauty-lab/forms", headers=headers)
     assert response.status_code == 200
-    forms = response.json()["forms"]
+    forms = response.json()["items"]
     assert len(forms) >= 1
     names = [f["name"] for f in forms]
     assert "Health Intake" in names
@@ -105,7 +105,7 @@ def test_update_form_metadata(client: TestClient) -> None:
     assert updated["name"] == "New Name"
     assert updated["isActive"] is False
     # Version should still be 1 (no schema change)
-    assert updated["latestVersion"]["versionNumber"] == 1
+    assert updated["currentVersionNumber"] == 1
 
 
 def test_update_form_schema_creates_new_version(client: TestClient) -> None:
@@ -126,8 +126,8 @@ def test_update_form_schema_creates_new_version(client: TestClient) -> None:
     )
     assert response.status_code == 200
     updated = response.json()
-    assert updated["latestVersion"]["versionNumber"] == 2
-    assert updated["latestVersion"]["schema"]["title"] == "Updated Intake"
+    assert updated["currentVersionNumber"] == 2
+    assert updated["schema"]["title"] == "Updated Intake"
 
 
 def test_delete_form_removes_it(client: TestClient) -> None:
@@ -138,7 +138,7 @@ def test_delete_form_removes_it(client: TestClient) -> None:
 
     # Verify it's gone
     list_resp = client.get("/api/v1/tenants/brow-beauty-lab/forms", headers=headers)
-    forms = list_resp.json()["forms"]
+    forms = list_resp.json()["items"]
     assert all(f["id"] != form["id"] for f in forms)
 
 
@@ -447,3 +447,25 @@ def test_manage_form_requirement_draft_answers_prefill(client: TestClient) -> No
     updated_requirement = updated_reqs_resp.json()[0]
     assert updated_requirement["draftAnswers"] == {"medications": "Ibuprofen"}
     assert updated_requirement["prefillAnswers"] == {"medications": "Ibuprofen"}
+
+
+def test_update_form_rejects_invalid_scope_and_timing(client: TestClient) -> None:
+    form = _create_form(client, "Strict Form", _simple_schema())
+    headers = _auth_headers(client)
+    url = f"/api/v1/tenants/brow-beauty-lab/forms/{form['id']}"
+    assert client.patch(url, json={"scope": "everyone"}, headers=headers).status_code == 422
+    assert client.patch(url, json={"customerPromptTiming": "whenever"}, headers=headers).status_code == 422
+    # the form is unchanged
+    kept = next(f for f in client.get("/api/v1/tenants/brow-beauty-lab/forms", headers=headers).json()["items"] if f["id"] == form["id"])
+    assert kept["scope"] == "customer" and kept["customerPromptTiming"] == "pre_booking"
+
+
+def test_internal_forms_are_accepted(client: TestClient) -> None:
+    headers = _auth_headers(client)
+    response = client.post(
+        "/api/v1/tenants/brow-beauty-lab/forms",
+        json={"name": "Staff Note", "scope": "internal", "isActive": True},
+        headers=headers,
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["scope"] == "internal"

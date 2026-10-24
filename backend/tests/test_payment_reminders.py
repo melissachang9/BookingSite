@@ -7,7 +7,8 @@ def _next_weekday(target_weekday: int) -> str:
     today = datetime.now(timezone.utc).date()
     days_ahead = (target_weekday - today.weekday()) % 7
     if days_ahead == 0:
-        days_ahead = 1
+        # Today is the requested weekday: use next week's, not tomorrow (a different weekday).
+        days_ahead = 7
     return (today + timedelta(days=days_ahead)).isoformat()
 
 

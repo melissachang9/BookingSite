@@ -2409,6 +2409,11 @@ async def update_tenant_service(
         elif getattr(payload, clear_flag, False):
             setattr(service, field, None)
     if getattr(payload, "compare_at_price_cents", None) is not None:
+        # The schema can only compare against a price sent in the same request; check the saved one too.
+        if payload.compare_at_price_cents <= service.price_cents:
+            raise api_exception(
+                422, "validation_error", "compareAtPriceCents must be greater than the service price to act as an anchor."
+            )
         service.compare_at_price_cents = payload.compare_at_price_cents
     elif getattr(payload, "clear_compare_at_price", False):
         service.compare_at_price_cents = None
