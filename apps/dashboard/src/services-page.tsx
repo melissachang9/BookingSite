@@ -1268,6 +1268,12 @@ function ServiceDetail({
 // Tab components
 // ===========================================================================
 
+// Clicking a number field selects what's in it, so typing replaces it straight away.
+const selectNumberOnFocus = {
+  onFocus: (event: React.FocusEvent<HTMLInputElement>) => event.target.select(),
+  onMouseUp: (event: React.MouseEvent<HTMLInputElement>) => event.preventDefault(),
+};
+
 const FORM_TIMING_LABELS: Record<string, string> = {
   pre_booking: "Before booking",
   pre_visit: "Before the appointment",
@@ -1336,7 +1342,7 @@ function ServiceDetailsTab({
       <span className="cs-svc-details__label">{label}</span>
       <span className="cs-svc-unit cs-svc-unit--suffix">
         <input className="cs-svc-details__input" type="number" min={options.min} step={options.step}
-          value={value} required={options.required}
+          {...selectNumberOnFocus} value={value} required={options.required}
           onChange={(e) => onChange(e.target.value)} />
         {/* --chars lets CSS place the unit right after the typed digits. */}
         <span className="cs-svc-unit__affix" aria-hidden="true"
@@ -1371,7 +1377,7 @@ function ServiceDetailsTab({
               <span className="cs-svc-details__label">Price</span>
               <span className="cs-svc-unit cs-svc-unit--prefix">
                 <input className="cs-svc-details__input" type="number" min={0} step="0.01"
-                  value={form.priceAmount}
+                  {...selectNumberOnFocus} value={form.priceAmount}
                   onChange={(e) => setForm((c) => ({ ...c, priceAmount: e.target.value }))} required />
                 <span className="cs-svc-unit__affix" aria-hidden="true">$</span>
               </span>
@@ -1851,11 +1857,14 @@ function ServiceStaffTab({
           : teamPayEarnsCents(provider, visitPrice);
     const setPayMode = (mode: "default" | "percent" | "flat") => {
       if (mode === payMode) return;
-      patchVariantText(provider.id, "flat", "");
-      patchVariantText(provider.id, "percent", "");
+      // Start from the staff member's own pay setting when it's the same kind, so nothing resets to zero.
+      const teamPercentBp = provider.compensationMode === "service_percent" ? provider.compensationServicePercentBp ?? 0 : 0;
+      const teamFlatCents = provider.compensationMode === "flat_per_booking" ? provider.compensationFlatCents ?? 0 : 0;
+      patchVariantText(provider.id, "flat", mode === "flat" ? (teamFlatCents / 100).toFixed(2) : "");
+      patchVariantText(provider.id, "percent", mode === "percent" ? (teamPercentBp / 100).toString() : "");
       if (mode === "default") updateVariant(provider.id, { commissionFlatCents: null, commissionBasisPoints: null });
-      else if (mode === "percent") updateVariant(provider.id, { commissionFlatCents: null, commissionBasisPoints: 0 });
-      else updateVariant(provider.id, { commissionBasisPoints: null, commissionFlatCents: 0 });
+      else if (mode === "percent") updateVariant(provider.id, { commissionFlatCents: null, commissionBasisPoints: teamPercentBp });
+      else updateVariant(provider.id, { commissionBasisPoints: null, commissionFlatCents: teamFlatCents });
     };
     const bookingLink = provider.bookingUrl ?? null;
     const savedSlug = provider.bookingSlug ?? "";
@@ -2736,7 +2745,7 @@ function ServiceAddOnsTab({
       <label className="cs-svc-details__field">
         <span className="cs-svc-details__label">Price</span>
         <span className="cs-svc-unit cs-svc-unit--prefix">
-          <input className="cs-svc-details__input" type="number" min={0} step="0.01" value={draft.price}
+          <input className="cs-svc-details__input" type="number" min={0} step="0.01" {...selectNumberOnFocus} value={draft.price}
             placeholder="0.00" onChange={(e) => setDraft({ ...draft, price: e.target.value })} />
           <span className="cs-svc-unit__affix" aria-hidden="true">$</span>
         </span>
@@ -2744,7 +2753,7 @@ function ServiceAddOnsTab({
       <label className="cs-svc-details__field">
         <span className="cs-svc-details__label">Extra minutes</span>
         <span className="cs-svc-unit cs-svc-unit--suffix">
-          <input className="cs-svc-details__input" type="number" min={0} max={240} step={5} value={draft.minutes}
+          <input className="cs-svc-details__input" type="number" min={0} max={240} step={5} {...selectNumberOnFocus} value={draft.minutes}
             onChange={(e) => setDraft({ ...draft, minutes: e.target.value })} />
           <span className="cs-svc-unit__affix" aria-hidden="true"
             style={{ "--chars": draft.minutes.length } as React.CSSProperties}>min</span>

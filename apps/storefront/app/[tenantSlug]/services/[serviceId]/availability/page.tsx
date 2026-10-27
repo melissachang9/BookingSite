@@ -224,6 +224,13 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
     const nextAvailable = nextAvailabilitySearch.nextAvailableSlot;
     const nextAvailableDate = nextAvailable ? isoDateFromValueInTimeZone(nextAvailable.startAt, tenant.timezone) : undefined;
     const locationById = new Map(activeLocations.map((location) => [location.id, location.name]));
+    // With no location chosen, a service offered at only one place still has a definite location to show.
+    const serviceLocations = activeLocations.filter(
+      (location) =>
+        (service.locationIds.length === 0 || service.locationIds.includes(location.id)) &&
+        (!selectedProvider || selectedProvider.locationIds.length === 0 || selectedProvider.locationIds.includes(location.id)),
+    );
+    const onlyLocation = serviceLocations.length === 1 ? serviceLocations[0] : undefined;
     // One card per start time and location: with "any provider" the first free provider is offered.
     const seenTimes = new Set<string>();
     const pickableSlots = selectedAvailability.slots.filter((slot) => {
@@ -260,13 +267,35 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
           </div>
           <div className="sf-chips" aria-label="Selected appointment filters">
             <Link href={providerStepHref} className="sf-pill sf-pill--link">{selectedProvider?.name ?? "Any provider"}</Link>
-            <span className="sf-pill">{selectedLocation?.name ?? "Any location"}</span>
+            <span className="sf-pill">{(selectedLocation ?? onlyLocation)?.name ?? "Any location"}</span>
             <span className="sf-pill sf-pill--rose">
               {service.name} · {formatDuration(service.durationMinutes + selectedAddOns.reduce((sum, item) => sum + item.durationMinutes, 0))}
             </span>
             {selectedAddOns.map((item) => <span key={item.id} className="sf-pill">+ {item.name}</span>)}
           </div>
         </header>
+
+        {serviceLocations.length > 1 ? (
+          <nav className="sf-filters" aria-label="Location">
+            <Link
+              href={pathWithQuery(availabilityPath, { ...baseQuery, locationId: undefined, month: activeMonth, date: selectedDate })}
+              className={`sf-filter${selectedLocation ? "" : " is-active"}`}
+              aria-current={selectedLocation ? undefined : "true"}
+            >
+              All locations
+            </Link>
+            {serviceLocations.map((location) => (
+              <Link
+                key={location.id}
+                href={pathWithQuery(availabilityPath, { ...baseQuery, locationId: location.id, month: activeMonth, date: selectedDate })}
+                className={`sf-filter${selectedLocation?.id === location.id ? " is-active" : ""}`}
+                aria-current={selectedLocation?.id === location.id ? "true" : undefined}
+              >
+                {location.name}
+              </Link>
+            ))}
+          </nav>
+        ) : null}
 
         {error === "slot-unavailable" ? (
           <section className="status-banner" aria-live="polite">
@@ -370,13 +399,13 @@ export default async function AvailabilityPage({ params, searchParams }: Availab
                             <input type="hidden" name="serviceId" value={service.id} />
                             <input type="hidden" name="providerId" value={slot.providerId} />
                             <input type="hidden" name="startsAt" value={slot.startAt} />
-                            <input type="hidden" name="locationId" value={slot.locationId ?? ""} />
+                            <input type="hidden" name="locationId" value={slot.locationId ?? onlyLocation?.id ?? ""} />
                             <input type="hidden" name="returnTo" value={returnTo} />
                             {selectedAddOnIds.map((id) => <input key={id} type="hidden" name="addOnId" value={id} />)}
                             <button type="submit" className="sf-slot" data-provider-name={slot.providerName}>
                               <strong>{timeTitle(slot.startAt, tenant.timezone)}</strong>
                               <span>{slot.providerName}</span>
-                              <small>{slotLocationName ?? "Location to confirm"}</small>
+                              <small>{slotLocationName ?? onlyLocation?.name ?? "Location to confirm"}</small>
                             </button>
                           </form>
                         );

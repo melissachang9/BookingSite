@@ -778,6 +778,20 @@ describe("ServicesPage", () => {
     expect(deleteSpy).not.toHaveBeenCalled();
   });
 
+  it("selects the price when it is clicked so typing replaces it", async () => {
+    mockLoaders();
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    const price = (await screen.findByLabelText(/^Price/)) as HTMLInputElement;
+    // jsdom reports no selection range for number inputs, so watch for select() itself.
+    const selectSpy = vi.spyOn(price, "select");
+    fireEvent.focus(price);
+
+    expect(selectSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("names a new service so it never clashes with an existing one", async () => {
     mockLoaders({
       services: [...baseServices, { ...baseServices[2], id: "svc-new", name: "New Service" }],
