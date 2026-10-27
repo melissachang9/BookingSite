@@ -650,6 +650,134 @@ describe("ServicesPage", () => {
     });
   });
 
+  it("shows the service's own price, duration and deposit for staff who offer it", async () => {
+    mockLoaders();
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("tab", { name: "Staff" }));
+
+    expect(await screen.findByLabelText("Ava Rivera price")).toHaveValue("50.00");
+    expect(screen.getByLabelText("Ava Rivera duration")).toHaveValue("30");
+    expect(screen.getByLabelText("Ava Rivera deposit")).toHaveValue("0.00");
+  });
+
+  it("starts a newly enabled staff member on the service's values", async () => {
+    mockLoaders();
+    const updateProvider = vi.spyOn(platformApi, "updateProvider").mockResolvedValue({} as any);
+    vi.mocked(platformApi.listProvidersAdmin).mockResolvedValue({
+      providers: [{ ...baseProviders[0], serviceIds: [] }],
+    } as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Signature Facial")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Signature Facial"));
+    fireEvent.click(screen.getByRole("tab", { name: "Staff" }));
+    vi.mocked(platformApi.listProvidersAdmin).mockResolvedValue({
+      providers: [{ ...baseProviders[0], serviceIds: ["svc-facial"] }],
+    } as any);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Toggle Ava Rivera" }));
+
+    await waitFor(() => expect(updateProvider).toHaveBeenCalledTimes(1));
+    expect(await screen.findByLabelText("Ava Rivera price")).toHaveValue("120.00");
+    expect(screen.getByLabelText("Ava Rivera duration")).toHaveValue("60");
+    expect(screen.getByLabelText("Ava Rivera deposit")).toHaveValue("25.00");
+  });
+
+  it("saves the details when the operator moves to another tab", async () => {
+    mockLoaders();
+    const updateSpy = vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Lash Tint")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Lash Tint"));
+    fireEvent.change(await screen.findByLabelText("Service name"), { target: { value: "Lash Lift" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Staff" }));
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(updateSpy.mock.calls[0][2]).toMatchObject({ name: "Lash Lift" });
+    expect(await screen.findByRole("tab", { name: "Staff", selected: true })).toBeInTheDocument();
+  });
+
+  it("saves staff pricing when the operator moves to another tab", async () => {
+    mockLoaders();
+    const replaceSpy = vi.spyOn(platformApi, "replaceServiceProviderVariants").mockResolvedValue({
+      variants: [{ providerId: "prov-1", priceCents: 6000, durationMinutes: null, depositCents: null, commissionFlatCents: null, commissionBasisPoints: null }],
+    } as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("tab", { name: "Staff" }));
+    fireEvent.change(await screen.findByLabelText("Ava Rivera price"), { target: { value: "60.00" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Details" }));
+
+    await waitFor(() => expect(replaceSpy).toHaveBeenCalledTimes(1));
+    expect(replaceSpy.mock.calls[0][2]).toMatchObject({
+      variants: [expect.objectContaining({ providerId: "prov-1", priceCents: 6000 })],
+    });
+  });
+
+  it("does not save when the operator switches tabs without changing anything", async () => {
+    mockLoaders();
+    const updateSpy = vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Lash Tint")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Lash Tint"));
+    fireEvent.click(await screen.findByRole("tab", { name: "Staff" }));
+
+    expect(await screen.findByRole("tab", { name: "Staff", selected: true })).toBeInTheDocument();
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+
+  it("offers Save on the Staff tab", async () => {
+    mockLoaders();
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Lash Tint")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Lash Tint"));
+    fireEvent.click(await screen.findByRole("tab", { name: "Staff" }));
+
+    expect(await screen.findByRole("button", { name: "Save" })).toBeInTheDocument();
+  });
+
+  it("removes an unsaved new service when its screen is closed", async () => {
+    mockLoaders();
+    vi.spyOn(platformApi, "createService").mockResolvedValue({ id: "svc-created" } as any);
+    const deleteSpy = vi.spyOn(platformApi, "deleteService").mockResolvedValue(undefined as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "New service" }));
+    await waitFor(() => expect(platformApi.createService).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByText("Brow Shape"));
+
+    await waitFor(() => expect(deleteSpy).toHaveBeenCalledWith("brow-beauty-lab", "svc-created"));
+  });
+
+  it("keeps a new service once it has been saved on purpose", async () => {
+    const created = { ...baseServices[2], id: "svc-created", name: "New Service" };
+    mockLoaders();
+    vi.spyOn(platformApi, "createService").mockResolvedValue(created as any);
+    vi.mocked(platformApi.listServices).mockResolvedValue({ services: [...baseServices, created] } as any);
+    vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+    const deleteSpy = vi.spyOn(platformApi, "deleteService").mockResolvedValue(undefined as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "New service" }));
+    await screen.findByLabelText("Service name");
+    fireEvent.click(screen.getByRole("tab", { name: "Staff" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    await waitFor(() => expect(platformApi.updateService).toHaveBeenCalled());
+    fireEvent.click(screen.getByText("Brow Shape"));
+
+    await screen.findByRole("heading", { name: "Brow Shape", level: 4 });
+    expect(deleteSpy).not.toHaveBeenCalled();
+  });
+
   it("names a new service so it never clashes with an existing one", async () => {
     mockLoaders({
       services: [...baseServices, { ...baseServices[2], id: "svc-new", name: "New Service" }],

@@ -176,6 +176,9 @@ export function ServicesPage({
   const [drag, setDrag] = useState<DragState>({ kind: "none" });
   const [dragOverTarget, setDragOverTarget] = useState<DragOverTarget>({ kind: "none" });
   const [status, setStatus] = useState<string | null>(null);
+  // A service made with "New" stays a draft until the operator saves on purpose;
+  // closing its screen without saving removes it. Moving between tabs does not.
+  const draftServiceIdRef = useRef<string | null>(null);
   const [categoryModal, setCategoryModal] = useState<
     | { kind: "none" }
     | { kind: "create" }
@@ -226,6 +229,33 @@ export function ServicesPage({
       cancelled = true;
     };
   }, [tenantSlug, canView]);
+
+  const discardDraftService = (serviceId: string) => {
+    void platformApi.deleteService(tenantSlug, serviceId)
+      .then(() => platformApi.listServices(tenantSlug))
+      .then((resp) => {
+        setServices(resp.services);
+        setStatus("The new service was discarded because it was never saved.");
+      })
+      .catch((error) => setStatus(readErrorMessage(error, "Unable to discard the unsaved service.")));
+  };
+
+  // Leaving the draft's screen (another service or category) discards it.
+  useEffect(() => {
+    const draftId = draftServiceIdRef.current;
+    if (!draftId) return;
+    if (selection.kind === "service" && selection.serviceId === draftId) return;
+    draftServiceIdRef.current = null;
+    discardDraftService(draftId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selection]);
+
+  // Leaving the Services page entirely also closes the draft's screen. There is no
+  // screen left to report a failure on, so this one is best effort.
+  useEffect(() => () => {
+    const draftId = draftServiceIdRef.current;
+    if (draftId) void platformApi.deleteService(tenantSlug, draftId).catch(() => undefined);
+  }, [tenantSlug]);
 
   // ===== Grouping helpers =====
   // NOTE: These useMemo calls must run on every render, so they come BEFORE the
@@ -315,6 +345,8 @@ export function ServicesPage({
 
   const handleDuplicateService = async (service: ServiceSummary) => {
     if (!canManage) return;
+    // Duplicating is a deliberate step, so an unfinished original is kept.
+    if (draftServiceIdRef.current === service.id) draftServiceIdRef.current = null;
     try {
       const created = await platformApi.duplicateService(tenantSlug, service.id);
       await refreshServices();
@@ -416,6 +448,11 @@ export function ServicesPage({
                         }
                       }
                       await refreshServices();
+                      // Starting another new service closes the previous unsaved one.
+                      const previousDraftId = draftServiceIdRef.current;
+                      draftServiceIdRef.current = created.id;
+                      if (previousDraftId && previousDraftId !== created.id) discardDraftService(previousDraftId);
+                      setActiveTab("details");
                       setSelection({ kind: "service", serviceId: created.id });
                       setStatus("New service created. Fill in the details below.");
                     } catch (err) {
@@ -526,6 +563,9 @@ export function ServicesPage({
                       if (msg) setStatus(msg);
                     }}
                     onDuplicate={handleDuplicateService}
+                    onCommitted={() => {
+                      if (draftServiceIdRef.current === selectedService.id) draftServiceIdRef.current = null;
+                    }}
                     refreshProviders={refreshProviders}
                     canManageSettings={canManageSettings}
                   />
@@ -740,6 +780,7 @@ function ServiceDetail({
   onTabChange,
   onSaved,
   onDuplicate,
+  onCommitted,
   refreshProviders,
   canManageSettings,
 }: {
@@ -753,6 +794,8 @@ function ServiceDetail({
   onTabChange: (tab: ServiceTabKey) => void;
   onSaved: (msg?: string) => void;
   onDuplicate: (service: ServiceSummary) => void;
+  /** The operator saved on purpose (or deleted the service), so an unfinished new service is now a real one. */
+  onCommitted: () => void;
   refreshProviders: () => Promise<void>;
   canManageSettings: boolean;
 }) {
@@ -776,6 +819,8 @@ function ServiceDetail({
   >({});
   const [copyHint, setCopyHint] = useState<string | null>(null);
   const copyTimerRef = useRef<number | null>(null);
+  // The Resources tab keeps its own rows; it registers its save here so the header Save can include them.
+  const resourcesSaveRef = useRef<((quiet?: boolean) => Promise<void>) | null>(null);
 
   useEffect(() => { setForm(toCardState(service)); }, [service]);
 
@@ -833,18 +878,18 @@ function ServiceDetail({
     copyTimerRef.current = window.setTimeout(() => setCopyHint(null), 2000);
   };
 
-  const handleSave = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!canManage) return;
+  /** Validates and saves the Details/Online booking form. Resolves to whether it was saved. */
+  const persistService = async (quiet = false): Promise<boolean> => {
+    if (!canManage) return false;
     const name = form.name.trim();
-    if (!name) { onSaved("Service name is required."); return; }
+    if (!name) { onSaved("Service name is required."); return false; }
     const durationMinutes = Number(form.durationMinutes);
     const priceCents = parseMoneyInput(form.priceAmount);
     const depositCents = parseMoneyInput(form.depositAmount);
     if (!Number.isInteger(durationMinutes) || durationMinutes < 15 || priceCents === null || depositCents === null) {
-      onSaved("Enter a valid duration, price, and deposit."); return;
+      onSaved("Enter a valid duration, price, and deposit."); return false;
     }
-    if (form.locationIds.length === 0) { onSaved("Select at least one location."); return; }
+    if (form.locationIds.length === 0) { onSaved("Select at least one location."); return false; }
     const body: UpdateServiceRequest = {
       name, durationMinutes,
       setupBufferMinutes: Number(form.setupBufferMinutes) || 0,
@@ -874,13 +919,13 @@ function ServiceDetail({
     }
     if (form.bookingPaymentMode === "partial_flat") {
       const val = form.bookingPaymentValueAmount.trim() ? parseMoneyInput(form.bookingPaymentValueAmount) : null;
-      if (val == null) { onSaved("Enter the amount to take at booking."); return; }
+      if (val == null) { onSaved("Enter the amount to take at booking."); return false; }
       body.bookingPaymentValueCents = val;
     }
     if (form.bookingPaymentMode === "partial_percent") {
       const pct = Number(form.bookingPaymentPercent);
       if (!form.bookingPaymentPercent.trim() || !Number.isFinite(pct) || pct < 0 || pct > 100) {
-        onSaved("Enter a partial payment percentage from 0 to 100."); return;
+        onSaved("Enter a partial payment percentage from 0 to 100."); return false;
       }
       body.bookingPaymentPercent = pct;
     }
@@ -917,10 +962,17 @@ function ServiceDetail({
         await platformApi.updateForm(tenantSlug, item.id, { serviceIds });
       }
       if (changedForms.length > 0) setFormsReloadKey((key) => key + 1);
-      onSaved(`"${name}" saved.`);
+      // A quiet save (switching tabs) refreshes the list without announcing itself.
+      onSaved(quiet ? undefined : `"${name}" saved.`);
+      return true;
     }
-    catch (error) { onSaved(readErrorMessage(error, "Unable to save service.")); }
+    catch (error) { onSaved(readErrorMessage(error, "Unable to save service.")); return false; }
     finally { setSaving(false); }
+  };
+
+  const handleSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (await persistService()) onCommitted();
   };
 
   // Variants
@@ -987,7 +1039,7 @@ function ServiceDetail({
     }
   };
 
-  const handleSaveVariants = async () => {
+  const handleSaveVariants = async (quiet = false) => {
     if (!canManage) return;
     const payload: ProviderServiceVariantEntry[] = variants
       .filter((v) => v.priceCents != null || v.durationMinutes != null || v.depositCents != null || v.commissionFlatCents != null || v.commissionBasisPoints != null)
@@ -996,19 +1048,30 @@ function ServiceDetail({
     try {
       const resp = await platformApi.replaceServiceProviderVariants(tenantSlug, service.id, { variants: payload });
       setVariants(resp.variants); setSavedVariants(resp.variants);
-      onSaved("Per-provider pricing saved.");
+      onSaved(quiet ? undefined : "Per-provider pricing saved.");
     } catch (error) { onSaved(readErrorMessage(error, "Unable to save variants.")); }
     finally { setVariantsSaving(false); }
   };
 
-  // Single save action for the Staff tab: persist per-provider overrides (if any
-  // were edited) and the client-selection setting in one click.
-  const handleSaveStaffTab = async () => {
+  // The header Save works on every tab: it saves whatever is pending (per-provider
+  // overrides, resource rows, and the service details) in one click.
+  const handleSaveCurrent = async () => {
     if (!canManage) return;
-    if (isVariantsDirty) {
-      await handleSaveVariants();
+    if (isVariantsDirty) await handleSaveVariants();
+    if (resourcesSaveRef.current) await resourcesSaveRef.current();
+    if (await persistService()) onCommitted();
+  };
+
+  // Everything pending is saved as the operator moves between tabs, so nothing typed is lost.
+  const isFormDirty = JSON.stringify(form) !== JSON.stringify(toCardState(service));
+  const handleTabChange = async (tab: ServiceTabKey) => {
+    if (tab === activeTab) return;
+    if (canManage && !saving && !variantsSaving) {
+      if (isVariantsDirty) await handleSaveVariants(true);
+      if (resourcesSaveRef.current) await resourcesSaveRef.current(true);
+      if (isFormDirty) await persistService(true);
     }
-    await handleSave({ preventDefault: () => {} } as FormEvent<HTMLFormElement>);
+    onTabChange(tab);
   };
 
   const eligibleProviders = useMemo(
@@ -1126,7 +1189,12 @@ function ServiceDetail({
               <button type="submit" form={detailsFormId} className="cs-svc-pill-btn cs-svc-pill-btn--primary" disabled={saving}>
                 {saving ? "Saving…" : "Save"}
               </button>
-            ) : null}
+            ) : (
+              <button type="button" className="cs-svc-pill-btn cs-svc-pill-btn--primary"
+                disabled={saving || variantsSaving} onClick={() => void handleSaveCurrent()}>
+                {saving || variantsSaving ? "Saving…" : "Save"}
+              </button>
+            )}
             <OverflowMenu
               label="More service actions"
               items={[{
@@ -1135,7 +1203,7 @@ function ServiceDetail({
                 onSelect: () => {
                   if (window.confirm(`Delete "${service.name}"? This cannot be undone.`)) {
                     platformApi.deleteService(tenantSlug, service.id)
-                      .then(() => onSaved(`"${service.name}" deleted.`))
+                      .then(() => { onCommitted(); onSaved(`"${service.name}" deleted.`); })
                       .catch((e) => onSaved(readErrorMessage(e, "Unable to delete service.")));
                   }
                 },
@@ -1149,7 +1217,7 @@ function ServiceDetail({
         {tabs.map((tab) => (
           <button key={tab.key} type="button" role="tab" aria-selected={activeTab === tab.key}
             className={`cs-md-tab${activeTab === tab.key ? " is-active" : ""}`}
-            onClick={() => onTabChange(tab.key)}>
+            onClick={() => void handleTabChange(tab.key)}>
             {tab.label}
           </button>
         ))}
@@ -1170,7 +1238,6 @@ function ServiceDetail({
           canManage={canManage} variantsLoaded={variantsLoaded}
           isVariantsDirty={isVariantsDirty} variantsSaving={variantsSaving}
           handleSaveVariants={handleSaveVariants}
-          handleSaveStaffTab={handleSaveStaffTab}
           baseDurationMinutes={baseDurationMinutes} basePriceCents={basePriceCents}
           baseDepositCents={baseDepositCents} tenantSlug={tenantSlug}
           storefrontBaseUrl={storefrontBaseUrl}
@@ -1182,7 +1249,8 @@ function ServiceDetail({
       ) : null}
       {activeTab === "resources" ? (
         <ServiceResourcesTab service={service} tenantSlug={tenantSlug} locations={locations}
-          canManage={canManage} canCreateResources={canManageSettings} onSaved={onSaved} />
+          canManage={canManage} canCreateResources={canManageSettings} onSaved={onSaved}
+          saveRef={resourcesSaveRef} />
       ) : null}
       {activeTab === "customizations" ? (
         <ServiceAddOnsTab service={service} tenantSlug={tenantSlug} canManage={canManage} />
@@ -1558,7 +1626,6 @@ function ServiceStaffTab({
   service, eligibleProviders, assignedProviderIds, toggleProviderAssignment,
   variantByProvider, updateVariant, variantTexts, patchVariantText, canManage,
   variantsLoaded, isVariantsDirty, variantsSaving, handleSaveVariants,
-  handleSaveStaffTab,
   baseDurationMinutes, basePriceCents, baseDepositCents, tenantSlug, storefrontBaseUrl,
   form, setForm, saving, handleSave, category, setProviderBookable, setProviderBookingSlug,
 }: {
@@ -1583,8 +1650,7 @@ function ServiceStaffTab({
   variantsLoaded: boolean;
   isVariantsDirty: boolean;
   variantsSaving: boolean;
-  handleSaveVariants: () => Promise<void>;
-  handleSaveStaffTab: () => Promise<void>;
+  handleSaveVariants: (quiet?: boolean) => Promise<void>;
   baseDurationMinutes: number;
   basePriceCents: number;
   baseDepositCents: number;
@@ -1698,7 +1764,7 @@ function ServiceStaffTab({
             type="text" inputMode="decimal"
             disabled={!canManage}
             placeholder={formatMoneyShort(basePriceCents)}
-            value={text.price}
+            value={text.price || (basePriceCents / 100).toFixed(2)}
             onFocus={selectOnFocus}
             onMouseUp={keepSelection}
             onChange={(e) => patchVariantText(provider.id, "price", e.target.value)}
@@ -1713,7 +1779,7 @@ function ServiceStaffTab({
             type="text" inputMode="numeric"
             disabled={!canManage}
             placeholder={`${baseDurationMinutes} min`}
-            value={text.duration}
+            value={text.duration || String(baseDurationMinutes)}
             onFocus={selectOnFocus}
             onMouseUp={keepSelection}
             onChange={(e) => patchVariantText(provider.id, "duration", e.target.value)}
@@ -1723,7 +1789,7 @@ function ServiceStaffTab({
           <span
             className="cs-override-table__affix"
             aria-hidden="true"
-            style={{ "--chars": text.duration.length } as React.CSSProperties}
+            style={{ "--chars": (text.duration || String(baseDurationMinutes)).length } as React.CSSProperties}
           >
             min
           </span>
@@ -1735,7 +1801,7 @@ function ServiceStaffTab({
             type="text" inputMode="decimal"
             disabled={!canManage}
             placeholder={formatMoneyShort(baseDepositCents)}
-            value={text.deposit}
+            value={text.deposit || (baseDepositCents / 100).toFixed(2)}
             onFocus={selectOnFocus}
             onMouseUp={keepSelection}
             onChange={(e) => patchVariantText(provider.id, "deposit", e.target.value)}
@@ -2074,14 +2140,6 @@ function ServiceStaffTab({
         ) : null}
       </div>
 
-      {canManage ? (
-        <div className="cs-svc-actions">
-          <button type="button" className="cs-svc-save-btn" disabled={saving || variantsSaving}
-            onClick={handleSaveStaffTab}>
-            {saving || variantsSaving ? "Saving…" : "Save"}
-          </button>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -2256,7 +2314,7 @@ function serializeAttached(map: Map<string, number>): string {
 }
 
 function ServiceResourcesTab({
-  service, tenantSlug, locations, canManage, canCreateResources, onSaved,
+  service, tenantSlug, locations, canManage, canCreateResources, onSaved, saveRef,
 }: {
   service: ServiceSummary;
   tenantSlug: string;
@@ -2265,6 +2323,8 @@ function ServiceResourcesTab({
   /** Creating a resource is a settings action (settings.manage). */
   canCreateResources: boolean;
   onSaved: (msg?: string) => void;
+  /** Lets the header Save include this tab's unsaved rows. */
+  saveRef: React.MutableRefObject<((quiet?: boolean) => Promise<void>) | null>;
 }) {
   const [allResources, setAllResources] = useState<ResourceSummary[]>([]);
   const [attached, setAttached] = useState<Map<string, number>>(new Map());
@@ -2328,7 +2388,7 @@ function ServiceResourcesTab({
     });
   };
 
-  const handleSave = async () => {
+  const handleSave = async (quiet = false) => {
     if (!canManage) return;
     setSaving(true);
     try {
@@ -2338,13 +2398,18 @@ function ServiceResourcesTab({
       }));
       await platformApi.replaceServiceResources(tenantSlug, service.id, { resources });
       setSavedKey(serializeAttached(attached));
-      onSaved("Resources saved.");
+      onSaved(quiet ? undefined : "Resources saved.");
     } catch (err) {
       onSaved(readErrorMessage(err, "Unable to save resources."));
     } finally {
       setSaving(false);
     }
   };
+
+  useEffect(() => {
+    saveRef.current = isDirty ? handleSave : null;
+    return () => { saveRef.current = null; };
+  });
 
   const startAdding = (kind: NewResourceDraft["kind"]) => {
     setAddError(null);
@@ -2542,7 +2607,7 @@ function ServiceResourcesTab({
       {canManage ? (
         <div className="cs-svc-actions">
           {isDirty ? <span className="cs-svc-helper">Unsaved changes</span> : null}
-          <button type="button" className="cs-svc-save-btn" onClick={handleSave} disabled={saving || !isDirty}>
+          <button type="button" className="cs-svc-save-btn" onClick={() => void handleSave()} disabled={saving || !isDirty}>
             {saving ? "Saving…" : "Save resources"}
           </button>
         </div>
