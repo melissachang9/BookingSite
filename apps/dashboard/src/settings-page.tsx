@@ -2212,6 +2212,8 @@ function BrandingSection({
   return (
     <>
       <form className="cs-form cs-branding-section" onSubmit={handleSubmit}>
+      <details className="cs-fieldset cs-collapsible" open>
+      <summary>Logo, colors and gallery</summary>
       <div className="cs-form-row">
         <ImageUploadField label="Logo" value={logoUrl} onChange={setLogoUrl} disabled={disabled} tenantSlug={tenantSlug} />
         <ImageUploadField label="Favicon" value={faviconUrl} onChange={setFaviconUrl} disabled={disabled} tenantSlug={tenantSlug} />
@@ -2274,6 +2276,7 @@ function BrandingSection({
           <small>Turn this off to hide the right-side marketing container on the first booking screen.</small>
         </span>
       </label>
+      </details>
 
       <details className="cs-fieldset cs-collapsible" open>
         <summary>Marketing panel</summary>
