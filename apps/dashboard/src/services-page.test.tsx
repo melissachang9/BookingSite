@@ -792,6 +792,140 @@ describe("ServicesPage", () => {
     expect(selectSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("starts a flat pay amount from the staff member's percentage pay at this treatment's price", async () => {
+    mockLoaders();
+    vi.mocked(platformApi.listProvidersAdmin).mockResolvedValue({
+      providers: [{ ...baseProviders[0], compensationMode: "service_percent", compensationServicePercentBp: 4000 }],
+    } as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("tab", { name: "Staff" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open settings for Ava Rivera" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Flat per booking" }));
+
+    // 40% of the $50.00 Brow Shape.
+    expect(await screen.findByLabelText("Ava Rivera pay flat amount")).toHaveValue("20.00");
+  });
+
+  it("starts a percent pay from the staff member's flat pay at this treatment's price", async () => {
+    mockLoaders();
+    vi.mocked(platformApi.listProvidersAdmin).mockResolvedValue({
+      providers: [{ ...baseProviders[0], compensationMode: "flat_per_booking", compensationFlatCents: 1500 }],
+    } as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("tab", { name: "Staff" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open settings for Ava Rivera" }));
+    fireEvent.click(await screen.findByRole("button", { name: "% of price" }));
+
+    // $15.00 of the $50.00 Brow Shape.
+    expect(await screen.findByLabelText("Ava Rivera pay percent")).toHaveValue("30");
+  });
+
+  it("turns financing on for a whole category", async () => {
+    mockLoaders();
+    const updateCategory = vi.spyOn(platformApi, "updateServiceCategory").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brows")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Brows" }));
+    const toggle = await screen.findByRole("button", { name: "Category financing toggle" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateCategory).toHaveBeenCalledTimes(1));
+    expect(updateCategory.mock.calls[0][2]).toMatchObject({ financingMode: "on" });
+  });
+
+  it("turns a category's financing back off", async () => {
+    mockLoaders({ categories: [{ ...baseCategories[0], financingMode: "on" }, baseCategories[1]] });
+    const updateCategory = vi.spyOn(platformApi, "updateServiceCategory").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brows")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Brows" }));
+    const toggle = await screen.findByRole("button", { name: "Category financing toggle" });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateCategory).toHaveBeenCalledTimes(1));
+    expect(updateCategory.mock.calls[0][2]).toMatchObject({ clearFinancing: true });
+  });
+
+  it("lets one service show financing when its category does not", async () => {
+    mockLoaders();
+    const updateSpy = vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("tab", { name: "Online booking" }));
+    expect(await screen.findByText(/Brows doesn.t offer financing/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Financing"), { target: { value: "on" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(updateSpy.mock.calls[0][2]).toMatchObject({ financingMode: "on" });
+    expect(updateSpy.mock.calls[0][2]).not.toHaveProperty("financingUrl");
+  });
+
+  it("lets a service hide financing or use its own link", async () => {
+    mockLoaders();
+    const updateSpy = vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("tab", { name: "Online booking" }));
+    fireEvent.change(await screen.findByLabelText("Financing"), { target: { value: "custom" } });
+    fireEvent.change(screen.getByLabelText("Link for this service"), { target: { value: "https://other.example.com/apply" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(updateSpy.mock.calls[0][2]).toMatchObject({
+      financingMode: "custom",
+      financingUrl: "https://other.example.com/apply",
+    });
+  });
+
+  it("follows the studio financing setting unless the service changes it", async () => {
+    mockLoaders();
+    const updateSpy = vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("tab", { name: "Online booking" }));
+    expect(await screen.findByLabelText("Financing")).toHaveValue("");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(updateSpy.mock.calls[0][2]).toMatchObject({ inheritFinancing: true });
+    expect(updateSpy.mock.calls[0][2]).not.toHaveProperty("financingMode");
+  });
+
+  it("will not save a service's own financing link that is not a web address", async () => {
+    mockLoaders();
+    const updateSpy = vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("tab", { name: "Online booking" }));
+    fireEvent.change(await screen.findByLabelText("Financing"), { target: { value: "custom" } });
+    fireEvent.change(screen.getByLabelText("Link for this service"), { target: { value: "javascript:alert(1)" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText(/web address starting with http/i)).toBeInTheDocument();
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+
   it("names a new service so it never clashes with an existing one", async () => {
     mockLoaders({
       services: [...baseServices, { ...baseServices[2], id: "svc-new", name: "New Service" }],

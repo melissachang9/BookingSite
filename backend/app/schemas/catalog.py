@@ -48,6 +48,40 @@ class BookingAdResponse(CamelModel):
     review_body: str | None = None
 
 
+class FinancingResponse(CamelModel):
+    """A studio-wide link to a financing option, shown beside each service price on the booking site."""
+
+    enabled: bool = False
+    # The button's label, e.g. "See financing options".
+    button_text: str | None = None
+    link_url: str | None = None
+    # Instalments the monthly figure is spread over: each service shows its price divided by this.
+    months: int | None = None
+
+
+class ServiceFinancingResponse(CamelModel):
+    """What one service shows for financing once the studio setting and the service's own choice are applied."""
+
+    button_text: str
+    link_url: str
+    months: int
+    monthly_cents: int
+
+
+FINANCING_SERVICE_MODES = ("on", "off", "custom")
+FINANCING_CATEGORY_MODES = ("on", "off")
+
+
+def _validate_financing_url(value: str | None, field_name: str) -> None:
+    if value is None or not value.strip():
+        raise ValueError(f"{field_name} is required.")
+    link = value.strip()
+    if len(link) > 2048:
+        raise ValueError(f"{field_name} must be 2048 characters or fewer.")
+    if not re.match(r"^https?://[^\s]+$", link, re.IGNORECASE):
+        raise ValueError(f"{field_name} must be a web address starting with http:// or https://.")
+
+
 class TenantBrandingResponse(CamelModel):
     logo_url: str | None = None
     favicon_url: str | None = None
@@ -59,6 +93,7 @@ class TenantBrandingResponse(CamelModel):
     service_categories: list[str] = Field(default_factory=list)
     booking_screening: BookingScreeningResponse | None = None
     booking_ad: BookingAdResponse | None = None
+    financing: FinancingResponse | None = None
 
 
 _HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
@@ -71,9 +106,17 @@ class UpdateTenantBrandingRequest(CamelModel):
     accent_color: str | None = Field(default=None, max_length=16)
     photos: list[str] | None = Field(default=None, max_length=24)
     booking_ad: BookingAdResponse | None = None
+    financing: FinancingResponse | None = None
 
     @model_validator(mode="after")
     def _validate(self) -> "UpdateTenantBrandingRequest":
+        if self.financing is not None:
+            if self.financing.button_text is not None and len(self.financing.button_text.strip()) > 60:
+                raise ValueError("financing.button_text must be 60 characters or fewer.")
+            if self.financing.enabled:
+                _validate_financing_url(self.financing.link_url, "financing.link_url")
+                if self.financing.months is None or not 2 <= self.financing.months <= 84:
+                    raise ValueError("financing.months must be from 2 to 84.")
         for field_name, value in (("primary_color", self.primary_color), ("accent_color", self.accent_color)):
             if value is not None and value.strip() and not _HEX_COLOR_RE.match(value.strip()):
                 raise ValueError(f"{field_name} must be a #RGB or #RRGGBB hex color.")
@@ -459,6 +502,10 @@ class ServiceSummaryResponse(CamelModel):
     is_taxable: bool | None = None
     effective_is_taxable: bool = True
     effective_tax_source: str = "default"  # service | category | default
+    # Financing: None follows the category, "on" shows it, "off" hides it, "custom" shows it with its own link.
+    financing_mode: str | None = None
+    financing_url: str | None = None
+    effective_financing: ServiceFinancingResponse | None = None
 
 
 def _validate_provider_selection(mode: str | None) -> None:
@@ -546,6 +593,10 @@ class UpdateServiceRequest(CamelModel):
     # Back to "inherit from the category" for each online booking rule.
     inherit_booking_payment: bool = False
     inherit_require_card_on_file: bool = False
+    financing_mode: str | None = Field(default=None, max_length=16)
+    financing_url: str | None = Field(default=None, max_length=2048)
+    # Back to following the category's financing setting.
+    inherit_financing: bool = False
     is_taxable: bool | None = None
     inherit_is_taxable: bool = False
     clear_outcome_headline: bool = False
@@ -563,6 +614,11 @@ class UpdateServiceRequest(CamelModel):
     @model_validator(mode="after")
     def _validate(self) -> "UpdateServiceRequest":
         _validate_booking_payment(self.booking_payment_mode, self.booking_payment_percent)
+        if self.financing_mode is not None:
+            if self.financing_mode not in FINANCING_SERVICE_MODES:
+                raise ValueError(f"financingMode must be one of: {', '.join(FINANCING_SERVICE_MODES)}.")
+            if self.financing_mode == "custom":
+                _validate_financing_url(self.financing_url, "financingUrl")
         _validate_provider_selection(self.provider_selection_mode)
         if (
             self.featured_label is not None
@@ -612,6 +668,8 @@ class ServiceCategorySummaryResponse(CamelModel):
     booking_payment_percent: int | None = None
     require_card_on_file: bool | None = None
     provider_selection_mode: str | None = None
+    # Whether the category's services show the studio's financing link ("on"/"off"); None = off.
+    financing_mode: str | None = None
     form_ids: list[str] = Field(default_factory=list)
 
 
@@ -651,11 +709,15 @@ class UpdateServiceCategoryRequest(CamelModel):
     clear_is_taxable: bool = False
     clear_require_card_on_file: bool = False
     clear_provider_selection_mode: bool = False
+    financing_mode: str | None = Field(default=None, max_length=16)
+    clear_financing: bool = False
 
     @model_validator(mode="after")
     def _validate_online_booking(self) -> "UpdateServiceCategoryRequest":
         _validate_booking_payment(self.booking_payment_mode, self.booking_payment_percent)
         _validate_provider_selection(self.provider_selection_mode)
+        if self.financing_mode is not None and self.financing_mode not in FINANCING_CATEGORY_MODES:
+            raise ValueError(f"financingMode must be one of: {', '.join(FINANCING_CATEGORY_MODES)}.")
         if self.booking_payment_mode == "partial_flat" and self.booking_payment_value_cents is None:
             raise ValueError("bookingPaymentValueCents is required for a fixed payment.")
         return self

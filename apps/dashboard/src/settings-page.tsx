@@ -2043,6 +2043,7 @@ function GalleryUploadField({
 }
 
 const HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+const FINANCING_URL_RE = /^https?:\/\/\S+$/i;
 
 function BrandingSection({
   canManageSettings,
@@ -2079,6 +2080,10 @@ function BrandingSection({
   const [bookingAdLocationBody, setBookingAdLocationBody] = useState<string>("");
   const [bookingAdReviewHeadline, setBookingAdReviewHeadline] = useState<string>("");
   const [bookingAdReviewBody, setBookingAdReviewBody] = useState<string>("");
+  const [financingEnabled, setFinancingEnabled] = useState<boolean>(false);
+  const [financingButtonText, setFinancingButtonText] = useState<string>("");
+  const [financingLinkUrl, setFinancingLinkUrl] = useState<string>("");
+  const [financingMonths, setFinancingMonths] = useState<string>("12");
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
   useEffect(() => {
@@ -2108,6 +2113,10 @@ function BrandingSection({
       setBookingAdLocationBody(branding.bookingAd?.locationBody ?? "");
       setBookingAdReviewHeadline(branding.bookingAd?.reviewHeadline ?? "");
       setBookingAdReviewBody(branding.bookingAd?.reviewBody ?? "");
+      setFinancingEnabled(branding.financing?.enabled ?? false);
+      setFinancingButtonText(branding.financing?.buttonText ?? "");
+      setFinancingLinkUrl(branding.financing?.linkUrl ?? "");
+      setFinancingMonths(String(branding.financing?.months ?? 12));
     }
   }, [tenant]);
 
@@ -2121,8 +2130,17 @@ function BrandingSection({
     if (bookingAdPanelColor.trim() && !HEX_COLOR_RE.test(bookingAdPanelColor.trim())) {
       return "Card color must be a #RGB or #RRGGBB hex value.";
     }
+    if (financingEnabled) {
+      if (!FINANCING_URL_RE.test(financingLinkUrl.trim())) {
+        return "Enter the financing link as a web address starting with http:// or https://.";
+      }
+      const months = Number(financingMonths);
+      if (!Number.isInteger(months) || months < 2 || months > 84) {
+        return "Financing months must be a whole number from 2 to 84.";
+      }
+    }
     return null;
-  }, [primaryColor, accentColor, bookingAdPanelColor]);
+  }, [primaryColor, accentColor, bookingAdPanelColor, financingEnabled, financingLinkUrl, financingMonths]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -2155,6 +2173,12 @@ function BrandingSection({
           locationBody: bookingAdLocationBody.trim() || null,
           reviewHeadline: bookingAdReviewHeadline.trim() || null,
           reviewBody: bookingAdReviewBody.trim() || null,
+        },
+        financing: {
+          enabled: financingEnabled,
+          buttonText: financingButtonText.trim() || null,
+          linkUrl: financingLinkUrl.trim() || null,
+          months: Number.isInteger(Number(financingMonths)) && financingMonths.trim() ? Number(financingMonths) : null,
         },
       });
       onTenantUpdated(updated);
@@ -2540,6 +2564,65 @@ function BrandingSection({
               maxLength={512}
               placeholder="Businesses can configure this artwork and message for the booking review step."
             />
+          </label>
+        </div>
+      </details>
+
+      <details className="cs-fieldset cs-collapsible" open={financingEnabled}>
+        <summary>Financing</summary>
+        <p className="cs-fieldset-help">
+          Set up a financing button for the booking site, shown beside a service price like &ldquo;or $100/mo&rdquo;.
+          It stays off until you turn it on for a category or a service under Services.
+        </p>
+        <label className="cs-toggle-field">
+          <input
+            type="checkbox"
+            checked={financingEnabled}
+            onChange={(event) => setFinancingEnabled(event.target.checked)}
+            disabled={disabled}
+          />
+          <span>
+            <strong>Financing available</strong>
+            <small>Master switch. Each service shows its price divided by the number of months below.</small>
+          </span>
+        </label>
+        <div className="cs-form-row">
+          <label className="cs-field">
+            <span>Button text</span>
+            <input
+              type="text"
+              value={financingButtonText}
+              onChange={(event) => setFinancingButtonText(event.target.value)}
+              disabled={disabled}
+              maxLength={60}
+              placeholder="See financing options"
+            />
+          </label>
+          <label className="cs-field">
+            <span>Months</span>
+            <input
+              type="number"
+              min={2}
+              max={84}
+              value={financingMonths}
+              onChange={(event) => setFinancingMonths(event.target.value)}
+              disabled={disabled}
+              aria-label="Financing months"
+            />
+          </label>
+        </div>
+        <div className="cs-form-row">
+          <label className="cs-field">
+            <span>Financing link</span>
+            <input
+              type="url"
+              value={financingLinkUrl}
+              onChange={(event) => setFinancingLinkUrl(event.target.value)}
+              disabled={disabled}
+              maxLength={2048}
+              placeholder="https://"
+            />
+            <small className="cs-field-help">Where the button sends clients, such as your financing provider&apos;s application page.</small>
           </label>
         </div>
       </details>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { FinancingLink } from "../../../components/financing-link";
 import { storefrontApi, isApiNotFoundError } from "../../../lib/storefront-api";
 import { formatCurrency, formatDuration } from "../../../lib/storefront-shell";
 
@@ -67,6 +68,7 @@ export default async function ProviderLandingPage({ params }: ProviderPageProps)
                     <div className="sf-service__side">
                       <strong>{formatCurrency(svc.priceCents)}</strong>
                       <span>{formatDuration(svc.durationMinutes)}</span>
+                      <FinancingLink financing={svc.effectiveFinancing} />
                       {provider.isBookableOnline ? (
                         <Link
                           href={`/${tenantSlug}/services/${svc.id}?providerId=${provider.id}`}

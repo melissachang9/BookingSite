@@ -43,6 +43,14 @@ export type UpdateLocationRequest = {
   isActive?: boolean;
 };
 
+/** Financing as one service shows it: the studio's link and term, with this service's monthly amount. */
+export type ServiceFinancing = {
+  buttonText: string;
+  linkUrl: string;
+  months: number;
+  monthlyCents: number;
+};
+
 export type ServiceSummary = AuditFields &
   TenantScoped & {
     name: string;
@@ -79,6 +87,11 @@ export type ServiceSummary = AuditFields &
     isTaxable?: boolean | null;
     effectiveIsTaxable?: boolean;
     effectiveTaxSource?: OnlineBookingSource | "default";
+    /** null follows the category; "on" shows financing; "off" hides it; "custom" shows it with financingUrl. */
+    financingMode?: "on" | "off" | "custom" | null;
+    financingUrl?: string | null;
+    /** What the booking site shows beside the price, or null when this service shows no financing. */
+    effectiveFinancing?: ServiceFinancing | null;
     featuredLabel?: CategoryFeaturedLabel | null;
     slug?: string | null;
     scarcityHint?: string | null;
@@ -130,6 +143,10 @@ export type UpdateServiceRequest = {
   inheritRequireCardOnFile?: boolean;
   isTaxable?: boolean | null;
   inheritIsTaxable?: boolean;
+  financingMode?: "on" | "off" | "custom" | null;
+  financingUrl?: string | null;
+  /** Back to following the category's financing setting. */
+  inheritFinancing?: boolean;
   featuredLabel?: CategoryFeaturedLabel | null;
   clearFeaturedLabel?: boolean;
   imageUrl?: string | null;
@@ -196,6 +213,8 @@ export type ServiceCategorySummary = AuditFields &
     bookingPaymentPercent?: number | null;
     requireCardOnFile?: boolean | null;
     providerSelectionMode?: string | null;
+    /** Whether the category's services show the studio's financing link. null = off. */
+    financingMode?: "on" | "off" | null;
     /** Forms every service in this category requires. */
     formIds?: UUID[];
   };
@@ -235,6 +254,8 @@ export type UpdateServiceCategoryRequest = {
   clearBookingPayment?: boolean;
   clearRequireCardOnFile?: boolean;
   clearProviderSelectionMode?: boolean;
+  financingMode?: "on" | "off" | null;
+  clearFinancing?: boolean;
   clearSlug?: boolean;
   clearOutcomeHeadline?: boolean;
   clearSubheadline?: boolean;

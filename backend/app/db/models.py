@@ -161,6 +161,9 @@ class Service(Base, IdMixin, TimestampMixin):
     guarantee_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     social_proof: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
     scarcity_hint: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Financing link: NULL follows the category, "on" shows it, "off" hides it, "custom" shows it with financing_url.
+    financing_mode: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    financing_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     image_alt_text: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     before_image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -239,6 +242,8 @@ class ServiceCategory(Base, IdMixin, TimestampMixin):
     booking_payment_percent: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 0-100
     require_card_on_file: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     provider_selection_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # client_choice, auto_assign, hide
+    # Whether services in the category show the studio's financing link unless they say otherwise (NULL = off).
+    financing_mode: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)  # on, off
 
     services: Mapped[list[Service]] = relationship(back_populates="category")
     form_attachments: Mapped[list["ServiceCategoryFormAttachment"]] = relationship(

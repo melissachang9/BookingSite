@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { FinancingLink } from "../../../components/financing-link";
 import { isApiClientError, isApiNotFoundError, storefrontApi } from "../../../lib/storefront-api";
 import { formatCurrency, formatDuration, pathWithQuery, slugify, titleFromSlug } from "../../../lib/storefront-shell";
 
@@ -105,6 +106,7 @@ export default async function CategoryLandingPage({ params, searchParams }: Cate
                     <div className="sf-service__side">
                       <strong>{formatCurrency(service.priceCents)}</strong>
                       <span>{formatDuration(service.durationMinutes)}</span>
+                      <FinancingLink financing={service.effectiveFinancing} />
                       <Link
                         href={pathWithQuery(`/${tenantSlug}/services/${slugify(service.name)}`, { locationId, screening })}
                         className="sf-btn"

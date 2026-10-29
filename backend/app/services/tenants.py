@@ -308,6 +308,13 @@ async def update_tenant_branding(
             "reviewHeadline": payload.booking_ad.review_headline.strip() if payload.booking_ad.review_headline else None,
             "reviewBody": payload.booking_ad.review_body.strip() if payload.booking_ad.review_body else None,
         }
+    if payload.financing is not None:
+        current_branding["financing"] = {
+            "enabled": payload.financing.enabled,
+            "buttonText": payload.financing.button_text.strip() if payload.financing.button_text and payload.financing.button_text.strip() else None,
+            "linkUrl": payload.financing.link_url.strip() if payload.financing.link_url and payload.financing.link_url.strip() else None,
+            "months": payload.financing.months,
+        }
 
     tenant.branding_json = current_branding
     await session.commit()
@@ -1880,6 +1887,7 @@ def _category_to_summary(category: ServiceCategory, form_ids: list[str] | None =
         booking_payment_percent=category.booking_payment_percent,
         require_card_on_file=category.require_card_on_file,
         provider_selection_mode=category.provider_selection_mode,
+        financing_mode=category.financing_mode,
         is_taxable=category.is_taxable,
         form_ids=form_ids or [],
     )
@@ -2208,6 +2216,10 @@ async def update_tenant_service_category(
         category.provider_selection_mode = None
     elif payload.provider_selection_mode:
         category.provider_selection_mode = payload.provider_selection_mode
+    if payload.clear_financing:
+        category.financing_mode = None
+    elif payload.financing_mode is not None:
+        category.financing_mode = payload.financing_mode
     await session.commit()
     await session.refresh(category)
     form_ids = await _category_form_ids(session, tenant.id, [category.id])
@@ -2385,6 +2397,14 @@ async def update_tenant_service(
             ServiceLocation(tenant_id=tenant.id, location_id=lid) for lid in requested
         ]
 
+    # Financing link: follow the studio, hide it for this service, or use the service's own link.
+    if getattr(payload, "inherit_financing", False):
+        service.financing_mode = None
+        service.financing_url = None
+    elif getattr(payload, "financing_mode", None) is not None:
+        service.financing_mode = payload.financing_mode
+        service.financing_url = payload.financing_url.strip() if payload.financing_mode == "custom" else None
+
     # Phase J: merchandising fields
     if getattr(payload, "slug", None) is not None and payload.slug.strip():
         service.slug = await _ensure_unique_service_slug(
@@ -2537,6 +2557,8 @@ async def duplicate_tenant_service(session: AsyncSession, tenant_slug: str, serv
         booking_payment_value_cents=source.booking_payment_value_cents,
         booking_payment_percent=source.booking_payment_percent,
         provider_selection_mode=source.provider_selection_mode,
+        financing_mode=source.financing_mode,
+        financing_url=source.financing_url,
         sort_order=(int(max_sort) + 1) if max_sort is not None else 0,
     )
     duplicate.location_links = [

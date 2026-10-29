@@ -22,6 +22,7 @@ from app.schemas.catalog import (
     TenantSettingsResponse,
     TenantSummaryResponse,
 )
+from app.services.financing import effective_financing
 from app.services.service_terms import effective_online_booking, effective_taxable
 
 
@@ -280,6 +281,9 @@ def service_to_summary(service: Service, tenant: Tenant | None = None) -> Servic
         is_taxable=service.is_taxable,
         effective_is_taxable=taxable,
         effective_tax_source=taxable_source,
+        financing_mode=service.financing_mode,
+        financing_url=service.financing_url,
+        effective_financing=effective_financing(service, tenant),
     )
 
 

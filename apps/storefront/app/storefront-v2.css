@@ -852,3 +852,8 @@ html { background: #ebe7e3; }
 .sf-faq > div:first-child { border-top: 0; }
 .sf-faq dt { font: 600 15px var(--sf-font-sans); }
 .sf-faq dd { margin: 6px 0 0; font: 400 14px/1.55 var(--sf-font-sans); color: var(--sf-muted); }
+
+/* ---- Financing link beside a service price ------------------------------ */
+.sf-financing { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 8px; margin-top: 6px; padding: 6px 12px; border-radius: 999px; background: var(--sf-sage-soft); color: var(--sf-ink); font: 500 12.5px var(--sf-font-sans); text-decoration: none; }
+.sf-financing strong { font-weight: 600; text-decoration: underline; }
+.sf-financing:hover { background: #d3e2d1; }

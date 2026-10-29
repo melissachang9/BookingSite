@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { storefrontApi, isApiClientError, isApiNotFoundError } from "../../lib/storefront-api";
 import { BookingSteps } from "../../components/booking-steps";
+import { FinancingLink } from "../../components/financing-link";
 import { formatCurrency, formatDuration, pathWithQuery, slugify, titleFromSlug } from "../../lib/storefront-shell";
 
 const FEATURED_LABELS: Record<string, string> = {
@@ -126,6 +127,7 @@ export default async function ServicesPage({ params, searchParams }: ServicesPag
                       <div className="sf-service__side">
                         <strong>{formatCurrency(service.priceCents)}</strong>
                         <span>{formatDuration(service.durationMinutes)}</span>
+                        <FinancingLink financing={service.effectiveFinancing} />
                         <Link
                           href={pathWithQuery(`/${tenantSlug}/services/${slugify(service.name)}`, {
                             locationId: selectedLocation?.id,

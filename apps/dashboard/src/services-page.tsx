@@ -669,6 +669,8 @@ type ServiceCardState = {
   slug: string;
   scarcityHint: string;
   metaDescription: string;
+  financingMode: string; // '' (follows the category) | 'on' | 'off' | 'custom'
+  financingUrl: string; // the service's own link, for 'custom'
 };
 
 /** The "Taken at booking" choices, shared by services and categories. */
@@ -766,6 +768,8 @@ function toCardState(service: ServiceSummary): ServiceCardState {
     slug: service.slug ?? "",
     scarcityHint: service.scarcityHint ?? "",
     metaDescription: service.metaDescription ?? "",
+    financingMode: service.financingMode ?? "",
+    financingUrl: service.financingUrl ?? "",
   };
 }
 
@@ -939,6 +943,19 @@ function ServiceDetail({
     const meta = form.metaDescription.trim();
     if (meta) body.metaDescription = meta;
     else if (service.metaDescription) body.clearMetaDescription = true;
+    // Financing: follow the category, show it, hide it, or use this service's own link.
+    if (!form.financingMode) {
+      body.inheritFinancing = true;
+    } else if (form.financingMode === "on" || form.financingMode === "off") {
+      body.financingMode = form.financingMode;
+    } else {
+      const financingUrl = form.financingUrl.trim();
+      if (!/^https?:\/\/\S+$/i.test(financingUrl)) {
+        onSaved("Enter the financing link as a web address starting with http:// or https://."); return false;
+      }
+      body.financingMode = "custom";
+      body.financingUrl = financingUrl;
+    }
     // Provider selection mode
     body.providerSelectionMode = form.providerSelectionMode;
     if (form.featuredLabel) body.featuredLabel = form.featuredLabel as CategoryFeaturedLabel;
@@ -1256,7 +1273,7 @@ function ServiceDetail({
         <ServiceAddOnsTab service={service} tenantSlug={tenantSlug} canManage={canManage} />
       ) : null}
       {activeTab === "onlineBooking" ? (
-        <ServiceOnlineBookingTab formId={detailsFormId} form={form} setForm={setForm} canManage={canManage}
+        <ServiceOnlineBookingTab service={service} formId={detailsFormId} form={form} setForm={setForm} canManage={canManage}
           schedulingHref={schedulingHref} handleCopyLink={handleCopyLink} copyHint={copyHint}
           saving={saving} handleSave={handleSave} category={categories.find((c) => c.id === form.categoryId) ?? null} />
       ) : null}
@@ -1857,9 +1874,19 @@ function ServiceStaffTab({
           : teamPayEarnsCents(provider, visitPrice);
     const setPayMode = (mode: "default" | "percent" | "flat") => {
       if (mode === payMode) return;
-      // Start from the staff member's own pay setting when it's the same kind, so nothing resets to zero.
-      const teamPercentBp = provider.compensationMode === "service_percent" ? provider.compensationServicePercentBp ?? 0 : 0;
-      const teamFlatCents = provider.compensationMode === "flat_per_booking" ? provider.compensationFlatCents ?? 0 : 0;
+      // Start from the staff member's own pay setting, converted at this treatment's price when it's the other kind, so nothing resets to zero.
+      const teamPercentBp =
+        provider.compensationMode === "service_percent"
+          ? provider.compensationServicePercentBp ?? 0
+          : provider.compensationMode === "flat_per_booking" && visitPrice > 0
+            ? Math.min(10_000, Math.round(((provider.compensationFlatCents ?? 0) * 10_000) / visitPrice))
+            : 0;
+      const teamFlatCents =
+        provider.compensationMode === "flat_per_booking"
+          ? provider.compensationFlatCents ?? 0
+          : provider.compensationMode === "service_percent"
+            ? Math.round((visitPrice * (provider.compensationServicePercentBp ?? 0)) / 10_000)
+            : 0;
       patchVariantText(provider.id, "flat", mode === "flat" ? (teamFlatCents / 100).toFixed(2) : "");
       patchVariantText(provider.id, "percent", mode === "percent" ? (teamPercentBp / 100).toString() : "");
       if (mode === "default") updateVariant(provider.id, { commissionFlatCents: null, commissionBasisPoints: null });
@@ -2154,9 +2181,10 @@ function ServiceStaffTab({
 }
 
 function ServiceOnlineBookingTab({
-  formId, form, setForm, canManage, schedulingHref, handleCopyLink, copyHint,
+  service, formId, form, setForm, canManage, schedulingHref, handleCopyLink, copyHint,
   saving, handleSave, category,
 }: {
+  service: ServiceSummary;
   formId: string;
   form: ServiceCardState;
   setForm: React.Dispatch<React.SetStateAction<ServiceCardState>>;
@@ -2247,6 +2275,42 @@ function ServiceOnlineBookingTab({
             </div>
             {form.requireCardOnFile === null ? (
               <p className="cs-svc-helper">Following {categoryName}. Change it to set this service&apos;s own.</p>
+            ) : null}
+          </div>
+
+          <hr className="cs-svc-details__divider" />
+
+          <div className="cs-svc-setting cs-svc-setting--stack">
+            <span className="cs-svc-setting__text">
+              <span className="cs-svc-card__title">Financing</span>
+              <span className="cs-svc-section__lead">
+                {service.effectiveFinancing
+                  ? `Shows “or ${formatMoney(service.effectiveFinancing.monthlyCents)}/mo” with a “${service.effectiveFinancing.buttonText}” button.`
+                  : form.financingMode === "off"
+                    ? "No financing is shown for this service."
+                    : form.financingMode === "" && category?.financingMode !== "on"
+                      ? `Off. ${categoryName} doesn't offer financing; choose Show financing to offer it on this service.`
+                      : "Not shown yet. Set up the financing link under Settings → Marketing."}
+              </span>
+            </span>
+            <label className="cs-svc-details__field cs-svc-details__field--half">
+              <span className="cs-svc-details__label">Financing link</span>
+              <select className="cs-svc-details__input" value={form.financingMode} disabled={!canManage}
+                aria-label="Financing"
+                onChange={(e) => setForm((c) => ({ ...c, financingMode: e.target.value }))}>
+                <option value="">Same as {categoryName}</option>
+                <option value="on">Show financing</option>
+                <option value="off">Don&apos;t show financing</option>
+                <option value="custom">Use a different link</option>
+              </select>
+            </label>
+            {form.financingMode === "custom" ? (
+              <label className="cs-svc-details__field">
+                <span className="cs-svc-details__label">Link for this service</span>
+                <input className="cs-svc-details__input" type="url" maxLength={2048} placeholder="https://"
+                  value={form.financingUrl} disabled={!canManage}
+                  onChange={(e) => setForm((c) => ({ ...c, financingUrl: e.target.value }))} />
+              </label>
             ) : null}
           </div>
 
@@ -3141,6 +3205,7 @@ type CategoryFormState = {
   bookingPaymentPercent: string;
   requireCardOnFile: boolean;
   providerSelectionMode: string; // '' = not set (clients choose their artist)
+  financingEnabled: boolean; // services in the category show the studio's financing link
   formIds: string[];
   isTaxable: boolean; // false stops the business tax rate applying to services that don't say otherwise
 };
@@ -3170,6 +3235,7 @@ function categoryToFormState(category: ServiceCategorySummary): CategoryFormStat
     bookingPaymentPercent: category.bookingPaymentPercent != null ? String(category.bookingPaymentPercent) : "",
     requireCardOnFile: category.requireCardOnFile ?? false,
     providerSelectionMode: category.providerSelectionMode ?? "",
+    financingEnabled: category.financingMode === "on",
     formIds: category.formIds ?? [],
     isTaxable: category.isTaxable ?? true,
   };
@@ -3362,6 +3428,8 @@ function CategoryDetailPanel({
     else if (category.requireCardOnFile !== null && category.requireCardOnFile !== undefined) body.clearRequireCardOnFile = true;
     if (form.providerSelectionMode) body.providerSelectionMode = form.providerSelectionMode;
     else if (category.providerSelectionMode) body.clearProviderSelectionMode = true;
+    if (form.financingEnabled) body.financingMode = "on";
+    else if (category.financingMode) body.clearFinancing = true;
 
     setSaving(true);
     try {
@@ -3602,6 +3670,26 @@ function CategoryDetailPanel({
                 aria-label="Category require card on file toggle"
                 aria-pressed={form.requireCardOnFile}
                 onClick={() => setForm((prev) => ({ ...prev, requireCardOnFile: !prev.requireCardOnFile }))}
+              />
+            </div>
+
+            <hr className="cs-svc-details__divider" />
+
+            <div className="cs-svc-setting">
+              <span className="cs-svc-setting__text">
+                <span className="cs-svc-card__title">Offer financing</span>
+                <span className="cs-svc-section__lead">
+                  Shows “or $X/mo” with your financing button on every service in this category. A service can
+                  turn it off or use its own link. Set the link under Settings → Marketing.
+                </span>
+              </span>
+              <button
+                type="button"
+                className={`cs-switch${form.financingEnabled ? "" : " cs-switch--off"}`}
+                aria-label="Category financing toggle"
+                aria-pressed={form.financingEnabled}
+                disabled={!canManage}
+                onClick={() => setForm((prev) => ({ ...prev, financingEnabled: !prev.financingEnabled }))}
               />
             </div>
 

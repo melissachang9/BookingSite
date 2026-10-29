@@ -43,6 +43,17 @@ export type TenantBranding = {
     reviewHeadline?: string | null;
     reviewBody?: string | null;
   } | null;
+  financing?: TenantFinancing | null;
+};
+
+/** A studio-wide financing link shown beside each service price on the booking site. */
+export type TenantFinancing = {
+  enabled: boolean;
+  /** The button's label; empty falls back to "See financing options". */
+  buttonText?: string | null;
+  linkUrl?: string | null;
+  /** Instalments the monthly figure is spread over (2-84). */
+  months?: number | null;
 };
 
 export type BusinessHoursDay = {
@@ -182,6 +193,7 @@ export type UpdateTenantBrandingRequest = {
     reviewHeadline?: string | null;
     reviewBody?: string | null;
   } | null;
+  financing?: TenantFinancing | null;
 };
 
 export type UpdateTenantClientOwnershipRequest = {

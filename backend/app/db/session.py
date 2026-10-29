@@ -289,6 +289,8 @@ async def _ensure_postgres_schema_compatibility() -> None:
             "booking_payment_mode": "VARCHAR(32)",
             "booking_payment_value_cents": "INTEGER",
             "booking_payment_percent": "INTEGER",
+            "financing_mode": "VARCHAR(16)",
+            "financing_url": "TEXT",
         }
         for column_name, column_type in service_columns.items():
             exists = await connection.scalar(
@@ -610,6 +612,7 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("service_categories", "booking_payment_percent", "INTEGER"),
     ("service_categories", "require_card_on_file", "BOOLEAN"),
     ("service_categories", "provider_selection_mode", "VARCHAR(32)"),
+    ("service_categories", "financing_mode", "VARCHAR(16)"),
     ("service_categories", "is_taxable", "BOOLEAN"),
     ("services", "is_taxable", "BOOLEAN"),
     ("booking_items", "kind", "VARCHAR(16) NOT NULL DEFAULT 'service'"),

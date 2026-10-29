@@ -439,6 +439,43 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("saves the studio financing link, button text and months", async () => {
+    const spy = vi.spyOn(platformApi, "updateTenantBranding").mockResolvedValue(tenant as any);
+    render(<SettingsPage definition={definition} currentUser={ownerUser} tenant={tenant} onTenantUpdated={vi.fn()} />);
+
+    fireEvent.click(screen.getByLabelText(/financing available/i));
+    fireEvent.change(screen.getByLabelText("Button text"), { target: { value: "Pay over time" } });
+    fireEvent.change(screen.getByLabelText("Financing months"), { target: { value: "18" } });
+    fireEvent.change(screen.getByLabelText(/^financing link/i), { target: { value: "https://financing.example.com/apply" } });
+    fireEvent.click(screen.getByRole("button", { name: /save branding/i }));
+
+    await waitFor(() =>
+      expect(spy).toHaveBeenCalledWith("brow-beauty-lab", expect.objectContaining({
+        financing: {
+          enabled: true,
+          buttonText: "Pay over time",
+          linkUrl: "https://financing.example.com/apply",
+          months: 18,
+        },
+      })),
+    );
+  });
+
+  it("blocks saving financing without a web link or with a bad number of months", async () => {
+    const spy = vi.spyOn(platformApi, "updateTenantBranding").mockResolvedValue(tenant as any);
+    render(<SettingsPage definition={definition} currentUser={ownerUser} tenant={tenant} onTenantUpdated={vi.fn()} />);
+
+    fireEvent.click(screen.getByLabelText(/financing available/i));
+    fireEvent.change(screen.getByLabelText(/^financing link/i), { target: { value: "javascript:alert(1)" } });
+    expect(screen.getByRole("alert")).toHaveTextContent(/web address starting with http/i);
+    expect(screen.getByRole("button", { name: /save branding/i })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(/^financing link/i), { target: { value: "https://f.example.com" } });
+    fireEvent.change(screen.getByLabelText("Financing months"), { target: { value: "1" } });
+    expect(screen.getByRole("alert")).toHaveTextContent(/2 to 84/);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it("takes marketing images as uploads, never as typed URLs", async () => {
     const spy = vi.spyOn(platformApi, "updateTenantBranding").mockResolvedValue(tenant as any);
     render(<SettingsPage definition={definition} currentUser={ownerUser} tenant={tenant} onTenantUpdated={vi.fn()} />);
