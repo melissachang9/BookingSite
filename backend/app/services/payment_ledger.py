@@ -60,6 +60,35 @@ def payment_refunded_cents(payment: Payment) -> int:
     return sum(e.amount_cents or 0 for e in payment.events if e.kind in REFUND_KINDS)
 
 
+def payment_details(payment: Payment) -> str | None:
+    """What a person reading the ledger wants to know about how this payment was taken.
+
+    Card brand and last four, the note and reference typed when it was recorded (and by whom),
+    or "Paid online" when the client paid through checkout themselves.
+    """
+    parts: list[str] = []
+    if payment.card_brand and payment.card_last4:
+        parts.append(f"{payment.card_brand} ending {payment.card_last4}")
+
+    events = sorted(payment.events, key=lambda e: e.occurred_at)
+    recorded = next((e for e in reversed(events) if e.kind == "payment_recorded"), None)
+    if recorded is not None:
+        note = (recorded.notes or "").strip().rstrip(".").strip()
+        if note:
+            parts.append(note)
+        if payment.external_reference and payment.external_reference not in note:
+            parts.append(f"Ref {payment.external_reference}")
+        if recorded.display_name:
+            parts.append(f"Recorded by {recorded.display_name}")
+    elif any(e.kind == "checkout_completed" for e in events):
+        parts.append("Paid online")
+    elif payment.payment_method_type == "wallet":
+        parts.append("Paid with wallet credit")
+    elif payment.external_reference:
+        parts.append(f"Ref {payment.external_reference}")
+    return " · ".join(parts) or None
+
+
 def _utc(value: datetime | None) -> datetime | None:
     if value is None:
         return None
@@ -132,6 +161,7 @@ async def list_transactions(
                 cash_cents=0 if is_wallet_payment else received,
                 tip_cents=payment.tip_cents,
                 status=payment.status,
+                notes=payment_details(payment),
                 **common,
             )
         )

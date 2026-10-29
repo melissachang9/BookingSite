@@ -348,3 +348,66 @@ def test_staff_wallet_adjustment_is_recorded_against_the_staff_member(client) ->
     after = _liabilities(client)["wallet"]
     assert after["addedCents"] == before["addedCents"] + 1500
     assert after["closingCents"] == before["closingCents"] + 1500
+
+
+# --- the details column ----------------------------------------------------------------------
+
+
+def _set_card(payment_id: str, brand: str, last4: str) -> None:
+    async def _go():
+        from app.db.models import Payment
+        from app.db.session import get_session_maker
+
+        async with get_session_maker()() as session:
+            payment = await session.get(Payment, payment_id)
+            payment.card_brand, payment.card_last4 = brand, last4
+            await session.commit()
+
+    asyncio.run(_go())
+
+
+def _row(client, payment_id: str, type_: str) -> dict:
+    rows = _transactions(client, limit=200)["transactions"]
+    return next(r for r in rows if r["paymentId"] == payment_id and r["type"] == type_)
+
+
+def test_online_deposit_details_say_paid_online_with_the_card(client) -> None:
+    booking = _confirm_paid_deposit_booking(client)["booking"]
+    detail = client.get(f"{BASE}/bookings/{booking['id']}", headers=_auth_headers(client)).json()
+    payment_id = detail["payments"][0]["id"]
+    assert _row(client, payment_id, "deposit_collected")["notes"] == "Paid online"
+
+    _set_card(payment_id, "Visa", "4242")
+    assert _row(client, payment_id, "deposit_collected")["notes"] == "Visa ending 4242 · Paid online"
+
+
+def test_manual_payment_details_show_the_note_reference_and_who_recorded_it(client) -> None:
+    booking = _confirm_paid_deposit_booking(client)["booking"]
+    headers = _auth_headers(client)
+    paid = client.post(
+        f"{BASE}/bookings/{booking['id']}/payments/manual",
+        headers=headers,
+        json={
+            "amountCents": booking["balanceDueCents"],
+            "paymentMethodType": "external_pos",
+            "externalReference": "POS-1042",
+            "notes": "Paid at front desk",
+        },
+    )
+    assert paid.status_code == 200, paid.json()
+    detail = client.get(f"{BASE}/bookings/{booking['id']}", headers=headers).json()
+    manual_id = next(p["id"] for p in detail["payments"] if p["paymentMethodType"] == "external_pos")
+    notes = _row(client, manual_id, "payment")["notes"]
+    assert "Paid at front desk" in notes
+    assert notes.count("POS-1042") == 1  # the reference is shown once, not repeated
+    assert "Recorded by" in notes
+
+
+def test_wallet_payment_details_say_wallet_credit(client) -> None:
+    booking = _confirm_paid_deposit_booking(client)["booking"]
+    headers = _auth_headers(client)
+    client.patch(f"{BASE}/customers/{booking['customerId']}", headers=headers, json={"walletAdjustmentCents": 5000})
+    client.post(f"{BASE}/bookings/{booking['id']}/payments/wallet-credit", headers=headers, json={"amountCents": 1000})
+    detail = client.get(f"{BASE}/bookings/{booking['id']}", headers=headers).json()
+    wallet_id = next(p["id"] for p in detail["payments"] if p["paymentMethodType"] == "wallet")
+    assert "wallet" in (_row(client, wallet_id, "payment")["notes"] or "").lower()
