@@ -54,6 +54,11 @@ export type TenantFinancing = {
   linkUrl?: string | null;
   /** Instalments the monthly figure is spread over (2-84). */
   months?: number | null;
+  /** Optional wording shown with the offer, only when filled in: e.g. "0% APR". */
+  aprLabel?: string | null;
+  /** A short note such as "Subject to approval." */
+  disclosure?: string | null;
+  termsUrl?: string | null;
 };
 
 export type BusinessHoursDay = {

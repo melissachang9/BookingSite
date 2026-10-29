@@ -447,6 +447,9 @@ describe("SettingsPage", () => {
     fireEvent.change(screen.getByLabelText("Button text"), { target: { value: "Pay over time" } });
     fireEvent.change(screen.getByLabelText("Financing months"), { target: { value: "18" } });
     fireEvent.change(screen.getByLabelText(/^financing link/i), { target: { value: "https://financing.example.com/apply" } });
+    fireEvent.change(screen.getByLabelText(/rate label/i), { target: { value: "0% APR" } });
+    fireEvent.change(screen.getByLabelText(/financing terms link/i), { target: { value: "https://financing.example.com/terms" } });
+    fireEvent.change(screen.getByLabelText(/note shown with the offer/i), { target: { value: "Subject to approval." } });
     fireEvent.click(screen.getByRole("button", { name: /save branding/i }));
 
     await waitFor(() =>
@@ -456,6 +459,9 @@ describe("SettingsPage", () => {
           buttonText: "Pay over time",
           linkUrl: "https://financing.example.com/apply",
           months: 18,
+          aprLabel: "0% APR",
+          disclosure: "Subject to approval.",
+          termsUrl: "https://financing.example.com/terms",
         },
       })),
     );

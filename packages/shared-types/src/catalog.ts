@@ -49,6 +49,10 @@ export type ServiceFinancing = {
   linkUrl: string;
   months: number;
   monthlyCents: number;
+  /** Optional wording from the studio, e.g. "0% APR" and a short disclosure. */
+  aprLabel?: string | null;
+  disclosure?: string | null;
+  termsUrl?: string | null;
 };
 
 export type ServiceSummary = AuditFields &

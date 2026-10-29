@@ -64,11 +64,11 @@ export default async function ProviderLandingPage({ params }: ProviderPageProps)
                     <div className="sf-service__body">
                       <h3>{svc.name}</h3>
                       <p>{svc.description ?? "Personalised studio service with live appointment availability."}</p>
+                      <FinancingLink financing={svc.effectiveFinancing} priceCents={svc.priceCents} />
                     </div>
                     <div className="sf-service__side">
                       <strong>{formatCurrency(svc.priceCents)}</strong>
                       <span>{formatDuration(svc.durationMinutes)}</span>
-                      <FinancingLink financing={svc.effectiveFinancing} />
                       {provider.isBookableOnline ? (
                         <Link
                           href={`/${tenantSlug}/services/${svc.id}?providerId=${provider.id}`}

@@ -32,9 +32,17 @@ def effective_financing(service: Service, tenant: Tenant | None) -> ServiceFinan
     if monthly_cents <= 0:
         return None
     button_text = studio.get("buttonText")
+
+    def _text(key: str) -> str | None:
+        value = studio.get(key)
+        return value.strip() if isinstance(value, str) and value.strip() else None
+
     return ServiceFinancingResponse(
         button_text=button_text.strip() if isinstance(button_text, str) and button_text.strip() else DEFAULT_FINANCING_BUTTON_TEXT,
         link_url=link_url,
         months=months,
         monthly_cents=monthly_cents,
+        apr_label=_text("aprLabel"),
+        disclosure=_text("disclosure"),
+        terms_url=_text("termsUrl"),
     )

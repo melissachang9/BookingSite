@@ -82,6 +82,9 @@ def test_financing_is_opt_in_per_service(client) -> None:
         "linkUrl": "https://financing.example.com/apply",
         "months": 12,
         "monthlyCents": 10_000,
+        "aprLabel": None,
+        "disclosure": None,
+        "termsUrl": None,
     }
 
 
@@ -205,6 +208,46 @@ def test_category_financing_rejects_unknown_modes(client) -> None:
     assert client.patch(url, json={"financingMode": "custom"}, headers=headers).status_code == 422
     assert client.patch(url, json={"financingMode": "on"}, headers=headers).status_code == 200
     assert client.patch(url, json={"clearFinancing": True}, headers=headers).json()["financingMode"] is None
+
+
+def test_optional_apr_label_disclosure_and_terms_link_come_through(client) -> None:
+    headers = _auth_headers(client)
+    service = _create_service(client, headers)
+    _set_studio_financing(
+        client,
+        headers,
+        aprLabel=" 0% APR ",
+        disclosure="Subject to approval.",
+        termsUrl="https://financing.example.com/terms",
+    )
+
+    financing = _turn_on(client, headers, service["id"])["effectiveFinancing"]
+    assert financing["aprLabel"] == "0% APR"
+    assert financing["disclosure"] == "Subject to approval."
+    assert financing["termsUrl"] == "https://financing.example.com/terms"
+
+
+def test_apr_label_disclosure_and_terms_link_are_absent_unless_filled_in(client) -> None:
+    headers = _auth_headers(client)
+    service = _create_service(client, headers)
+    _set_studio_financing(client, headers)
+
+    financing = _turn_on(client, headers, service["id"])["effectiveFinancing"]
+    assert financing["aprLabel"] is None
+    assert financing["disclosure"] is None
+    assert financing["termsUrl"] is None
+
+
+def test_financing_wording_is_length_checked_and_the_terms_link_must_be_a_web_address(client) -> None:
+    headers = _auth_headers(client)
+    for bad in (
+        {"aprLabel": "x" * 25},
+        {"disclosure": "x" * 401},
+        {"termsUrl": "javascript:alert(1)"},
+    ):
+        financing = {"enabled": True, "buttonText": "Pay", "linkUrl": "https://f.example.com", "months": 12, **bad}
+        response = client.patch("/api/v1/tenants/brow-beauty-lab/branding", json={"financing": financing}, headers=headers)
+        assert response.status_code == 422, bad
 
 
 def test_studio_financing_needs_a_web_link_and_a_sensible_term(client) -> None:

@@ -314,6 +314,9 @@ async def update_tenant_branding(
             "buttonText": payload.financing.button_text.strip() if payload.financing.button_text and payload.financing.button_text.strip() else None,
             "linkUrl": payload.financing.link_url.strip() if payload.financing.link_url and payload.financing.link_url.strip() else None,
             "months": payload.financing.months,
+            "aprLabel": payload.financing.apr_label.strip() if payload.financing.apr_label and payload.financing.apr_label.strip() else None,
+            "disclosure": payload.financing.disclosure.strip() if payload.financing.disclosure and payload.financing.disclosure.strip() else None,
+            "termsUrl": payload.financing.terms_url.strip() if payload.financing.terms_url and payload.financing.terms_url.strip() else None,
         }
 
     tenant.branding_json = current_branding

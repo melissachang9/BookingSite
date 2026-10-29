@@ -326,7 +326,7 @@ html { background: #ebe7e3; }
 .sf-service {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: start;
   gap: clamp(14px, 1.8vw, 28px);
   padding: 20px 24px 20px 20px;
   border-radius: 36px;
@@ -342,6 +342,7 @@ html { background: #ebe7e3; }
   color: var(--sf-ink);
   object-fit: cover;
 }
+.sf-service__body { padding-top: 6px; }
 .sf-service__tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .sf-tag--tint { color: var(--sf-ink); }
 .sf-service__body h3 { margin: 0; font: 600 clamp(18px, 1.5vw, 22px) var(--sf-font-sans); letter-spacing: -0.035em; }
@@ -853,7 +854,40 @@ html { background: #ebe7e3; }
 .sf-faq dt { font: 600 15px var(--sf-font-sans); }
 .sf-faq dd { margin: 6px 0 0; font: 400 14px/1.55 var(--sf-font-sans); color: var(--sf-muted); }
 
-/* ---- Financing link beside a service price ------------------------------ */
-.sf-financing { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 8px; margin-top: 6px; padding: 6px 12px; border-radius: 999px; background: var(--sf-sage-soft); color: var(--sf-ink); font: 500 12.5px var(--sf-font-sans); text-decoration: none; }
-.sf-financing strong { font-weight: 600; text-decoration: underline; }
-.sf-financing:hover { background: #d3e2d1; }
+/* ---- Financing: expandable "$250/month for 3 months" under a service ------ */
+.sf-finance { margin-top: 12px; max-width: 46em; }
+.sf-finance__pill { display: inline-flex; align-items: center; gap: 10px; padding: 8px 16px 8px 8px; border: 1px solid var(--sf-border-strong); border-radius: 999px; background: var(--sf-surface); font: 400 14px var(--sf-font-sans); color: var(--sf-muted); cursor: pointer; list-style: none; }
+.sf-finance__pill::-webkit-details-marker { display: none; }
+.sf-finance__pill:focus { outline: none; }
+.sf-finance__pill:focus-visible { outline: 2px solid var(--sf-ink); outline-offset: 2px; }
+.sf-finance__pill strong { color: var(--sf-ink); font-weight: 600; }
+.sf-finance__pill::after { content: ""; width: 7px; height: 7px; margin: 0 2px 2px 4px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); transition: transform 0.15s; }
+.sf-finance[open] .sf-finance__pill::after { transform: rotate(-135deg); margin-bottom: -2px; }
+.sf-finance__pill:not(:has(.sf-finance__apr)) { padding-left: 16px; }
+.sf-finance__apr { padding: 4px 12px; border-radius: 999px; background: var(--sf-ink); color: #fff; font: 600 12.5px var(--sf-font-sans); }
+.sf-finance__panel { display: grid; gap: 6px; margin-top: 10px; padding: 14px 18px; border-radius: 20px; background: var(--sf-tile); font: 400 14px/1.5 var(--sf-font-sans); color: var(--sf-muted); }
+.sf-finance__panel strong { color: var(--sf-ink); font-weight: 600; }
+.sf-finance__panel p { margin: 0; }
+.sf-finance__links { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.sf-finance__links a { color: var(--sf-ink); font-weight: 600; text-decoration: underline; }
+
+/* ---- Checkout: choose a deposit or the monthly plan --------------------- */
+.sf-paychoice { display: grid; gap: 10px; margin: 18px 0 0; padding: 0; border: 0; min-width: 0; }
+.sf-paychoice__legend { padding: 0; margin-bottom: 2px; font: 700 12px var(--sf-font-sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--sf-muted); }
+.sf-payopt { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border: 1px solid var(--sf-border-strong); border-radius: 20px; background: var(--sf-tile); cursor: pointer; }
+.sf-payopt.is-selected { border: 2px solid var(--sf-ink); padding: 13px 15px; background: var(--sf-surface); }
+.sf-payopt input { position: absolute; opacity: 0; pointer-events: none; }
+.sf-payopt__radio { flex: none; width: 22px; height: 22px; margin-top: 1px; border: 1.5px solid var(--sf-ink); border-radius: 50%; background: var(--sf-surface); }
+.sf-payopt.is-selected .sf-payopt__radio { border-width: 6px; }
+.sf-payopt input:focus-visible + .sf-payopt__radio { outline: 2px solid var(--sf-ring); outline-offset: 2px; }
+.sf-payopt__text { display: grid; gap: 2px; min-width: 0; }
+.sf-payopt__text strong { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font: 600 15px var(--sf-font-sans); }
+.sf-payopt__text small { font: 400 13px/1.4 var(--sf-font-sans); color: var(--sf-muted); }
+.sf-payopt__apr { padding: 3px 10px; border-radius: 999px; background: var(--sf-ink); color: #fff; font: 600 12px var(--sf-font-sans); }
+.sf-paychoice__panel { display: grid; gap: 8px; margin-top: 10px; padding: 14px 16px; border-radius: 20px; background: var(--sf-tile); font: 400 13px/1.5 var(--sf-font-sans); color: var(--sf-muted); }
+.sf-paychoice__panel strong { color: var(--sf-ink); font-weight: 600; }
+.sf-paychoice__panel p { margin: 0; }
+.sf-paychoice__links { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.sf-paychoice__links a { color: var(--sf-ink); font-weight: 600; text-decoration: underline; }
+a.sf-summary__cta { text-decoration: none; text-align: center; }
+a.sf-summary__cta[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }

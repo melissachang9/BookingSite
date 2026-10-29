@@ -227,3 +227,11 @@ export function readableTextColor(background: string): string {
     .map((unit) => (unit <= 0.03928 ? unit / 12.92 : ((unit + 0.055) / 1.055) ** 2.4)) as [number, number, number];
   return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? "#15110f" : "#ffffff";
 }
+
+/**
+ * A total spread over a financing term, rounded to the nearest cent. Matches how the backend works out
+ * each service's monthly amount, so the same price reads the same on the service list and at checkout.
+ */
+export function financingMonthlyCents(totalCents: number, months: number): number {
+  return Math.floor((totalCents + Math.floor(months / 2)) / months);
+}

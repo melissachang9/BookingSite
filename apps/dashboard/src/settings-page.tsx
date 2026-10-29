@@ -2084,6 +2084,9 @@ function BrandingSection({
   const [financingButtonText, setFinancingButtonText] = useState<string>("");
   const [financingLinkUrl, setFinancingLinkUrl] = useState<string>("");
   const [financingMonths, setFinancingMonths] = useState<string>("12");
+  const [financingAprLabel, setFinancingAprLabel] = useState<string>("");
+  const [financingDisclosure, setFinancingDisclosure] = useState<string>("");
+  const [financingTermsUrl, setFinancingTermsUrl] = useState<string>("");
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
   useEffect(() => {
@@ -2117,6 +2120,9 @@ function BrandingSection({
       setFinancingButtonText(branding.financing?.buttonText ?? "");
       setFinancingLinkUrl(branding.financing?.linkUrl ?? "");
       setFinancingMonths(String(branding.financing?.months ?? 12));
+      setFinancingAprLabel(branding.financing?.aprLabel ?? "");
+      setFinancingDisclosure(branding.financing?.disclosure ?? "");
+      setFinancingTermsUrl(branding.financing?.termsUrl ?? "");
     }
   }, [tenant]);
 
@@ -2138,9 +2144,12 @@ function BrandingSection({
       if (!Number.isInteger(months) || months < 2 || months > 84) {
         return "Financing months must be a whole number from 2 to 84.";
       }
+      if (financingTermsUrl.trim() && !FINANCING_URL_RE.test(financingTermsUrl.trim())) {
+        return "Enter the financing terms link as a web address starting with http:// or https://.";
+      }
     }
     return null;
-  }, [primaryColor, accentColor, bookingAdPanelColor, financingEnabled, financingLinkUrl, financingMonths]);
+  }, [primaryColor, accentColor, bookingAdPanelColor, financingEnabled, financingLinkUrl, financingMonths, financingTermsUrl]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -2179,6 +2188,9 @@ function BrandingSection({
           buttonText: financingButtonText.trim() || null,
           linkUrl: financingLinkUrl.trim() || null,
           months: Number.isInteger(Number(financingMonths)) && financingMonths.trim() ? Number(financingMonths) : null,
+          aprLabel: financingAprLabel.trim() || null,
+          disclosure: financingDisclosure.trim() || null,
+          termsUrl: financingTermsUrl.trim() || null,
         },
       });
       onTenantUpdated(updated);
@@ -2623,6 +2635,45 @@ function BrandingSection({
               placeholder="https://"
             />
             <small className="cs-field-help">Where the button sends clients, such as your financing provider&apos;s application page.</small>
+          </label>
+        </div>
+        <div className="cs-form-row">
+          <label className="cs-field">
+            <span>Rate label (optional)</span>
+            <input
+              type="text"
+              value={financingAprLabel}
+              onChange={(event) => setFinancingAprLabel(event.target.value)}
+              disabled={disabled}
+              maxLength={24}
+              placeholder="0% APR"
+            />
+            <small className="cs-field-help">Shown as a small tag next to the monthly amount. Only use wording your financing provider allows.</small>
+          </label>
+          <label className="cs-field">
+            <span>Financing terms link (optional)</span>
+            <input
+              type="url"
+              value={financingTermsUrl}
+              onChange={(event) => setFinancingTermsUrl(event.target.value)}
+              disabled={disabled}
+              maxLength={2048}
+              placeholder="https://"
+            />
+          </label>
+        </div>
+        <div className="cs-form-row">
+          <label className="cs-field">
+            <span>Note shown with the offer (optional)</span>
+            <textarea
+              value={financingDisclosure}
+              onChange={(event) => setFinancingDisclosure(event.target.value)}
+              disabled={disabled}
+              rows={2}
+              maxLength={400}
+              placeholder="Quick eligibility check with no impact on your credit score. Subject to approval."
+            />
+            <small className="cs-field-help">Appears when a client opens the monthly amount and at checkout. Leave blank to show nothing.</small>
           </label>
         </div>
       </details>

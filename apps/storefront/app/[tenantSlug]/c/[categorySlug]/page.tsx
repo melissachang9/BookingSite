@@ -102,11 +102,11 @@ export default async function CategoryLandingPage({ params, searchParams }: Cate
                     <div className="sf-service__body">
                       <h3>{service.name}</h3>
                       <p>{service.description ?? "Personalised studio service with live appointment availability."}</p>
+                      <FinancingLink financing={service.effectiveFinancing} priceCents={service.priceCents} />
                     </div>
                     <div className="sf-service__side">
                       <strong>{formatCurrency(service.priceCents)}</strong>
                       <span>{formatDuration(service.durationMinutes)}</span>
-                      <FinancingLink financing={service.effectiveFinancing} />
                       <Link
                         href={pathWithQuery(`/${tenantSlug}/services/${slugify(service.name)}`, { locationId, screening })}
                         className="sf-btn"

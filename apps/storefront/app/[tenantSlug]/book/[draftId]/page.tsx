@@ -5,6 +5,7 @@ import type { FormAnswers, FormField, FormRequirement } from "@booking/shared-ty
 
 import { storefrontApi, isApiClientError, isApiNotFoundError } from "../../../lib/storefront-api";
 import {
+  financingMonthlyCents,
   formatCurrency,
   formatDuration,
   formatExpiryWindow,
@@ -21,6 +22,7 @@ import ContactDetailsForm from "./contact-details-form";
 import DateFieldInput from "./date-field-input";
 import DeferrableFormCard from "./deferrable-form-card";
 import HoldCountdown from "./hold-countdown";
+import { PaymentChoice } from "./payment-choice";
 import { PendingSubmitButton } from "./pending-submit-button";
 import ProgressSteps from "./progress-steps";
 import SignatureField from "./signature-field";
@@ -381,6 +383,39 @@ export default async function BookingDraftPage({ params, searchParams }: Booking
       </button>
     );
 
+    const summaryRows = (
+      <>
+        <div><dt>When</dt><dd>{whenLabel}</dd></div>
+        <div><dt>With</dt><dd>{draft.provider.name}</dd></div>
+        {location ? <div><dt>Where</dt><dd>{location.addressLine1 ?? location.name}</dd></div> : null}
+        {(draft.addOns ?? []).map((item, index) => (
+          <div key={`${item.addOnId ?? item.name}-${index}`}>
+            <dt>+ {item.name}</dt>
+            <dd>{money(item.priceCents)}</dd>
+          </div>
+        ))}
+      </>
+    );
+    const summaryNote = `${cancellationHours ? `Free cancellation up to ${cancellationHours} hours before. ` : ""}${
+      draft.depositCents > 0 && remainingCents > 0 ? `The remaining ${money(remainingCents)} is paid at the studio.` : ""
+    }`;
+    // Financing is offered next to a deposit: the client picks one way to pay for the visit.
+    const serviceFinancing = draft.service.effectiveFinancing;
+    const financingMonthly = serviceFinancing ? financingMonthlyCents(visitTotalCents, serviceFinancing.months) : 0;
+    const financingOffer =
+      serviceFinancing && draft.depositCents > 0 && financingMonthly > 0
+        ? {
+            linkUrl: serviceFinancing.linkUrl,
+            buttonText: serviceFinancing.buttonText,
+            termsUrl: serviceFinancing.termsUrl ?? null,
+            aprLabel: serviceFinancing.aprLabel ?? null,
+            disclosure: serviceFinancing.disclosure ?? null,
+            months: serviceFinancing.months,
+            monthlyLabel: money(financingMonthly),
+            totalLabel: money(visitTotalCents),
+          }
+        : null;
+
     return (
       <main className="sf-flow">
         <BookingSteps current={4} />
@@ -515,30 +550,34 @@ export default async function BookingDraftPage({ params, searchParams }: Booking
               </span>
             </div>
 
-            <dl className="sf-summary__rows">
-              <div><dt>When</dt><dd>{whenLabel}</dd></div>
-              <div><dt>With</dt><dd>{draft.provider.name}</dd></div>
-              {location ? <div><dt>Where</dt><dd>{location.addressLine1 ?? location.name}</dd></div> : null}
-              {(draft.addOns ?? []).map((item, index) => (
-                <div key={`${item.addOnId ?? item.name}-${index}`}>
-                  <dt>+ {item.name}</dt>
-                  <dd>{money(item.priceCents)}</dd>
-                </div>
-              ))}
-              <div>
-                <dt>{draft.depositCents > 0 ? "Deposit due today" : "Due today"}</dt>
-                <dd>{money(draft.depositCents)}</dd>
-              </div>
-            </dl>
+            {financingOffer ? (
+              <PaymentChoice
+                staticRows={summaryRows}
+                dueLabel="Deposit due today"
+                dueAmount={money(draft.depositCents)}
+                depositTitle={`Pay ${money(draft.depositCents)} deposit today`}
+                depositDetail={remainingCents > 0 ? `${money(remainingCents)} balance paid at the studio` : "Nothing more to pay at the studio"}
+                financing={financingOffer}
+                depositCta={summaryCta}
+                canStartFinancing={canStartDepositCheckout}
+                disabledLabel={paymentCtaLabel}
+                note={summaryNote}
+              />
+            ) : (
+              <>
+                <dl className="sf-summary__rows">
+                  {summaryRows}
+                  <div>
+                    <dt>{draft.depositCents > 0 ? "Deposit due today" : "Due today"}</dt>
+                    <dd>{money(draft.depositCents)}</dd>
+                  </div>
+                </dl>
 
-            {summaryCta}
+                {summaryCta}
 
-            <p className="sf-summary__note">
-              {cancellationHours ? `Free cancellation up to ${cancellationHours} hours before. ` : ""}
-              {draft.depositCents > 0 && remainingCents > 0
-                ? `The remaining ${money(remainingCents)} is paid at the studio.`
-                : ""}
-            </p>
+                <p className="sf-summary__note">{summaryNote}</p>
+              </>
+            )}
           </aside>
         </div>
       </main>

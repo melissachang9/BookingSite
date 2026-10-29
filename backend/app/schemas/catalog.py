@@ -57,6 +57,10 @@ class FinancingResponse(CamelModel):
     link_url: str | None = None
     # Instalments the monthly figure is spread over: each service shows its price divided by this.
     months: int | None = None
+    # Optional wording the studio's financing provider requires or allows; shown only when filled in.
+    apr_label: str | None = None  # e.g. "0% APR"
+    disclosure: str | None = None  # e.g. "Subject to approval."
+    terms_url: str | None = None
 
 
 class ServiceFinancingResponse(CamelModel):
@@ -66,6 +70,9 @@ class ServiceFinancingResponse(CamelModel):
     link_url: str
     months: int
     monthly_cents: int
+    apr_label: str | None = None
+    disclosure: str | None = None
+    terms_url: str | None = None
 
 
 FINANCING_SERVICE_MODES = ("on", "off", "custom")
@@ -113,6 +120,12 @@ class UpdateTenantBrandingRequest(CamelModel):
         if self.financing is not None:
             if self.financing.button_text is not None and len(self.financing.button_text.strip()) > 60:
                 raise ValueError("financing.button_text must be 60 characters or fewer.")
+            if self.financing.apr_label is not None and len(self.financing.apr_label.strip()) > 24:
+                raise ValueError("financing.apr_label must be 24 characters or fewer.")
+            if self.financing.disclosure is not None and len(self.financing.disclosure.strip()) > 400:
+                raise ValueError("financing.disclosure must be 400 characters or fewer.")
+            if self.financing.terms_url is not None and self.financing.terms_url.strip():
+                _validate_financing_url(self.financing.terms_url, "financing.terms_url")
             if self.financing.enabled:
                 _validate_financing_url(self.financing.link_url, "financing.link_url")
                 if self.financing.months is None or not 2 <= self.financing.months <= 84:
