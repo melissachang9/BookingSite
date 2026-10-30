@@ -1,5 +1,13 @@
 import type { AuditFields, TenantScoped, UUID } from "./common";
 
+export type ResourceServiceUse = {
+  serviceId: UUID;
+  serviceName: string;
+  isActive: boolean;
+  /** Units one booking of the service uses. */
+  quantity: number;
+};
+
 export type ResourceSummary = AuditFields &
   TenantScoped & {
     name: string;
@@ -9,6 +17,8 @@ export type ResourceSummary = AuditFields &
     notes?: string | null;
     /** Units the studio owns (a room is one unit). */
     quantity: number;
+    /** Services that require this resource. */
+    usedBy: ResourceServiceUse[];
   };
 
 export type ResourceListResponse = {

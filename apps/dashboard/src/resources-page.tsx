@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import type {
   AuthenticatedUser,
   CreateResourceRequest,
+  LocationSummary,
   ResourceListResponse,
   ResourceSummary,
   UpdateResourceRequest,
@@ -58,6 +59,7 @@ export function ResourcesPage({
 
   const [loadState, setLoadState] = useState<LoadState>({ kind: "loading" });
   const [resources, setResources] = useState<ResourceSummary[]>([]);
+  const [locations, setLocations] = useState<LocationSummary[]>([]);
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
   const [status, setStatus] = useState<string | null>(null);
@@ -78,7 +80,14 @@ export function ResourcesPage({
   useEffect(() => {
     if (!canView || !tenantSlug) return;
     void loadResources();
+    // Locations only label and pin resources; the page still works without them.
+    platformApi.listLocations(tenantSlug)
+      .then((response) => setLocations(response.locations))
+      .catch(() => setLocations([]));
   }, [tenantSlug, canView]);
+
+  const locationName = (locationId?: string | null) =>
+    locationId ? (locations.find((loc) => loc.id === locationId)?.name ?? "One location") : "All locations";
 
   const selectedResource =
     resources.find((r) => r.id === selectedResourceId) ?? null;
@@ -126,28 +135,42 @@ export function ResourcesPage({
             {resources.length === 0 ? (
               <p className="cs-empty">No resources yet.</p>
             ) : (
-              <ul className="cs-md-list">
-                {resources.map((resource) => (
-                  <li key={resource.id}>
-                    <button
-                      type="button"
-                      className={`cs-md-list__item${
-                        selectedResourceId === resource.id ? " is-active" : ""
-                      }`}
-                      onClick={() => setSelectedResourceId(resource.id)}
-                    >
-                      <div>
-                        <strong>{resource.name}</strong>
-                        <span>
-                          {KIND_LABELS[resource.kind] ?? resource.kind}
-                          {" · "}
-                          {resource.isActive ? "Active" : "Inactive"}
-                        </span>
-                      </div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <>
+                {[
+                  { title: "Rooms", items: resources.filter((r) => r.kind === "room") },
+                  { title: "Equipment & other", items: resources.filter((r) => r.kind !== "room") },
+                ]
+                  .filter((group) => group.items.length > 0)
+                  .map((group) => (
+                    <div key={group.title}>
+                      <p className="cs-kicker">{group.title}</p>
+                      <ul className="cs-md-list">
+                        {group.items.map((resource) => (
+                          <li key={resource.id}>
+                            <button
+                              type="button"
+                              className={`cs-md-list__item${
+                                selectedResourceId === resource.id ? " is-active" : ""
+                              }`}
+                              onClick={() => setSelectedResourceId(resource.id)}
+                            >
+                              <div>
+                                <strong>{resource.name}</strong>
+                                <span>
+                                  {KIND_LABELS[resource.kind] ?? resource.kind}
+                                  {resource.kind !== "room" ? ` · ${resource.quantity} ${resource.quantity === 1 ? "unit" : "units"}` : ""}
+                                  {" · "}
+                                  {locationName(resource.locationId)}
+                                  {resource.isActive ? "" : " · Inactive"}
+                                </span>
+                              </div>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+              </>
             )}
           </aside>
 
@@ -162,6 +185,8 @@ export function ResourcesPage({
                       {selectedResource.kind !== "room"
                         ? ` · ${selectedResource.quantity} ${selectedResource.quantity === 1 ? "unit" : "units"}`
                         : ""}
+                      {" · "}
+                      {locationName(selectedResource.locationId)}
                       {" · "}
                       {selectedResource.isActive ? "Active" : "Inactive"}
                     </p>
@@ -190,6 +215,28 @@ export function ResourcesPage({
                   ) : null}
                 </header>
 
+                <section className="cs-md-detail-panel__section" aria-label="Used by">
+                  <p className="cs-kicker">Used by</p>
+                  {selectedResource.usedBy.length === 0 ? (
+                    <p className="cs-md-detail-panel__notes">
+                      No service needs this yet, so it doesn&apos;t affect availability. Tick it on a
+                      service&apos;s Resources tab to start using it.
+                    </p>
+                  ) : (
+                    <ul className="cs-md-detail-panel__list">
+                      {selectedResource.usedBy.map((use) => (
+                        <li key={use.serviceId}>
+                          <strong>{use.serviceName}</strong>
+                          {use.isActive ? "" : " (inactive)"}
+                          {selectedResource.kind !== "room"
+                            ? ` · uses ${use.quantity} of ${selectedResource.quantity}`
+                            : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+
                 {selectedResource.notes ? (
                   <section className="cs-md-detail-panel__section">
                     <p className="cs-kicker">Notes</p>
@@ -212,6 +259,7 @@ export function ResourcesPage({
         <ResourceModal
           tenantSlug={tenantSlug}
           modal={modal}
+          locations={locations}
           onClose={() => setModal({ kind: "none" })}
           onSaved={async (msg) => {
             await loadResources();
@@ -241,12 +289,14 @@ export function ResourcesPage({
 function ResourceModal({
   tenantSlug,
   modal,
+  locations,
   onClose,
   onSaved,
   onStatus,
 }: {
   tenantSlug: string;
   modal: ModalState;
+  locations: LocationSummary[];
   onClose: () => void;
   onSaved: (msg: string) => Promise<void>;
   onStatus: (msg: string) => void;
@@ -256,6 +306,7 @@ function ResourceModal({
   const [kind, setKind] = useState(isEdit ? modal.resource.kind : "room");
   const [notes, setNotes] = useState(isEdit ? (modal.resource.notes ?? "") : "");
   const [quantity, setQuantity] = useState(String(isEdit ? modal.resource.quantity : 1));
+  const [locationId, setLocationId] = useState(isEdit ? (modal.resource.locationId ?? "") : "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -282,6 +333,7 @@ function ResourceModal({
           kind,
           notes: notes.trim() || null,
           quantity: units,
+          locationId: locationId || null,
         };
         await platformApi.updateResource(tenantSlug, modal.resource.id, body);
         await onSaved(`"${trimmedName}" updated.`);
@@ -291,6 +343,7 @@ function ResourceModal({
           kind,
           notes: notes.trim() || undefined,
           quantity: units,
+          locationId: locationId || null,
         };
         await platformApi.createResource(tenantSlug, body);
         await onSaved(`"${trimmedName}" created.`);
@@ -357,6 +410,20 @@ function ResourceModal({
               </small>
             </label>
           ) : null}
+          <label>
+            <span>Location</span>
+            <select value={locationId} onChange={(event) => setLocationId(event.target.value)}>
+              <option value="">All locations</option>
+              {locations.map((loc) => (
+                <option key={loc.id} value={loc.id}>{loc.name}</option>
+              ))}
+            </select>
+            <small className="cs-settings-form-help">
+              {kind === "room"
+                ? "A room pinned to a location is only offered for bookings there."
+                : "Equipment pinned to a location is only available for bookings there."}
+            </small>
+          </label>
           <label>
             <span>Notes</span>
             <textarea

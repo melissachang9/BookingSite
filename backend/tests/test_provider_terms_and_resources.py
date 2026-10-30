@@ -368,6 +368,60 @@ def test_resource_quantity_is_validated(client) -> None:
     assert response.status_code == 422
 
 
+def test_resource_lists_the_services_that_use_it(client) -> None:
+    headers = _auth(client)
+    service = _service_named(client, "Signature Facial")
+    panel = _create_resource(client, headers, "Used panel", "equipment", quantity=2)
+    unused = _create_resource(client, headers, "Spare panel", "equipment", quantity=1)
+    assert _require(client, headers, service["id"], [(panel, 2)]).status_code == 200
+
+    items = {item["id"]: item for item in client.get(f"{API}/resources", headers=headers).json()["items"]}
+    assert items[panel]["usedBy"] == [
+        {"serviceId": service["id"], "serviceName": "Signature Facial", "isActive": True, "quantity": 2}
+    ]
+    assert items[unused]["usedBy"] == []
+
+
+def test_resource_location_can_be_changed_and_cleared(client) -> None:
+    headers = _auth(client)
+    locations = client.get(f"{API}/locations").json()["locations"]
+    room = _create_resource(client, headers, "Movable room", "room")
+
+    moved = client.patch(f"{API}/resources/{room}", headers=headers, json={"locationId": locations[0]["id"]})
+    assert moved.status_code == 200, moved.json()
+    assert moved.json()["locationId"] == locations[0]["id"]
+
+    # Leaving the field out keeps the location; an explicit null returns to all locations.
+    kept = client.patch(f"{API}/resources/{room}", headers=headers, json={"notes": "Sink"})
+    assert kept.json()["locationId"] == locations[0]["id"]
+    cleared = client.patch(f"{API}/resources/{room}", headers=headers, json={"locationId": None})
+    assert cleared.json()["locationId"] is None
+
+
+def test_resource_rejects_another_tenants_location(client) -> None:
+    headers = _auth(client)
+
+    async def _run() -> str:
+        from app.db.models import Location, Tenant
+        from app.db.session import get_session_maker
+
+        async with get_session_maker()() as session:
+            tenant = Tenant(slug="other-loc-tenant", name="Other", timezone="America/New_York", branding_json={}, settings_json={})
+            session.add(tenant)
+            await session.flush()
+            location = Location(tenant_id=tenant.id, name="Elsewhere", time_zone="America/New_York")
+            session.add(location)
+            await session.commit()
+            return location.id
+
+    foreign = asyncio.run(_run())
+    created = client.post(f"{API}/resources", headers=headers, json={"name": "Sneaky", "kind": "room", "locationId": foreign})
+    assert created.status_code == 404
+    room = _create_resource(client, headers, "Own room", "room")
+    moved = client.patch(f"{API}/resources/{room}", headers=headers, json={"locationId": foreign})
+    assert moved.status_code == 404
+
+
 # --------------------------------------------------------------------------- tenant isolation
 
 

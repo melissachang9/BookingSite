@@ -7,6 +7,13 @@ from pydantic import Field
 from app.schemas.base import CamelModel
 
 
+class ResourceServiceUse(CamelModel):
+    service_id: str
+    service_name: str
+    is_active: bool
+    quantity: int  # units one booking of the service uses
+
+
 class ResourceSummaryResponse(CamelModel):
     id: str
     tenant_id: str
@@ -18,6 +25,7 @@ class ResourceSummaryResponse(CamelModel):
     location_id: str | None = None
     notes: str | None = None
     quantity: int = 1  # units the studio owns
+    used_by: list[ResourceServiceUse] = Field(default_factory=list)
 
 
 class ResourceListResponse(CamelModel):
