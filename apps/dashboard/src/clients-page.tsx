@@ -13,8 +13,8 @@ import type {
 
 import { platformApi } from "./platform-api";
 import { FormResponseViewer } from "./form-response-viewer";
-import { ClientFollowUpTab } from "./client-follow-up-tab";
 import { ClientPaymentsTab } from "./client-payments-tab";
+import { dismissReasonLabel } from "./follow-up-panel";
 import { ContactIcon, buildContactRows, memberMonthsSince } from "./client-profile-parts";
 
 type RouteDefinitionLike = {
@@ -138,10 +138,6 @@ export function CustomersPage({
   const [clientOwnershipEnabled, setClientOwnershipEnabled] = useState(false);
   const [activeTab, setActiveTab] = useState<ClientTab>("history");
   const [showEditInfo, setShowEditInfo] = useState(false);
-  const [listView, setListView] = useState<"all" | "follow_up">("all");
-  const [attempts, setAttempts] = useState<CustomerBookingAttempt[]>([]);
-  const canManage =
-    currentUser !== null && hasPermission(currentUser, "customers.manage");
 
   // Read customerId from URL query param on mount
   useEffect(() => {
@@ -189,23 +185,6 @@ export function CustomersPage({
     if (!canView || !tenantSlug) return;
     void loadCustomers();
   }, [tenantSlug, canView]);
-
-  useEffect(() => {
-    if (!canView || !tenantSlug) return;
-    platformApi
-      .listBookingAttempts(tenantSlug, { includeFollowedUp: true })
-      .then((response) => setAttempts(response.items))
-      .catch(() => {
-        // The Follow up tab is secondary; the client list still works without it.
-      });
-  }, [tenantSlug, canView]);
-
-  const markFollowedUp = async (attempt: CustomerBookingAttempt, note: string) => {
-    const updated = await platformApi.markBookingAttemptFollowedUp(tenantSlug, attempt.id, {
-      note: note.trim() || null,
-    });
-    setAttempts((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-  };
 
   useEffect(() => {
     if (!canView || !tenantSlug || selectedCustomerId === null) {
@@ -278,10 +257,6 @@ export function CustomersPage({
 
   const selectedCustomer =
     customers.find((c) => c.id === selectedCustomerId) ?? null;
-  const openFollowUps = attempts.filter(
-    (item) =>
-      item.followUpAt == null && (item.outcome === "financing_started" || item.outcome === "abandoned") && !item.bookedSince,
-  ).length;
 
   const filteredCustomers = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -471,39 +446,7 @@ export function CustomersPage({
         />
       </header>
 
-      <div className="cs-clients-page__views" role="tablist" aria-label="Client views">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={listView === "all"}
-          className={`cs-clients-page__view${listView === "all" ? " is-active" : ""}`}
-          onClick={() => setListView("all")}
-        >
-          All clients
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={listView === "follow_up"}
-          className={`cs-clients-page__view${listView === "follow_up" ? " is-active" : ""}`}
-          onClick={() => setListView("follow_up")}
-        >
-          Follow up
-          {openFollowUps > 0 ? <span className="cs-clients-page__view-count">{openFollowUps}</span> : null}
-        </button>
-      </div>
-
-      {listView === "follow_up" ? (
-        <ClientFollowUpTab
-          items={attempts}
-          canManage={canManage}
-          onOpenClient={(customerId) => {
-            setActiveTab("history");
-            setSelectedCustomerId(customerId);
-          }}
-          onMarkFollowedUp={markFollowedUp}
-        />
-      ) : filteredCustomers.length === 0 ? (
+      {filteredCustomers.length === 0 ? (
         <p className="cs-empty">No customers found.</p>
       ) : (
         <ul className="cs-clients-page__grid">
@@ -723,8 +666,23 @@ function attemptDetails(attempt: CustomerBookingAttempt): { meta: string; badge:
   if (attempt.bookedSince) {
     return { meta: `${wanted} · booked since`, badge: "Booked since", tone: "neutral" };
   }
+  if (attempt.dismissedAt) {
+    const by = attempt.dismissedByName ? ` by ${attempt.dismissedByName}` : "";
+    const note = attempt.dismissedNote ? `: ${attempt.dismissedNote}` : "";
+    return {
+      meta: `${wanted} · removed from follow-up${by} (${dismissReasonLabel(attempt.dismissedReason)})${note}`,
+      badge: "Removed",
+      tone: "neutral",
+    };
+  }
   if (attempt.followUpAt) {
-    return { meta: `${wanted} · followed up ${formatDateTime(attempt.followUpAt)}`, badge: "Followed up", tone: "neutral" };
+    const by = attempt.followUpByName ? ` by ${attempt.followUpByName}` : "";
+    const note = attempt.followUpNote ? `: ${attempt.followUpNote}` : "";
+    return { meta: `${wanted} · followed up ${formatDateTime(attempt.followUpAt)}${by}${note}`, badge: "Followed up", tone: "neutral" };
+  }
+  if (attempt.agedOut) {
+    const what = attempt.outcome === "financing_started" ? "opened financing" : "left before paying";
+    return { meta: `${wanted} · ${what}, past the 30-day follow-up window`, badge: "Aged out", tone: "neutral" };
   }
   if (attempt.outcome === "financing_started") {
     const opened = attempt.financingStartedAt ? formatDateTime(attempt.financingStartedAt) : "";
@@ -739,7 +697,7 @@ function attemptDetails(attempt: CustomerBookingAttempt): { meta: string; badge:
 function ClientAttemptRow({ attempt }: { attempt: CustomerBookingAttempt }) {
   const { meta, badge, tone } = attemptDetails(attempt);
   return (
-    <li className={`cs-client-history-row${attempt.bookedSince ? " is-muted" : ""}`}>
+    <li className={`cs-client-history-row${attempt.bookedSince || attempt.followUpAt || attempt.agedOut || attempt.dismissedAt ? " is-muted" : ""}`}>
       <span className="cs-client-history-row__date">
         <strong className="cs-client-history-row__day">{dayNumber(attempt.startsAt)}</strong>
         <span className="cs-client-history-row__month">{monthLabel(attempt.startsAt)}</span>

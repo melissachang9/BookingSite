@@ -521,3 +521,95 @@ def test_follow_up_needs_sign_in_and_stays_in_the_tenant(client) -> None:
     assert client.post(f"{base}/missing/follow-up", json={}, headers=headers).status_code == 404
     other = client.post(f"/api/v1/tenants/not-a-studio/booking-attempts/{lead['draftId']}/follow-up", json={}, headers=headers)
     assert other.status_code in (403, 404)
+
+
+def _age_draft(draft_id: str, days: int) -> None:
+    import asyncio
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import select
+
+    from app.db.models import BookingDraft
+    from app.db.session import get_session_maker
+
+    async def _go():
+        async with get_session_maker()() as session:
+            draft = await session.scalar(select(BookingDraft).where(BookingDraft.id == draft_id))
+            then = datetime.now(timezone.utc) - timedelta(days=days)
+            draft.created_at = then
+            if draft.financing_started_at is not None:
+                draft.financing_started_at = then
+            await session.commit()
+
+    asyncio.run(_go())
+
+
+def test_unfinished_bookings_age_off_the_follow_up_list_after_30_days_but_stay_on_the_profile(client) -> None:
+    headers = _auth_headers(client)
+    recent = _lead(client, headers, "Recent Rae", opened_financing=True)
+    stale_cart = _lead(client, headers, "Stale Sam", opened_financing=False)
+    stale_financing = _lead(client, headers, "Stale Fin", opened_financing=True)
+    _age_draft(recent["draftId"], 29)
+    _age_draft(stale_cart["draftId"], 31)
+    _age_draft(stale_financing["draftId"], 31)
+
+    listed = {i["id"] for i in _follow_ups(client, headers)}
+    assert recent["draftId"] in listed
+    assert stale_cart["draftId"] not in listed
+    assert stale_financing["draftId"] not in listed
+
+    [old] = _attempts(client, headers, stale_financing["customerId"])
+    assert old["agedOut"] is True
+    assert old["outcome"] == "financing_started"
+    [fresh] = _attempts(client, headers, recent["customerId"])
+    assert fresh["agedOut"] is False
+
+
+def test_removing_from_the_list_records_the_reason_and_keeps_it_on_the_profile(client) -> None:
+    headers = _auth_headers(client)
+    lead = _lead(client, headers, "Not Keen", opened_financing=True)
+    url = f"/api/v1/tenants/brow-beauty-lab/booking-attempts/{lead['draftId']}/dismiss"
+
+    removed = client.post(url, json={"reason": "not_interested", "note": "Said no on the phone"}, headers=headers)
+    assert removed.status_code == 200, removed.json()
+    body = removed.json()
+    assert body["dismissedReason"] == "not_interested"
+    assert body["dismissedNote"] == "Said no on the phone"
+    assert body["dismissedByName"]
+    assert body["dismissedAt"] is not None
+    # Removing is not the same as following up.
+    assert body["followUpAt"] is None
+
+    assert lead["draftId"] not in {i["id"] for i in _follow_ups(client, headers)}
+    assert lead["draftId"] not in {i["id"] for i in _follow_ups(client, headers, includeFollowedUp="true")}
+    [attempt] = _attempts(client, headers, lead["customerId"])
+    assert attempt["dismissedReason"] == "not_interested"
+
+    again = client.post(url, json={"reason": "duplicate"}, headers=headers)
+    assert again.status_code == 409
+
+
+def test_removing_needs_a_known_reason_and_a_note_for_other(client) -> None:
+    headers = _auth_headers(client)
+    lead = _lead(client, headers, "Other Reasons", opened_financing=False)
+    url = f"/api/v1/tenants/brow-beauty-lab/booking-attempts/{lead['draftId']}/dismiss"
+
+    assert client.post(url, json={"reason": "because"}, headers=headers).status_code == 422
+    assert client.post(url, json={"reason": "other"}, headers=headers).status_code == 422
+    assert client.post(url, json={"reason": "other", "note": "  "}, headers=headers).status_code == 422
+    assert lead["draftId"] in {i["id"] for i in _follow_ups(client, headers)}
+    assert client.post(url, json={"reason": "other", "note": "Moved abroad"}, headers=headers).status_code == 200
+
+
+def test_removing_needs_sign_in_and_stays_in_the_tenant(client) -> None:
+    headers = _auth_headers(client)
+    lead = _lead(client, headers, "Hands Off", opened_financing=True)
+    base = "/api/v1/tenants/brow-beauty-lab/booking-attempts"
+
+    assert client.post(f"{base}/{lead['draftId']}/dismiss", json={"reason": "duplicate"}).status_code in (401, 403)
+    assert client.post(f"{base}/missing/dismiss", json={"reason": "duplicate"}, headers=headers).status_code == 404
+    other = client.post(
+        f"/api/v1/tenants/not-a-studio/booking-attempts/{lead['draftId']}/dismiss", json={"reason": "duplicate"}, headers=headers
+    )
+    assert other.status_code in (403, 404)
+    assert lead["draftId"] in {i["id"] for i in _follow_ups(client, headers)}

@@ -55,6 +55,7 @@ import type {
   CustomerBookingAttempt,
   CustomerBookingAttemptListResponse,
   CustomerProfileResponse,
+  DismissBookingAttemptRequest,
   MarkBookingAttemptFollowedUpRequest,
   AppointmentsReport,
   ClientsReport,
@@ -669,6 +670,11 @@ export const createPlatformApi = (client: ApiClient) => ({
   markBookingAttemptFollowedUp: (tenantSlug: string, bookingDraftId: string, body: MarkBookingAttemptFollowedUpRequest = {}) =>
     client.post<CustomerBookingAttempt, MarkBookingAttemptFollowedUpRequest>(
       `tenants/${tenantSlug}/booking-attempts/${bookingDraftId}/follow-up`,
+      body,
+    ),
+  dismissBookingAttempt: (tenantSlug: string, bookingDraftId: string, body: DismissBookingAttemptRequest) =>
+    client.post<CustomerBookingAttempt, DismissBookingAttemptRequest>(
+      `tenants/${tenantSlug}/booking-attempts/${bookingDraftId}/dismiss`,
       body,
     ),
   getCustomerProfile: (tenantSlug: string, customerId: string) =>

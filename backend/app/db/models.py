@@ -702,11 +702,17 @@ class BookingDraft(Base, IdMixin, TimestampMixin):
     follow_up_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     follow_up_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     follow_up_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Staff took this off the follow-up list without following up (not interested, booked another way...).
+    dismissed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    dismissed_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    dismissed_reason: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    dismissed_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="booking_drafts")
     location: Mapped[Optional["Location"]] = relationship(lazy="joined", viewonly=True)
     customer: Mapped[Optional[Customer]] = relationship(back_populates="booking_drafts")
     follow_up_by: Mapped[Optional["User"]] = relationship(foreign_keys=[follow_up_by_user_id], viewonly=True)
+    dismissed_by: Mapped[Optional["User"]] = relationship(foreign_keys=[dismissed_by_user_id], viewonly=True)
     service: Mapped[Service] = relationship(back_populates="booking_drafts")
     provider: Mapped[Provider] = relationship(back_populates="booking_drafts")
     confirmed_booking: Mapped[Optional[Booking]] = relationship(back_populates="source_draft", uselist=False)

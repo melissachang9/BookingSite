@@ -4297,10 +4297,6 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .cs-client-history-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .cs-client-history-row { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-12); background: var(--cs-surface); }
 .cs-client-history-row.is-muted { opacity: .55; }
-.cs-clients-page__views { display: flex; gap: 6px; margin-bottom: 14px; }
-.cs-clients-page__view { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-pill); background: var(--cs-surface); font: 600 12px var(--cs-font); color: var(--cs-secondary); cursor: pointer; }
-.cs-clients-page__view.is-active { background: var(--cs-ink); border-color: var(--cs-ink); color: #fff; }
-.cs-clients-page__view-count { padding: 1px 7px; border-radius: var(--cs-r-pill); background: var(--cs-peach); color: var(--cs-ink); font: 700 11px var(--cs-font); }
 .cs-followup { display: grid; gap: 12px; }
 .cs-followup__filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .cs-followup__chip { padding: 6px 12px; border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-pill); background: var(--cs-surface); font: 600 12px var(--cs-font); color: var(--cs-secondary); cursor: pointer; }
@@ -4320,6 +4316,8 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .cs-followup__form { display: flex; align-items: center; gap: 8px; }
 .cs-followup__form input { width: 220px; padding: 8px 11px; border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-pill); font: 500 12px var(--cs-font); }
 .cs-followup__action { padding: 8px 13px; border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-pill); background: var(--cs-canvas); font: 600 12px var(--cs-font); color: var(--cs-ink); white-space: nowrap; cursor: pointer; }
+.cs-followup__actions { display: flex; align-items: center; gap: 12px; }
+.cs-followup__form select { padding: 8px 11px; border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-pill); background: var(--cs-surface); font: 500 12px var(--cs-font); }
 .cs-followup__link { padding: 0; border: 0; background: none; font: 600 12px var(--cs-font); color: var(--cs-secondary); cursor: pointer; }
 @media (max-width: 720px) { .cs-followup__item { flex-direction: column; align-items: flex-start; } .cs-followup__form { flex-wrap: wrap; } }
 .cs-client-attempts { display: grid; gap: 8px; margin-bottom: 16px; }

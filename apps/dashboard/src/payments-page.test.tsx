@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   AuthenticatedUser,
-  DepositPaymentFollowUpItem,
+  CustomerBookingAttempt,
   LiabilitySummary,
   MoneyOwed,
   TransactionListResponse,
@@ -20,6 +20,8 @@ const ownerUser: AuthenticatedUser = {
   permissions: [
     { key: "payments.view", allowed: true },
     { key: "payments.manage", allowed: true },
+    { key: "customers.view", allowed: true },
+    { key: "customers.manage", allowed: true },
   ],
 };
 
@@ -33,84 +35,6 @@ const readOnlyUser: AuthenticatedUser = {
     { key: "payments.manage", allowed: false },
   ],
 };
-
-const baseFollowUpItem = {
-  bookingDraft: {
-    id: "draft-1",
-    tenantId: "tenant-1",
-    createdAt: "2026-05-24T15:00:00.000Z",
-    updatedAt: "2026-05-24T15:00:00.000Z",
-    customerId: "customer-1",
-    serviceId: "service-1",
-    providerId: "provider-1",
-    locationId: "location-1",
-    status: "awaiting_payment",
-    bookingMethod: "staff_entered",
-    startsAt: "2026-05-25T17:00:00.000Z",
-    endsAt: "2026-05-25T18:00:00.000Z",
-    expiresAt: "2026-05-25T18:15:00.000Z",
-    priceCents: 10000,
-    depositCents: 2500,
-    durationMinutes: 60,
-    service: {
-      id: "service-1",
-      tenantId: "tenant-1",
-      createdAt: "2026-05-24T15:00:00.000Z",
-      updatedAt: "2026-05-24T15:00:00.000Z",
-      name: "Signature Facial",
-      description: "A 60-minute facial.",
-      durationMinutes: 60,
-      setupBufferMinutes: 0,
-      cleanupBufferMinutes: 0,
-      priceCents: 10000,
-      depositCents: 2500,
-      isActive: true,
-      imageUrl: null,
-      imageAltText: null,
-      locationIds: ["location-1"],
-      formIds: [],
-      sortOrder: 0,
-      requireCardOnFile: false,
-    },
-    provider: {
-      id: "provider-1",
-      tenantId: "tenant-1",
-      createdAt: "2026-05-24T15:00:00.000Z",
-      updatedAt: "2026-05-24T15:00:00.000Z",
-      userId: null,
-      name: "Jordan Rivera",
-      email: "jordan@example.com",
-      description: null,
-      imageUrl: null,
-      imageAltText: null,
-      availabilityLabel: null,
-      isActive: true,
-      isBookableOnline: true,
-      serviceIds: ["service-1"],
-      locationIds: ["location-1"],
-    },
-    customer: {
-      id: "customer-1",
-      tenantId: "tenant-1",
-      createdAt: "2026-05-24T15:00:00.000Z",
-      updatedAt: "2026-05-24T15:00:00.000Z",
-      name: "Taylor Guest",
-      email: "guest@example.com",
-      phone: "555-0100",
-      notes: null,
-    },
-    intakePlan: null,
-    formRequirements: [],
-  },
-  paymentId: "payment-1",
-  paymentStatus: "pending",
-  checkoutSessionId: null,
-  checkoutUrl: null,
-  checkoutExpiresAt: null,
-  linkState: "missing",
-} as DepositPaymentFollowUpItem;
-
-const listResponse = { items: [baseFollowUpItem] };
 
 const emptyTransactions: TransactionListResponse = { transactions: [], total: 0, limit: 25, offset: 0 };
 const emptyOwed: MoneyOwed = { refundsOwed: [], balancesOwed: [], refundsOwedTotalCents: 0, balancesOwedTotalCents: 0 };
@@ -136,6 +60,9 @@ const ledgerStubs = () => ({
   listSales: vi.fn().mockResolvedValue({ sales: [], total: 0, limit: 25, offset: 0 }),
   getSaleReceipt: vi.fn(),
   emailSaleReceipt: vi.fn(),
+  listBookingAttempts: vi.fn().mockResolvedValue({ items: [] }),
+  markBookingAttemptFollowedUp: vi.fn(),
+  dismissBookingAttempt: vi.fn(),
 });
 
 const openFollowUpTab = () => fireEvent.click(screen.getByRole("tab", { name: "Follow-up" }));
@@ -150,7 +77,6 @@ const renderPaymentsPage = (api: PaymentsPageApi, currentUser: AuthenticatedUser
       }}
       currentUser={currentUser}
       api={api}
-      storefrontBaseUrl="http://127.0.0.1:3001"
     />,
   );
 
@@ -158,93 +84,162 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("PaymentsPage", () => {
-  it("reopens a deposit checkout link and opens it in a new tab", async () => {
-    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
-    const api: PaymentsPageApi = {
-      ...ledgerStubs(),
-      listPaymentFollowUp: vi.fn().mockResolvedValue(listResponse),
-      createCheckoutSession: vi.fn().mockResolvedValue({
-        checkoutUrl: "https://checkout.stripe.test/deposit_123",
-        sessionId: "deposit_123",
-        expiresAt: "2026-05-25T00:00:00.000Z",
-      }),
-      sendPaymentReminder: vi.fn(),
-    };
+const lead = {
+  outcome: "abandoned" as const,
+  serviceName: "Signature Facial",
+  providerName: "Maya",
+  startsAt: "2026-06-02T17:00:00.000Z",
+  createdAt: "2026-05-25T18:00:00.000Z",
+  bookedSince: false,
+  bookingMethod: "public_online",
+  customerId: "customer-1",
+  customerEmail: "pat@example.com",
+  customerPhone: "6045550101",
+};
+const coldLead: CustomerBookingAttempt = { ...lead, id: "cold", customerName: "Cold Cart" };
+const warmLead: CustomerBookingAttempt = {
+  ...lead,
+  id: "warm",
+  outcome: "financing_started",
+  customerName: "Warm Lead",
+  financingStartedAt: "2026-05-25T18:05:00.000Z",
+};
+
+describe("PaymentsPage follow-up tab", () => {
+  it("lists clients who opened financing and clients who abandoned, with counts and filters", async () => {
+    const api: PaymentsPageApi = { ...ledgerStubs() };
+    (api.listBookingAttempts as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [warmLead, coldLead] });
 
     renderPaymentsPage(api);
     openFollowUpTab();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Reopen checkout link" }));
+    const panel = await screen.findByRole("region", { name: "Follow up" });
+    expect(await within(panel).findByText("Warm Lead")).toBeInTheDocument();
+    expect(panel).toHaveTextContent("Opened financing");
+    expect(panel).toHaveTextContent("opened financing May 25");
+    expect(panel).toHaveTextContent("Cold Cart");
+    expect(panel).toHaveTextContent("6045550101 · pat@example.com");
+    expect(panel).toHaveTextContent("2 to follow up");
+    expect(within(panel).getByRole("link", { name: "Warm Lead" })).toHaveAttribute("href", "/customers?customerId=customer-1");
+    expect(within(panel).getByRole("button", { name: "Opened financing · 1" })).toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(api.createCheckoutSession).toHaveBeenCalledWith({
-        tenantSlug: "brow-beauty-lab",
-        bookingDraftId: "draft-1",
-        kind: "deposit",
-        successUrl: "http://127.0.0.1:3001/brow-beauty-lab/book/draft-1/success",
-        cancelUrl: "http://127.0.0.1:3001/brow-beauty-lab/book/draft-1",
-      });
-    });
-
-    expect(openSpy).toHaveBeenCalledWith("https://checkout.stripe.test/deposit_123", "_blank", "noopener,noreferrer");
-    expect(await screen.findByText("Generated a fresh checkout link and opened it in a new tab.")).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole("button", { name: "Abandoned · 1" }));
+    expect(within(panel).queryByText("Warm Lead")).not.toBeInTheDocument();
+    expect(within(panel).getByText("Cold Cart")).toBeInTheDocument();
   });
 
-  it("sends a real reminder email and refreshes the follow-up queue", async () => {
-    const api: PaymentsPageApi = {
-      ...ledgerStubs(),
-      listPaymentFollowUp: vi.fn().mockResolvedValue(listResponse),
-      createCheckoutSession: vi.fn(),
-      sendPaymentReminder: vi.fn().mockResolvedValue({
-        bookingDraftId: "draft-1",
-        paymentId: "payment-1",
-        checkoutSessionId: "checkout-1",
-        checkoutUrl: "https://checkout.stripe.test/deposit_123",
-        recipientEmail: "guest@example.com",
-        provider: "resend",
-        providerMessageId: "message-1",
-        sentAt: "2026-05-24T16:00:00.000Z",
-      }),
-    };
+  it("marks a client as followed up with a note and moves them out of the open list", async () => {
+    const api: PaymentsPageApi = { ...ledgerStubs() };
+    (api.listBookingAttempts as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [warmLead] });
+    (api.markBookingAttemptFollowedUp as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...warmLead,
+      followUpAt: "2026-05-26T15:00:00.000Z",
+      followUpByName: "Owner",
+      followUpNote: "Left a voicemail",
+    });
 
     renderPaymentsPage(api);
     openFollowUpTab();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Send reminder email" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Mark followed up" }));
+    fireEvent.change(screen.getByLabelText("Follow-up note for Warm Lead"), { target: { value: "Left a voicemail" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    await waitFor(() => {
-      expect(api.sendPaymentReminder).toHaveBeenCalledWith("brow-beauty-lab", "draft-1");
-    });
-
-    expect(api.listPaymentFollowUp).toHaveBeenCalledTimes(2);
-    expect(await screen.findByText("Reminder email sent to guest@example.com.")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(api.markBookingAttemptFollowedUp).toHaveBeenCalledWith("brow-beauty-lab", "warm", { note: "Left a voicemail" }),
+    );
+    // Gone from the list and the count; the record lives on the client's profile.
+    await waitFor(() => expect(screen.queryByText("Warm Lead")).not.toBeInTheDocument());
+    expect(screen.getByText("0 to follow up")).toBeInTheDocument();
+    expect(screen.getByText("Nobody is waiting for a follow-up.")).toBeInTheDocument();
   });
 
-  it("shows read-only payment follow-up controls when the role cannot manage payments", async () => {
-    const api: PaymentsPageApi = {
-      ...ledgerStubs(),
-      listPaymentFollowUp: vi.fn().mockResolvedValue(listResponse),
-      createCheckoutSession: vi.fn(),
-      sendPaymentReminder: vi.fn(),
+  it("removes a client from the list with a reason, which is not the same as following up", async () => {
+    const api: PaymentsPageApi = { ...ledgerStubs() };
+    (api.listBookingAttempts as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [warmLead, coldLead] });
+    (api.dismissBookingAttempt as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...coldLead,
+      dismissedAt: "2026-05-26T15:00:00.000Z",
+      dismissedReason: "booked_another_way",
+      dismissedByName: "Owner",
+    });
+
+    renderPaymentsPage(api);
+    openFollowUpTab();
+
+    await screen.findByText("Cold Cart");
+    fireEvent.click(screen.getAllByRole("button", { name: "Remove from list" })[1]);
+    fireEvent.change(screen.getByLabelText("Reason for removing Cold Cart"), { target: { value: "booked_another_way" } });
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+    await waitFor(() =>
+      expect(api.dismissBookingAttempt).toHaveBeenCalledWith("brow-beauty-lab", "cold", { reason: "booked_another_way", note: null }),
+    );
+    await waitFor(() => expect(screen.queryByText("Cold Cart")).not.toBeInTheDocument());
+    expect(api.markBookingAttemptFollowedUp).not.toHaveBeenCalled();
+    expect(screen.getByText("Warm Lead")).toBeInTheDocument();
+    expect(screen.getByText("1 to follow up")).toBeInTheDocument();
+  });
+
+  it("needs a note when the removal reason is Other", async () => {
+    const api: PaymentsPageApi = { ...ledgerStubs() };
+    (api.listBookingAttempts as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [coldLead] });
+
+    renderPaymentsPage(api);
+    openFollowUpTab();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Remove from list" }));
+    fireEvent.change(screen.getByLabelText("Reason for removing Cold Cart"), { target: { value: "other" } });
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Add a note explaining why");
+    expect(api.dismissBookingAttempt).not.toHaveBeenCalled();
+    expect(screen.getByText("Cold Cart")).toBeInTheDocument();
+  });
+
+  it("hides the follow-up action from staff who can't manage clients", async () => {
+    const api: PaymentsPageApi = { ...ledgerStubs() };
+    (api.listBookingAttempts as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [warmLead] });
+    const viewOnly: AuthenticatedUser = {
+      ...ownerUser,
+      permissions: [
+        { key: "payments.view", allowed: true },
+        { key: "customers.view", allowed: true },
+      ],
     };
+
+    renderPaymentsPage(api, viewOnly);
+    openFollowUpTab();
+
+    expect(await screen.findByText("Warm Lead")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mark followed up" })).not.toBeInTheDocument();
+  });
+
+  it("doesn't load client follow-ups for a role that can't view clients", async () => {
+    const api: PaymentsPageApi = { ...ledgerStubs() };
 
     renderPaymentsPage(api, readOnlyUser);
     openFollowUpTab();
 
-    expect(await screen.findByText("Your role can review payment follow-up work, but it cannot send reminders, reopen links, or draft outreach.")).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "Send reminder email" })).toBeDisabled();
-    expect(await screen.findByRole("button", { name: "Reopen checkout link" })).toBeDisabled();
-    expect(await screen.findByRole("button", { name: "Draft reminder email" })).toBeDisabled();
-    expect(await screen.findByRole("button", { name: "Copy checkout link" })).toBeDisabled();
+    expect(await screen.findByText("Your role can view payments, but it cannot view clients to follow up with.")).toBeInTheDocument();
+    expect(api.listBookingAttempts).not.toHaveBeenCalled();
   });
 
+  it("shows an error when the follow-up list can't load", async () => {
+    const api: PaymentsPageApi = { ...ledgerStubs() };
+    (api.listBookingAttempts as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("boom"));
+
+    renderPaymentsPage(api);
+    openFollowUpTab();
+
+    expect(await screen.findByText("boom")).toBeInTheDocument();
+  });
+});
+
+describe("PaymentsPage", () => {
   it("lists transactions with signed amounts, sale numbers and a tip note", async () => {
     const api: PaymentsPageApi = {
       ...ledgerStubs(),
-      listPaymentFollowUp: vi.fn(),
-      createCheckoutSession: vi.fn(),
-      sendPaymentReminder: vi.fn(),
     };
     (api.listTransactions as ReturnType<typeof vi.fn>).mockResolvedValue({
       total: 3,
@@ -302,9 +297,6 @@ describe("PaymentsPage", () => {
   it("filters transactions by type and shows an empty state", async () => {
     const api: PaymentsPageApi = {
       ...ledgerStubs(),
-      listPaymentFollowUp: vi.fn(),
-      createCheckoutSession: vi.fn(),
-      sendPaymentReminder: vi.fn(),
     };
     renderPaymentsPage(api);
     expect(await screen.findByText("No payments have been recorded yet.")).toBeInTheDocument();
@@ -322,9 +314,6 @@ describe("PaymentsPage", () => {
   it("shows a transactions error instead of an empty list", async () => {
     const api: PaymentsPageApi = {
       ...ledgerStubs(),
-      listPaymentFollowUp: vi.fn(),
-      createCheckoutSession: vi.fn(),
-      sendPaymentReminder: vi.fn(),
     };
     (api.listTransactions as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("Server is down"));
     renderPaymentsPage(api);
@@ -334,9 +323,6 @@ describe("PaymentsPage", () => {
   it("shows money held as opening plus collected minus used equals closing", async () => {
     const api: PaymentsPageApi = {
       ...ledgerStubs(),
-      listPaymentFollowUp: vi.fn(),
-      createCheckoutSession: vi.fn(),
-      sendPaymentReminder: vi.fn(),
     };
     (api.getLiabilitySummary as ReturnType<typeof vi.fn>).mockResolvedValue({
       deposits: { ...bucket, openingCents: 1000, collectedCents: 3500, redeemedCents: 3000, closingCents: 1500 },
@@ -355,9 +341,6 @@ describe("PaymentsPage", () => {
   it("lists refunds to give and balances owed on the follow-up tab", async () => {
     const api: PaymentsPageApi = {
       ...ledgerStubs(),
-      listPaymentFollowUp: vi.fn().mockResolvedValue({ items: [] }),
-      createCheckoutSession: vi.fn(),
-      sendPaymentReminder: vi.fn(),
     };
     (api.getMoneyOwed as ReturnType<typeof vi.fn>).mockResolvedValue({
       refundsOwed: [
@@ -384,9 +367,6 @@ describe("PaymentsPage", () => {
     const noAccess: AuthenticatedUser = { ...ownerUser, permissions: [] };
     const api: PaymentsPageApi = {
       ...ledgerStubs(),
-      listPaymentFollowUp: vi.fn(),
-      createCheckoutSession: vi.fn(),
-      sendPaymentReminder: vi.fn(),
     };
     renderPaymentsPage(api, noAccess);
     expect(screen.getByText(/cannot view payments/)).toBeInTheDocument();
@@ -397,9 +377,6 @@ describe("PaymentsPage", () => {
   it("opens the receipt when a sale number is clicked", async () => {
     const api: PaymentsPageApi = {
       ...ledgerStubs(),
-      listPaymentFollowUp: vi.fn(),
-      createCheckoutSession: vi.fn(),
-      sendPaymentReminder: vi.fn(),
     };
     (api.listTransactions as ReturnType<typeof vi.fn>).mockResolvedValue({
       total: 1,
@@ -448,9 +425,6 @@ describe("PaymentsPage", () => {
   it("lists numbered sales with what is still owed and opens a receipt", async () => {
     const api: PaymentsPageApi = {
       ...ledgerStubs(),
-      listPaymentFollowUp: vi.fn(),
-      createCheckoutSession: vi.fn(),
-      sendPaymentReminder: vi.fn(),
     };
     (api.listSales as ReturnType<typeof vi.fn>).mockResolvedValue({
       total: 2,
@@ -508,9 +482,6 @@ describe("PaymentsPage", () => {
   it("explains an empty sales list and filters sales by date", async () => {
     const api: PaymentsPageApi = {
       ...ledgerStubs(),
-      listPaymentFollowUp: vi.fn(),
-      createCheckoutSession: vi.fn(),
-      sendPaymentReminder: vi.fn(),
     };
     renderPaymentsPage(api);
     fireEvent.click(screen.getByRole("tab", { name: "Sales" }));
@@ -529,9 +500,6 @@ describe("PaymentsPage", () => {
   it("shows a sales error instead of an empty list", async () => {
     const api: PaymentsPageApi = {
       ...ledgerStubs(),
-      listPaymentFollowUp: vi.fn(),
-      createCheckoutSession: vi.fn(),
-      sendPaymentReminder: vi.fn(),
     };
     (api.listSales as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("Sales are unavailable."));
     renderPaymentsPage(api);

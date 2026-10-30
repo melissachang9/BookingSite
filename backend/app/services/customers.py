@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +38,10 @@ def _parse_birthday(raw: str) -> date | None:
     return parsed
 
 
+# How long an unfinished booking stays on the follow-up list, counted from the client's last activity
+# (opening financing, otherwise starting the booking).
+FOLLOW_UP_WINDOW_DAYS = 30
+
 _LIVE_DRAFT_STATUSES = {"draft", "slot_held", "awaiting_form", "awaiting_payment"}
 
 
@@ -70,6 +74,9 @@ def _booking_attempts(drafts: list[BookingDraft], booked: list[tuple[str, str, d
             continue
         customer = draft.customer
         followed_by = draft.follow_up_by
+        dismissed_by = draft.dismissed_by
+        last_activity = _aware(draft.financing_started_at or draft.created_at)
+        aged_out = outcome != "in_progress" and now - last_activity > timedelta(days=FOLLOW_UP_WINDOW_DAYS)
         entries.append(
             CustomerBookingAttempt(
                 id=draft.id,
@@ -90,6 +97,11 @@ def _booking_attempts(drafts: list[BookingDraft], booked: list[tuple[str, str, d
                 customer_name=customer.name if customer is not None else None,
                 customer_email=customer.email if customer is not None else None,
                 customer_phone=customer.phone if customer is not None else None,
+                aged_out=aged_out,
+                dismissed_at=draft.dismissed_at,
+                dismissed_reason=draft.dismissed_reason,
+                dismissed_by_name=dismissed_by.name if dismissed_by is not None else None,
+                dismissed_note=draft.dismissed_note,
                 follow_up_at=draft.follow_up_at,
                 follow_up_by_name=followed_by.name if followed_by is not None else None,
                 follow_up_note=draft.follow_up_note,
@@ -103,6 +115,7 @@ _ATTEMPT_LOAD_OPTIONS = (
     selectinload(BookingDraft.provider),
     selectinload(BookingDraft.customer),
     selectinload(BookingDraft.follow_up_by),
+    selectinload(BookingDraft.dismissed_by),
 )
 
 
@@ -158,6 +171,8 @@ async def list_booking_attempts(
         for item in _booking_attempts(list(drafts), booked)
         if item.outcome in {"financing_started", "abandoned"}
         and not item.booked_since
+        and not item.aged_out
+        and item.dismissed_at is None
         and (include_followed_up or item.follow_up_at is None)
         and (outcome is None or item.outcome == outcome)
     ]
@@ -168,6 +183,55 @@ async def list_booking_attempts(
         )
     )
     return items
+
+
+async def dismiss_booking_attempt(
+    session: AsyncSession,
+    tenant_slug: str,
+    booking_draft_id: str,
+    reason: str,
+    note: str | None,
+    actor: User,
+) -> CustomerBookingAttempt:
+    """Take an unfinished booking off the follow-up list without claiming anyone followed up."""
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    draft = await session.scalar(
+        select(BookingDraft)
+        .options(*_ATTEMPT_LOAD_OPTIONS)
+        .where(BookingDraft.id == booking_draft_id, BookingDraft.tenant_id == tenant.id)
+    )
+    if draft is None or draft.customer_id is None:
+        raise api_exception(404, "not_found", "Unfinished booking was not found for this tenant.")
+    if _attempt_outcome(draft, datetime.now(timezone.utc)) not in {"financing_started", "abandoned"}:
+        raise api_exception(409, "conflict", "This booking is not on the follow-up list.")
+    if draft.dismissed_at is not None:
+        raise api_exception(409, "conflict", "This booking was already removed from the follow-up list.")
+    clean_note = (note or "").strip() or None
+    if reason == "other" and clean_note is None:
+        raise api_exception(422, "validation_error", "Add a note explaining why this is being removed.")
+    draft.dismissed_at = datetime.now(timezone.utc)
+    draft.dismissed_by_user_id = actor.id
+    draft.dismissed_reason = reason
+    draft.dismissed_note = clean_note
+    await record_audit(
+        session,
+        tenant_id=tenant.id,
+        entity_type="booking_draft",
+        entity_id=draft.id,
+        action="follow_up_dismissed",
+        actor=actor,
+        changes={"reason": reason},
+        notes=clean_note,
+    )
+    await session.commit()
+    draft = await session.scalar(
+        select(BookingDraft)
+        .options(*_ATTEMPT_LOAD_OPTIONS)
+        .where(BookingDraft.id == booking_draft_id)
+        .execution_options(populate_existing=True)
+    )
+    booked = await _booked_pairs(session, tenant.id, {draft.customer_id})
+    return _booking_attempts([draft], booked)[0]
 
 
 async def mark_booking_attempt_followed_up(

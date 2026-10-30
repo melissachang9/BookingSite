@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field
 
@@ -53,6 +54,13 @@ class CustomerBookingAttempt(CamelModel):
     customer_name: str | None = None
     customer_email: str | None = None
     customer_phone: str | None = None
+    # Past the follow-up window: no longer on the follow-up list, still on the client's profile.
+    aged_out: bool = False
+    # Removed from the follow-up list without following up: why, by whom, when.
+    dismissed_at: datetime | None = None
+    dismissed_reason: str | None = None
+    dismissed_by_name: str | None = None
+    dismissed_note: str | None = None
     # Set once staff have followed up (who, when, and what came of it).
     follow_up_at: datetime | None = None
     follow_up_by_name: str | None = None
@@ -61,6 +69,14 @@ class CustomerBookingAttempt(CamelModel):
 
 class CustomerBookingAttemptListResponse(CamelModel):
     items: list[CustomerBookingAttempt]
+
+
+BOOKING_ATTEMPT_DISMISS_REASONS = ("not_interested", "booked_another_way", "duplicate", "wrong_contact", "other")
+
+
+class DismissBookingAttemptRequest(CamelModel):
+    reason: Literal["not_interested", "booked_another_way", "duplicate", "wrong_contact", "other"]
+    note: str | None = Field(default=None, max_length=500)
 
 
 class MarkBookingAttemptFollowedUpRequest(CamelModel):

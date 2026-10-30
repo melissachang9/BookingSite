@@ -68,10 +68,30 @@ export type CustomerBookingAttempt = {
   customerName?: string | null;
   customerEmail?: string | null;
   customerPhone?: string | null;
+  /** Past the 30-day follow-up window: off the follow-up list, still on the profile. */
+  agedOut?: boolean;
+  /** Removed from the follow-up list without following up. */
+  dismissedAt?: ISODateString | null;
+  dismissedReason?: BookingAttemptDismissReason | null;
+  dismissedByName?: string | null;
+  dismissedNote?: string | null;
   /** Set once staff followed up. */
   followUpAt?: ISODateString | null;
   followUpByName?: string | null;
   followUpNote?: string | null;
+};
+
+export type BookingAttemptDismissReason =
+  | "not_interested"
+  | "booked_another_way"
+  | "duplicate"
+  | "wrong_contact"
+  | "other";
+
+export type DismissBookingAttemptRequest = {
+  reason: BookingAttemptDismissReason;
+  /** Required when the reason is "other". */
+  note?: string | null;
 };
 
 export type CustomerBookingAttemptListResponse = {

@@ -855,7 +855,6 @@ export function App() {
               <PaymentsPage
                 definition={pageByPath.get("payments") ?? routeDefinitions[0]}
                 currentUser={session.user}
-                storefrontBaseUrl={storefrontBaseUrl}
               />
             }
           />

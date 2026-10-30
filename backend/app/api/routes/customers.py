@@ -7,12 +7,12 @@ from app.api.dependencies.auth import get_current_user, require_tenant_permissio
 from app.core.http import api_exception
 from app.db.models import User
 from app.db.session import get_db_session
-from app.schemas.customers import CustomerBookingAttempt, CustomerBookingAttemptListResponse, CustomerListResponse, MarkBookingAttemptFollowedUpRequest, CustomerLookupResponse, CustomerProfileResponse, UpdateCustomerRequest, UpsertCustomerRequest, UpsertCustomerResponse
+from app.schemas.customers import CustomerBookingAttempt, CustomerBookingAttemptListResponse, CustomerListResponse, DismissBookingAttemptRequest, MarkBookingAttemptFollowedUpRequest, CustomerLookupResponse, CustomerProfileResponse, UpdateCustomerRequest, UpsertCustomerRequest, UpsertCustomerResponse
 from app.schemas.forms import BookingFormResponseListResponse
 from app.schemas.catalog import TenantUserListResponse
 from app.services.auth import ROLE_PERMISSION_ALLOWLIST
 from app.services.booking_forms import list_customer_form_responses
-from app.services.customers import create_or_update_customer, get_customer_profile, list_booking_attempts, list_tenant_customers, mark_booking_attempt_followed_up, lookup_tenant_customers, update_customer
+from app.services.customers import create_or_update_customer, dismiss_booking_attempt, get_customer_profile, list_booking_attempts, list_tenant_customers, mark_booking_attempt_followed_up, lookup_tenant_customers, update_customer
 from app.services.audit import record_audit
 from app.services.tenants import list_tenant_users
 
@@ -118,6 +118,21 @@ async def mark_booking_attempt_followed_up_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> CustomerBookingAttempt:
     return await mark_booking_attempt_followed_up(session, tenant_slug, booking_draft_id, payload.note, actor)
+
+
+@router.post(
+    "/tenants/{tenant_slug}/booking-attempts/{booking_draft_id}/dismiss",
+    response_model=CustomerBookingAttempt,
+    summary="Remove an unfinished booking from the follow-up list, with a reason",
+)
+async def dismiss_booking_attempt_route(
+    tenant_slug: str,
+    booking_draft_id: str,
+    payload: DismissBookingAttemptRequest,
+    actor: User = Depends(require_tenant_permission("customers.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> CustomerBookingAttempt:
+    return await dismiss_booking_attempt(session, tenant_slug, booking_draft_id, payload.reason, payload.note, actor)
 
 
 @router.get(
