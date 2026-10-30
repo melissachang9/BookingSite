@@ -180,4 +180,7 @@ def test_tax_report_needs_permission_and_a_valid_filter(client) -> None:
     )
     assert bad.status_code == 404
     csv = client.get(f"/api/v1/tenants/{TENANT}/reports/tax", headers=headers, params={**params, "format": "csv"})
-    assert csv.status_code == 422
+    assert csv.status_code == 200
+    assert csv.headers["content-type"].startswith("text/csv")
+    assert "tax-report-" in csv.headers["content-disposition"]
+    assert "Tax collected" in csv.text

@@ -8,6 +8,7 @@ import type {
   ReportQuery,
   SalesBreakdownRow,
   SalesReport,
+  TaxReport,
   TeamReport,
 } from "@booking/shared-types";
 
@@ -161,7 +162,7 @@ const asBars = (rows: Array<{ key: string; label: string; count: number }>): Bar
 
 // -------------------------------------------------------------- the section ----
 
-type TabKey = ReportKind | "marketing";
+type TabKey = ReportKind | "marketing" | "overview" | "tax";
 
 export function ReportsSection({
   tenantSlug,
@@ -180,7 +181,7 @@ export function ReportsSection({
   canManageMarketing?: boolean;
 }) {
   const today = useMemo(() => todayIn(tenantTimezone), [tenantTimezone]);
-  const [tab, setTab] = useState<TabKey>(canViewFinancial ? "sales" : "team");
+  const [tab, setTab] = useState<TabKey>("overview");
   const [preset, setPreset] = useState<PresetKey>("30d");
   const [range, setRange] = useState(() => presetRange("30d", today));
   const [groupBy, setGroupBy] = useState<ReportGroupBy>("day");
@@ -217,11 +218,13 @@ export function ReportsSection({
     providerId: providerId || undefined,
   };
   const tabs: Array<{ key: TabKey; label: string; hidden?: boolean }> = [
+    { key: "overview", label: "Overview" },
     { key: "sales", label: "Sales", hidden: !canViewFinancial },
     { key: "team", label: "Team" },
     { key: "clients", label: "Clients" },
     { key: "appointments", label: "Appointments" },
     { key: "marketing", label: "Marketing", hidden: !canViewFinancial },
+    { key: "tax", label: "Tax", hidden: !canViewFinancial },
   ];
   const clientsIgnoreFilters = tab === "clients";
 
@@ -231,7 +234,7 @@ export function ReportsSection({
   };
 
   const download = async () => {
-    if (tab === "marketing") return;
+    if (tab === "marketing" || tab === "overview") return;
     setExporting(true);
     setExportError(null);
     try {
@@ -338,7 +341,7 @@ export function ReportsSection({
             </>
           ) : null}
         </div>
-        {canExport && tab !== "marketing" ? (
+        {canExport && tab !== "marketing" && tab !== "overview" ? (
           <button type="button" className="rp-export" onClick={() => void download()} disabled={exporting || rangeInvalid}>
             {exporting ? "Exporting…" : "Export CSV"}
           </button>
@@ -347,16 +350,258 @@ export function ReportsSection({
       {exportError ? <p className="cs-error" role="alert">{exportError}</p> : null}
       {rangeInvalid ? <p className="cs-error" role="alert">The start date must be on or before the end date.</p> : null}
 
+      {!rangeInvalid && tab === "overview" ? (
+        <OverviewView tenantSlug={tenantSlug} query={query} canViewFinancial={canViewFinancial} onOpen={setTab} />
+      ) : null}
       {!rangeInvalid && tab === "sales" && canViewFinancial ? (
         <SalesView tenantSlug={tenantSlug} query={query} compare={compare} />
       ) : null}
       {!rangeInvalid && tab === "team" ? <TeamView tenantSlug={tenantSlug} query={query} /> : null}
       {!rangeInvalid && tab === "clients" ? <ClientsView tenantSlug={tenantSlug} query={query} /> : null}
       {!rangeInvalid && tab === "appointments" ? <AppointmentsView tenantSlug={tenantSlug} query={query} /> : null}
+      {!rangeInvalid && tab === "tax" && canViewFinancial ? <TaxView tenantSlug={tenantSlug} query={query} /> : null}
       {!rangeInvalid && tab === "marketing" && canViewFinancial ? (
         <MarketingView tenantSlug={tenantSlug} query={query} canManage={canManageMarketing} />
       ) : null}
     </div>
+  );
+}
+
+// --------------------------------------------------------------- overview ----
+
+/** One headline card per area, each loaded on its own so a slow or failing report doesn't blank the rest. */
+function OverviewCard({
+  title,
+  note,
+  tab,
+  tabLabel,
+  onOpen,
+  children,
+}: {
+  title: string;
+  note?: string;
+  tab: TabKey;
+  tabLabel: string;
+  onOpen: (tab: TabKey) => void;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rp-card" aria-label={title}>
+      <div className="rp-card__head">
+        <h4 className="rp-card__title">{title}</h4>
+        <button type="button" className="rp-chip" onClick={() => onOpen(tab)} aria-label={`Open ${tabLabel} report`}>
+          Details →
+        </button>
+      </div>
+      {note ? <p className="rp-note">{note}</p> : null}
+      {children}
+    </section>
+  );
+}
+
+function OverviewView({
+  tenantSlug,
+  query,
+  canViewFinancial,
+  onOpen,
+}: {
+  tenantSlug: string;
+  query: ReportQuery;
+  canViewFinancial: boolean;
+  onOpen: (tab: TabKey) => void;
+}) {
+  const sales = useReport<SalesReport>(
+    canViewFinancial,
+    () => platformApi.getSalesReport(tenantSlug, { ...query, groupBy: "day" }, "prior_period"),
+    [tenantSlug, query.from, query.to, query.locationId, query.providerId],
+  );
+  const clients = useReport<ClientsReport>(
+    true,
+    () => platformApi.getClientsReport(tenantSlug, query),
+    [tenantSlug, query.from, query.to],
+  );
+  const appointments = useReport<AppointmentsReport>(
+    true,
+    () => platformApi.getAppointmentsReport(tenantSlug, query),
+    [tenantSlug, query.from, query.to, query.locationId, query.providerId],
+  );
+  const team = useReport<TeamReport>(
+    true,
+    () => platformApi.getTeamReport(tenantSlug, query),
+    [tenantSlug, query.from, query.to, query.locationId, query.providerId],
+  );
+
+  return (
+    <div className="rp-body">
+      {canViewFinancial ? (
+        <OverviewCard title="Sales" tab="sales" tabLabel="Sales" onOpen={onOpen}>
+          <ReportState state={sales}>
+            {(report) => {
+              const k = report.kpis;
+              const p = report.previousKpis ?? null;
+              return (
+                <>
+                  <div className="rp-kpis rp-kpis--compact">
+                    <Kpi label="Net sales" value={money(k.netSalesCents)} current={k.netSalesCents} previous={p?.netSalesCents} />
+                    <Kpi label="Completed visits" value={count(k.completedAppointments)} current={k.completedAppointments} previous={p?.completedAppointments} />
+                    <Kpi label="Average ticket" value={money(k.averageTicketCents)} current={k.averageTicketCents} previous={p?.averageTicketCents} />
+                    <Kpi label="Owed by clients" value={money(report.outstanding.outstandingBalanceCents)} hint={`${report.outstanding.followUpCount} to follow up`} />
+                  </div>
+                  <LineChart
+                    title="Net sales"
+                    seriesLabel="Net sales"
+                    format={money}
+                    points={report.series.map((point) => ({ label: bucketLabel(point.bucketStart, "day"), value: point.netSalesCents }))}
+                  />
+                </>
+              );
+            }}
+          </ReportState>
+        </OverviewCard>
+      ) : null}
+
+      <div className="rp-grid2">
+        <OverviewCard
+          title="Clients"
+          note="Covers the whole business, not the location or team filter."
+          tab="clients"
+          tabLabel="Clients"
+          onOpen={onOpen}
+        >
+          <ReportState state={clients}>
+            {(report) => {
+              const s = report.summary;
+              return (
+                <div className="rp-kpis rp-kpis--compact">
+                  <Kpi label="New clients" value={count(s.newClients)} hint={`${percent(s.newClientShare)} of active`} />
+                  <Kpi label="Returning clients" value={count(s.returningClients)} />
+                  <Kpi label="Rebooking rate" value={percent(s.rebookingRate)} />
+                  <Kpi label="At risk" value={count(report.atRiskCount)} hint="90+ days since last visit" />
+                </div>
+              );
+            }}
+          </ReportState>
+        </OverviewCard>
+
+        <OverviewCard title="Appointments" tab="appointments" tabLabel="Appointments" onOpen={onOpen}>
+          <ReportState state={appointments}>
+            {(report) => {
+              const s = report.summary;
+              return (
+                <div className="rp-kpis rp-kpis--compact">
+                  <Kpi label="Appointments" value={count(s.total)} hint={`${s.upcoming} upcoming`} />
+                  <Kpi label="No-show rate" value={percent(s.noShowRate)} hint={`${s.noShows} no-shows`} />
+                  <Kpi label="Cancel rate" value={percent(s.cancelRate)} hint={`${s.lateCancelCount} late`} />
+                  <Kpi label="Online booking conversion" value={percent(report.drafts.conversionRate)} hint={`${report.drafts.abandoned} abandoned`} />
+                </div>
+              );
+            }}
+          </ReportState>
+        </OverviewCard>
+
+        <OverviewCard title="Team" tab="team" tabLabel="Team" onOpen={onOpen}>
+          <ReportState state={team}>
+            {(report) => {
+              const t = report.totals;
+              return (
+                <div className="rp-kpis rp-kpis--compact">
+                  <Kpi label="Utilization" value={percent(t.utilizationRate)} hint="Booked ÷ scheduled" />
+                  <Kpi label="Booked hours" value={hours(t.bookedMinutes)} />
+                  <Kpi label="Completed visits" value={count(t.appointmentsCompleted)} />
+                </div>
+              );
+            }}
+          </ReportState>
+        </OverviewCard>
+
+        {canViewFinancial ? (
+          <OverviewCard
+            title="Marketing"
+            note="Where new clients come from and what they cost to win."
+            tab="marketing"
+            tabLabel="Marketing"
+            onOpen={onOpen}
+          >
+            <ReportState state={clients}>
+              {(report) => (
+                <BarList
+                  title="New clients by source"
+                  rows={asBars(report.sources)}
+                  format={count}
+                  limit={5}
+                  empty="No new clients in this range."
+                />
+              )}
+            </ReportState>
+          </OverviewCard>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------- tax ----
+
+const TAX_KIND_LABELS: Record<string, string> = { service: "Services", add_on: "Add-ons", product: "Products" };
+
+function TaxView({ tenantSlug, query }: { tenantSlug: string; query: ReportQuery }) {
+  const state = useReport<TaxReport>(
+    true,
+    () => platformApi.getTaxReport(tenantSlug, query),
+    [tenantSlug, query.from, query.to, query.locationId, query.providerId],
+  );
+  return (
+    <ReportState state={state}>
+      {(report) => (
+        <div className="rp-body">
+          <div className="rp-kpis">
+            <Kpi label="Tax collected" value={money(report.taxCollectedCents)} hint="As charged on each completed sale" />
+            <Kpi label="Taxable sales" value={money(report.taxableSalesCents)} hint="Before discounts" />
+            <Kpi label="Total sales" value={money(report.salesCents)} hint="Before discounts" />
+            <Kpi label="Completed sales" value={count(report.salesCount)} />
+          </div>
+          <p className="rp-note">
+            Read from completed sales using the tax rate in force when each sale was made, so changing a rate
+            later never rewrites past periods. Sales are dated by when the visit was completed. Discounts and
+            refunds are not netted out of the sales figures, so confirm the taxable base with your accountant.
+          </p>
+          <div className="rp-grid2">
+            <section className="rp-card">
+              <h4 className="rp-card__title">By kind</h4>
+              {report.byKind.length === 0 ? (
+                <p className="rp-status">No completed sales in this range.</p>
+              ) : (
+                <ReportTable caption="Tax by kind" head={["Kind", "Sales", "Tax collected"]}>
+                  {report.byKind.map((row) => (
+                    <tr key={row.kind}>
+                      <th scope="row">{TAX_KIND_LABELS[row.kind] ?? row.kind}</th>
+                      <td>{money(row.salesCents)}</td>
+                      <td>{money(row.taxCents)}</td>
+                    </tr>
+                  ))}
+                </ReportTable>
+              )}
+            </section>
+            <section className="rp-card">
+              <h4 className="rp-card__title">By location</h4>
+              {report.byLocation.length === 0 ? (
+                <p className="rp-status">No completed sales in this range.</p>
+              ) : (
+                <ReportTable caption="Tax by location" head={["Location", "Sales", "Tax collected"]}>
+                  {report.byLocation.map((row) => (
+                    <tr key={row.locationId ?? "none"}>
+                      <th scope="row">{row.locationName ?? "No location"}</th>
+                      <td>{money(row.salesCents)}</td>
+                      <td>{money(row.taxCents)}</td>
+                    </tr>
+                  ))}
+                </ReportTable>
+              )}
+            </section>
+          </div>
+        </div>
+      )}
+    </ReportState>
   );
 }
 

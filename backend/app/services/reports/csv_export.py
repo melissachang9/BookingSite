@@ -10,6 +10,7 @@ from app.schemas.reports import (
     AppointmentsReportResponse,
     ClientsReportResponse,
     SalesReportResponse,
+    TaxReportResponse,
     TeamReportResponse,
 )
 
@@ -48,6 +49,35 @@ def render_csv(title: str, range_label_text: str, sections: list[Section]) -> st
 def range_label(report: Any) -> str:
     r = report.range
     return f"{r.start_date} to {r.end_date} ({r.timezone})"
+
+
+_TAX_KIND_LABELS = {"service": "Services", "add_on": "Add-ons", "product": "Products"}
+
+
+def tax_sections(report: TaxReportResponse) -> list[Section]:
+    """Sales and tax before discounts, as recorded on each completed sale."""
+    return [
+        (
+            "Summary",
+            ["Metric", "Value"],
+            [
+                ["Completed sales", report.sales_count],
+                ["Sales before discounts", _usd(report.sales_cents)],
+                ["Taxable sales before discounts", _usd(report.taxable_sales_cents)],
+                ["Tax collected", _usd(report.tax_collected_cents)],
+            ],
+        ),
+        (
+            "By kind",
+            ["Kind", "Sales", "Tax collected"],
+            [[_TAX_KIND_LABELS.get(r.kind, r.kind), _usd(r.sales_cents), _usd(r.tax_cents)] for r in report.by_kind],
+        ),
+        (
+            "By location",
+            ["Location", "Sales", "Tax collected"],
+            [[r.location_name or "No location", _usd(r.sales_cents), _usd(r.tax_cents)] for r in report.by_location],
+        ),
+    ]
 
 
 def sales_sections(report: SalesReportResponse) -> list[Section]:

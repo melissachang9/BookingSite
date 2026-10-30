@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppointmentsReport, ClientsReport, SalesReport, TeamReport } from "@booking/shared-types";
+import type { AppointmentsReport, ClientsReport, SalesReport, TaxReport, TeamReport } from "@booking/shared-types";
 
 import { platformApi } from "./platform-api";
 import { ReportsSection } from "./reports-section";
@@ -113,6 +113,7 @@ describe("ReportsSection", () => {
   it("shows sales KPIs, breakdowns and comparison deltas for a financial user", async () => {
     const sales = vi.spyOn(platformApi, "getSalesReport").mockResolvedValue(salesReport);
     render(<ReportsSection {...baseProps} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Sales" }));
 
     expect(await screen.findByText("$5,950")).toBeInTheDocument(); // net sales
     expect(screen.getByText("Gross minus discounts")).toBeInTheDocument();
@@ -129,6 +130,7 @@ describe("ReportsSection", () => {
   it("requests the prior period when comparison is switched on", async () => {
     const sales = vi.spyOn(platformApi, "getSalesReport").mockResolvedValue(salesReport);
     render(<ReportsSection {...baseProps} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Sales" }));
     await screen.findByText("$5,950");
 
     fireEvent.click(screen.getByLabelText("Compare to prior period"));
@@ -141,6 +143,7 @@ describe("ReportsSection", () => {
     render(<ReportsSection {...baseProps} canViewFinancial={false} canExport={false} />);
 
     expect(screen.queryByRole("tab", { name: "Sales" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Team" }));
     expect(await screen.findByRole("heading", { name: "Team performance" })).toBeInTheDocument();
     expect(screen.getByText("Jordan Rivera", { selector: "th" })).toBeInTheDocument();
     expect(screen.queryByText("Commission")).not.toBeInTheDocument();
@@ -212,6 +215,7 @@ describe("ReportsSection", () => {
     vi.spyOn(platformApi, "getSalesReport").mockResolvedValue(salesReport);
     const exportCsv = vi.spyOn(platformApi, "exportReportCsv").mockRejectedValueOnce(new Error("Export failed"));
     render(<ReportsSection {...baseProps} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Sales" }));
     await screen.findByText("$5,950");
 
     fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
@@ -222,6 +226,7 @@ describe("ReportsSection", () => {
   it("blocks an inverted custom date range without calling the API again", async () => {
     const sales = vi.spyOn(platformApi, "getSalesReport").mockResolvedValue(salesReport);
     const { container } = render(<ReportsSection {...baseProps} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Sales" }));
     await screen.findByText("$5,950");
 
     fireEvent.click(screen.getByRole("button", { name: "Custom" }));
@@ -233,5 +238,154 @@ describe("ReportsSection", () => {
     expect(screen.getByRole("button", { name: "Export CSV" })).toBeDisabled();
     expect(screen.queryByText("$5,950")).not.toBeInTheDocument();
     expect(sales.mock.calls.length).toBe(callsAfter);
+  });
+
+  describe("Tax", () => {
+    const taxReport: TaxReport = {
+      startDate: "2026-09-09",
+      endDate: "2026-10-08",
+      salesCount: 12,
+      salesCents: 250000,
+      taxableSalesCents: 200000,
+      taxCollectedCents: 17500,
+      byKind: [
+        { kind: "service", salesCents: 200000, taxCents: 15000 },
+        { kind: "add_on", salesCents: 30000, taxCents: 2500 },
+        { kind: "product", salesCents: 20000, taxCents: 0 },
+      ],
+      byLocation: [{ locationId: "loc-1", locationName: "Downtown", salesCents: 250000, taxCents: 17500 }],
+    };
+
+    it("shows tax collected, taxable sales and the breakdowns", async () => {
+      vi.spyOn(platformApi, "getSalesReport").mockResolvedValue(salesReport);
+      const tax = vi.spyOn(platformApi, "getTaxReport").mockResolvedValue(taxReport);
+      render(<ReportsSection {...baseProps} />);
+      fireEvent.click(screen.getByRole("tab", { name: "Tax" }));
+
+      expect((await screen.findByText("Tax collected", { selector: ".rp-kpi__label" })).parentElement).toHaveTextContent("$175");
+      expect(screen.getByText("Taxable sales").parentElement).toHaveTextContent("$2,000");
+      const byKind = screen.getByRole("table", { name: "Tax by kind" });
+      expect(within(byKind).getByRole("row", { name: /Add-ons/ })).toHaveTextContent("$25");
+      expect(within(screen.getByRole("table", { name: "Tax by location" })).getByText("Downtown")).toBeInTheDocument();
+      expect(screen.getByText(/Discounts and\s+refunds are not netted out/)).toBeInTheDocument();
+      expect(tax).toHaveBeenCalledWith("brow-beauty-lab", expect.objectContaining({ from: expect.any(String) }));
+    });
+
+    it("exports the tax report as CSV", async () => {
+      vi.spyOn(platformApi, "getSalesReport").mockResolvedValue(salesReport);
+      vi.spyOn(platformApi, "getTaxReport").mockResolvedValue(taxReport);
+      const exportCsv = vi.spyOn(platformApi, "exportReportCsv").mockRejectedValueOnce(new Error("Export failed"));
+      render(<ReportsSection {...baseProps} />);
+      fireEvent.click(screen.getByRole("tab", { name: "Tax" }));
+      await screen.findByRole("table", { name: "Tax by kind" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+      await screen.findByText("Export failed");
+      expect(exportCsv).toHaveBeenCalledWith("brow-beauty-lab", "tax", expect.anything());
+    });
+
+    it("says so when there are no completed sales", async () => {
+      vi.spyOn(platformApi, "getSalesReport").mockResolvedValue(salesReport);
+      vi.spyOn(platformApi, "getTaxReport").mockResolvedValue({
+        ...taxReport, salesCount: 0, salesCents: 0, taxableSalesCents: 0, taxCollectedCents: 0, byKind: [], byLocation: [],
+      });
+      render(<ReportsSection {...baseProps} />);
+      fireEvent.click(screen.getByRole("tab", { name: "Tax" }));
+
+      expect((await screen.findAllByText("No completed sales in this range.")).length).toBe(2);
+    });
+
+    it("is hidden, and never requested, without financial access", () => {
+      const tax = vi.spyOn(platformApi, "getTaxReport");
+      vi.spyOn(platformApi, "getTeamReport").mockResolvedValue(teamReport(false));
+      vi.spyOn(platformApi, "getClientsReport").mockResolvedValue({
+        range, includeFinancial: false,
+        summary: {
+          totalClients: 0, activeClients: 0, newClients: 0, returningClients: 0, newClientShare: null,
+          averageVisitsPerActiveClient: null, rebookingRate: null, blockedClients: 0, walletHolders: 0,
+        },
+        retention: [], cohorts: [], sources: [], topClients: [], atRiskCount: 0, atRisk: [],
+      });
+      vi.spyOn(platformApi, "getAppointmentsReport").mockResolvedValue(emptyAppointments);
+      render(<ReportsSection {...baseProps} canViewFinancial={false} canExport={false} />);
+
+      expect(screen.queryByRole("tab", { name: "Tax" })).toBeNull();
+      expect(tax).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Overview", () => {
+    const clientsReport: ClientsReport = {
+      range,
+      includeFinancial: true,
+      summary: {
+        totalClients: 49, activeClients: 27, newClients: 11, returningClients: 22, newClientShare: 0.33,
+        averageVisitsPerActiveClient: 2.4, rebookingRate: 0.8, blockedClients: 0, walletHolders: 16,
+        walletLiabilityCents: 70000, averageLifetimeValueCents: 51462,
+      },
+      retention: [], cohorts: [],
+      sources: [{ key: "instagram", label: "Instagram", count: 6 }],
+      topClients: [], atRiskCount: 3, atRisk: [],
+    };
+
+    function mockAll() {
+      vi.spyOn(platformApi, "getSalesReport").mockResolvedValue(salesReport);
+      vi.spyOn(platformApi, "getTeamReport").mockResolvedValue(teamReport(true));
+      vi.spyOn(platformApi, "getClientsReport").mockResolvedValue(clientsReport);
+      vi.spyOn(platformApi, "getAppointmentsReport").mockResolvedValue(emptyAppointments);
+    }
+
+    it("opens on the overview with a headline card for each area", async () => {
+      mockAll();
+      render(<ReportsSection {...baseProps} />);
+
+      expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+      const sales = await screen.findByRole("region", { name: "Sales" });
+      expect(await within(sales).findByText("$5,950")).toBeInTheDocument();
+      expect(within(sales).getAllByText(/▲ 50% vs\. prior/).length).toBeGreaterThan(0);
+      const clients = screen.getByRole("region", { name: "Clients" });
+      expect(await within(clients).findByText("11")).toBeInTheDocument(); // new clients
+      expect(within(clients).getByText("90+ days since last visit").parentElement).toHaveTextContent("3");
+      expect(await within(screen.getByRole("region", { name: "Team" })).findByText("21%")).toBeInTheDocument();
+      expect(await within(screen.getByRole("region", { name: "Marketing" })).findByText("Instagram")).toBeInTheDocument();
+    });
+
+    it("jumps to the full report from a card", async () => {
+      mockAll();
+      render(<ReportsSection {...baseProps} />);
+
+      fireEvent.click(await screen.findByRole("button", { name: "Open Team report" }));
+      expect(screen.getByRole("tab", { name: "Team" })).toHaveAttribute("aria-selected", "true");
+      expect(await screen.findByText("Jordan Rivera", { selector: "th" })).toBeInTheDocument();
+    });
+
+    it("leaves out sales and marketing, and never asks for sales data, without financial access", async () => {
+      const sales = vi.spyOn(platformApi, "getSalesReport").mockResolvedValue(salesReport);
+      vi.spyOn(platformApi, "getTeamReport").mockResolvedValue(teamReport(false));
+      vi.spyOn(platformApi, "getClientsReport").mockResolvedValue({ ...clientsReport, includeFinancial: false });
+      vi.spyOn(platformApi, "getAppointmentsReport").mockResolvedValue(emptyAppointments);
+      render(<ReportsSection {...baseProps} canViewFinancial={false} canExport={false} />);
+
+      expect(await screen.findByRole("region", { name: "Clients" })).toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "Sales" })).toBeNull();
+      expect(screen.queryByRole("region", { name: "Marketing" })).toBeNull();
+      expect(sales).not.toHaveBeenCalled();
+    });
+
+    it("keeps the other cards when one report fails", async () => {
+      mockAll();
+      vi.spyOn(platformApi, "getAppointmentsReport").mockRejectedValue(new Error("Appointments are down"));
+      render(<ReportsSection {...baseProps} />);
+
+      expect(await within(await screen.findByRole("region", { name: "Appointments" })).findByRole("alert")).toHaveTextContent("Appointments are down");
+      expect(await within(screen.getByRole("region", { name: "Team" })).findByText("21%")).toBeInTheDocument();
+    });
+
+    it("hides Export CSV, which has nothing to export on the overview", async () => {
+      mockAll();
+      render(<ReportsSection {...baseProps} />);
+      await screen.findByRole("region", { name: "Sales" });
+      expect(screen.queryByRole("button", { name: "Export CSV" })).toBeNull();
+    });
   });
 });

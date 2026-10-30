@@ -28,6 +28,7 @@ from app.services.reports.csv_export import (
     range_label,
     render_csv,
     sales_sections,
+    tax_sections,
     team_sections,
 )
 from app.services.reports.ranges import ReportRange, build_range
@@ -129,15 +130,23 @@ async def sales_report_route(
 async def tax_report_route(
     tenant_slug: str,
     filters: _Filters = Depends(report_filters),
-    _: User = Depends(require_tenant_permission("reports.financial")),
+    user: User = Depends(require_tenant_permission("reports.financial")),
     session: AsyncSession = Depends(get_db_session),
 ):
-    if filters.export_format != "json":
-        raise api_exception(422, "validation_error", "The tax report is only available as json for now.")
     tenant, rng = await _resolve(session, tenant_slug, filters)
-    return await build_tax_report(
+    if filters.export_format == "csv":
+        _require_export(await _permissions(session, user))
+    report = await build_tax_report(
         session, tenant, rng, location_id=filters.location_id, provider_id=filters.provider_id
     )
+    if filters.export_format == "csv":
+        body = render_csv("Tax report", f"{rng.start} to {rng.end} ({rng.zone})", tax_sections(report))
+        return Response(
+            content=body,
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{_filename("tax", rng)}"'},
+        )
+    return report
 
 
 @router.get("/team", response_model=TeamReportResponse, summary="Team report")

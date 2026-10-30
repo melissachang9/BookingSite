@@ -184,7 +184,7 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.post<MarketingSpendEntry, CreateMarketingSpendRequest>(`tenants/${tenantSlug}/marketing/spend`, body),
   removeMarketingSpend: (tenantSlug: string, spendId: string) =>
     client.delete<void>(`tenants/${tenantSlug}/marketing/spend/${spendId}`),
-  exportReportCsv: (tenantSlug: string, kind: "sales" | "team" | "clients" | "appointments", query: ReportQuery) =>
+  exportReportCsv: (tenantSlug: string, kind: "sales" | "team" | "clients" | "appointments" | "tax", query: ReportQuery) =>
     client.getText(`tenants/${tenantSlug}/reports/${kind}`, { query: { ...reportQuery(query), format: "csv" } }),
   updateTenantSettings: (tenantSlug: string, body: UpdateTenantSettingsRequest) =>
     client.patch<TenantSummary, UpdateTenantSettingsRequest>(`tenants/${tenantSlug}/settings`, body),
