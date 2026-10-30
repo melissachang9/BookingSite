@@ -552,6 +552,7 @@ export function ServicesPage({
                   <ServiceDetail
                     service={selectedService}
                     categories={orderedCategories}
+                    allServices={services}
                     locations={locations}
                     providers={providers}
                     canManage={canManage}
@@ -775,6 +776,7 @@ function toCardState(service: ServiceSummary): ServiceCardState {
 
 function ServiceDetail({
   service,
+  allServices,
   categories,
   locations,
   providers,
@@ -789,6 +791,8 @@ function ServiceDetail({
   canManageSettings,
 }: {
   service: ServiceSummary;
+  /** Every service on the menu, so an add-on can start from one that is already set up. */
+  allServices: ServiceSummary[];
   categories: ServiceCategorySummary[];
   locations: LocationSummary[];
   providers: ProviderSummary[];
@@ -1270,7 +1274,7 @@ function ServiceDetail({
           saveRef={resourcesSaveRef} />
       ) : null}
       {activeTab === "customizations" ? (
-        <ServiceAddOnsTab service={service} tenantSlug={tenantSlug} canManage={canManage} />
+        <ServiceAddOnsTab service={service} allServices={allServices} tenantSlug={tenantSlug} canManage={canManage} />
       ) : null}
       {activeTab === "onlineBooking" ? (
         <ServiceOnlineBookingTab service={service} formId={detailsFormId} form={form} setForm={setForm} canManage={canManage}
@@ -2711,9 +2715,10 @@ type AddOnDraft = { name: string; price: string; minutes: string; description: s
 const emptyAddOnDraft: AddOnDraft = { name: "", price: "", minutes: "0", description: "" };
 
 function ServiceAddOnsTab({
-  service, tenantSlug, canManage,
+  service, allServices, tenantSlug, canManage,
 }: {
   service: ServiceSummary;
+  allServices: ServiceSummary[];
   tenantSlug: string;
   canManage: boolean;
 }) {
@@ -2812,8 +2817,42 @@ function ServiceAddOnsTab({
     }
   };
 
+  // Services already on the menu that aren't this one and aren't already offered as an add-on here.
+  const takenNames = new Set(addOns.map((item) => item.name.trim().toLowerCase()));
+  const pickableServices = allServices.filter(
+    (item) => item.id !== service.id && item.isActive && !takenNames.has(item.name.trim().toLowerCase()),
+  );
+
+  const useExistingService = (serviceId: string) => {
+    const picked = allServices.find((item) => item.id === serviceId);
+    if (!picked) { setDraft(emptyAddOnDraft); return; }
+    setDraft({
+      name: picked.name,
+      price: (picked.priceCents / 100).toFixed(2),
+      minutes: String(Math.min(picked.durationMinutes, 240)),
+      description: picked.description ?? "",
+    });
+  };
+
   const renderForm = () => (
     <div className="cs-svc-inline-form" role="group" aria-label={editingId === "new" ? "New add-on" : "Edit add-on"}>
+      {editingId === "new" ? (
+        <label className="cs-svc-details__field cs-svc-inline-form__full">
+          <span className="cs-svc-details__label">Start from</span>
+          <select className="cs-svc-details__input" defaultValue="" aria-label="Start from an existing service"
+            onChange={(e) => useExistingService(e.target.value)}>
+            <option value="">New add-on (not a standalone service)</option>
+            {pickableServices.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name} · {formatMoneyShort(item.priceCents)} · {item.durationMinutes} min
+              </option>
+            ))}
+          </select>
+          <span className="cs-svc-helper">
+            Pick a service you've already set up to copy its name, price and time, or leave it on New add-on to type your own.
+          </span>
+        </label>
+      ) : null}
       <label className="cs-svc-details__field cs-svc-inline-form__wide">
         <span className="cs-svc-details__label">Name</span>
         <input className="cs-svc-details__input" value={draft.name} autoFocus placeholder="e.g. LED therapy"

@@ -421,6 +421,34 @@ describe("ServicesPage", () => {
     expect(await screen.findByText("Brow lamination")).toBeInTheDocument();
   });
 
+  it("starts an add-on from a service that is already set up", async () => {
+    mockLoaders();
+    vi.spyOn(platformApi, "listServiceAddOnsManaged").mockResolvedValue({ items: [] } as any);
+    const createSpy = vi.spyOn(platformApi, "createServiceAddOn").mockResolvedValue({
+      id: "addon-2", tenantId: "tenant-1", serviceId: "svc-shape", createdAt: "", updatedAt: "",
+      name: "Facial", description: null, priceCents: 0, durationMinutes: 0, isActive: true, sortOrder: 0,
+    } as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    fireEvent.click(screen.getByRole("tab", { name: "Add-ons" }));
+    fireEvent.click(await screen.findByRole("button", { name: "+ Add add-on" }));
+
+    const form = screen.getByRole("group", { name: "New add-on" });
+    const picker = within(form).getByRole("combobox", { name: "Start from an existing service" });
+    // The service being edited can't be its own add-on.
+    expect(within(picker).queryByRole("option", { name: /Brow Shape/ })).toBeNull();
+    const option = within(picker).getAllByRole("option").find((o) => o.textContent?.startsWith("Signature Facial"));
+    expect(option).toBeDefined();
+    fireEvent.change(picker, { target: { value: (option as HTMLOptionElement).value } });
+
+    expect(within(form).getByPlaceholderText("e.g. LED therapy")).toHaveValue("Signature Facial");
+    fireEvent.click(within(form).getByRole("button", { name: "Add add-on" }));
+    await waitFor(() => expect(createSpy).toHaveBeenCalled());
+    expect(createSpy.mock.calls[0]![2]).toMatchObject({ name: "Signature Facial", priceCents: 12000, durationMinutes: 60 });
+  });
+
   it("adds equipment inline from the Resources tab and ticks it", async () => {
     mockLoaders();
     vi.spyOn(platformApi, "listResources").mockResolvedValue({ items: [] } as any);
