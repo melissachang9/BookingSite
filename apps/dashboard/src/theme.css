@@ -6906,6 +6906,14 @@ select:disabled {
 .rp-check { display: inline-flex; align-items: center; gap: 6px; font: 500 12px var(--cs-font); color: var(--cs-ink); cursor: pointer; }
 .rp-export { margin-left: auto; padding: 6px 14px; border: 0; border-radius: var(--cs-r-pill); background: var(--cs-ink); font: 600 12px var(--cs-font); color: #fff; cursor: pointer; }
 .rp-export:disabled { opacity: .5; cursor: not-allowed; }
+.rp-glossary section { margin-top: 12px; }
+.rp-glossary__group { margin: 0 0 6px; font: 700 10px var(--cs-font); letter-spacing: .1em; text-transform: uppercase; color: var(--cs-label); }
+.rp-glossary dl { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.rp-glossary dt { font: 700 12px var(--cs-font); color: var(--cs-ink); }
+.rp-glossary dd { margin: 2px 0 0; font: 500 12px/1.5 var(--cs-font); color: var(--cs-secondary); }
+.rp-glossary__formula { display: block; color: var(--cs-label); }
+.rp-glossary__where { color: var(--cs-label); }
+.rp-glossary__tag { margin-left: 8px; padding: 1px 8px; border-radius: var(--cs-r-pill); background: var(--cs-hover); font: 600 10px var(--cs-font); color: var(--cs-label); }
 .rp-spend-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 12px; margin-bottom: 12px; padding: 12px 14px; border-radius: var(--cs-r-14); background: var(--cs-canvas); }
 .rp-spend-form label { display: flex; flex-direction: column; gap: 4px; font: 600 11px var(--cs-font); color: var(--cs-label); }
 .rp-spend-form input { padding: 6px 10px; border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-pill); background: var(--cs-surface); font: 500 12px var(--cs-font); color: var(--cs-ink); }

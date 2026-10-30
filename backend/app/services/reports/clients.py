@@ -16,7 +16,7 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Customer, Payment, Tenant
+from app.db.models import Customer, Payment, PaymentEvent, Tenant
 from app.schemas.reports import (
     AtRiskRow,
     ClientsReportResponse,
@@ -26,6 +26,7 @@ from app.schemas.reports import (
     RetentionRow,
     TopClientRow,
 )
+from app.services.payment_ledger import REFUND_KINDS
 from app.services.reports.data import BookingStub, load_booking_stubs
 from app.services.reports.ranges import ReportRange, rate
 from app.services.reports.team import rebooked_ids
@@ -82,8 +83,24 @@ async def build_clients_report(
 
     # --- lifetime value / spend from payments (net of tips), SQL-side ---
     lifetime_spend: dict[str, int] = {}
+    lifetime_refunded: dict[str, int] = {}
     range_spend: dict[str, int] = {}
     if include_financial:
+        # Money that went back to the client, read from the append-only refund events. Lifetime value above is
+        # already net of it, so net + refunded is what the client originally paid.
+        for cid, total in (
+            await session.execute(
+                select(Payment.customer_id, func.sum(PaymentEvent.amount_cents))
+                .join(Payment, Payment.id == PaymentEvent.payment_id)
+                .where(
+                    PaymentEvent.tenant_id == tenant.id,
+                    Payment.tenant_id == tenant.id,
+                    PaymentEvent.kind.in_(REFUND_KINDS),
+                )
+                .group_by(Payment.customer_id)
+            )
+        ).all():
+            lifetime_refunded[cid] = int(total or 0)
         for cid, total in (
             await session.execute(
                 select(Payment.customer_id, func.sum(Payment.amount_cents - Payment.tip_cents))
@@ -130,6 +147,11 @@ async def build_clients_report(
         wallet_holders=len(wallet_holders),
         wallet_liability_cents=sum(c.wallet_balance_cents or 0 for c in wallet_holders) if include_financial else None,
         average_lifetime_value_cents=round(sum(paying) / len(paying)) if include_financial and paying else None,
+        average_lifetime_refunded_cents=(
+            round(sum(lifetime_refunded.get(cid, 0) for cid in lifetime_spend if completed_counts.get(cid)) / len(paying))
+            if include_financial and paying
+            else None
+        ),
     )
 
     # --- retention: clients first seen in the 12 months ending at the range end ---

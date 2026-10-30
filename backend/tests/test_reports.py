@@ -494,6 +494,63 @@ def test_clients_report_new_returning_and_retention(client) -> None:
     assert {row["name"] for row in body["topClients"]} >= {"Veteran Client", "Rookie Client"}
 
 
+def _paying_clients() -> tuple[int, int, int]:
+    """(clients with a completed visit and a kept payment, their kept money, their refunded money)."""
+
+    async def run(session):
+        from sqlalchemy import func, select
+
+        from app.db.models import Booking, Payment, PaymentEvent
+
+        completed = select(Booking.customer_id).where(Booking.status == "completed", Booking.completed_at.is_not(None))
+        kept = dict(
+            (
+                await session.execute(
+                    select(Payment.customer_id, func.sum(Payment.amount_cents - Payment.tip_cents))
+                    .where(Payment.status == "succeeded", Payment.customer_id.in_(completed))
+                    .group_by(Payment.customer_id)
+                )
+            ).all()
+        )
+        refunded = (
+            await session.execute(
+                select(func.coalesce(func.sum(PaymentEvent.amount_cents), 0))
+                .join(Payment, Payment.id == PaymentEvent.payment_id)
+                .where(
+                    PaymentEvent.kind.in_(("refund_recorded", "refund_processed", "wallet_returned")),
+                    Payment.customer_id.in_(list(kept) or [""]),
+                )
+            )
+        ).scalar_one()
+        return len(kept), int(sum(kept.values())), int(refunded)
+
+    return _db(run)
+
+
+def test_clients_report_lifetime_value_is_net_and_refunds_come_from_events(client) -> None:
+    _cache.clear()
+    customer = _add_customer("Refunded Client")
+    booking = _add_booking(customer, starts_at=_utc(2020, 2, 10, 18), completed_at=_utc(2020, 2, 10, 19))
+    # Paid $100, then $30 went back. The payment row now holds what was kept; the event keeps the refund.
+    payment = _add_payment(booking, customer, amount_cents=7000, created_at=_utc(2020, 2, 10, 19))
+    _add_payment_event(payment, "refund_recorded", 3000, _utc(2020, 2, 12, 12))
+    # A deposit turned into wallet credit is not money returned to the client.
+    _add_payment_event(payment, "wallet_credited", 500, _utc(2020, 2, 12, 13))
+
+    count, kept, refunded = _paying_clients()
+    assert refunded >= 3000  # ours, plus whatever the demo data already refunded
+    summary = _get(client, "clients", _auth_headers(client), **{"from": "2020-02-01", "to": "2020-02-29"}).json()["summary"]
+    assert summary["averageLifetimeValueCents"] == round(kept / count)
+    assert summary["averageLifetimeRefundedCents"] == round(refunded / count)
+
+
+def test_refunded_figures_stay_hidden_without_financial_access(client) -> None:
+    owner = _auth_headers(client)
+    staff = _staff_headers(client, owner)
+    summary = _get(client, "clients", staff, **PAST).json()["summary"]
+    assert summary["averageLifetimeRefundedCents"] is None
+
+
 def test_clients_report_flags_at_risk_clients(client) -> None:
     _cache.clear()
     lapsed = _add_customer("Lapsed Client")

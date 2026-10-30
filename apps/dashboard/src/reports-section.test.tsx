@@ -407,6 +407,23 @@ describe("ReportsSection", () => {
       expect(await within(screen.getByRole("region", { name: "Team" })).findByText("21%")).toBeInTheDocument();
     });
 
+    it("explains every metric, marking the ones that need more data", async () => {
+      mockAll();
+      render(<ReportsSection {...baseProps} />);
+      await screen.findByRole("region", { name: "Sales" });
+
+      fireEvent.click(screen.getByText("Metric definitions"));
+      const acquisition = screen.getByRole("region", { name: "Acquisition metrics" });
+      expect(within(acquisition).getByText(/Customer acquisition cost/)).toBeInTheDocument();
+      // LTV:CAC and payback are defined now but can't be reported until the data exists.
+      const planned = within(acquisition).getByText("LTV : CAC").closest("div");
+      expect(planned).toHaveTextContent("Coming later");
+      expect(planned).toHaveTextContent("Needs:");
+      const reported = within(acquisition).getByText("Online booking conversion").closest("div");
+      expect(reported).not.toHaveTextContent("Coming later");
+      expect(reported).toHaveTextContent("Shown in: Appointments, Overview.");
+    });
+
     it("hides Export CSV, which has nothing to export on the overview", async () => {
       mockAll();
       render(<ReportsSection {...baseProps} />);

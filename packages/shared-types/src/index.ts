@@ -4,6 +4,7 @@ export * from "./common";
 export * from "./customers";
 export * from "./forms";
 export * from "./health";
+export * from "./metrics";
 export * from "./payments";
 export * from "./permissions";
 export * from "./resources";

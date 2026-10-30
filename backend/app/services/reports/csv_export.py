@@ -170,6 +170,7 @@ def clients_sections(report: ClientsReportResponse) -> list[Section]:
                 ["Wallet holders", s.wallet_holders],
                 ["Wallet liability", _usd(s.wallet_liability_cents)],
                 ["Average lifetime value", _usd(s.average_lifetime_value_cents)],
+                ["Average refunded per client", _usd(s.average_lifetime_refunded_cents)],
             ],
         ),
         (

@@ -167,6 +167,8 @@ export type ClientsReport = {
     walletHolders: number;
     walletLiabilityCents?: number | null;
     averageLifetimeValueCents?: number | null;
+    /** Average refunded per paying client; lifetime value is already net of this. */
+    averageLifetimeRefundedCents?: number | null;
   };
   retention: Array<{ windowDays: number; eligible: number; retained: number; rate: number | null }>;
   cohorts: Array<{

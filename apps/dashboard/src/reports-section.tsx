@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { METRIC_DEFINITIONS } from "@booking/shared-types";
 import type {
   AppointmentsReport,
   ClientsReport,
@@ -367,6 +368,44 @@ export function ReportsSection({
   );
 }
 
+// --------------------------------------------------------------- glossary ----
+
+const GLOSSARY_GROUPS = [
+  { key: "sales", label: "Sales and profit" },
+  { key: "clients", label: "Clients" },
+  { key: "acquisition", label: "Acquisition" },
+  { key: "operations", label: "Operations" },
+] as const;
+
+/** Every metric in one place, including the ones that are defined but not reportable yet. */
+function Glossary() {
+  return (
+    <details className="rp-defs rp-glossary">
+      <summary>Metric definitions</summary>
+      {GLOSSARY_GROUPS.map((group) => (
+        <section key={group.key} aria-label={`${group.label} metrics`}>
+          <h5 className="rp-glossary__group">{group.label}</h5>
+          <dl>
+            {METRIC_DEFINITIONS.filter((metric) => metric.group === group.key).map((metric) => (
+              <div key={metric.key} className="rp-glossary__item">
+                <dt>
+                  {metric.name}
+                  {metric.status === "planned" ? <span className="rp-glossary__tag">Coming later</span> : null}
+                </dt>
+                <dd>
+                  {metric.meaning} <span className="rp-glossary__formula">{metric.formula}</span>
+                  {metric.status === "reported" && metric.where ? <span className="rp-glossary__where"> Shown in: {metric.where}.</span> : null}
+                  {metric.status === "planned" && metric.needs ? <span className="rp-glossary__where"> Needs: {metric.needs}</span> : null}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ))}
+    </details>
+  );
+}
+
 // --------------------------------------------------------------- overview ----
 
 /** One headline card per area, each loaded on its own so a slow or failing report doesn't blank the rest. */
@@ -536,6 +575,8 @@ function OverviewView({
           </OverviewCard>
         ) : null}
       </div>
+
+      <Glossary />
     </div>
   );
 }
@@ -893,7 +934,8 @@ function ClientsView({ tenantSlug, query }: { tenantSlug: string; query: ReportQ
               <Kpi label="Rebooking rate" value={percent(s.rebookingRate)} hint="Visits followed by another booking" />
               <Kpi label="Visits per active client" value={s.averageVisitsPerActiveClient?.toFixed(1) ?? "–"} />
               <Kpi label="All clients" value={count(s.totalClients)} hint={`${s.blockedClients} blocked online`} />
-              {fin ? <Kpi label="Avg lifetime value" value={moneyOrDash(s.averageLifetimeValueCents)} hint="Payments excl. tips" /> : null}
+              {fin ? <Kpi label="Avg lifetime value" value={moneyOrDash(s.averageLifetimeValueCents)} hint="Payments excl. tips, net of refunds" /> : null}
+              {fin ? <Kpi label="Avg refunded per client" value={moneyOrDash(s.averageLifetimeRefundedCents)} hint="Lifetime value + this = paid" /> : null}
               {fin ? <Kpi label="Wallet balances held" value={moneyOrDash(s.walletLiabilityCents)} hint={`${s.walletHolders} clients`} /> : null}
             </div>
 

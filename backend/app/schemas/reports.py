@@ -168,6 +168,8 @@ class ClientsSummary(CamelModel):
     wallet_holders: int
     wallet_liability_cents: int | None = None
     average_lifetime_value_cents: int | None = None
+    # Average refunded per paying client; lifetime value is already net of this.
+    average_lifetime_refunded_cents: int | None = None
 
 
 class RetentionRow(CamelModel):
