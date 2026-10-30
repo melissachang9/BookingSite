@@ -2683,7 +2683,7 @@ function ServiceResourcesTab({
             ) : null}
           </div>
           <p className="cs-svc-section__lead">
-            Tracked units also block on the calendar — booking stops once every unit is in use.
+            A slot only opens on the calendar when both a qualified provider and this equipment are free.
           </p>
           {renderAddForm("equipment")}
           {equipment.length > 0 ? (
@@ -2838,10 +2838,10 @@ function ServiceAddOnsTab({
     <div className="cs-svc-inline-form" role="group" aria-label={editingId === "new" ? "New add-on" : "Edit add-on"}>
       {editingId === "new" ? (
         <label className="cs-svc-details__field cs-svc-inline-form__full">
-          <span className="cs-svc-details__label">Start from</span>
-          <select className="cs-svc-details__input" defaultValue="" aria-label="Start from an existing service"
+          <span className="cs-svc-details__label">Start from an existing service</span>
+          <select className="cs-svc-details__input cs-svc-details__input--dropdown" defaultValue="" aria-label="Start from an existing service"
             onChange={(e) => useExistingService(e.target.value)}>
-            <option value="">New add-on (not a standalone service)</option>
+            <option value="">Choose a service to copy, or type a new add-on below</option>
             {pickableServices.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.name} · {formatMoneyShort(item.priceCents)} · {item.durationMinutes} min
@@ -2849,7 +2849,7 @@ function ServiceAddOnsTab({
             ))}
           </select>
           <span className="cs-svc-helper">
-            Pick a service you've already set up to copy its name, price and time, or leave it on New add-on to type your own.
+            Open the list to copy a service's name, price and time, or skip it and fill in the fields below.
           </span>
         </label>
       ) : null}
