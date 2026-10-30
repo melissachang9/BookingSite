@@ -1465,8 +1465,8 @@ function ServiceDetailsTab({
           <label className="cs-svc-details__field">
             <span className="cs-svc-details__label">Client-facing description</span>
             <textarea
-              className="cs-svc-details__input cs-svc-details__textarea"
-              rows={2}
+              className="cs-svc-details__input cs-svc-details__textarea cs-svc-details__textarea--tall"
+              rows={8}
               value={form.description}
               onChange={(e) => setForm((c) => ({ ...c, description: e.target.value }))}
               placeholder="Describe the treatment as it appears on the storefront…"
@@ -1729,7 +1729,6 @@ function ServiceStaffTab({
     const names = (
       <span className="cs-override-table__lead-text">
         <span className="cs-override-table__name">{provider.name}</span>
-        {provider.description ? <span className="cs-override-table__meta">{provider.description}</span> : null}
       </span>
     );
     const checkbox = (
@@ -2090,6 +2089,7 @@ function ServiceStaffTab({
   return (
     <div className="cs-svc-detail-form">
       <div className={`cs-svc-staff-layout${selectedProvider ? " has-panel" : ""}`}>
+        <div className="cs-svc-staff-main">
         <section className="cs-svc-card" aria-label="Staff">
           <header className="cs-svc-card__head cs-svc-card__head--stack">
             <h3 className="cs-svc-card__title">Who performs this</h3>
@@ -2111,12 +2111,24 @@ function ServiceStaffTab({
                 <span>Online booking</span>
               </div>
 
+              {selectedProvider ? (
+                <button type="button" className="cs-link-btn cs-override-table__back" onClick={() => setSelectedProviderId(null)}>
+                  ← All staff
+                </button>
+              ) : null}
+
               <div className="cs-override-table__list">
-                {offered.map(renderProviderRow)}
-                {notOffered.map(renderProviderRow)}
+                {selectedProvider ? (
+                  renderProviderRow(selectedProvider)
+                ) : (
+                  <>
+                    {offered.map(renderProviderRow)}
+                    {notOffered.map(renderProviderRow)}
+                  </>
+                )}
               </div>
 
-              {canManage && (offered.length > 0 || notOffered.length > 0) ? (
+              {canManage && !selectedProvider && (offered.length > 0 || notOffered.length > 0) ? (
                 <div className="cs-override-table__group-foot">
                   {offered.length > 0 ? (
                     <button type="button" className="cs-link-btn"
@@ -2134,7 +2146,7 @@ function ServiceStaffTab({
                 </div>
               ) : null}
 
-              <p className="cs-svc-staff-summary">
+              <p className="cs-svc-staff-summary" hidden={selectedProvider !== null}>
                 {storefrontPrice === null
                   ? "No one is bookable online for this treatment yet."
                   : <>Storefront shows <strong>{storefrontPrice}</strong> · {bookableOnline.length} of {offered.length} bookable online</>}
@@ -2143,37 +2155,38 @@ function ServiceStaffTab({
           )}
         </section>
 
-        {selectedProvider ? renderPanel(selectedProvider) : null}
-      </div>
-
-      <div className="cs-svc-card">
-        <span className="cs-svc-card__eyebrow">Client selection on booking</span>
-        <div className="cs-svc-selection">
-          {([
-            ["client_choice", "Let clients choose their artist", "Clients see all eligible staff and pick one when booking online."],
-            ["auto_assign", "Assign automatically", "Distribute bookings evenly across eligible staff. Best for fairness."],
-            ["hide", "Hide artist selection", "Clients book the service without seeing who'll perform it. Useful for new staff or training periods."],
-          ] as const).map(([mode, title, helper]) => (
-            <label
-              key={mode}
-              className={`cs-svc-selection-opt${shownSelection === mode ? " cs-svc-selection-opt--active" : ""}`}
-            >
-              <input type="radio" name="clientSelection" value={mode}
-                className="cs-visually-hidden"
-                checked={shownSelection === mode}
-                onChange={() => setForm((c) => ({ ...c, providerSelectionMode: mode }))}
-                disabled={!canManage} />
-              <span className={`cs-svc-radio${shownSelection === mode ? " cs-svc-radio--on" : ""}`} aria-hidden="true" />
-              <span className="cs-svc-selection-opt__text">
-                <span className="cs-svc-selection-opt__title">{title}</span>
-                <span className="cs-svc-helper">{helper}</span>
-              </span>
-            </label>
-          ))}
+        <div className="cs-svc-card">
+          <span className="cs-svc-card__eyebrow">Client selection on booking</span>
+          <div className="cs-svc-selection">
+            {([
+              ["client_choice", "Let clients choose their artist", "Clients see all eligible staff and pick one when booking online."],
+              ["auto_assign", "Assign automatically", "Distribute bookings evenly across eligible staff. Best for fairness."],
+              ["hide", "Hide artist selection", "Clients book the service without seeing who'll perform it. Useful for new staff or training periods."],
+            ] as const).map(([mode, title, helper]) => (
+              <label
+                key={mode}
+                className={`cs-svc-selection-opt${shownSelection === mode ? " cs-svc-selection-opt--active" : ""}`}
+              >
+                <input type="radio" name="clientSelection" value={mode}
+                  className="cs-visually-hidden"
+                  checked={shownSelection === mode}
+                  onChange={() => setForm((c) => ({ ...c, providerSelectionMode: mode }))}
+                  disabled={!canManage} />
+                <span className={`cs-svc-radio${shownSelection === mode ? " cs-svc-radio--on" : ""}`} aria-hidden="true" />
+                <span className="cs-svc-selection-opt__text">
+                  <span className="cs-svc-selection-opt__title">{title}</span>
+                  <span className="cs-svc-helper">{helper}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          {form.providerSelectionMode === "" ? (
+            <p className="cs-svc-helper">Following {selectionCategoryName}. Choose another option to set this service&apos;s own.</p>
+          ) : null}
         </div>
-        {form.providerSelectionMode === "" ? (
-          <p className="cs-svc-helper">Following {selectionCategoryName}. Choose another option to set this service&apos;s own.</p>
-        ) : null}
+        </div>
+
+        {selectedProvider ? renderPanel(selectedProvider) : null}
       </div>
 
     </div>

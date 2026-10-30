@@ -1163,12 +1163,28 @@ describe("ServicesPage", () => {
       fireEvent.change(within(panel).getByLabelText("Ava Rivera booking link"), { target: { value: "draft-only" } });
       expect(within(panel).getByRole("button", { name: "Save link" })).toBeEnabled();
 
+      // Only the chosen artist is listed while their panel is open; go back to the full list to pick someone else.
+      expect(screen.queryByRole("button", { name: "Open settings for Ben Cole" })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "← All staff" }));
       fireEvent.click(screen.getByRole("button", { name: "Open settings for Ben Cole" }));
       const benPanel = await screen.findByRole("complementary", { name: "Ben Cole settings" });
       expect(within(benPanel).getByLabelText("Ben Cole booking link")).toHaveValue("");
       // No link yet: Save and Copy are both there, neither usable until there is something to save or copy.
       expect(within(benPanel).getByRole("button", { name: "Save link" })).toBeDisabled();
       expect(within(benPanel).getByRole("button", { name: "Copy link" })).toBeDisabled();
+    });
+
+    it("lists only the chosen artist while their panel is open, and everyone again after Done", async () => {
+      const other = { ...provider, id: "prov-2", name: "Ben Cole", bookingSlug: null, bookingUrl: null, serviceIds: ["svc-shape"] };
+      const panel = await openPanel([provider, other]);
+
+      expect(screen.queryByRole("button", { name: "Open settings for Ben Cole" })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Ben Cole price")).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Ava Rivera price")).toBeInTheDocument();
+
+      fireEvent.click(within(panel).getByRole("button", { name: "Done" }));
+      expect(await screen.findByRole("button", { name: "Open settings for Ben Cole" })).toBeInTheDocument();
+      expect(screen.getByLabelText("Ben Cole price")).toBeInTheDocument();
     });
 
     it("shows why a booking link couldn't be saved, such as one already taken", async () => {

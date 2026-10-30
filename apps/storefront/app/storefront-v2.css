@@ -346,7 +346,7 @@ html { background: #ebe7e3; }
 .sf-service__tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .sf-tag--tint { color: var(--sf-ink); }
 .sf-service__body h3 { margin: 0; font: 600 clamp(18px, 1.5vw, 22px) var(--sf-font-sans); letter-spacing: -0.035em; }
-.sf-service__body p { margin: 6px 0 0; max-width: 46em; font: 400 15px/1.5 var(--sf-font-sans); color: var(--sf-muted); }
+.sf-service__body p { margin: 6px 0 0; max-width: 46em; white-space: pre-line; font: 400 15px/1.5 var(--sf-font-sans); color: var(--sf-muted); }
 .sf-service__side { display: grid; justify-items: end; gap: 2px; text-align: right; min-width: 96px; }
 .sf-service__side strong { font: 600 clamp(20px, 1.7vw, 24px) var(--sf-font-sans); letter-spacing: -0.03em; }
 .sf-service__side span { font: 400 14px var(--sf-font-sans); color: var(--sf-muted); }

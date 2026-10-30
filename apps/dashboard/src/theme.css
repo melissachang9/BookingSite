@@ -2084,7 +2084,7 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .cs-override-table__columns,
 .cs-override-table__row {
   display: grid;
-  grid-template-columns: minmax(150px, 1.4fr) repeat(3, minmax(72px, 88px)) minmax(140px, 1fr);
+  grid-template-columns: minmax(150px, 1.4fr) minmax(92px, 108px) minmax(76px, 92px) minmax(92px, 108px) minmax(140px, 1fr);
   column-gap: 10px;
   align-items: center;
 }
@@ -2187,7 +2187,7 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 }
 .cs-override-table__field:not(:placeholder-shown) + .cs-override-table__affix { display: block; }
 .cs-override-table__cell--prefix .cs-override-table__affix { left: 10px; }
-.cs-override-table__cell--prefix .cs-override-table__field:not(:placeholder-shown) { padding-left: 19px; }
+.cs-override-table__cell--prefix .cs-override-table__field:not(:placeholder-shown) { padding-left: 19px; padding-right: 6px; text-overflow: clip; }
 /* Tabular digits are 1ch wide, so the unit can sit right after the value. */
 .cs-override-table__cell--suffix .cs-override-table__field { font-variant-numeric: tabular-nums; }
 .cs-override-table__cell--suffix .cs-override-table__affix { left: calc(14px + var(--chars, 0) * 1ch); font-variant-numeric: tabular-nums; }
@@ -4835,6 +4835,7 @@ select.cs-svc-details__input {
 .cs-svc-details__input[type="number"]::-webkit-outer-spin-button,
 .cs-svc-details__input[type="number"]::-webkit-inner-spin-button { margin: 0; appearance: none; }
 .cs-svc-details__textarea { height: auto; min-height: 58px; padding: 14px; line-height: 1.5; resize: vertical; }
+.cs-svc-details__textarea--tall { min-height: 200px; }
 .cs-svc-details__divider { width: 100%; height: 1px; margin: 0; border: 0; background: var(--cs-hairline); }
 
 /* Units inside a field: "$" before the value, "min" right after the digits. */
@@ -7166,6 +7167,29 @@ select:disabled {
 .cs-override-table__group-foot { display: flex; justify-content: flex-start; padding: 0 12px; }
 
 /* ---- Service › Staff: provider table with a settings panel on the right ---- */
+.cs-svc-staff-main { display: grid; gap: 16px; min-width: 0; }
+/* Services › Staff: the provider column takes the spare room, and long names and descriptions wrap instead of ending in "…". */
+.cs-svc-staff-layout:not(.has-panel) .cs-override-table__columns,
+.cs-svc-staff-layout:not(.has-panel) .cs-override-table__row {
+  grid-template-columns: minmax(150px, 1fr) minmax(84px, 100px) minmax(68px, 84px) minmax(84px, 100px) minmax(92px, 116px);
+}
+/* "Not offering this treatment" fills the space beside the name and wraps, rather than running past the row. */
+.cs-svc-staff-layout .cs-override-table__row > .cs-override-table__note {
+  justify-self: stretch;
+  min-width: 0;
+  max-width: none;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+/* Shorter rows now that there's no bio line under the name. */
+.cs-svc-staff-layout .cs-override-table__row { min-height: 0; padding-top: 7px; padding-bottom: 7px; }
+.cs-svc-staff-layout .cs-override-table__name,
+.cs-svc-staff-layout .cs-override-table__meta {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .cs-svc-staff-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 .cs-svc-staff-layout.has-panel { grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); }
 @media (max-width: 1100px) {
@@ -7247,8 +7271,22 @@ select:disabled {
 /* With the provider panel open the table is narrower, so its columns tighten up before it stacks. */
 .cs-svc-staff-layout.has-panel .cs-override-table__columns,
 .cs-svc-staff-layout.has-panel .cs-override-table__row {
-  grid-template-columns: minmax(120px, 1.5fr) minmax(64px, 76px) minmax(56px, 66px) minmax(52px, 62px) minmax(88px, 0.8fr);
-  column-gap: 6px;
+  grid-template-columns: minmax(110px, 1.3fr) minmax(84px, 100px) minmax(66px, 80px) minmax(84px, 100px);
+  column-gap: 8px;
+}
+/* Only the chosen provider is listed while their panel is open; the panel already carries online booking. */
+.cs-svc-staff-layout.has-panel .cs-override-table__columns > :nth-child(5),
+.cs-svc-staff-layout.has-panel .cs-override-table__online { display: none; }
+.cs-override-table__back { align-self: flex-start; }
+/* Narrow table with the panel open: money fields get the room, Duration drops to its own line. */
+@container override-table (max-width: 440px) {
+  .cs-svc-staff-layout.has-panel .cs-override-table__row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 12px;
+  }
+  .cs-svc-staff-layout.has-panel .cs-override-table__cell[data-label="Price"] { grid-column: 1; grid-row: 2; }
+  .cs-svc-staff-layout.has-panel .cs-override-table__cell[data-label="Deposit"] { grid-column: 2; grid-row: 2; }
+  .cs-svc-staff-layout.has-panel .cs-override-table__cell[data-label="Duration"] { grid-column: 1 / -1; grid-row: 3; }
 }
 .cs-svc-staff-layout.has-panel { grid-template-columns: minmax(0, 1fr) 330px; }
 .cs-svc-staff-layout.has-panel .cs-override-table__meta,
