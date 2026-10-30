@@ -107,12 +107,43 @@ def _apply_sms_consent(customer: Customer, consent: object, phone: str | None) -
         customer.sms_phone = phone
 
 
+_ATTRIBUTION_FIELDS = (
+    ("utm_source", 64),
+    ("utm_medium", 64),
+    ("utm_campaign", 128),
+    ("referrer_url", 500),
+    ("landing_path", 255),
+)
+
+
+def _attribution_columns(attribution: object | None) -> dict[str, str | None]:
+    """Cleaned attribution for a new draft. Source and medium are lowercased so "Instagram" and
+    "instagram" group together in reports; empty values become null."""
+    columns: dict[str, str | None] = {name: None for name, _ in _ATTRIBUTION_FIELDS}
+    if attribution is None:
+        return columns
+    values = {
+        "utm_source": getattr(attribution, "source", None),
+        "utm_medium": getattr(attribution, "medium", None),
+        "utm_campaign": getattr(attribution, "campaign", None),
+        "referrer_url": getattr(attribution, "referrer_url", None),
+        "landing_path": getattr(attribution, "landing_path", None),
+    }
+    for name, limit in _ATTRIBUTION_FIELDS:
+        value = (values[name] or "").strip()[:limit]
+        if value and name in ("utm_source", "utm_medium"):
+            value = value.lower()
+        columns[name] = value or None
+    return columns
+
+
 async def _upsert_customer(
     session: AsyncSession,
     tenant_id: str,
     payload: dict[str, str | None],
     assign_owner_user_id: str | None = None,
     source_channel: str = "public_online",
+    first_touch: dict[str, str | None] | None = None,
 ) -> Customer:
     email = payload.get("email")
     phone = payload.get("phone")
@@ -138,6 +169,13 @@ async def _upsert_customer(
             acquired_at=now,
             source_channel=source_channel,
         )
+        # Only a brand-new customer gets a first touch; returning customers keep the one they have.
+        if first_touch:
+            customer.first_touch_source = first_touch.get("utm_source")
+            customer.first_touch_medium = first_touch.get("utm_medium")
+            customer.first_touch_campaign = first_touch.get("utm_campaign")
+            customer.first_touch_referrer_url = first_touch.get("referrer_url")
+            customer.first_touch_landing_path = first_touch.get("landing_path")
         _apply_sms_consent(customer, sms_consent, phone)
         session.add(customer)
         await session.flush()
@@ -429,9 +467,14 @@ async def _promote_draft_to_booking(
         deposit_cents=draft.deposit_cents,
         source_channel=_booking_source_channel(draft),
         notes=draft.notes,
+        **{name: getattr(draft, name) for name, _ in _ATTRIBUTION_FIELDS},
     )
     session.add(booking)
     await session.flush()
+    # A customer's first booking is recorded once, so "time to first booking" and cohorts stay stable.
+    if draft.customer is not None and draft.customer.first_booking_at is None:
+        draft.customer.first_booking_id = booking.id
+        draft.customer.first_booking_at = booking.created_at or datetime.now(timezone.utc)
 
     # Chosen add-ons become line items, so totals, tax and balance include them.
     draft_add_ons = (
@@ -787,6 +830,7 @@ async def create_booking_draft(
     if resource_picks is None:
         raise api_exception(409, "conflict", "No room or equipment for this service is free at this time.")
 
+    attribution = _attribution_columns(None if is_staff_draft else payload.attribution)
     customer = None
     if payload.customer is not None:
         assign_owner = (
@@ -800,6 +844,7 @@ async def create_booking_draft(
             payload.customer.model_dump(),
             assign_owner_user_id=assign_owner,
             source_channel="staff_entered" if is_staff_draft else "public_online",
+            first_touch=attribution,
         )
 
     draft = BookingDraft(
@@ -813,6 +858,7 @@ async def create_booking_draft(
         starts_at=resolved_start_at,
         ends_at=resolved_end_at,
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
+        **attribution,
         price_cents=terms.price_cents,
         # Taken at booking per the service's payment mode, on the full visit
         # (service plus add-ons).
@@ -1238,6 +1284,7 @@ async def update_booking_draft(
             draft.tenant_id,
             payload.customer.model_dump(),
             assign_owner_user_id=assign_owner,
+            first_touch={name: getattr(draft, name) for name, _ in _ATTRIBUTION_FIELDS},
         )
         draft.customer_id = customer.id
         draft.customer = customer

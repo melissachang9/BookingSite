@@ -238,6 +238,15 @@ export type BookingListQuery = {
 
 export type BookingListResponse = PaginatedResponse<BookingSummary>;
 
+/** Where a visitor came from, captured by the booking page when they first landed. */
+export type BookingAttribution = {
+  source?: string | null;
+  medium?: string | null;
+  campaign?: string | null;
+  referrerUrl?: string | null;
+  landingPath?: string | null;
+};
+
 export type CreateBookingDraftRequest = {
   tenantSlug: string;
   serviceId: UUID;
@@ -255,6 +264,8 @@ export type CreateBookingDraftRequest = {
   addOnIds?: UUID[];
   /** Staff-only notes for the team (staff_entered drafts only). */
   notes?: string;
+  /** Marketing attribution from the booking page; ignored for staff-entered drafts. */
+  attribution?: BookingAttribution;
 };
 
 export type UpdateBookingDraftRequest = {

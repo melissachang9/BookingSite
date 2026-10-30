@@ -12,6 +12,7 @@ import type {
 } from "@booking/shared-types";
 
 import { platformApi } from "./platform-api";
+import { MarketingView } from "./marketing-view";
 import { BarList, Heatmap, LineChart, ReportTable, type BarRow } from "./report-charts";
 
 // ---------------------------------------------------------------- helpers ----
@@ -160,7 +161,7 @@ const asBars = (rows: Array<{ key: string; label: string; count: number }>): Bar
 
 // -------------------------------------------------------------- the section ----
 
-type TabKey = ReportKind;
+type TabKey = ReportKind | "marketing";
 
 export function ReportsSection({
   tenantSlug,
@@ -168,12 +169,15 @@ export function ReportsSection({
   canViewReports,
   canViewFinancial,
   canExport,
+  canManageMarketing = false,
 }: {
   tenantSlug: string;
   tenantTimezone: string;
   canViewReports: boolean;
   canViewFinancial: boolean;
   canExport: boolean;
+  /** May record and remove marketing spend (settings.manage). */
+  canManageMarketing?: boolean;
 }) {
   const today = useMemo(() => todayIn(tenantTimezone), [tenantTimezone]);
   const [tab, setTab] = useState<TabKey>(canViewFinancial ? "sales" : "team");
@@ -217,6 +221,7 @@ export function ReportsSection({
     { key: "team", label: "Team" },
     { key: "clients", label: "Clients" },
     { key: "appointments", label: "Appointments" },
+    { key: "marketing", label: "Marketing", hidden: !canViewFinancial },
   ];
   const clientsIgnoreFilters = tab === "clients";
 
@@ -226,6 +231,7 @@ export function ReportsSection({
   };
 
   const download = async () => {
+    if (tab === "marketing") return;
     setExporting(true);
     setExportError(null);
     try {
@@ -332,7 +338,7 @@ export function ReportsSection({
             </>
           ) : null}
         </div>
-        {canExport ? (
+        {canExport && tab !== "marketing" ? (
           <button type="button" className="rp-export" onClick={() => void download()} disabled={exporting || rangeInvalid}>
             {exporting ? "Exporting…" : "Export CSV"}
           </button>
@@ -347,6 +353,9 @@ export function ReportsSection({
       {!rangeInvalid && tab === "team" ? <TeamView tenantSlug={tenantSlug} query={query} /> : null}
       {!rangeInvalid && tab === "clients" ? <ClientsView tenantSlug={tenantSlug} query={query} /> : null}
       {!rangeInvalid && tab === "appointments" ? <AppointmentsView tenantSlug={tenantSlug} query={query} /> : null}
+      {!rangeInvalid && tab === "marketing" && canViewFinancial ? (
+        <MarketingView tenantSlug={tenantSlug} query={query} canManage={canManageMarketing} />
+      ) : null}
     </div>
   );
 }

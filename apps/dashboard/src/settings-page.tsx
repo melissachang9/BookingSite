@@ -18,7 +18,6 @@ import { platformApi } from "./platform-api";
 import { uploadImageFile } from "./upload-image";
 import { DEFAULT_PANEL_COLOR, isHexColor, readableTextColor } from "./color";
 import { CropModal } from "./staff-page";
-import { ReportsSection } from "./reports-section";
 import { PaymentsSettingsSection } from "./payments-settings-section";
 
 type RouteDefinitionLike = {
@@ -39,7 +38,6 @@ type SettingsGroup =
   | "Calendar & appointments"
   | "Notifications"
   | "Payments & checkout"
-  | "Reports"
   | "Advanced";
 
 // Each group has its own pastel, shared by its label in the nav and the pill
@@ -50,7 +48,6 @@ const GROUP_TONES: Record<SettingsGroup, "mint" | "pink" | "peach" | "lilac" | "
   "Calendar & appointments": "peach",
   Notifications: "lilac",
   "Payments & checkout": "blue",
-  Reports: "mint",
   Advanced: "grey",
 };
 
@@ -160,13 +157,6 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
     title: "Payment Methods",
     eyebrow: "Payments & checkout",
     description: "Manage custom payment methods for checkout.",
-    status: "available",
-  },
-  {
-    id: "reports",
-    title: "Reports",
-    eyebrow: "Reports",
-    description: "Sales, team performance and utilization, client retention, and appointment trends.",
     status: "available",
   },
 ];
@@ -343,14 +333,6 @@ export function SettingsPage({
                   tenant={tenant}
                   onTenantUpdated={onTenantUpdated}
                   tenantSlug={currentUser.tenantSlug}
-                />
-              ) : section.id === "reports" ? (
-                <ReportsSection
-                  tenantSlug={currentUser.tenantSlug}
-                  tenantTimezone={tenant?.timezone ?? "UTC"}
-                  canViewReports={hasPermission(currentUser, "reports.view")}
-                  canViewFinancial={hasPermission(currentUser, "reports.financial")}
-                  canExport={hasPermission(currentUser, "reports.export")}
                 />
               ) : section.id === "payments" ? (
                 <PaymentsSettingsSection

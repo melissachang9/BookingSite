@@ -232,3 +232,50 @@ export type TaxReport = {
   byKind: Array<{ kind: "service" | "add_on" | "product"; salesCents: number; taxCents: number }>;
   byLocation: Array<{ locationId?: string | null; locationName?: string | null; salesCents: number; taxCents: number }>;
 };
+
+// ---------------------------------------------------------------------------
+// Marketing spend and acquisition cost (Reports → Marketing).
+// ---------------------------------------------------------------------------
+
+export type MarketingSpendEntry = {
+  id: string;
+  /** Lowercase, matching a customer's first-touch source (e.g. "instagram"). */
+  channel: string;
+  campaign?: string | null;
+  periodStart: string;
+  periodEnd: string;
+  amountCents: number;
+  note?: string | null;
+  /** "manual" today; an ad-platform import will write its own name. */
+  sourceSystem: string;
+  createdByName?: string | null;
+  createdAt: string;
+};
+
+export type MarketingSpendListResponse = { items: MarketingSpendEntry[] };
+
+export type CreateMarketingSpendRequest = {
+  channel: string;
+  campaign?: string | null;
+  periodStart: string;
+  periodEnd: string;
+  amountCents: number;
+  note?: string | null;
+};
+
+export type MarketingChannelRow = {
+  channel: string;
+  label: string;
+  spendCents: number;
+  newClients: number;
+  /** Spend ÷ new clients from the same channel; null when the channel won nobody. */
+  cacCents?: number | null;
+};
+
+export type MarketingReport = {
+  range: ReportRange;
+  channels: MarketingChannelRow[];
+  totalSpendCents: number;
+  totalNewClients: number;
+  blendedCacCents?: number | null;
+};

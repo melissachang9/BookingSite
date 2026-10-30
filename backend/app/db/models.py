@@ -72,6 +72,15 @@ class Customer(Base, IdMixin, TimestampMixin):
     acquired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     source_channel: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     referred_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Where the customer first came from. Written once when the customer is created and never changed,
+    # so acquisition reports keep the original truth even after later visits come from elsewhere.
+    first_touch_source: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    first_touch_medium: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    first_touch_campaign: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    first_touch_referrer_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    first_touch_landing_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    first_booking_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    first_booking_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     notes_history: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     sms_consent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
     sms_phone: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
@@ -395,6 +404,12 @@ class Booking(Base, IdMixin, TimestampMixin):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Reporting/attribution facts (null on bookings that predate tracking).
     source_channel: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # Marketing attribution copied from the draft this booking was made from.
+    utm_source: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    utm_medium: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    utm_campaign: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    referrer_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    landing_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     canceled_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)  # staff | customer | system
     cancel_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     no_show_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -689,6 +704,12 @@ class BookingDraft(Base, IdMixin, TimestampMixin):
     price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     deposit_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Marketing attribution captured by the booking page (all null for staff-entered drafts).
+    utm_source: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    utm_medium: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    utm_campaign: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    referrer_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    landing_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     # Staff who created the draft from the calendar (null for online bookings).
     created_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     # Staff-only notes; copied to the booking on confirmation, never shown publicly.
@@ -904,6 +925,29 @@ class Resource(Base, IdMixin, TimestampMixin):
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
     service_links: Mapped[list[ServiceResource]] = relationship(back_populates="resource", cascade="all, delete-orphan")
+
+
+class MarketingSpend(Base, IdMixin, TimestampMixin):
+    """Money spent to win customers on one channel over a period (the cost side of CAC).
+
+    Entered by hand today; `source_system` and `external_ref` let an ad-platform import write the same
+    rows later. Entries are never deleted: removing one stamps who removed it and when.
+    """
+
+    __tablename__ = "marketing_spend"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    channel: Mapped[str] = mapped_column(String(64), nullable=False)
+    campaign: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    note: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    source_system: Mapped[str] = mapped_column(String(32), nullable=False, default="manual", server_default="manual")
+    external_ref: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    removed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    removed_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
 
 
 class ResourceBlock(Base, IdMixin, TimestampMixin):

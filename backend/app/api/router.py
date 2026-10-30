@@ -10,6 +10,7 @@ from app.api.routes.payment_processors import router as payment_processors_route
 from app.api.routes.payments import router as payments_router
 from app.api.routes.sales import router as sales_router
 from app.api.routes.reports import router as reports_router
+from app.api.routes.marketing import router as marketing_router
 from app.api.routes.resources import router as resources_router
 from app.api.routes.service_add_ons import router as service_add_ons_router
 from app.api.routes.tenants import router as tenants_router
@@ -41,6 +42,7 @@ api_router.include_router(payments_router)
 api_router.include_router(sales_router)
 api_router.include_router(payment_processors_router)
 api_router.include_router(reports_router)
+api_router.include_router(marketing_router)
 api_router.include_router(resources_router)
 api_router.include_router(service_add_ons_router)
 api_router.include_router(health_router)

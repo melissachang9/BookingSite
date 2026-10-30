@@ -1,7 +1,9 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { ATTRIBUTION_COOKIE, parseAttributionCookie } from "../../../lib/attribution";
 import { storefrontApi } from "../../../lib/storefront-api";
 
 const readRequiredField = (formData: FormData, key: string): string => {
@@ -24,6 +26,8 @@ export async function startBookingDraftAction(formData: FormData) {
   const locationId = typeof locationIdValue === "string" && locationIdValue.length > 0 ? locationIdValue : undefined;
   const addOnIds = formData.getAll("addOnId").filter((value): value is string => typeof value === "string" && value.length > 0);
 
+  const attribution = parseAttributionCookie((await cookies()).get(ATTRIBUTION_COOKIE)?.value);
+
   let draftId: string;
 
   try {
@@ -34,6 +38,7 @@ export async function startBookingDraftAction(formData: FormData) {
       startsAt,
       locationId,
       addOnIds,
+      attribution,
     });
 
     draftId = draft.id;

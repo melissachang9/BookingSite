@@ -179,7 +179,9 @@ async def build_clients_report(
     source_counts: dict[str, int] = defaultdict(int)
     for cid in new_ids:
         customer = customers.get(cid)
-        source = (customer.source_channel if customer else None) or "unknown"
+        # The recorded first touch (utm source, ?ref= link or referring site) is finer than the channel,
+        # which is all that older customers have.
+        source = (customer.first_touch_source if customer else None) or (customer.source_channel if customer else None) or "unknown"
         source_counts[source] += 1
     sources = [
         CountRow(key=key, label=key.replace("_", " ").capitalize(), count=count)

@@ -6906,6 +6906,11 @@ select:disabled {
 .rp-check { display: inline-flex; align-items: center; gap: 6px; font: 500 12px var(--cs-font); color: var(--cs-ink); cursor: pointer; }
 .rp-export { margin-left: auto; padding: 6px 14px; border: 0; border-radius: var(--cs-r-pill); background: var(--cs-ink); font: 600 12px var(--cs-font); color: #fff; cursor: pointer; }
 .rp-export:disabled { opacity: .5; cursor: not-allowed; }
+.rp-spend-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 12px; margin-bottom: 12px; padding: 12px 14px; border-radius: var(--cs-r-14); background: var(--cs-canvas); }
+.rp-spend-form label { display: flex; flex-direction: column; gap: 4px; font: 600 11px var(--cs-font); color: var(--cs-label); }
+.rp-spend-form input { padding: 6px 10px; border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-pill); background: var(--cs-surface); font: 500 12px var(--cs-font); color: var(--cs-ink); }
+.rp-spend-form__actions { grid-column: 1 / -1; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.rp-spend-form__actions .cs-error { margin: 0 auto 0 0; }
 .rp-status { margin: 0; padding: 24px 4px; font: 500 13px var(--cs-font); color: var(--cs-label); }
 
 .rp-body { display: flex; flex-direction: column; gap: 12px; }

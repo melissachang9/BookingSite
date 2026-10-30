@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState, type ComponentProps, type FormEvent, type ReactNode } from "react";
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import type {
   AuthenticatedUser,
@@ -26,6 +26,7 @@ import {
 import { CalendarPage } from "./calendar-page";
 import { MoneyFormatProvider } from "./money-format";
 import { PaymentsPage } from "./payments-page";
+import { ReportsPage } from "./reports-page";
 import { SettingsPage } from "./settings-page";
 import { CloverCallbackPage } from "./payments-settings-section";
 import { StaffPage } from "./staff-page";
@@ -134,6 +135,16 @@ const routeDefinitions: RouteDefinition[] = [
     tone: "progress",
     workstreams: ["Transactions", "Money held", "Follow-up"],
     actions: ["Review transactions", "Send reminder", "Copy link"],
+  },
+  {
+    path: "/reports",
+    title: "Reports",
+    eyebrow: "Business performance",
+    description: "Sales, team, clients, appointments and, as the data builds up, where customers come from and what they are worth.",
+    metric: "Reports",
+    tone: "progress",
+    workstreams: ["Sales and team", "Client retention", "Acquisition and cost"],
+    actions: ["Pick a date range", "Compare periods", "Export CSV"],
   },
   {
     path: "/forms",
@@ -282,6 +293,13 @@ function getAuthNoticeMessage(): string | null {
   return null;
 }
 
+/** Reports used to be a Settings section, so old `/settings#reports` links go to the Reports page. */
+function SettingsRoute(props: ComponentProps<typeof SettingsPage>) {
+  const { hash } = useLocation();
+  if (hash === "#reports") return <Navigate to="/reports" replace />;
+  return <SettingsPage {...props} />;
+}
+
 function LoginRedirect() {
   const redirectPathRef = useRef<string>(readStoredRedirectPath() ?? "/calendar");
 
@@ -360,7 +378,8 @@ function AuthenticatedLayout({
       definition.path !== "/onboarding" &&
       !definition.group &&
       // The payments queue is only for people allowed to see payments.
-      (definition.path !== "/payments" || hasPermission(session.user, "payments.view")),
+      (definition.path !== "/payments" || hasPermission(session.user, "payments.view")) &&
+      (definition.path !== "/reports" || hasPermission(session.user, "reports.view")),
   );
 
   const getInitials = (name: string): string => {
@@ -393,6 +412,11 @@ function AuthenticatedLayout({
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="6" width="18" height="12" rx="2" />
         <path d="M3 10h18M7 15h3" />
+      </svg>
+    ),
+    "/reports": (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 20V10M10 20V4M16 20v-8M22 20H2" />
       </svg>
     ),
     "/forms": (
@@ -858,11 +882,21 @@ export function App() {
               />
             }
           />
+          <Route
+            path="/reports"
+            element={
+              <ReportsPage
+                definition={pageByPath.get("reports") ?? routeDefinitions[0]}
+                currentUser={session.user}
+                tenant={tenantSummary}
+              />
+            }
+          />
           <Route path="/forms" element={<FormsPage definition={pageByPath.get("forms") ?? routeDefinitions[0]} currentUser={session.user} />} />
           <Route
             path="/settings"
             element={
-              <SettingsPage
+              <SettingsRoute
                 definition={pageByPath.get("settings") ?? routeDefinitions[0]}
                 currentUser={session.user}
                 tenant={tenantSummary}

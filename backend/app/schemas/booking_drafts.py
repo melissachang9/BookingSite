@@ -58,6 +58,16 @@ class CustomerSummaryResponse(CamelModel):
     wallet_balance_cents: int = 0
 
 
+class AttributionInput(CamelModel):
+    """Where the visitor came from, captured by the booking page on their first landing."""
+
+    source: str | None = Field(default=None, max_length=64)
+    medium: str | None = Field(default=None, max_length=64)
+    campaign: str | None = Field(default=None, max_length=128)
+    referrer_url: str | None = Field(default=None, max_length=500)
+    landing_path: str | None = Field(default=None, max_length=255)
+
+
 class CreateBookingDraftRequest(CamelModel):
     tenant_slug: str
     service_id: str
@@ -70,6 +80,8 @@ class CreateBookingDraftRequest(CamelModel):
     add_on_ids: list[str] = Field(default_factory=list, max_length=20)
     # Staff-only notes for the team; ignored for online bookings.
     notes: str | None = Field(default=None, max_length=1000)
+    # Marketing attribution from the booking page; ignored for staff-entered drafts.
+    attribution: AttributionInput | None = None
 
 
 class ReleaseBookingDraftRequest(CamelModel):

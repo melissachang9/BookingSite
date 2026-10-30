@@ -50,6 +50,7 @@ import type {
   ReleaseBookingDraftRequest,
   CreateFormRequest,
   CreateLocationRequest,
+  CreateMarketingSpendRequest,
   CreateResourceBlockRequest,
   CreateResourceRequest,
   CustomerListResponse,
@@ -99,6 +100,9 @@ import type {
   ReplaceProviderServiceVariantsRequest,
   ReplaceServiceResourcesRequest,
   ReplaceUserPermissionsRequest,
+  MarketingReport,
+  MarketingSpendEntry,
+  MarketingSpendListResponse,
   ResourceBlock,
   ResourceBlockListResponse,
   ResourceListResponse,
@@ -172,6 +176,14 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.get<ClientsReport>(`tenants/${tenantSlug}/reports/clients`, { query: reportQuery(query) }),
   getAppointmentsReport: (tenantSlug: string, query: ReportQuery) =>
     client.get<AppointmentsReport>(`tenants/${tenantSlug}/reports/appointments`, { query: reportQuery(query) }),
+  getMarketingReport: (tenantSlug: string, query: ReportQuery) =>
+    client.get<MarketingReport>(`tenants/${tenantSlug}/marketing/report`, { query: { from: query.from, to: query.to } }),
+  listMarketingSpend: (tenantSlug: string, query: Pick<ReportQuery, "from" | "to">) =>
+    client.get<MarketingSpendListResponse>(`tenants/${tenantSlug}/marketing/spend`, { query: { from: query.from, to: query.to } }),
+  createMarketingSpend: (tenantSlug: string, body: CreateMarketingSpendRequest) =>
+    client.post<MarketingSpendEntry, CreateMarketingSpendRequest>(`tenants/${tenantSlug}/marketing/spend`, body),
+  removeMarketingSpend: (tenantSlug: string, spendId: string) =>
+    client.delete<void>(`tenants/${tenantSlug}/marketing/spend/${spendId}`),
   exportReportCsv: (tenantSlug: string, kind: "sales" | "team" | "clients" | "appointments", query: ReportQuery) =>
     client.getText(`tenants/${tenantSlug}/reports/${kind}`, { query: { ...reportQuery(query), format: "csv" } }),
   updateTenantSettings: (tenantSlug: string, body: UpdateTenantSettingsRequest) =>
