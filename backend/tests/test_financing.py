@@ -448,3 +448,76 @@ def test_booking_attempts_require_customer_access_and_stay_in_the_tenant(client)
 
     assert client.get(f"/api/v1/tenants/brow-beauty-lab/customers/{customer_id}").status_code in (401, 403)
     assert client.get(f"/api/v1/tenants/not-a-studio/customers/{customer_id}", headers=headers).status_code in (403, 404)
+
+
+def _lead(client, headers, name: str, *, opened_financing: bool) -> dict:
+    draft = _held_draft(client, headers)
+    url = f"/api/v1/tenants/brow-beauty-lab/booking-drafts/{draft['id']}"
+    slug = name.lower().replace(" ", "")
+    saved = client.patch(url, json={"customer": {"name": name, "email": f"{slug}@example.com", "phone": f"604555{abs(hash(slug)) % 10000:04d}"}})
+    assert saved.status_code == 200, saved.json()
+    if opened_financing:
+        assert client.post(f"{url}/financing-started").status_code == 200
+    _lapse_draft(draft["id"])
+    return {"draftId": draft["id"], "customerId": saved.json()["customer"]["id"], "name": name}
+
+
+def _follow_ups(client, headers, **params) -> list[dict]:
+    response = client.get("/api/v1/tenants/brow-beauty-lab/booking-attempts", params=params, headers=headers)
+    assert response.status_code == 200, response.json()
+    return response.json()["items"]
+
+
+def test_follow_up_list_puts_clients_who_opened_financing_first(client) -> None:
+    headers = _auth_headers(client)
+    cold = _lead(client, headers, "Cold Cart", opened_financing=False)
+    warm = _lead(client, headers, "Warm Lead", opened_financing=True)
+
+    items = _follow_ups(client, headers)
+    ours = [i for i in items if i["id"] in {cold["draftId"], warm["draftId"]}]
+    assert [(i["customerName"], i["outcome"]) for i in ours] == [("Warm Lead", "financing_started"), ("Cold Cart", "abandoned")]
+    assert ours[0]["customerEmail"] == "warmlead@example.com"
+
+    assert [i["id"] for i in _follow_ups(client, headers, outcome="abandoned") if i["id"] in {cold["draftId"], warm["draftId"]}] == [cold["draftId"]]
+    assert [i["id"] for i in _follow_ups(client, headers, outcome="financing_started") if i["id"] in {cold["draftId"], warm["draftId"]}] == [warm["draftId"]]
+
+
+def test_follow_up_list_leaves_out_holds_still_in_progress(client) -> None:
+    headers = _auth_headers(client)
+    draft = _held_draft(client, headers)
+    client.patch(
+        f"/api/v1/tenants/brow-beauty-lab/booking-drafts/{draft['id']}",
+        json={"customer": {"name": "Still Here", "email": "stillhere@example.com", "phone": "6045550999"}},
+    )
+    assert draft["id"] not in {i["id"] for i in _follow_ups(client, headers)}
+
+
+def test_marking_followed_up_records_who_and_hides_it_from_the_open_list(client) -> None:
+    headers = _auth_headers(client)
+    lead = _lead(client, headers, "Call Me Back", opened_financing=True)
+    url = f"/api/v1/tenants/brow-beauty-lab/booking-attempts/{lead['draftId']}/follow-up"
+
+    done = client.post(url, json={"note": "Left a voicemail"}, headers=headers)
+    assert done.status_code == 200, done.json()
+    body = done.json()
+    assert body["followUpAt"] is not None
+    assert body["followUpNote"] == "Left a voicemail"
+    assert body["followUpByName"]
+
+    assert lead["draftId"] not in {i["id"] for i in _follow_ups(client, headers)}
+    assert lead["draftId"] in {i["id"] for i in _follow_ups(client, headers, includeFollowedUp="true")}
+    # The profile row shows it too.
+    [attempt] = [a for a in _attempts(client, headers, lead["customerId"]) if a["id"] == lead["draftId"]]
+    assert attempt["followUpNote"] == "Left a voicemail"
+
+
+def test_follow_up_needs_sign_in_and_stays_in_the_tenant(client) -> None:
+    headers = _auth_headers(client)
+    lead = _lead(client, headers, "Not Yours", opened_financing=True)
+    base = "/api/v1/tenants/brow-beauty-lab/booking-attempts"
+
+    assert client.get(base).status_code in (401, 403)
+    assert client.post(f"{base}/{lead['draftId']}/follow-up", json={}).status_code in (401, 403)
+    assert client.post(f"{base}/missing/follow-up", json={}, headers=headers).status_code == 404
+    other = client.post(f"/api/v1/tenants/not-a-studio/booking-attempts/{lead['draftId']}/follow-up", json={}, headers=headers)
+    assert other.status_code in (403, 404)

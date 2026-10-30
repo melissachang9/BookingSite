@@ -83,6 +83,7 @@ function mockLoaders() {
   vi.spyOn(platformApi, "listCustomers").mockResolvedValue(customerList);
   vi.spyOn(platformApi, "getCustomerProfile").mockResolvedValue(profileResponse);
   vi.spyOn(platformApi, "listCustomerFormResponses").mockResolvedValue(formResponses);
+  vi.spyOn(platformApi, "listBookingAttempts").mockResolvedValue({ items: [] });
 }
 
 beforeEach(() => {
@@ -175,7 +176,7 @@ describe("CustomersPage unfinished bookings", () => {
 
     const section = await screen.findByRole("region", { name: "Unfinished bookings" });
     expect(section).toHaveTextContent("Signature Facial");
-    expect(section).toHaveTextContent("Follow up: financing");
+    expect(section).toHaveTextContent("Follow up: opened financing");
     expect(section).toHaveTextContent("opened financing");
     expect(section).toHaveTextContent("Brow Shape");
     expect(section).toHaveTextContent("Follow up: abandoned");
@@ -204,5 +205,89 @@ describe("CustomersPage unfinished bookings", () => {
     fireEvent.click(screen.getByRole("button", { name: /Taylor Guest/ }));
     expect(await screen.findByText("No bookings yet.")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Unfinished bookings" })).not.toBeInTheDocument();
+  });
+});
+
+describe("CustomersPage follow up tab", () => {
+  const lead = {
+    outcome: "abandoned" as const,
+    serviceName: "Signature Facial",
+    providerName: "Maya",
+    startsAt: "2026-06-02T17:00:00.000Z",
+    createdAt: "2026-05-25T18:00:00.000Z",
+    bookedSince: false,
+    bookingMethod: "public_online",
+    customerId: "customer-1",
+    customerEmail: "pat@example.com",
+    customerPhone: "6045550101",
+  };
+  const cold = { ...lead, id: "cold", customerName: "Cold Cart" };
+  const warm = {
+    ...lead,
+    id: "warm",
+    outcome: "financing_started" as const,
+    customerName: "Warm Lead",
+    financingStartedAt: "2026-05-25T18:05:00.000Z",
+  };
+
+  const managerUser: AuthenticatedUser = {
+    ...ownerUser,
+    permissions: [
+      { key: "customers.view", allowed: true },
+      { key: "customers.manage", allowed: true },
+    ],
+  };
+
+  async function openFollowUp(currentUser: AuthenticatedUser = managerUser) {
+    render(<CustomersPage definition={definition} currentUser={currentUser} />);
+    await waitFor(() => expect(screen.getByText("Taylor Guest")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("tab", { name: /Follow up/ }));
+  }
+
+  it("lists clients who opened financing and clients who abandoned, with counts and filters", async () => {
+    vi.spyOn(platformApi, "listBookingAttempts").mockResolvedValue({ items: [warm, cold] });
+    await openFollowUp();
+
+    const list = await screen.findByRole("region", { name: "Follow up" });
+    expect(list).toHaveTextContent("Warm Lead");
+    expect(list).toHaveTextContent("Opened financing");
+    expect(list).toHaveTextContent("opened financing May 25");
+    expect(list).toHaveTextContent("Cold Cart");
+    expect(list).toHaveTextContent("6045550101 · pat@example.com");
+    expect(screen.getByRole("button", { name: "All · 2" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Opened financing · 1" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Abandoned · 1" }));
+    expect(screen.queryByText("Warm Lead")).not.toBeInTheDocument();
+    expect(screen.getByText("Cold Cart")).toBeInTheDocument();
+  });
+
+  it("marks a client as followed up with a note and moves them out of the open list", async () => {
+    vi.spyOn(platformApi, "listBookingAttempts").mockResolvedValue({ items: [warm] });
+    const mark = vi.spyOn(platformApi, "markBookingAttemptFollowedUp").mockResolvedValue({
+      ...warm,
+      followUpAt: "2026-05-26T15:00:00.000Z",
+      followUpByName: "Owner",
+      followUpNote: "Left a voicemail",
+    });
+    await openFollowUp();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Mark followed up" }));
+    fireEvent.change(screen.getByLabelText("Follow-up note for Warm Lead"), { target: { value: "Left a voicemail" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mark).toHaveBeenCalledWith("brow-beauty-lab", "warm", { note: "Left a voicemail" }));
+    await waitFor(() => expect(screen.queryByText("Warm Lead")).not.toBeInTheDocument());
+    expect(screen.getByText("Nobody is waiting for a follow-up.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Show followed up"));
+    expect(screen.getByText(/Followed up May 26.*by Owner: Left a voicemail/)).toBeInTheDocument();
+  });
+
+  it("hides the follow-up action from staff who can't manage clients", async () => {
+    vi.spyOn(platformApi, "listBookingAttempts").mockResolvedValue({ items: [warm] });
+    await openFollowUp(ownerUser);
+    expect(await screen.findByText("Warm Lead")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mark followed up" })).not.toBeInTheDocument();
   });
 });

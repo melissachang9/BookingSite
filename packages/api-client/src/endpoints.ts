@@ -52,7 +52,10 @@ import type {
   CreateLocationRequest,
   CreateResourceRequest,
   CustomerListResponse,
+  CustomerBookingAttempt,
+  CustomerBookingAttemptListResponse,
   CustomerProfileResponse,
+  MarkBookingAttemptFollowedUpRequest,
   AppointmentsReport,
   ClientsReport,
   DashboardReport,
@@ -659,6 +662,15 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.get<CustomerListResponse>(`tenants/${tenantSlug}/customers`, {
       query: search ? { search } : undefined,
     }),
+  listBookingAttempts: (tenantSlug: string, options: { includeFollowedUp?: boolean } = {}) =>
+    client.get<CustomerBookingAttemptListResponse>(`tenants/${tenantSlug}/booking-attempts`, {
+      query: options.includeFollowedUp ? { includeFollowedUp: "true" } : undefined,
+    }),
+  markBookingAttemptFollowedUp: (tenantSlug: string, bookingDraftId: string, body: MarkBookingAttemptFollowedUpRequest = {}) =>
+    client.post<CustomerBookingAttempt, MarkBookingAttemptFollowedUpRequest>(
+      `tenants/${tenantSlug}/booking-attempts/${bookingDraftId}/follow-up`,
+      body,
+    ),
   getCustomerProfile: (tenantSlug: string, customerId: string) =>
     client.get<CustomerProfileResponse>(`tenants/${tenantSlug}/customers/${customerId}`),
   updateCustomer: (tenantSlug: string, customerId: string, body: UpdateCustomerRequest) =>

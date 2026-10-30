@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from pydantic import Field
+
 from app.schemas.base import CamelModel
 from app.schemas.booking_drafts import CustomerSummaryResponse
 from app.schemas.bookings import PaginationMetaResponse
@@ -47,6 +49,22 @@ class CustomerBookingAttempt(CamelModel):
     # The client has since booked this service, so there is nothing left to chase.
     booked_since: bool = False
     booking_method: str
+    customer_id: str | None = None
+    customer_name: str | None = None
+    customer_email: str | None = None
+    customer_phone: str | None = None
+    # Set once staff have followed up (who, when, and what came of it).
+    follow_up_at: datetime | None = None
+    follow_up_by_name: str | None = None
+    follow_up_note: str | None = None
+
+
+class CustomerBookingAttemptListResponse(CamelModel):
+    items: list[CustomerBookingAttempt]
+
+
+class MarkBookingAttemptFollowedUpRequest(CamelModel):
+    note: str | None = Field(default=None, max_length=500)
 
 
 class CustomerPaymentEntry(CamelModel):

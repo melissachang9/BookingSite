@@ -17,6 +17,7 @@ from app.services.presenters import (
     booking_price_cents,
     customer_to_summary,
 )
+from app.services.audit import record_audit
 from app.services.tenants import get_tenant_by_slug
 from app.services.wallet import record_wallet_transaction
 
@@ -40,28 +41,35 @@ def _parse_birthday(raw: str) -> date | None:
 _LIVE_DRAFT_STATUSES = {"draft", "slot_held", "awaiting_form", "awaiting_payment"}
 
 
-def _booking_attempts(drafts: list[BookingDraft], booked: list[tuple[str, datetime]]) -> list[CustomerBookingAttempt]:
-    """Unfinished online drafts, newest first. Staff releasing a hold on purpose is only worth
-    keeping when the client had opened financing."""
+def _aware(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _attempt_outcome(draft: BookingDraft, now: datetime) -> str | None:
+    """financing_started | in_progress | abandoned, or None when the draft isn't an unfinished online
+    booking worth keeping (confirmed, or a staff-entered/released hold with no financing click)."""
+    if draft.confirmed_booking_id is not None or draft.status == "confirmed":
+        return None
+    if draft.financing_started_at is not None:
+        return "financing_started"
+    if draft.booking_method == "staff_entered" or draft.status == "canceled":
+        return None
+    if draft.status in _LIVE_DRAFT_STATUSES and _aware(draft.expires_at) > now:
+        return "in_progress"
+    return "abandoned"
+
+
+def _booking_attempts(drafts: list[BookingDraft], booked: list[tuple[str, str, datetime]]) -> list[CustomerBookingAttempt]:
+    """Unfinished online drafts, newest first. `booked` is (customer_id, service_id, created_at) of the
+    client's live bookings, used to tell when they came back and booked anyway."""
     now = datetime.now(timezone.utc)
-
-    def aware(value: datetime) -> datetime:
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-
     entries: list[CustomerBookingAttempt] = []
     for draft in drafts:
-        if draft.confirmed_booking_id is not None or draft.status == "confirmed":
+        outcome = _attempt_outcome(draft, now)
+        if outcome is None:
             continue
-        if draft.booking_method == "staff_entered" and draft.financing_started_at is None:
-            continue
-        if draft.financing_started_at is not None:
-            outcome = "financing_started"
-        elif draft.status == "canceled":
-            continue
-        elif draft.status in _LIVE_DRAFT_STATUSES and aware(draft.expires_at) > now:
-            outcome = "in_progress"
-        else:
-            outcome = "abandoned"
+        customer = draft.customer
+        followed_by = draft.follow_up_by
         entries.append(
             CustomerBookingAttempt(
                 id=draft.id,
@@ -72,35 +80,134 @@ def _booking_attempts(drafts: list[BookingDraft], booked: list[tuple[str, dateti
                 created_at=draft.created_at,
                 financing_started_at=draft.financing_started_at,
                 booked_since=any(
-                    service_id == draft.service_id and aware(created) >= aware(draft.created_at)
-                    for service_id, created in booked
+                    customer_id == draft.customer_id
+                    and service_id == draft.service_id
+                    and _aware(created) >= _aware(draft.created_at)
+                    for customer_id, service_id, created in booked
                 ),
                 booking_method=draft.booking_method,
+                customer_id=draft.customer_id,
+                customer_name=customer.name if customer is not None else None,
+                customer_email=customer.email if customer is not None else None,
+                customer_phone=customer.phone if customer is not None else None,
+                follow_up_at=draft.follow_up_at,
+                follow_up_by_name=followed_by.name if followed_by is not None else None,
+                follow_up_note=draft.follow_up_note,
             )
         )
     return entries
+
+
+_ATTEMPT_LOAD_OPTIONS = (
+    selectinload(BookingDraft.service),
+    selectinload(BookingDraft.provider),
+    selectinload(BookingDraft.customer),
+    selectinload(BookingDraft.follow_up_by),
+)
+
+
+async def _booked_pairs(session: AsyncSession, tenant_id: str, customer_ids: set[str]) -> list[tuple[str, str, datetime]]:
+    if not customer_ids:
+        return []
+    rows = (
+        await session.execute(
+            select(Booking.customer_id, Booking.service_id, Booking.created_at).where(
+                Booking.tenant_id == tenant_id,
+                Booking.customer_id.in_(customer_ids),
+                Booking.status.notin_(["canceled"]),
+            )
+        )
+    ).all()
+    return [(row[0], row[1], row[2]) for row in rows]
 
 
 async def _load_booking_attempts(session: AsyncSession, tenant_id: str, customer_id: str) -> list[CustomerBookingAttempt]:
     drafts = (
         await session.scalars(
             select(BookingDraft)
-            .options(selectinload(BookingDraft.service), selectinload(BookingDraft.provider))
+            .options(*_ATTEMPT_LOAD_OPTIONS)
             .where(BookingDraft.tenant_id == tenant_id, BookingDraft.customer_id == customer_id)
             .order_by(BookingDraft.created_at.desc())
             .limit(25)
         )
     ).all()
-    booked = (
-        await session.execute(
-            select(Booking.service_id, Booking.created_at).where(
-                Booking.tenant_id == tenant_id,
-                Booking.customer_id == customer_id,
-                Booking.status.notin_(["canceled"]),
-            )
+    return _booking_attempts(list(drafts), await _booked_pairs(session, tenant_id, {customer_id}))
+
+
+async def list_booking_attempts(
+    session: AsyncSession,
+    tenant_slug: str,
+    *,
+    outcome: str | None = None,
+    include_followed_up: bool = False,
+) -> list[CustomerBookingAttempt]:
+    """Clients to circle back with: opened financing first (the warmer lead), then abandoned checkouts."""
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    drafts = (
+        await session.scalars(
+            select(BookingDraft)
+            .options(*_ATTEMPT_LOAD_OPTIONS)
+            .where(BookingDraft.tenant_id == tenant.id, BookingDraft.customer_id.is_not(None))
+            .order_by(BookingDraft.created_at.desc())
+            .limit(500)
         )
     ).all()
-    return _booking_attempts(list(drafts), [(row[0], row[1]) for row in booked])
+    booked = await _booked_pairs(session, tenant.id, {d.customer_id for d in drafts if d.customer_id})
+    items = [
+        item
+        for item in _booking_attempts(list(drafts), booked)
+        if item.outcome in {"financing_started", "abandoned"}
+        and not item.booked_since
+        and (include_followed_up or item.follow_up_at is None)
+        and (outcome is None or item.outcome == outcome)
+    ]
+    items.sort(
+        key=lambda item: (
+            0 if item.outcome == "financing_started" else 1,
+            -(_aware(item.financing_started_at or item.created_at).timestamp()),
+        )
+    )
+    return items
+
+
+async def mark_booking_attempt_followed_up(
+    session: AsyncSession,
+    tenant_slug: str,
+    booking_draft_id: str,
+    note: str | None,
+    actor: User,
+) -> CustomerBookingAttempt:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    draft = await session.scalar(
+        select(BookingDraft)
+        .options(*_ATTEMPT_LOAD_OPTIONS)
+        .where(BookingDraft.id == booking_draft_id, BookingDraft.tenant_id == tenant.id)
+    )
+    if draft is None or draft.customer_id is None:
+        raise api_exception(404, "not_found", "Unfinished booking was not found for this tenant.")
+    if _attempt_outcome(draft, datetime.now(timezone.utc)) not in {"financing_started", "abandoned"}:
+        raise api_exception(409, "conflict", "This booking is not waiting for follow-up.")
+    draft.follow_up_at = datetime.now(timezone.utc)
+    draft.follow_up_by_user_id = actor.id
+    draft.follow_up_note = (note or "").strip() or None
+    await record_audit(
+        session,
+        tenant_id=tenant.id,
+        entity_type="booking_draft",
+        entity_id=draft.id,
+        action="follow_up",
+        actor=actor,
+        notes=draft.follow_up_note,
+    )
+    await session.commit()
+    draft = await session.scalar(
+        select(BookingDraft)
+        .options(*_ATTEMPT_LOAD_OPTIONS)
+        .where(BookingDraft.id == booking_draft_id)
+        .execution_options(populate_existing=True)
+    )
+    booked = await _booked_pairs(session, tenant.id, {draft.customer_id})
+    return _booking_attempts([draft], booked)[0]
 
 
 def _build_customer_profile(

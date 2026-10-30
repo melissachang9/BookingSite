@@ -7,12 +7,12 @@ from app.api.dependencies.auth import get_current_user, require_tenant_permissio
 from app.core.http import api_exception
 from app.db.models import User
 from app.db.session import get_db_session
-from app.schemas.customers import CustomerListResponse, CustomerLookupResponse, CustomerProfileResponse, UpdateCustomerRequest, UpsertCustomerRequest, UpsertCustomerResponse
+from app.schemas.customers import CustomerBookingAttempt, CustomerBookingAttemptListResponse, CustomerListResponse, MarkBookingAttemptFollowedUpRequest, CustomerLookupResponse, CustomerProfileResponse, UpdateCustomerRequest, UpsertCustomerRequest, UpsertCustomerResponse
 from app.schemas.forms import BookingFormResponseListResponse
 from app.schemas.catalog import TenantUserListResponse
 from app.services.auth import ROLE_PERMISSION_ALLOWLIST
 from app.services.booking_forms import list_customer_form_responses
-from app.services.customers import create_or_update_customer, get_customer_profile, list_tenant_customers, lookup_tenant_customers, update_customer
+from app.services.customers import create_or_update_customer, get_customer_profile, list_booking_attempts, list_tenant_customers, mark_booking_attempt_followed_up, lookup_tenant_customers, update_customer
 from app.services.audit import record_audit
 from app.services.tenants import list_tenant_users
 
@@ -87,6 +87,37 @@ async def list_owner_candidates(
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantUserListResponse:
     return await list_tenant_users(session, tenant_slug)
+
+
+@router.get(
+    "/tenants/{tenant_slug}/booking-attempts",
+    response_model=CustomerBookingAttemptListResponse,
+    summary="Clients who opened financing or left checkout without booking, for follow-up",
+)
+async def list_booking_attempts_route(
+    tenant_slug: str,
+    outcome: str | None = Query(default=None, pattern="^(financing_started|abandoned)$"),
+    include_followed_up: bool = Query(default=False, alias="includeFollowedUp"),
+    _: object = Depends(require_tenant_permission("customers.view")),
+    session: AsyncSession = Depends(get_db_session),
+) -> CustomerBookingAttemptListResponse:
+    items = await list_booking_attempts(session, tenant_slug, outcome=outcome, include_followed_up=include_followed_up)
+    return CustomerBookingAttemptListResponse(items=items)
+
+
+@router.post(
+    "/tenants/{tenant_slug}/booking-attempts/{booking_draft_id}/follow-up",
+    response_model=CustomerBookingAttempt,
+    summary="Mark an unfinished booking as followed up",
+)
+async def mark_booking_attempt_followed_up_route(
+    tenant_slug: str,
+    booking_draft_id: str,
+    payload: MarkBookingAttemptFollowedUpRequest,
+    actor: User = Depends(require_tenant_permission("customers.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> CustomerBookingAttempt:
+    return await mark_booking_attempt_followed_up(session, tenant_slug, booking_draft_id, payload.note, actor)
 
 
 @router.get(

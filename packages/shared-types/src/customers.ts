@@ -64,6 +64,22 @@ export type CustomerBookingAttempt = {
   /** The client has since booked this service. */
   bookedSince: boolean;
   bookingMethod: string;
+  customerId?: UUID | null;
+  customerName?: string | null;
+  customerEmail?: string | null;
+  customerPhone?: string | null;
+  /** Set once staff followed up. */
+  followUpAt?: ISODateString | null;
+  followUpByName?: string | null;
+  followUpNote?: string | null;
+};
+
+export type CustomerBookingAttemptListResponse = {
+  items: CustomerBookingAttempt[];
+};
+
+export type MarkBookingAttemptFollowedUpRequest = {
+  note?: string | null;
 };
 
 export type CustomerPaymentEntry = {

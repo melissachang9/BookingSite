@@ -698,10 +698,15 @@ class BookingDraft(Base, IdMixin, TimestampMixin):
     # When the customer first clicked through to the studio's financing page. Applying there does not
     # confirm the booking, so this is how staff can tell the customer is mid-financing.
     financing_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Staff marked this unfinished booking as followed up (who, when, and what came of it).
+    follow_up_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    follow_up_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    follow_up_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="booking_drafts")
     location: Mapped[Optional["Location"]] = relationship(lazy="joined", viewonly=True)
     customer: Mapped[Optional[Customer]] = relationship(back_populates="booking_drafts")
+    follow_up_by: Mapped[Optional["User"]] = relationship(foreign_keys=[follow_up_by_user_id], viewonly=True)
     service: Mapped[Service] = relationship(back_populates="booking_drafts")
     provider: Mapped[Provider] = relationship(back_populates="booking_drafts")
     confirmed_booking: Mapped[Optional[Booking]] = relationship(back_populates="source_draft", uselist=False)
