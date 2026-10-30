@@ -643,6 +643,29 @@ function SalesView({ tenantSlug, query, compare }: { tenantSlug: string; query: 
               <Kpi label="Add-on sales" value={money(k.addOnSalesCents)} hint={`${percent(k.addOnAttachRate)} of visits`} current={k.addOnSalesCents} previous={p?.addOnSalesCents} />
             </div>
 
+            <section className="rp-card" aria-label="Profit">
+              <h4 className="rp-card__title">Profit</h4>
+              {report.margin.coverage ? (
+                <>
+                  <div className="rp-kpis rp-kpis--compact">
+                    <Kpi label="Gross profit" value={money(report.margin.grossProfitCents)} hint="Sales minus cost to deliver" />
+                    <Kpi label="Margin" value={percent(report.margin.margin)} />
+                    <Kpi label="Costs" value={money(report.margin.costCents)} />
+                    <Kpi label="Sales with a cost" value={percent(report.margin.coverage)} hint="Of line sales value" />
+                  </div>
+                  <p className="rp-note">
+                    Only sales with a cost entered count toward profit, using the cost at the time of sale and before
+                    discounts. Add costs on each service and add-on to cover the rest.
+                  </p>
+                </>
+              ) : (
+                <p className="rp-status">
+                  No costs entered yet. Add a cost to deliver on a service or add-on (Services → Details / Add-ons) to
+                  see profit and margin here.
+                </p>
+              )}
+            </section>
+
             <LineChart
               title="Net sales"
               seriesLabel="Net sales"

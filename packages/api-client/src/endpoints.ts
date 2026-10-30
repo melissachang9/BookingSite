@@ -641,7 +641,7 @@ export const createPlatformApi = (client: ApiClient) => ({
   addBookingItem: (
     tenantSlug: string,
     bookingId: string,
-    body: { sourceServiceId?: string | null; sourceAddOnId?: string | null; name?: string; priceCents?: number; quantity?: number },
+    body: { sourceServiceId?: string | null; sourceAddOnId?: string | null; name?: string; priceCents?: number; quantity?: number; costCents?: number },
   ) =>
     client.post<BookingSummary, typeof body>(
       `tenants/${tenantSlug}/bookings/${bookingId}/items`,

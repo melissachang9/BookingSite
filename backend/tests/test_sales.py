@@ -184,3 +184,88 @@ def test_tax_report_needs_permission_and_a_valid_filter(client) -> None:
     assert csv.headers["content-type"].startswith("text/csv")
     assert "tax-report-" in csv.headers["content-disposition"]
     assert "Tax collected" in csv.text
+
+
+def _line_costs(sale_id: str) -> list[tuple[str, int | None]]:
+    async def _go():
+        from sqlalchemy import select
+
+        from app.db.models import SaleLine
+        from app.db.session import get_session_maker
+
+        async with get_session_maker()() as session:
+            rows = (await session.scalars(select(SaleLine).where(SaleLine.sale_id == sale_id))).all()
+            return [(line.kind, line.unit_cost_cents) for line in rows]
+
+    return asyncio.run(_go())
+
+
+def test_service_cost_is_frozen_on_the_sale_line_and_feeds_the_margin(client) -> None:
+    headers = _auth_headers(client)
+    booking = _confirm_paid_deposit_booking(client)["booking"]
+    service_id = booking["serviceId"]
+    API = f"/api/v1/tenants/{TENANT}"
+
+    saved = client.patch(f"{API}/services/{service_id}", headers=headers, json={"costCents": 1200})
+    assert saved.status_code == 200, saved.json()
+    assert saved.json()["costCents"] == 1200
+
+    completed = _complete(client, booking)
+    assert _line_costs(completed["saleId"]) == [("service", 1200)]
+
+    # Changing the cost later never rewrites the sale that already happened.
+    client.patch(f"{API}/services/{service_id}", headers=headers, json={"costCents": 9900})
+    assert _line_costs(completed["saleId"]) == [("service", 1200)]
+
+    report = client.get(f"{API}/reports/sales", headers=headers, params=_wide_range())
+    assert report.status_code == 200, report.json()
+    margin = report.json()["margin"]
+    assert margin["costCents"] >= 1200
+    assert margin["grossProfitCents"] == margin["costedSalesCents"] - margin["costCents"]
+    assert 0 < margin["coverage"] <= 1
+
+
+def test_a_cost_can_be_cleared_and_a_sale_without_one_stays_out_of_profit(client) -> None:
+    headers = _auth_headers(client)
+    booking = _confirm_paid_deposit_booking(client)["booking"]
+    API = f"/api/v1/tenants/{TENANT}"
+    client.patch(f"{API}/services/{booking['serviceId']}", headers=headers, json={"costCents": 500})
+    cleared = client.patch(f"{API}/services/{booking['serviceId']}", headers=headers, json={"clearCost": True})
+    assert cleared.json()["costCents"] is None
+
+    completed = _complete(client, booking)
+    assert _line_costs(completed["saleId"]) == [("service", None)]
+
+
+def test_retail_product_cost_is_kept_on_the_item_and_the_sale_line(client) -> None:
+    headers = _auth_headers(client)
+    booking = _confirm_paid_deposit_booking(client)["booking"]
+    API = f"/api/v1/tenants/{TENANT}"
+    added = client.post(
+        f"{API}/bookings/{booking['id']}/items",
+        headers=headers,
+        json={"name": "Brow serum", "priceCents": 3000, "quantity": 2, "costCents": 900},
+    )
+    assert added.status_code in (200, 201), added.json()
+
+    completed = _complete(client, booking)
+    assert ("product", 900) in _line_costs(completed["saleId"])
+
+
+def test_add_on_cost_is_stored_on_the_add_on(client) -> None:
+    headers = _auth_headers(client)
+    booking = _confirm_paid_deposit_booking(client)["booking"]
+    API = f"/api/v1/tenants/{TENANT}"
+    created = client.post(
+        f"{API}/services/{booking['serviceId']}/add-ons",
+        headers=headers,
+        json={"name": "LED boost", "priceCents": 4000, "costCents": 700},
+    )
+    assert created.status_code in (200, 201), created.json()
+    assert created.json()["costCents"] == 700
+    cleared = client.patch(
+        f"{API}/services/{booking['serviceId']}/add-ons/{created.json()['id']}",
+        headers=headers,
+        json={"clearCost": True},
+    )
+    assert cleared.json()["costCents"] is None

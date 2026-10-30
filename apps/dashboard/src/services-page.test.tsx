@@ -368,6 +368,39 @@ describe("ServicesPage", () => {
     expect(updateSpy.mock.calls[0][2]).toMatchObject({ featuredLabel: "most_popular" });
   });
 
+  it("saves, and clears, what a service costs to deliver", async () => {
+    mockLoaders();
+    const updateSpy = vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    const cost = screen.getByLabelText(/Cost to deliver/);
+    expect(cost).toHaveValue(null); // nothing entered yet
+    fireEvent.change(cost, { target: { value: "12.50" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(updateSpy.mock.calls[0][2]).toMatchObject({ costCents: 1250 });
+    expect(updateSpy.mock.calls[0][2]).not.toHaveProperty("clearCost");
+  });
+
+  it("clears the cost when the field is emptied", async () => {
+    mockLoaders({ services: baseServices.map((svc: any) => (svc.id === "svc-shape" ? { ...svc, costCents: 800 } : svc)) });
+    const updateSpy = vi.spyOn(platformApi, "updateService").mockResolvedValue({} as any);
+    render(<ServicesPage definition={definition} currentUser={ownerUser} />);
+
+    await waitFor(() => expect(screen.getByText("Brow Shape")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Brow Shape"));
+    const cost = screen.getByLabelText(/Cost to deliver/);
+    expect(cost).toHaveValue(8);
+    fireEvent.change(cost, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(updateSpy.mock.calls[0][2]).toMatchObject({ clearCost: true });
+  });
+
   it("requires a client-facing form for the service on save", async () => {
     mockLoaders({
       forms: [
@@ -413,10 +446,11 @@ describe("ServicesPage", () => {
     fireEvent.change(within(form).getByPlaceholderText("e.g. LED therapy"), { target: { value: "Brow lamination" } });
     fireEvent.change(within(form).getByPlaceholderText("0.00"), { target: { value: "40" } });
     fireEvent.change(within(form).getByDisplayValue("0"), { target: { value: "15" } });
+    fireEvent.change(within(form).getByLabelText("Add-on cost to deliver"), { target: { value: "6" } });
     fireEvent.click(within(form).getByRole("button", { name: "Add add-on" }));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledWith("brow-beauty-lab", "svc-shape", {
-      name: "Brow lamination", priceCents: 4000, durationMinutes: 15, description: null,
+      name: "Brow lamination", priceCents: 4000, durationMinutes: 15, description: null, costCents: 600,
     }));
     expect(await screen.findByText("Brow lamination")).toBeInTheDocument();
   });

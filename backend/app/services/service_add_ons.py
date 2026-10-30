@@ -31,6 +31,7 @@ def add_on_to_response(add_on: ServiceAddOn) -> ServiceAddOnResponse:
         description=add_on.description,
         price_cents=add_on.price_cents,
         duration_minutes=add_on.duration_minutes,
+        cost_cents=add_on.cost_cents,
         is_active=add_on.is_active,
         sort_order=add_on.sort_order,
     )
@@ -98,6 +99,7 @@ async def create_service_add_on(
         description=(payload.description or "").strip() or None,
         price_cents=payload.price_cents,
         duration_minutes=payload.duration_minutes,
+        cost_cents=payload.cost_cents,
         is_active=payload.is_active,
         sort_order=next_sort or 0,
     )
@@ -131,6 +133,10 @@ async def update_service_add_on(
         add_on.price_cents = payload.price_cents
     if payload.duration_minutes is not None:
         add_on.duration_minutes = payload.duration_minutes
+    if payload.cost_cents is not None:
+        add_on.cost_cents = payload.cost_cents
+    elif payload.clear_cost:
+        add_on.cost_cents = None
     if payload.is_active is not None:
         add_on.is_active = payload.is_active
     if payload.sort_order is not None:

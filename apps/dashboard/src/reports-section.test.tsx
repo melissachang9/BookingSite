@@ -51,6 +51,7 @@ const salesReport: SalesReport = {
     paymentMethods: [{ method: "card", payments: 30, amountCents: 500000, tipsCents: 20000 }],
   },
   outstanding: { outstandingBalanceCents: 0, followUpCount: 0 },
+  margin: { costCents: 2000, costedSalesCents: 8000, totalSalesCents: 10000, grossProfitCents: 6000, margin: 0.75, coverage: 0.8 },
 };
 
 const teamReport = (includeFinancial: boolean): TeamReport => ({
@@ -238,6 +239,31 @@ describe("ReportsSection", () => {
     expect(screen.getByRole("button", { name: "Export CSV" })).toBeDisabled();
     expect(screen.queryByText("$5,950")).not.toBeInTheDocument();
     expect(sales.mock.calls.length).toBe(callsAfter);
+  });
+
+  describe("Profit", () => {
+    it("shows profit and how much of the sales have a cost", async () => {
+      vi.spyOn(platformApi, "getSalesReport").mockResolvedValue(salesReport);
+      render(<ReportsSection {...baseProps} />);
+      fireEvent.click(screen.getByRole("tab", { name: "Sales" }));
+
+      const profit = await screen.findByRole("region", { name: "Profit" });
+      expect(within(profit).getByText("Gross profit").parentElement).toHaveTextContent("$60");
+      expect(within(profit).getByText("Margin").parentElement).toHaveTextContent("75%");
+      expect(within(profit).getByText("Sales with a cost").parentElement).toHaveTextContent("80%");
+    });
+
+    it("explains how to see profit when no costs are entered", async () => {
+      vi.spyOn(platformApi, "getSalesReport").mockResolvedValue({
+        ...salesReport,
+        margin: { costCents: 0, costedSalesCents: 0, totalSalesCents: 10000, grossProfitCents: 0, margin: null, coverage: 0 },
+      });
+      render(<ReportsSection {...baseProps} />);
+      fireEvent.click(screen.getByRole("tab", { name: "Sales" }));
+
+      expect(await screen.findByText(/No costs entered yet/)).toBeInTheDocument();
+      expect(screen.queryByText("Gross profit")).toBeNull();
+    });
   });
 
   describe("Tax", () => {

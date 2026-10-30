@@ -64,6 +64,8 @@ export type ServiceSummary = AuditFields &
     cleanupBufferMinutes: number;
     priceCents: number;
     depositCents: number;
+    /** What one visit costs to deliver (supplies); null when not entered. Used for margin reports. */
+    costCents?: number | null;
     isActive: boolean;
     imageUrl?: string | null;
     imageAltText?: string | null;
@@ -130,6 +132,8 @@ export type UpdateServiceRequest = {
   cleanupBufferMinutes?: number;
   priceCents?: number;
   depositCents?: number;
+  costCents?: number;
+  clearCost?: boolean;
   locationIds?: UUID[];
   isActive?: boolean;
   categoryId?: string | null;
@@ -306,6 +310,8 @@ export type ServiceAddOn = AuditFields &
     priceCents: number;
     /** Extra minutes the add-on adds to the appointment. */
     durationMinutes: number;
+    /** What the add-on costs to deliver; null when not entered. */
+    costCents?: number | null;
     isActive: boolean;
     sortOrder: number;
   };
@@ -319,6 +325,7 @@ export type CreateServiceAddOnRequest = {
   description?: string | null;
   priceCents: number;
   durationMinutes?: number;
+  costCents?: number;
   isActive?: boolean;
 };
 
@@ -328,6 +335,8 @@ export type UpdateServiceAddOnRequest = {
   clearDescription?: boolean;
   priceCents?: number;
   durationMinutes?: number;
+  costCents?: number;
+  clearCost?: boolean;
   isActive?: boolean;
   sortOrder?: number;
 };

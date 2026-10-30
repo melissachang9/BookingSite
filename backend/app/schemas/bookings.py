@@ -45,6 +45,8 @@ class AddBookingItemRequest(CamelModel):
     name: str | None = Field(default=None, max_length=255)
     price_cents: int | None = Field(default=None, ge=0, le=1_000_000)
     quantity: int = Field(default=1, ge=1, le=99)
+    # What one unit cost the studio; only kept for retail products.
+    cost_cents: int | None = Field(default=None, ge=0, le=1_000_000)
 
 
 class BookingSummaryResponse(CamelModel):

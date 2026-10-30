@@ -75,6 +75,16 @@ export type PaymentMethodRow = {
   tipsCents: number;
 };
 
+/** Margin on sale lines that have a cost entered; lines without one are left out of profit and counted in coverage. */
+export type MarginSummary = {
+  costCents: number;
+  costedSalesCents: number;
+  totalSalesCents: number;
+  grossProfitCents: number;
+  margin?: number | null;
+  coverage?: number | null;
+};
+
 export type SalesReport = {
   range: ReportRange;
   kpis: SalesKpis;
@@ -96,6 +106,7 @@ export type SalesReport = {
     paymentMethods: PaymentMethodRow[];
   };
   outstanding: { outstandingBalanceCents: number; followUpCount: number };
+  margin: MarginSummary;
 };
 
 export type TeamMemberRow = {

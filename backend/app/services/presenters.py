@@ -253,6 +253,7 @@ def service_to_summary(service: Service, tenant: Tenant | None = None) -> Servic
         outcome_headline=service.outcome_headline,
         subheadline=service.subheadline,
         compare_at_price_cents=service.compare_at_price_cents,
+        cost_cents=service.cost_cents,
         featured_label=service.featured_label,
         value_stack=value_stack,
         bonuses=bonuses,

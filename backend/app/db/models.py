@@ -156,6 +156,8 @@ class Service(Base, IdMixin, TimestampMixin):
     price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     deposit_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # What one visit costs to deliver (supplies and consumables), for margin reports. Null means not entered.
+    cost_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     category_id: Mapped[Optional[str]] = mapped_column(
         String(36), ForeignKey("service_categories.id"), nullable=True, index=True
     )
@@ -217,6 +219,8 @@ class ServiceAddOn(Base, IdMixin, TimestampMixin):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    # What the add-on costs to deliver, for margin reports. Null means not entered.
+    cost_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
@@ -463,6 +467,8 @@ class BookingItem(Base, IdMixin, TimestampMixin):
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     # "service" follows the booking's service for tax; "product" always pays the location's product tax rate.
     kind: Mapped[str] = mapped_column(String(16), nullable=False, default="service", server_default="service")
+    # What one unit cost the studio. Only products carry their own; services and add-ons use the catalog cost.
+    cost_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     booking: Mapped[Booking] = relationship(back_populates="items")
 
@@ -604,6 +610,8 @@ class SaleLine(Base, IdMixin, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     unit_price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    # What one unit cost at the time of sale (null when no cost was entered), so margin never rewrites with later cost edits.
+    unit_cost_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     tax_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Who performed it, for commission and tip sharing.
     provider_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("providers.id"), nullable=True)

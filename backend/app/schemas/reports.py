@@ -74,6 +74,21 @@ class OutstandingSummary(CamelModel):
     follow_up_count: int = 0
 
 
+class MarginSummary(CamelModel):
+    """Margin on the sale lines that have a cost entered. Lines without a cost are left out of profit
+    and counted in coverage, so a missing cost never looks like a free item. Figures are before discounts."""
+
+    cost_cents: int
+    # Sales value of the lines that have a cost, and of all lines.
+    costed_sales_cents: int
+    total_sales_cents: int
+    gross_profit_cents: int
+    # Profit ÷ sales of the costed lines; null when nothing has a cost.
+    margin: float | None = None
+    # Share of line sales value that has a cost entered.
+    coverage: float | None = None
+
+
 class SalesReportResponse(CamelModel):
     range: ReportRangeResponse
     kpis: SalesKpis
@@ -87,6 +102,7 @@ class SalesReportResponse(CamelModel):
     by_channel: list[BreakdownRow]
     cash: CashSummary
     outstanding: OutstandingSummary
+    margin: MarginSummary
 
 
 # ----------------------------------------------------------------- team ----

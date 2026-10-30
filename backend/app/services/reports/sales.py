@@ -15,10 +15,11 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Booking, Payment, PaymentEvent, Tenant
+from app.db.models import Booking, Payment, PaymentEvent, Sale, SaleLine, Tenant
 from app.schemas.reports import (
     BreakdownRow,
     CashSummary,
+    MarginSummary,
     OutstandingSummary,
     PaymentMethodRow,
     SalesKpis,
@@ -70,6 +71,47 @@ def _rows(accs: dict[str, _Acc]) -> list[BreakdownRow]:
     ]
     rows.sort(key=lambda row: (-row.net_sales_cents, row.label))
     return rows
+
+
+async def _margin_summary(
+    session: AsyncSession,
+    tenant: Tenant,
+    rng: ReportRange,
+    *,
+    location_id: str | None,
+    provider_id: str | None,
+) -> MarginSummary:
+    """Costs come from the unit cost frozen on each sale line, never from today's catalog."""
+    query = (
+        select(SaleLine.unit_price_cents, SaleLine.quantity, SaleLine.unit_cost_cents)
+        .join(Sale, Sale.id == SaleLine.sale_id)
+        .where(
+            Sale.tenant_id == tenant.id,
+            Sale.status == "completed",
+            Sale.completed_at >= rng.start_utc,
+            Sale.completed_at < rng.end_utc,
+        )
+    )
+    if location_id:
+        query = query.where(Sale.location_id == location_id)
+    if provider_id:
+        query = query.where(SaleLine.provider_id == provider_id)
+    total = costed = cost = 0
+    for price, quantity, unit_cost in (await session.execute(query)).all():
+        value = price * quantity
+        total += value
+        if unit_cost is not None:
+            costed += value
+            cost += unit_cost * quantity
+    profit = costed - cost
+    return MarginSummary(
+        cost_cents=cost,
+        costed_sales_cents=costed,
+        total_sales_cents=total,
+        gross_profit_cents=profit,
+        margin=profit / costed if costed else None,
+        coverage=costed / total if total else None,
+    )
 
 
 def compute_kpis(bookings: list[Booking]) -> SalesKpis:
@@ -257,4 +299,5 @@ async def build_sales_report(
         by_channel=_rows(by_channel),
         cash=await _cash_summary(session, tenant, rng, location_id=location_id, provider_id=provider_id),
         outstanding=OutstandingSummary(outstanding_balance_cents=outstanding_cents, follow_up_count=follow_ups),
+        margin=await _margin_summary(session, tenant, rng, location_id=location_id, provider_id=provider_id),
     )

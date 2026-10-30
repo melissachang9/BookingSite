@@ -2431,6 +2431,10 @@ async def update_tenant_service(
             setattr(service, field, stripped or None)
         elif getattr(payload, clear_flag, False):
             setattr(service, field, None)
+    if getattr(payload, "cost_cents", None) is not None:
+        service.cost_cents = payload.cost_cents
+    elif getattr(payload, "clear_cost", False):
+        service.cost_cents = None
     if getattr(payload, "compare_at_price_cents", None) is not None:
         # The schema can only compare against a price sent in the same request; check the saved one too.
         if payload.compare_at_price_cents <= service.price_cents:

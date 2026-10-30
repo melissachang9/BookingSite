@@ -654,6 +654,7 @@ type ServiceCardState = {
   cleanupBufferMinutes: string;
   priceAmount: string;
   depositAmount: string;
+  costAmount: string; // '' = not entered
   categoryId: string;
   locationIds: string[];
   isActive: boolean;
@@ -751,6 +752,7 @@ function toCardState(service: ServiceSummary): ServiceCardState {
     cleanupBufferMinutes: String(service.cleanupBufferMinutes ?? 0),
     priceAmount: (service.priceCents / 100).toFixed(2),
     depositAmount: (service.depositCents / 100).toFixed(2),
+    costAmount: service.costCents == null ? "" : (service.costCents / 100).toFixed(2),
     categoryId: service.categoryId ?? "",
     locationIds: [...service.locationIds],
     isActive: service.isActive,
@@ -898,6 +900,8 @@ function ServiceDetail({
       onSaved("Enter a valid duration, price, and deposit."); return false;
     }
     if (form.locationIds.length === 0) { onSaved("Select at least one location."); return false; }
+    const costCents = form.costAmount.trim() ? parseMoneyInput(form.costAmount) : null;
+    if (form.costAmount.trim() && costCents === null) { onSaved("Enter the cost as a dollar amount, or leave it blank."); return false; }
     const body: UpdateServiceRequest = {
       name, durationMinutes,
       setupBufferMinutes: Number(form.setupBufferMinutes) || 0,
@@ -906,6 +910,8 @@ function ServiceDetail({
       locationIds: form.locationIds,
       isActive: form.isActive,
     };
+    if (costCents !== null) body.costCents = costCents;
+    else if (service.costCents != null) body.clearCost = true;
     if (form.requireCardOnFile === null) body.inheritRequireCardOnFile = true;
     else body.requireCardOnFile = form.requireCardOnFile;
     if (form.isTaxable === null) body.inheritIsTaxable = true;
@@ -1401,6 +1407,19 @@ function ServiceDetailsTab({
                   {...selectNumberOnFocus} value={form.priceAmount}
                   onChange={(e) => setForm((c) => ({ ...c, priceAmount: e.target.value }))} required />
                 <span className="cs-svc-unit__affix" aria-hidden="true">$</span>
+              </span>
+            </label>
+            <label className="cs-svc-details__field">
+              <span className="cs-svc-details__label">Cost to deliver</span>
+              <span className="cs-svc-unit cs-svc-unit--prefix">
+                <input className="cs-svc-details__input" type="number" min={0} step="0.01"
+                  {...selectNumberOnFocus} value={form.costAmount} placeholder="Optional"
+                  aria-describedby="cs-svc-cost-help"
+                  onChange={(e) => setForm((c) => ({ ...c, costAmount: e.target.value }))} />
+                <span className="cs-svc-unit__affix" aria-hidden="true">$</span>
+              </span>
+              <span id="cs-svc-cost-help" className="cs-svc-helper">
+                Supplies and consumables per visit. Reports use it to show profit; clients never see it.
               </span>
             </label>
             {minutesField("Duration", form.durationMinutes,
@@ -2710,9 +2729,9 @@ function ServiceResourcesTab({
 // Add-ons tab
 // ===========================================================================
 
-type AddOnDraft = { name: string; price: string; minutes: string; description: string };
+type AddOnDraft = { name: string; price: string; cost: string; minutes: string; description: string };
 
-const emptyAddOnDraft: AddOnDraft = { name: "", price: "", minutes: "0", description: "" };
+const emptyAddOnDraft: AddOnDraft = { name: "", price: "", cost: "", minutes: "0", description: "" };
 
 function ServiceAddOnsTab({
   service, allServices, tenantSlug, canManage,
@@ -2755,6 +2774,7 @@ function ServiceAddOnsTab({
     setDraft({
       name: addOn.name,
       price: (addOn.priceCents / 100).toFixed(2),
+      cost: addOn.costCents == null ? "" : (addOn.costCents / 100).toFixed(2),
       minutes: String(addOn.durationMinutes),
       description: addOn.description ?? "",
     });
@@ -2768,6 +2788,8 @@ function ServiceAddOnsTab({
     const minutes = Number(draft.minutes || 0);
     if (!name) { setFormError("Give the add-on a name."); return; }
     if (priceCents === null) { setFormError("Enter a valid price."); return; }
+    const costCents = draft.cost.trim() ? parseMoneyInput(draft.cost) : null;
+    if (draft.cost.trim() && costCents === null) { setFormError("Enter the cost as a dollar amount, or leave it blank."); return; }
     if (!Number.isInteger(minutes) || minutes < 0 || minutes > 240) {
       setFormError("Extra minutes must be a whole number from 0 to 240.");
       return;
@@ -2778,6 +2800,7 @@ function ServiceAddOnsTab({
       if (editingId === "new") {
         const created = await platformApi.createServiceAddOn(tenantSlug, service.id, {
           name, priceCents, durationMinutes: minutes, description: draft.description.trim() || null,
+          ...(costCents !== null ? { costCents } : {}),
         });
         setAddOns((prev) => [...prev, created]);
       } else if (editingId) {
@@ -2785,6 +2808,7 @@ function ServiceAddOnsTab({
         const updated = await platformApi.updateServiceAddOn(tenantSlug, service.id, editingId, {
           name, priceCents, durationMinutes: minutes,
           ...(description ? { description } : { clearDescription: true }),
+          ...(costCents !== null ? { costCents } : { clearCost: true }),
         });
         setAddOns((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       }
@@ -2829,6 +2853,7 @@ function ServiceAddOnsTab({
     setDraft({
       name: picked.name,
       price: (picked.priceCents / 100).toFixed(2),
+      cost: picked.costCents == null ? "" : (picked.costCents / 100).toFixed(2),
       minutes: String(Math.min(picked.durationMinutes, 240)),
       description: picked.description ?? "",
     });
@@ -2863,6 +2888,14 @@ function ServiceAddOnsTab({
         <span className="cs-svc-unit cs-svc-unit--prefix">
           <input className="cs-svc-details__input" type="number" min={0} step="0.01" {...selectNumberOnFocus} value={draft.price}
             placeholder="0.00" onChange={(e) => setDraft({ ...draft, price: e.target.value })} />
+          <span className="cs-svc-unit__affix" aria-hidden="true">$</span>
+        </span>
+      </label>
+      <label className="cs-svc-details__field">
+        <span className="cs-svc-details__label">Cost to deliver</span>
+        <span className="cs-svc-unit cs-svc-unit--prefix">
+          <input className="cs-svc-details__input" type="number" min={0} step="0.01" {...selectNumberOnFocus} value={draft.cost}
+            placeholder="Optional" aria-label="Add-on cost to deliver" onChange={(e) => setDraft({ ...draft, cost: e.target.value })} />
           <span className="cs-svc-unit__affix" aria-hidden="true">$</span>
         </span>
       </label>

@@ -473,6 +473,8 @@ class ServiceSummaryResponse(CamelModel):
     cleanup_buffer_minutes: int = 0
     price_cents: int
     deposit_cents: int
+    # What one visit costs to deliver; null when not entered.
+    cost_cents: int | None = None
     is_active: bool
     image_url: str | None = None
     image_alt_text: str | None = None
@@ -572,6 +574,8 @@ class UpdateServiceRequest(CamelModel):
     cleanup_buffer_minutes: int | None = Field(default=None, ge=0, le=120)
     price_cents: int | None = Field(default=None, ge=0, le=500_000)
     deposit_cents: int | None = Field(default=None, ge=0, le=500_000)
+    cost_cents: int | None = Field(default=None, ge=0, le=500_000)
+    clear_cost: bool = False
     location_ids: list[str] | None = None
     is_active: bool | None = None
     category_id: str | None = None

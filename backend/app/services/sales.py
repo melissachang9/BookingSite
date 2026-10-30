@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.http import api_exception
-from app.db.models import Booking, Sale, SaleLine, SaleSequence, SaleTender, SaleTip, User
+from app.db.models import Booking, BookingItem, Sale, SaleLine, SaleSequence, SaleTender, SaleTip, Service, ServiceAddOn, User
 from app.services.presenters import booking_price_cents, booking_tax_cents
 from app.services.service_terms import effective_taxable
 from app.services.tenants import tenant_currency
@@ -63,6 +63,34 @@ def _allocate_proportionally(total: int, weights: list[int]) -> list[int]:
     return shares
 
 
+async def _add_on_costs(session: AsyncSession, bookings: list[Booking]) -> dict[str, int | None]:
+    ids = {item.source_add_on_id for booking in bookings for item in booking.items if item.source_add_on_id}
+    if not ids:
+        return {}
+    rows = await session.execute(select(ServiceAddOn.id, ServiceAddOn.cost_cents).where(ServiceAddOn.id.in_(ids)))
+    return {add_on_id: cost for add_on_id, cost in rows.all()}
+
+
+async def _service_costs(session: AsyncSession, bookings: list[Booking]) -> dict[str, int | None]:
+    ids = {item.source_service_id for booking in bookings for item in booking.items if item.source_service_id}
+    if not ids:
+        return {}
+    rows = await session.execute(select(Service.id, Service.cost_cents).where(Service.id.in_(ids)))
+    return {service_id: cost for service_id, cost in rows.all()}
+
+
+def _item_unit_cost(
+    item: BookingItem, add_on_costs: dict[str, int | None], service_costs: dict[str, int | None]
+) -> int | None:
+    """Cost of one unit of a checkout item: the catalog cost behind an add-on or service, or the cost
+    typed in for a retail product. Null when none was entered."""
+    if item.source_add_on_id:
+        return add_on_costs.get(item.source_add_on_id)
+    if item.source_service_id:
+        return service_costs.get(item.source_service_id)
+    return item.cost_cents
+
+
 async def create_sale_for_bookings(
     session: AsyncSession,
     bookings: list[Booking],
@@ -82,6 +110,8 @@ async def create_sale_for_bookings(
     sale_number = await allocate_sale_number(session, first.tenant_id)
     now = datetime.now(timezone.utc)
 
+    add_on_costs = await _add_on_costs(session, bookings)
+    service_costs = await _service_costs(session, bookings)
     lines: list[SaleLine] = []
     taxable_flags: list[bool] = []
     tax_total = 0
@@ -95,6 +125,7 @@ async def create_sale_for_bookings(
                 name=booking.service.name,
                 quantity=1,
                 unit_price_cents=booking_price_cents(booking),
+                unit_cost_cents=booking.service.cost_cents,
                 provider_id=booking.provider_id,
             )
         )
@@ -108,6 +139,7 @@ async def create_sale_for_bookings(
                     name=item.name,
                     quantity=item.quantity,
                     unit_price_cents=item.price_cents,
+                    unit_cost_cents=_item_unit_cost(item, add_on_costs, service_costs),
                     provider_id=booking.provider_id,
                 )
             )
