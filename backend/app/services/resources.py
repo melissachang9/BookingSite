@@ -1,17 +1,34 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.http import api_exception
-from app.db.models import Location, Resource, Service, ServiceResource
+from app.db.models import (
+    Booking,
+    Customer,
+    Location,
+    Resource,
+    ResourceAllocation,
+    ResourceBlock,
+    Service,
+    ServiceResource,
+    User,
+)
 from app.schemas.resources import (
+    CreateResourceBlockRequest,
     CreateResourceRequest,
+    ResourceBlockConflict,
+    ResourceBlockListResponse,
+    ResourceBlockResponse,
     ResourceListResponse,
     ResourceServiceUse,
     ResourceSummaryResponse,
     UpdateResourceRequest,
 )
+from app.services.audit import record_audit
 from app.services.tenants import get_tenant_by_slug
 
 
@@ -144,3 +161,148 @@ def _resource_to_summary(resource: Resource, used_by: list[ResourceServiceUse]) 
         quantity=resource.quantity,
         used_by=used_by,
     )
+
+
+def _aware(value: datetime) -> datetime:
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+async def _get_resource(session: AsyncSession, tenant_id: str, resource_id: str) -> Resource:
+    resource = await session.scalar(
+        select(Resource).where(Resource.tenant_id == tenant_id, Resource.id == resource_id)
+    )
+    if resource is None:
+        raise api_exception(404, "not_found", "Resource was not found for this tenant.")
+    return resource
+
+
+async def _block_conflicts(
+    session: AsyncSession, tenant_id: str, block: ResourceBlock
+) -> list[ResourceBlockConflict]:
+    """Confirmed bookings that already hold this resource inside the block.
+
+    Blocks only stop new bookings, so these are shown to the operator to sort out."""
+    rows = (
+        await session.execute(
+            select(Booking, Customer.name, Service.name)
+            .join(ResourceAllocation, ResourceAllocation.booking_id == Booking.id)
+            .join(Customer, Customer.id == Booking.customer_id)
+            .join(Service, Service.id == Booking.service_id)
+            .where(
+                Booking.tenant_id == tenant_id,
+                ResourceAllocation.tenant_id == tenant_id,
+                ResourceAllocation.resource_id == block.resource_id,
+                Booking.status == "confirmed",
+                ResourceAllocation.starts_at < block.ends_at,
+                ResourceAllocation.ends_at > block.starts_at,
+            )
+            .order_by(Booking.starts_at.asc())
+        )
+    ).all()
+    seen: set[str] = set()
+    conflicts: list[ResourceBlockConflict] = []
+    for booking, customer_name, service_name in rows:
+        if booking.id in seen:
+            continue
+        seen.add(booking.id)
+        conflicts.append(
+            ResourceBlockConflict(
+                booking_id=booking.id,
+                starts_at=booking.starts_at,
+                ends_at=booking.ends_at,
+                customer_name=customer_name,
+                service_name=service_name,
+            )
+        )
+    return conflicts
+
+
+async def _block_response(
+    session: AsyncSession, tenant_id: str, block: ResourceBlock, creator_name: str | None
+) -> ResourceBlockResponse:
+    return ResourceBlockResponse(
+        id=block.id,
+        resource_id=block.resource_id,
+        starts_at=block.starts_at,
+        ends_at=block.ends_at,
+        reason=block.reason,
+        created_by_name=creator_name,
+        created_at=block.created_at,
+        conflicts=await _block_conflicts(session, tenant_id, block),
+    )
+
+
+async def list_resource_blocks(
+    session: AsyncSession, tenant_slug: str, resource_id: str
+) -> ResourceBlockListResponse:
+    """Blocks that haven't ended yet, soonest first, each with the bookings it collides with."""
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    await _get_resource(session, tenant.id, resource_id)
+    rows = (
+        await session.execute(
+            select(ResourceBlock, User.name)
+            .outerjoin(User, User.id == ResourceBlock.created_by_user_id)
+            .where(
+                ResourceBlock.tenant_id == tenant.id,
+                ResourceBlock.resource_id == resource_id,
+                ResourceBlock.removed_at.is_(None),
+                ResourceBlock.ends_at > datetime.now(timezone.utc),
+            )
+            .order_by(ResourceBlock.starts_at.asc())
+        )
+    ).all()
+    return ResourceBlockListResponse(
+        items=[await _block_response(session, tenant.id, block, name) for block, name in rows]
+    )
+
+
+async def create_resource_block(
+    session: AsyncSession,
+    tenant_slug: str,
+    resource_id: str,
+    payload: CreateResourceBlockRequest,
+    actor: User,
+) -> ResourceBlockResponse:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    await _get_resource(session, tenant.id, resource_id)
+    starts_at, ends_at = _aware(payload.starts_at), _aware(payload.ends_at)
+    if ends_at <= starts_at:
+        raise api_exception(422, "invalid_block", "The end time must be after the start time.")
+    block = ResourceBlock(
+        tenant_id=tenant.id,
+        resource_id=resource_id,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        reason=payload.reason.strip() if payload.reason and payload.reason.strip() else None,
+        created_by_user_id=actor.id,
+    )
+    session.add(block)
+    await session.flush()
+    await record_audit(
+        session, tenant_id=tenant.id, entity_type="resource_block", entity_id=block.id, action="create",
+        actor=actor, notes=block.reason,
+    )
+    await session.commit()
+    return await _block_response(session, tenant.id, block, actor.name)
+
+
+async def remove_resource_block(
+    session: AsyncSession, tenant_slug: str, resource_id: str, block_id: str, actor: User
+) -> None:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    block = await session.scalar(
+        select(ResourceBlock).where(
+            ResourceBlock.tenant_id == tenant.id,
+            ResourceBlock.resource_id == resource_id,
+            ResourceBlock.id == block_id,
+            ResourceBlock.removed_at.is_(None),
+        )
+    )
+    if block is None:
+        raise api_exception(404, "not_found", "Unavailable time was not found for this resource.")
+    block.removed_at = datetime.now(timezone.utc)
+    block.removed_by_user_id = actor.id
+    await record_audit(
+        session, tenant_id=tenant.id, entity_type="resource_block", entity_id=block.id, action="remove", actor=actor,
+    )
+    await session.commit()

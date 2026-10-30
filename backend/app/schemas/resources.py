@@ -47,3 +47,34 @@ class UpdateResourceRequest(CamelModel):
     location_id: str | None = None
     notes: str | None = None
     quantity: int | None = Field(default=None, ge=1, le=100)
+
+
+class ResourceBlockConflict(CamelModel):
+    """A confirmed booking that already holds the resource during a block."""
+
+    booking_id: str
+    starts_at: datetime
+    ends_at: datetime
+    customer_name: str
+    service_name: str
+
+
+class ResourceBlockResponse(CamelModel):
+    id: str
+    resource_id: str
+    starts_at: datetime
+    ends_at: datetime
+    reason: str | None = None
+    created_by_name: str | None = None
+    created_at: datetime
+    conflicts: list[ResourceBlockConflict] = Field(default_factory=list)
+
+
+class ResourceBlockListResponse(CamelModel):
+    items: list[ResourceBlockResponse]
+
+
+class CreateResourceBlockRequest(CamelModel):
+    starts_at: datetime
+    ends_at: datetime
+    reason: str | None = Field(default=None, max_length=255)

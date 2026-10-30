@@ -1,13 +1,12 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import type {
   AuthenticatedUser,
-  CreateResourceRequest,
   LocationSummary,
-  ResourceListResponse,
+  ResourceBlock,
   ResourceSummary,
-  UpdateResourceRequest,
 } from "@booking/shared-types";
 
+import { OverflowMenu } from "./overflow-menu";
 import { platformApi } from "./platform-api";
 
 type RouteDefinitionLike = {
@@ -21,10 +20,13 @@ type LoadState =
   | { kind: "ready" }
   | { kind: "error"; message: string };
 
-type ModalState =
-  | { kind: "none" }
-  | { kind: "add" }
-  | { kind: "edit"; resource: ResourceSummary };
+type ResourceForm = {
+  name: string;
+  kind: string;
+  quantity: string;
+  locationId: string;
+  notes: string;
+};
 
 const KIND_LABELS: Record<string, string> = {
   room: "Room",
@@ -32,6 +34,18 @@ const KIND_LABELS: Record<string, string> = {
   equipment: "Equipment",
   other: "Other",
 };
+
+const emptyForm: ResourceForm = { name: "", kind: "room", quantity: "1", locationId: "", notes: "" };
+
+function toForm(resource: ResourceSummary): ResourceForm {
+  return {
+    name: resource.name,
+    kind: resource.kind,
+    quantity: String(resource.quantity),
+    locationId: resource.locationId ?? "",
+    notes: resource.notes ?? "",
+  };
+}
 
 function hasPermission(user: AuthenticatedUser, key: string): boolean {
   return user.permissions.some(
@@ -42,6 +56,17 @@ function hasPermission(user: AuthenticatedUser, key: string): boolean {
 function readErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message;
   return fallback;
+}
+
+function formatWindow(startsAt: string, endsAt: string): string {
+  const start = new Date(startsAt);
+  const end = new Date(endsAt);
+  const day: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric" };
+  const time: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
+  const sameDay = start.toDateString() === end.toDateString();
+  return sameDay
+    ? `${start.toLocaleDateString(undefined, day)}, ${start.toLocaleTimeString(undefined, time)} – ${end.toLocaleTimeString(undefined, time)}`
+    : `${start.toLocaleDateString(undefined, day)} ${start.toLocaleTimeString(undefined, time)} – ${end.toLocaleDateString(undefined, day)} ${end.toLocaleTimeString(undefined, time)}`;
 }
 
 export function ResourcesPage({
@@ -60,13 +85,23 @@ export function ResourcesPage({
   const [loadState, setLoadState] = useState<LoadState>({ kind: "loading" });
   const [resources, setResources] = useState<ResourceSummary[]>([]);
   const [locations, setLocations] = useState<LocationSummary[]>([]);
-  const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
-  const [modal, setModal] = useState<ModalState>({ kind: "none" });
+  // "new" while adding a resource, otherwise a resource id.
+  const [selection, setSelection] = useState<string | null>(null);
+  const [form, setForm] = useState<ResourceForm>(emptyForm);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+
+  const [blocks, setBlocks] = useState<ResourceBlock[]>([]);
+  const [blocksError, setBlocksError] = useState<string | null>(null);
+  const [addingBlock, setAddingBlock] = useState(false);
+  const [blockDraft, setBlockDraft] = useState({ startsAt: "", endsAt: "", reason: "" });
+  const [blockError, setBlockError] = useState<string | null>(null);
+  const [blockBusy, setBlockBusy] = useState(false);
 
   const loadResources = async () => {
     try {
-      const response: ResourceListResponse = await platformApi.listResources(tenantSlug);
+      const response = await platformApi.listResources(tenantSlug);
       setResources(response.items);
       setLoadState({ kind: "ready" });
     } catch (error) {
@@ -86,11 +121,27 @@ export function ResourcesPage({
       .catch(() => setLocations([]));
   }, [tenantSlug, canView]);
 
+  const selected = resources.find((r) => r.id === selection) ?? null;
+
+  // Open the chosen resource's details and unavailable times.
+  useEffect(() => {
+    setFormError(null);
+    setAddingBlock(false);
+    setBlockError(null);
+    setBlocks([]);
+    setBlocksError(null);
+    if (!selected) return;
+    setForm(toForm(selected));
+    let current = true;
+    platformApi.listResourceBlocks(tenantSlug, selected.id)
+      .then((response) => { if (current) setBlocks(response.items); })
+      .catch((error) => { if (current) setBlocksError(readErrorMessage(error, "Unable to load unavailable times.")); });
+    return () => { current = false; };
+    // Re-run only when a different resource is opened, not after every save.
+  }, [selected?.id, tenantSlug]);
+
   const locationName = (locationId?: string | null) =>
     locationId ? (locations.find((loc) => loc.id === locationId)?.name ?? "One location") : "All locations";
-
-  const selectedResource =
-    resources.find((r) => r.id === selectedResourceId) ?? null;
 
   if (!currentUser) {
     return <main className="cs-page-stack"><p className="cs-empty">Sign in required</p></main>;
@@ -104,6 +155,393 @@ export function ResourcesPage({
     return <main className="cs-page-stack"><div className="cs-banner cs-banner--error" role="alert">{loadState.message}</div></main>;
   }
 
+  const startNew = () => {
+    setSelection("new");
+    setForm(emptyForm);
+    setFormError(null);
+  };
+
+  const isNew = selection === "new";
+  const original = selected ? toForm(selected) : emptyForm;
+  const isDirty = isNew
+    ? form.name.trim() !== ""
+    : selected !== null && (Object.keys(form) as Array<keyof ResourceForm>).some((key) => form[key] !== original[key]);
+  const tracksUnits = form.kind !== "room";
+
+  const handleSave = async () => {
+    if (!canManage) return;
+    const name = form.name.trim();
+    if (!name) { setFormError("Give the resource a name."); return; }
+    // A room is always one unit; other kinds are pooled (e.g. 2 LED panels).
+    const units = tracksUnits ? Number(form.quantity) : 1;
+    if (!Number.isInteger(units) || units < 1 || units > 100) {
+      setFormError("Units owned must be a whole number from 1 to 100.");
+      return;
+    }
+    setSaving(true);
+    setFormError(null);
+    try {
+      const body = {
+        name,
+        kind: form.kind,
+        quantity: units,
+        locationId: form.locationId || null,
+        notes: form.notes.trim() || null,
+      };
+      if (isNew) {
+        const created = await platformApi.createResource(tenantSlug, body);
+        await loadResources();
+        setSelection(created.id);
+        setStatus(`"${name}" created.`);
+      } else if (selected) {
+        await platformApi.updateResource(tenantSlug, selected.id, body);
+        await loadResources();
+        setStatus(`"${name}" updated.`);
+      }
+    } catch (error) {
+      setFormError(readErrorMessage(error, "Unable to save resource."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleActive = async (resource: ResourceSummary) => {
+    if (!canManage) return;
+    if (resource.isActive && resource.usedBy.length > 0) {
+      const names = resource.usedBy.map((use) => use.serviceName).join(", ");
+      if (!window.confirm(
+        `"${resource.name}" is needed by ${names}. While it's inactive those services will be offered without it. Deactivate anyway?`,
+      )) return;
+    }
+    try {
+      await platformApi.updateResource(tenantSlug, resource.id, { isActive: !resource.isActive });
+      setStatus(`"${resource.name}" ${resource.isActive ? "deactivated" : "activated"}.`);
+      await loadResources();
+    } catch (error) {
+      setStatus(readErrorMessage(error, "Unable to update resource."));
+    }
+  };
+
+  const handleAddBlock = async () => {
+    if (!selected) return;
+    const start = new Date(blockDraft.startsAt);
+    const end = new Date(blockDraft.endsAt);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      setBlockError("Choose when it becomes unavailable and when it's back.");
+      return;
+    }
+    if (end <= start) { setBlockError("The end time must be after the start time."); return; }
+    setBlockBusy(true);
+    setBlockError(null);
+    try {
+      const created = await platformApi.createResourceBlock(tenantSlug, selected.id, {
+        startsAt: start.toISOString(),
+        endsAt: end.toISOString(),
+        reason: blockDraft.reason.trim() || null,
+      });
+      setBlocks((prev) => [...prev, created].sort((a, b) => a.startsAt.localeCompare(b.startsAt)));
+      setBlockDraft({ startsAt: "", endsAt: "", reason: "" });
+      setAddingBlock(false);
+    } catch (error) {
+      setBlockError(readErrorMessage(error, "Unable to save unavailable time."));
+    } finally {
+      setBlockBusy(false);
+    }
+  };
+
+  const handleRemoveBlock = async (block: ResourceBlock) => {
+    if (!selected) return;
+    if (!window.confirm("Remove this unavailable time? The slots it blocked will open up again.")) return;
+    try {
+      await platformApi.removeResourceBlock(tenantSlug, selected.id, block.id);
+      setBlocks((prev) => prev.filter((item) => item.id !== block.id));
+    } catch (error) {
+      setBlocksError(readErrorMessage(error, "Unable to remove unavailable time."));
+    }
+  };
+
+  const groups = [
+    { title: "Rooms", items: resources.filter((r) => r.kind === "room") },
+    { title: "Equipment & other", items: resources.filter((r) => r.kind !== "room") },
+  ].filter((group) => group.items.length > 0);
+
+  const renderItem = (resource: ResourceSummary) => {
+    const isSelected = selection === resource.id;
+    return (
+      <li key={resource.id}>
+        <button
+          type="button"
+          className={`cs-svc-rail-item${isSelected ? " is-selected" : ""}${resource.isActive ? "" : " is-hidden"}`}
+          aria-current={isSelected ? "true" : undefined}
+          onClick={() => setSelection(resource.id)}
+        >
+          <span className="cs-svc-rail-item__text">
+            <span className="cs-svc-rail-item__name">{resource.name}</span>
+            <span className="cs-svc-rail-item__meta">
+              {resource.kind !== "room" ? `${resource.quantity} ${resource.quantity === 1 ? "unit" : "units"} · ` : ""}
+              {locationName(resource.locationId)}
+            </span>
+          </span>
+          {!resource.isActive ? <span className="cs-svc-rail-item__flag">Inactive</span> : null}
+        </button>
+      </li>
+    );
+  };
+
+  const renderDetail = () => (
+    <div className="cs-md-detail__inner">
+      <header className="cs-md-detail__header cs-svc-detail-head">
+        <div className="cs-svc-detail-head__text">
+          <p className="cs-svc-detail-head__eyebrow">{KIND_LABELS[form.kind] ?? form.kind}</p>
+          <h4 className="cs-svc-detail-head__name">{form.name.trim() || (isNew ? "New resource" : selected?.name)}</h4>
+        </div>
+        {canManage ? (
+          <div className="cs-svc-detail-head__actions">
+            {selected ? (
+              <label className="cs-svc-active-toggle">
+                <input
+                  type="checkbox"
+                  className="cs-switch__input"
+                  checked={selected.isActive}
+                  onChange={() => void handleToggleActive(selected)}
+                />
+                <span className={`cs-switch${selected.isActive ? "" : " cs-switch--off"}`} aria-hidden="true" />
+                Active
+              </label>
+            ) : null}
+            <button
+              type="button"
+              className="cs-svc-pill-btn cs-svc-pill-btn--primary"
+              onClick={() => void handleSave()}
+              disabled={saving || !isDirty}
+            >
+              {saving ? "Saving…" : isNew ? "Add resource" : "Save"}
+            </button>
+            {isNew ? (
+              <OverflowMenu label="More resource actions" items={[{ label: "Cancel", onSelect: () => setSelection(null) }]} />
+            ) : null}
+          </div>
+        ) : null}
+      </header>
+
+      <div className="cs-svc-detail-form">
+        <div className="cs-svc-card">
+          <section className="cs-svc-section" aria-label="Details">
+            <h3 className="cs-svc-card__title">Details</h3>
+            <div className="cs-svc-inline-form cs-svc-inline-form--flat">
+              <label className="cs-svc-details__field cs-svc-inline-form__wide">
+                <span className="cs-svc-details__label">Name</span>
+                <input
+                  className="cs-svc-details__input"
+                  value={form.name}
+                  disabled={!canManage}
+                  autoFocus={isNew}
+                  placeholder="e.g. Treatment Room A, Laser Device 1"
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                />
+              </label>
+              <label className="cs-svc-details__field">
+                <span className="cs-svc-details__label">Kind</span>
+                <select
+                  className="cs-svc-details__input"
+                  value={form.kind}
+                  disabled={!canManage}
+                  onChange={(e) => setForm({ ...form, kind: e.target.value })}
+                >
+                  <option value="room">Room</option>
+                  <option value="chair">Chair</option>
+                  <option value="equipment">Equipment</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              {tracksUnits ? (
+                <label className="cs-svc-details__field">
+                  <span className="cs-svc-details__label">Units owned</span>
+                  <input
+                    className="cs-svc-details__input"
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={form.quantity}
+                    disabled={!canManage}
+                    onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                  />
+                </label>
+              ) : null}
+              <label className="cs-svc-details__field">
+                <span className="cs-svc-details__label">Location</span>
+                <select
+                  className="cs-svc-details__input"
+                  value={form.locationId}
+                  disabled={!canManage}
+                  onChange={(e) => setForm({ ...form, locationId: e.target.value })}
+                >
+                  <option value="">All locations</option>
+                  {locations.map((loc) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+                </select>
+              </label>
+              <label className="cs-svc-details__field cs-svc-inline-form__full">
+                <span className="cs-svc-details__label">{form.kind === "room" ? "Features" : "Notes"}</span>
+                <input
+                  className="cs-svc-details__input"
+                  value={form.notes}
+                  disabled={!canManage}
+                  placeholder={form.kind === "room" ? "e.g. Sink, steamer, LED panel" : "Optional"}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                />
+              </label>
+            </div>
+            <p className="cs-svc-helper">
+              {tracksUnits
+                ? "Bookings that need this stop once every unit is in use."
+                : "A room is one space; a booking uses one of the rooms its service lists."}
+              {" "}Pinned to a location, it is only offered for bookings there.
+            </p>
+            {formError ? <p role="alert" className="cs-svc-helper cs-svc-helper--error">{formError}</p> : null}
+          </section>
+        </div>
+
+        {selected ? (
+          <>
+            <div className="cs-svc-card">
+              <section className="cs-svc-section" aria-label="Used by">
+                <h3 className="cs-svc-card__title">
+                  Used by <span className="cs-svc-card__count">{selected.usedBy.length}</span>
+                </h3>
+                {selected.usedBy.length === 0 ? (
+                  <p className="cs-svc-helper">
+                    No service needs this yet, so it doesn&apos;t affect availability. Tick it on a service&apos;s
+                    Resources tab to start using it.
+                  </p>
+                ) : (
+                  <div className="cs-svc-rows">
+                    {selected.usedBy.map((use) => (
+                      <div key={use.serviceId} className={`cs-svc-row${use.isActive ? "" : " cs-svc-row--off"}`}>
+                        <span className="cs-svc-row__main">
+                          <span className="cs-svc-row__name">{use.serviceName}</span>
+                          {use.isActive ? null : <span className="cs-svc-row__tag">Inactive</span>}
+                        </span>
+                        <span className="cs-svc-row__side">
+                          {selected.kind !== "room" ? `Uses ${use.quantity} of ${selected.quantity}` : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+
+            <div className="cs-svc-card">
+              <section className="cs-svc-section" aria-label="Unavailable times">
+                <div className="cs-svc-section__head">
+                  <h3 className="cs-svc-card__title">Unavailable times</h3>
+                  {canManage && !addingBlock ? (
+                    <button type="button" className="cs-link-btn" onClick={() => setAddingBlock(true)}>
+                      + Add unavailable time
+                    </button>
+                  ) : null}
+                </div>
+                <p className="cs-svc-section__lead">
+                  Block it for maintenance, cleaning or repairs. No new bookings are offered in these times;
+                  appointments already booked stay and are flagged here.
+                </p>
+                {blocksError ? <p role="alert" className="cs-svc-helper cs-svc-helper--error">{blocksError}</p> : null}
+                {addingBlock ? (
+                  <div className="cs-svc-inline-form" role="group" aria-label="New unavailable time">
+                    <label className="cs-svc-details__field cs-svc-inline-form__wide">
+                      <span className="cs-svc-details__label">From</span>
+                      <input
+                        className="cs-svc-details__input"
+                        type="datetime-local"
+                        value={blockDraft.startsAt}
+                        onChange={(e) => setBlockDraft({ ...blockDraft, startsAt: e.target.value })}
+                      />
+                    </label>
+                    <label className="cs-svc-details__field cs-svc-inline-form__wide">
+                      <span className="cs-svc-details__label">Until</span>
+                      <input
+                        className="cs-svc-details__input"
+                        type="datetime-local"
+                        value={blockDraft.endsAt}
+                        onChange={(e) => setBlockDraft({ ...blockDraft, endsAt: e.target.value })}
+                      />
+                    </label>
+                    <label className="cs-svc-details__field cs-svc-inline-form__full">
+                      <span className="cs-svc-details__label">Reason</span>
+                      <input
+                        className="cs-svc-details__input"
+                        value={blockDraft.reason}
+                        placeholder="e.g. Annual servicing (optional)"
+                        onChange={(e) => setBlockDraft({ ...blockDraft, reason: e.target.value })}
+                      />
+                    </label>
+                    <div className="cs-svc-inline-form__actions">
+                      {blockError ? <span role="alert" className="cs-svc-helper cs-svc-helper--error">{blockError}</span> : null}
+                      <button type="button" className="cs-svc-pill-btn" onClick={() => setAddingBlock(false)} disabled={blockBusy}>
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="cs-svc-pill-btn cs-svc-pill-btn--primary"
+                        onClick={() => void handleAddBlock()}
+                        disabled={blockBusy}
+                      >
+                        {blockBusy ? "Saving…" : "Block this time"}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {blocks.length === 0 && !addingBlock && !blocksError ? (
+                  <p className="cs-svc-helper">Nothing scheduled.</p>
+                ) : (
+                  <div className="cs-svc-rows">
+                    {blocks.map((block) => (
+                      <div key={block.id} className="cs-svc-row cs-svc-row--stack">
+                        <div className="cs-svc-row__line">
+                          <span className="cs-svc-row__main">
+                            <span className="cs-svc-row__text">
+                              <span className="cs-svc-row__name">{formatWindow(block.startsAt, block.endsAt)}</span>
+                              {block.reason ? <span className="cs-svc-row__sub">{block.reason}</span> : null}
+                            </span>
+                          </span>
+                          {canManage ? (
+                            <span className="cs-svc-row__side">
+                              <OverflowMenu
+                                label="Unavailable time actions"
+                                items={[{ label: "Remove", onSelect: () => void handleRemoveBlock(block), danger: true }]}
+                              />
+                            </span>
+                          ) : null}
+                        </div>
+                        {block.conflicts.length > 0 ? (
+                          <div className="cs-svc-warning" role="alert">
+                            <strong>
+                              {block.conflicts.length === 1
+                                ? "1 booked appointment overlaps this time"
+                                : `${block.conflicts.length} booked appointments overlap this time`}
+                            </strong>
+                            <ul>
+                              {block.conflicts.map((conflict) => (
+                                <li key={conflict.bookingId}>
+                                  {conflict.customerName} · {conflict.serviceName} · {formatWindow(conflict.startsAt, conflict.endsAt)}
+                                </li>
+                              ))}
+                            </ul>
+                            <span>They are still booked. Reschedule or contact them from the calendar.</span>
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+
   return (
     <main className="cs-page-stack">
       {status ? (
@@ -115,334 +553,47 @@ export function ResourcesPage({
         </div>
       ) : null}
 
-      <h3>{definition.title}</h3>
-
-      <section className="cs-md-shell">
+      <section className="cs-md-shell" aria-label={definition.title}>
         <div className="cs-md-grid">
-          <aside className="cs-md-rail" aria-label="Resource list">
-            <div className="cs-md-rail__header">
-              <h4>Resources</h4>
+          <aside className="cs-md-rail cs-svc-rail" aria-label="Resource list">
+            <header className="cs-svc-rail__header">
+              <h4 className="cs-svc-rail__title">Resources</h4>
               {canManage ? (
-                <button
-                  type="button"
-                  className="cs-btn cs-btn--ghost cs-btn--sm"
-                  onClick={() => setModal({ kind: "add" })}
-                >
-                  + Add resource
+                <button type="button" className="cs-svc-new-btn" aria-label="New resource" onClick={startNew}>
+                  New
+                  <span className="cs-svc-new-btn__icon" aria-hidden="true">+</span>
                 </button>
               ) : null}
-            </div>
-            {resources.length === 0 ? (
-              <p className="cs-empty">No resources yet.</p>
-            ) : (
-              <>
-                {[
-                  { title: "Rooms", items: resources.filter((r) => r.kind === "room") },
-                  { title: "Equipment & other", items: resources.filter((r) => r.kind !== "room") },
-                ]
-                  .filter((group) => group.items.length > 0)
-                  .map((group) => (
-                    <div key={group.title}>
-                      <p className="cs-kicker">{group.title}</p>
-                      <ul className="cs-md-list">
-                        {group.items.map((resource) => (
-                          <li key={resource.id}>
-                            <button
-                              type="button"
-                              className={`cs-md-list__item${
-                                selectedResourceId === resource.id ? " is-active" : ""
-                              }`}
-                              onClick={() => setSelectedResourceId(resource.id)}
-                            >
-                              <div>
-                                <strong>{resource.name}</strong>
-                                <span>
-                                  {KIND_LABELS[resource.kind] ?? resource.kind}
-                                  {resource.kind !== "room" ? ` · ${resource.quantity} ${resource.quantity === 1 ? "unit" : "units"}` : ""}
-                                  {" · "}
-                                  {locationName(resource.locationId)}
-                                  {resource.isActive ? "" : " · Inactive"}
-                                </span>
-                              </div>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
+            </header>
+            <div className="cs-svc-rail__groups">
+              {loadState.kind === "loading" ? (
+                <p className="cs-svc-rail__empty">Loading…</p>
+              ) : groups.length === 0 ? (
+                <p className="cs-svc-rail__empty">No resources yet.</p>
+              ) : (
+                groups.map((group) => (
+                  <div key={group.title} className="cs-svc-rail__group">
+                    <div className="cs-svc-rail__group-head">
+                      <p className="cs-svc-rail__group-label">{group.title}</p>
                     </div>
-                  ))}
-              </>
-            )}
+                    <ul className="cs-svc-rail__list">{group.items.map(renderItem)}</ul>
+                  </div>
+                ))
+              )}
+            </div>
           </aside>
 
-          <section className="cs-md-detail-panel" aria-label="Resource details">
-            {selectedResource ? (
-              <div className="cs-md-detail-panel__body">
-                <header className="cs-md-detail-panel__header">
-                  <div>
-                    <h4>{selectedResource.name}</h4>
-                    <p className="cs-md-detail-panel__meta">
-                      {KIND_LABELS[selectedResource.kind] ?? selectedResource.kind}
-                      {selectedResource.kind !== "room"
-                        ? ` · ${selectedResource.quantity} ${selectedResource.quantity === 1 ? "unit" : "units"}`
-                        : ""}
-                      {" · "}
-                      {locationName(selectedResource.locationId)}
-                      {" · "}
-                      {selectedResource.isActive ? "Active" : "Inactive"}
-                    </p>
-                  </div>
-                  {canManage ? (
-                    <div className="cs-md-detail__actions">
-                      <button
-                        type="button"
-                        className="cs-btn cs-btn--ghost cs-btn--sm"
-                        onClick={() =>
-                          setModal({ kind: "edit", resource: selectedResource })
-                        }
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="cs-btn cs-btn--ghost cs-btn--sm"
-                        onClick={() =>
-                          handleToggleActive(selectedResource)
-                        }
-                      >
-                        {selectedResource.isActive ? "Deactivate" : "Activate"}
-                      </button>
-                    </div>
-                  ) : null}
-                </header>
-
-                <section className="cs-md-detail-panel__section" aria-label="Used by">
-                  <p className="cs-kicker">Used by</p>
-                  {selectedResource.usedBy.length === 0 ? (
-                    <p className="cs-md-detail-panel__notes">
-                      No service needs this yet, so it doesn&apos;t affect availability. Tick it on a
-                      service&apos;s Resources tab to start using it.
-                    </p>
-                  ) : (
-                    <ul className="cs-md-detail-panel__list">
-                      {selectedResource.usedBy.map((use) => (
-                        <li key={use.serviceId}>
-                          <strong>{use.serviceName}</strong>
-                          {use.isActive ? "" : " (inactive)"}
-                          {selectedResource.kind !== "room"
-                            ? ` · uses ${use.quantity} of ${selectedResource.quantity}`
-                            : ""}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
-
-                {selectedResource.notes ? (
-                  <section className="cs-md-detail-panel__section">
-                    <p className="cs-kicker">Notes</p>
-                    <p className="cs-md-detail-panel__notes">
-                      {selectedResource.notes}
-                    </p>
-                  </section>
-                ) : null}
-              </div>
+          <div className="cs-md-detail" aria-label="Resource details">
+            {isNew || selected ? (
+              renderDetail()
             ) : (
               <div className="cs-md-detail-panel__empty">
                 <p>Select a resource to view details.</p>
               </div>
             )}
-          </section>
+          </div>
         </div>
       </section>
-
-      {modal.kind !== "none" ? (
-        <ResourceModal
-          tenantSlug={tenantSlug}
-          modal={modal}
-          locations={locations}
-          onClose={() => setModal({ kind: "none" })}
-          onSaved={async (msg) => {
-            await loadResources();
-            setStatus(msg);
-            setModal({ kind: "none" });
-          }}
-          onStatus={setStatus}
-        />
-      ) : null}
     </main>
-  );
-
-  async function handleToggleActive(resource: ResourceSummary) {
-    if (!canManage) return;
-    try {
-      await platformApi.updateResource(tenantSlug, resource.id, {
-        isActive: !resource.isActive,
-      });
-      setStatus(`"${resource.name}" ${resource.isActive ? "deactivated" : "activated"}.`);
-      await loadResources();
-    } catch (error) {
-      setStatus(readErrorMessage(error, "Unable to update resource."));
-    }
-  }
-}
-
-function ResourceModal({
-  tenantSlug,
-  modal,
-  locations,
-  onClose,
-  onSaved,
-  onStatus,
-}: {
-  tenantSlug: string;
-  modal: ModalState;
-  locations: LocationSummary[];
-  onClose: () => void;
-  onSaved: (msg: string) => Promise<void>;
-  onStatus: (msg: string) => void;
-}) {
-  const isEdit = modal.kind === "edit";
-  const [name, setName] = useState(isEdit ? modal.resource.name : "");
-  const [kind, setKind] = useState(isEdit ? modal.resource.kind : "room");
-  const [notes, setNotes] = useState(isEdit ? (modal.resource.notes ?? "") : "");
-  const [quantity, setQuantity] = useState(String(isEdit ? modal.resource.quantity : 1));
-  const [locationId, setLocationId] = useState(isEdit ? (modal.resource.locationId ?? "") : "");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      setError("Resource name is required.");
-      return;
-    }
-    // A room is always one unit; other kinds are pooled (e.g. 2 LED panels).
-    const units = kind === "room" ? 1 : Number(quantity);
-    if (!Number.isInteger(units) || units < 1 || units > 100) {
-      setError("Units owned must be a whole number from 1 to 100.");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      if (isEdit) {
-        const body: UpdateResourceRequest = {
-          name: trimmedName,
-          kind,
-          notes: notes.trim() || null,
-          quantity: units,
-          locationId: locationId || null,
-        };
-        await platformApi.updateResource(tenantSlug, modal.resource.id, body);
-        await onSaved(`"${trimmedName}" updated.`);
-      } else {
-        const body: CreateResourceRequest = {
-          name: trimmedName,
-          kind,
-          notes: notes.trim() || undefined,
-          quantity: units,
-          locationId: locationId || null,
-        };
-        await platformApi.createResource(tenantSlug, body);
-        await onSaved(`"${trimmedName}" created.`);
-      }
-    } catch (err) {
-      onStatus(readErrorMessage(err, "Unable to save resource."));
-      onClose();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div
-      className="cs-modal"
-      role="dialog"
-      aria-modal="true"
-      aria-label={isEdit ? "Edit resource" : "Add resource"}
-    >
-      <div className="cs-modal__panel">
-        <header className="cs-modal__header">
-          <h4>{isEdit ? "Edit resource" : "Add resource"}</h4>
-          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>
-            Close
-          </button>
-        </header>
-        <form className="cs-modal__form" onSubmit={handleSubmit}>
-          {error ? (
-            <div className="cs-banner cs-banner--error">{error}</div>
-          ) : null}
-          <label>
-            <span>Name</span>
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="e.g. Treatment Room A, Laser Device 1"
-              autoFocus
-            />
-          </label>
-          <label>
-            <span>Kind</span>
-            <select
-              value={kind}
-              onChange={(event) => setKind(event.target.value)}
-            >
-              <option value="room">Room</option>
-              <option value="chair">Chair</option>
-              <option value="equipment">Equipment</option>
-              <option value="other">Other</option>
-            </select>
-          </label>
-          {kind !== "room" ? (
-            <label>
-              <span>Units owned</span>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                value={quantity}
-                onChange={(event) => setQuantity(event.target.value)}
-              />
-              <small className="cs-settings-form-help">
-                Bookings that need this stop once every unit is in use.
-              </small>
-            </label>
-          ) : null}
-          <label>
-            <span>Location</span>
-            <select value={locationId} onChange={(event) => setLocationId(event.target.value)}>
-              <option value="">All locations</option>
-              {locations.map((loc) => (
-                <option key={loc.id} value={loc.id}>{loc.name}</option>
-              ))}
-            </select>
-            <small className="cs-settings-form-help">
-              {kind === "room"
-                ? "A room pinned to a location is only offered for bookings there."
-                : "Equipment pinned to a location is only available for bookings there."}
-            </small>
-          </label>
-          <label>
-            <span>Notes</span>
-            <textarea
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              rows={3}
-              placeholder="Optional notes about this resource"
-            />
-          </label>
-          <div className="cs-modal__actions">
-            <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>
-              Cancel
-            </button>
-            <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={saving}>
-              {saving ? "Saving…" : isEdit ? "Save changes" : "Create resource"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   );
 }

@@ -1,18 +1,28 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.auth import require_tenant_permission
 from app.db.models import User
 from app.db.session import get_db_session
 from app.schemas.resources import (
+    CreateResourceBlockRequest,
     CreateResourceRequest,
+    ResourceBlockListResponse,
+    ResourceBlockResponse,
     ResourceListResponse,
     ResourceSummaryResponse,
     UpdateResourceRequest,
 )
-from app.services.resources import create_tenant_resource, list_tenant_resources, update_tenant_resource
+from app.services.resources import (
+    create_resource_block,
+    create_tenant_resource,
+    list_resource_blocks,
+    list_tenant_resources,
+    remove_resource_block,
+    update_tenant_resource,
+)
 from app.services.audit import record_audit
 
 
@@ -64,3 +74,49 @@ async def update_resource(
     result = await update_tenant_resource(session, tenant_slug, resource_id, payload)
     await record_audit(session, tenant_id=result.tenant_id, entity_type="resource", entity_id=resource_id, action="update", actor=actor)
     return result
+
+
+@router.get(
+    "/tenants/{tenant_slug}/resources/{resource_id}/blocks",
+    response_model=ResourceBlockListResponse,
+    summary="List upcoming unavailable times for a resource",
+)
+async def list_blocks(
+    tenant_slug: str,
+    resource_id: str,
+    _: object = Depends(require_tenant_permission("settings.view")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ResourceBlockListResponse:
+    return await list_resource_blocks(session, tenant_slug, resource_id)
+
+
+@router.post(
+    "/tenants/{tenant_slug}/resources/{resource_id}/blocks",
+    response_model=ResourceBlockResponse,
+    status_code=201,
+    summary="Mark a resource unavailable for a window",
+)
+async def create_block(
+    tenant_slug: str,
+    resource_id: str,
+    payload: CreateResourceBlockRequest,
+    actor: User = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ResourceBlockResponse:
+    return await create_resource_block(session, tenant_slug, resource_id, payload, actor)
+
+
+@router.delete(
+    "/tenants/{tenant_slug}/resources/{resource_id}/blocks/{block_id}",
+    status_code=204,
+    summary="Remove an unavailable time (kept in the audit trail)",
+)
+async def remove_block(
+    tenant_slug: str,
+    resource_id: str,
+    block_id: str,
+    actor: User = Depends(require_tenant_permission("settings.manage")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    await remove_resource_block(session, tenant_slug, resource_id, block_id, actor)
+    return Response(status_code=204)

@@ -4490,6 +4490,21 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
   background: var(--cs-canvas);
 }
 .cs-svc-row--off { background: var(--cs-block); }
+/* A row with a warning underneath its main line (resource unavailable times). */
+.cs-svc-row--stack { flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 18px; }
+.cs-svc-row__line { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.cs-svc-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border-radius: var(--cs-r-12);
+  background: var(--cs-warn-fill);
+  font: 500 12px/1.5 var(--cs-font);
+  color: var(--cs-warn-text);
+}
+.cs-svc-warning strong { font-weight: 700; }
+.cs-svc-warning ul { margin: 0; padding-left: 18px; }
 .cs-svc-row__main { display: flex; align-items: center; gap: 14px; min-width: 0; cursor: pointer; }
 .cs-svc-row__text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .cs-svc-row__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 13px var(--cs-font); color: var(--cs-ink); }

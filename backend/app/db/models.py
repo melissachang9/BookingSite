@@ -906,6 +906,26 @@ class Resource(Base, IdMixin, TimestampMixin):
     service_links: Mapped[list[ServiceResource]] = relationship(back_populates="resource", cascade="all, delete-orphan")
 
 
+class ResourceBlock(Base, IdMixin, TimestampMixin):
+    """A window when a room or piece of equipment is out of service (maintenance, cleaning, repair).
+
+    Counts as every unit in use, so availability stops offering new bookings in
+    the window. Existing bookings are untouched. Blocks are never deleted:
+    removing one stamps who removed it and when.
+    """
+
+    __tablename__ = "resource_blocks"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    resource_id: Mapped[str] = mapped_column(String(36), ForeignKey("resources.id"), index=True, nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    removed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    removed_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+
+
 class ResourceAllocation(Base, IdMixin, TimestampMixin):
     """Units of a room or piece of equipment reserved for one appointment.
 

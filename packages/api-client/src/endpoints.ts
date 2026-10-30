@@ -50,6 +50,7 @@ import type {
   ReleaseBookingDraftRequest,
   CreateFormRequest,
   CreateLocationRequest,
+  CreateResourceBlockRequest,
   CreateResourceRequest,
   CustomerListResponse,
   CustomerBookingAttempt,
@@ -98,6 +99,8 @@ import type {
   ReplaceProviderServiceVariantsRequest,
   ReplaceServiceResourcesRequest,
   ReplaceUserPermissionsRequest,
+  ResourceBlock,
+  ResourceBlockListResponse,
   ResourceListResponse,
   ResourceSummary,
   ServiceResourceListResponse,
@@ -695,6 +698,12 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.get<ResourceListResponse>(`tenants/${tenantSlug}/resources`),
   createResource: (tenantSlug: string, body: CreateResourceRequest) =>
     client.post<ResourceSummary, CreateResourceRequest>(`tenants/${tenantSlug}/resources`, body),
+  listResourceBlocks: (tenantSlug: string, resourceId: string) =>
+    client.get<ResourceBlockListResponse>(`tenants/${tenantSlug}/resources/${resourceId}/blocks`),
+  createResourceBlock: (tenantSlug: string, resourceId: string, body: CreateResourceBlockRequest) =>
+    client.post<ResourceBlock, CreateResourceBlockRequest>(`tenants/${tenantSlug}/resources/${resourceId}/blocks`, body),
+  removeResourceBlock: (tenantSlug: string, resourceId: string, blockId: string) =>
+    client.delete<void>(`tenants/${tenantSlug}/resources/${resourceId}/blocks/${blockId}`),
   updateResource: (tenantSlug: string, resourceId: string, body: UpdateResourceRequest) =>
     client.patch<ResourceSummary, UpdateResourceRequest>(`tenants/${tenantSlug}/resources/${resourceId}`, body),
 });

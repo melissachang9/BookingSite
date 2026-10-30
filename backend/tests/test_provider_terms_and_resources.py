@@ -422,6 +422,67 @@ def test_resource_rejects_another_tenants_location(client) -> None:
     assert moved.status_code == 404
 
 
+def test_unavailable_time_stops_new_bookings_and_warns_about_existing_ones(client) -> None:
+    headers = _auth(client)
+    service = _service_named(client, "New Client Consultation")
+    provider_id = _providers_for(client, headers, service["id"])[0]["id"]
+    location_id = _location_id(client)
+    _work_mondays(client, headers, provider_id, location_id)
+    monday = _next_monday()
+
+    room = _create_resource(client, headers, "Blockable room", "room")
+    assert _require(client, headers, service["id"], [(room, 1)]).status_code == 200
+    slots = _slots(client, service["id"], location_id, monday, provider_id)
+    assert len(slots) >= 5
+    booked = slots[4]
+    draft = _draft(client, service["id"], booked)
+    assert draft.status_code in (200, 201), draft.json()
+    _confirm(client, draft.json()["id"], "block-conflict@example.com")
+
+    # Block the whole day: no new slots, and the existing booking is reported, not cancelled.
+    day_start = f"{monday}T00:00:00+00:00"
+    day_end = f"{monday}T23:59:00+00:00"
+    created = client.post(
+        f"{API}/resources/{room}/blocks",
+        headers=headers,
+        json={"startsAt": day_start, "endsAt": day_end, "reason": "Deep clean"},
+    )
+    assert created.status_code == 201, created.json()
+    body = created.json()
+    assert body["reason"] == "Deep clean"
+    assert [c["serviceName"] for c in body["conflicts"]] == ["New Client Consultation"]
+    # Availability may still suggest a later day, but nothing inside the block.
+    block_end = datetime.fromisoformat(day_end)
+    assert all(
+        datetime.fromisoformat(slot["startAt"].replace("Z", "+00:00")) > block_end
+        for slot in _slots(client, service["id"], location_id, monday, provider_id)
+    )
+
+    listed = client.get(f"{API}/resources/{room}/blocks", headers=headers).json()["items"]
+    assert [item["id"] for item in listed] == [body["id"]]
+    assert len(listed[0]["conflicts"]) == 1
+
+    # Removing it reopens the day; the removal is audited rather than erased.
+    removed = client.delete(f"{API}/resources/{room}/blocks/{body['id']}", headers=headers)
+    assert removed.status_code == 204
+    assert client.get(f"{API}/resources/{room}/blocks", headers=headers).json()["items"] == []
+    assert _slots(client, service["id"], location_id, monday, provider_id) != []
+    assert client.delete(f"{API}/resources/{room}/blocks/{body['id']}", headers=headers).status_code == 404
+
+
+def test_unavailable_time_validates_and_is_tenant_scoped(client) -> None:
+    headers = _auth(client)
+    room = _create_resource(client, headers, "Validated room", "room")
+    backwards = client.post(
+        f"{API}/resources/{room}/blocks",
+        headers=headers,
+        json={"startsAt": "2030-01-02T10:00:00+00:00", "endsAt": "2030-01-02T09:00:00+00:00"},
+    )
+    assert backwards.status_code == 422
+    missing = client.get(f"{API}/resources/not-a-real-resource/blocks", headers=headers)
+    assert missing.status_code == 404
+
+
 # --------------------------------------------------------------------------- tenant isolation
 
 

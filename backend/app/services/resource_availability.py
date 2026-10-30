@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Booking, Resource, ResourceAllocation, ServiceResource, SlotHold
+from app.db.models import Booking, Resource, ResourceAllocation, ResourceBlock, ServiceResource, SlotHold
 
 ROOM_KIND = "room"
 
@@ -117,6 +117,22 @@ async def load_usage(
         usage[allocation.resource_id].append(
             Usage(_aware(allocation.starts_at), _aware(allocation.ends_at), allocation.quantity)
         )
+    # Out-of-service windows take every unit, so nothing new can be placed in them.
+    blocks = (
+        await session.execute(
+            select(ResourceBlock, Resource.quantity)
+            .join(Resource, Resource.id == ResourceBlock.resource_id)
+            .where(
+                ResourceBlock.tenant_id == tenant_id,
+                ResourceBlock.resource_id.in_(resource_ids),
+                ResourceBlock.removed_at.is_(None),
+                ResourceBlock.starts_at < window_end,
+                ResourceBlock.ends_at > window_start,
+            )
+        )
+    ).all()
+    for block, units in blocks:
+        usage[block.resource_id].append(Usage(_aware(block.starts_at), _aware(block.ends_at), max(units or 1, 1)))
     return usage
 
 

@@ -41,3 +41,34 @@ export type UpdateResourceRequest = {
   notes?: string | null;
   quantity?: number;
 };
+
+/** A confirmed booking that already holds the resource during an unavailable time. */
+export type ResourceBlockConflict = {
+  bookingId: UUID;
+  startsAt: string;
+  endsAt: string;
+  customerName: string;
+  serviceName: string;
+};
+
+/** A window when a resource is out of service. It stops new bookings; existing ones stay and are listed as conflicts. */
+export type ResourceBlock = {
+  id: UUID;
+  resourceId: UUID;
+  startsAt: string;
+  endsAt: string;
+  reason?: string | null;
+  createdByName?: string | null;
+  createdAt: string;
+  conflicts: ResourceBlockConflict[];
+};
+
+export type ResourceBlockListResponse = {
+  items: ResourceBlock[];
+};
+
+export type CreateResourceBlockRequest = {
+  startsAt: string;
+  endsAt: string;
+  reason?: string | null;
+};
