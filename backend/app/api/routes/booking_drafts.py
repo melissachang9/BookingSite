@@ -20,6 +20,7 @@ from app.services.booking_drafts import (
     confirm_booking_draft,
     create_booking_draft,
     get_booking_draft,
+    mark_financing_started,
     release_booking_draft,
     update_booking_draft,
 )
@@ -90,6 +91,19 @@ async def update_booking_draft_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingDraftSummaryResponse:
     return await update_booking_draft(session, tenant_slug, booking_draft_id, payload)
+
+
+@router.post(
+    "/tenants/{tenant_slug}/booking-drafts/{booking_draft_id}/financing-started",
+    response_model=BookingDraftSummaryResponse,
+    summary="Note that the customer opened the studio's financing page",
+)
+async def financing_started_route(
+    tenant_slug: str,
+    booking_draft_id: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> BookingDraftSummaryResponse:
+    return await mark_financing_started(session, tenant_slug, booking_draft_id)
 
 
 @router.post(

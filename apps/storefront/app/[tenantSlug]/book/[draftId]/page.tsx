@@ -14,6 +14,7 @@ import {
 } from "../../../lib/storefront-shell";
 import {
   confirmBookingDraftAction,
+  noteFinancingStartedAction,
   saveBookingRequirementDraftAction,
   startDepositCheckoutAction,
   submitBookingRequirementAction,
@@ -560,6 +561,7 @@ export default async function BookingDraftPage({ params, searchParams }: Booking
                 financing={financingOffer}
                 depositCta={summaryCta}
                 canStartFinancing={canStartDepositCheckout}
+                onFinancingStart={noteFinancingStartedAction.bind(null, tenantSlug, draft.id)}
                 disabledLabel={paymentCtaLabel}
                 note={summaryNote}
               />

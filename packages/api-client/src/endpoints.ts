@@ -428,6 +428,10 @@ export const createPlatformApi = (client: ApiClient) => ({
       method: "POST",
       body,
     }),
+  markBookingDraftFinancingStarted: (tenantSlug: string, bookingDraftId: string) =>
+    client.request<BookingDraftSummary>(`tenants/${tenantSlug}/booking-drafts/${bookingDraftId}/financing-started`, {
+      method: "POST",
+    }),
   updateBookingDraft: (tenantSlug: string, bookingDraftId: string, body: UpdateBookingDraftRequest) =>
     client.patch<BookingDraftSummary, UpdateBookingDraftRequest>(
       `tenants/${tenantSlug}/booking-drafts/${bookingDraftId}`,

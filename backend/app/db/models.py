@@ -695,6 +695,9 @@ class BookingDraft(Base, IdMixin, TimestampMixin):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # When staff first asked the customer to pay (payment link sent).
     payment_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # When the customer first clicked through to the studio's financing page. Applying there does not
+    # confirm the booking, so this is how staff can tell the customer is mid-financing.
+    financing_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="booking_drafts")
     location: Mapped[Optional["Location"]] = relationship(lazy="joined", viewonly=True)

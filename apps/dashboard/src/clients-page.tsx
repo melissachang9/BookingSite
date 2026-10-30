@@ -3,6 +3,7 @@ import type {
   AuthenticatedUser,
   BookingFormResponseEntry,
   BookingFormResponseList,
+  CustomerBookingAttempt,
   CustomerBookingEntry,
   CustomerListResponse,
   CustomerProfileResponse,
@@ -632,15 +633,62 @@ function ClientHistoryTab({ profileState }: { profileState: ProfileState }) {
   const bookings = [...profileState.profile.bookings].sort(
     (a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime(),
   );
-  if (bookings.length === 0) {
+  const attempts = profileState.profile.bookingAttempts ?? [];
+  if (bookings.length === 0 && attempts.length === 0) {
     return <p className="cs-empty">No bookings yet.</p>;
   }
   return (
-    <ul className="cs-client-history-list">
-      {bookings.map((booking) => (
-        <ClientHistoryRow key={booking.id} booking={booking} />
-      ))}
-    </ul>
+    <>
+      {attempts.length > 0 ? (
+        <section className="cs-client-attempts" aria-label="Unfinished bookings">
+          <h3 className="cs-client-attempts__title">Unfinished bookings</h3>
+          <ul className="cs-client-history-list">
+            {attempts.map((attempt) => (
+              <ClientAttemptRow key={attempt.id} attempt={attempt} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {bookings.length > 0 ? (
+        <ul className="cs-client-history-list">
+          {bookings.map((booking) => (
+            <ClientHistoryRow key={booking.id} booking={booking} />
+          ))}
+        </ul>
+      ) : null}
+    </>
+  );
+}
+
+function attemptDetails(attempt: CustomerBookingAttempt): { meta: string; badge: string; tone: string } {
+  const wanted = `Wanted ${formatDateTime(attempt.startsAt)}`;
+  if (attempt.bookedSince) {
+    return { meta: `${wanted} · booked since`, badge: "Booked since", tone: "neutral" };
+  }
+  if (attempt.outcome === "financing_started") {
+    const opened = attempt.financingStartedAt ? formatDateTime(attempt.financingStartedAt) : "";
+    return { meta: `${wanted} · opened financing ${opened}`.trim(), badge: "Follow up: financing", tone: "peach" };
+  }
+  if (attempt.outcome === "in_progress") {
+    return { meta: `${wanted} · still being held`, badge: "In progress", tone: "neutral" };
+  }
+  return { meta: `${wanted} · left before paying (${formatDateTime(attempt.createdAt)})`, badge: "Follow up: abandoned", tone: "peach" };
+}
+
+function ClientAttemptRow({ attempt }: { attempt: CustomerBookingAttempt }) {
+  const { meta, badge, tone } = attemptDetails(attempt);
+  return (
+    <li className={`cs-client-history-row${attempt.bookedSince ? " is-muted" : ""}`}>
+      <span className="cs-client-history-row__date">
+        <strong className="cs-client-history-row__day">{dayNumber(attempt.startsAt)}</strong>
+        <span className="cs-client-history-row__month">{monthLabel(attempt.startsAt)}</span>
+      </span>
+      <span className="cs-client-history-row__body">
+        <strong className="cs-client-history-row__title">{attempt.serviceName}</strong>
+        <span className="cs-client-history-row__meta">{attempt.providerName} · {meta}</span>
+      </span>
+      <span className={`cs-client-history-row__badge cs-client-history-row__badge--${tone}`}>{badge}</span>
+    </li>
   );
 }
 

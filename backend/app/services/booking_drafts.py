@@ -910,6 +910,28 @@ async def get_booking_draft(
     return booking_draft_to_summary(draft)
 
 
+async def mark_financing_started(
+    session: AsyncSession,
+    tenant_slug: str,
+    booking_draft_id: str,
+) -> BookingDraftSummaryResponse:
+    """Note that the customer went off to the studio's financing page. Only the first click is kept, and
+    nothing about the booking or its hold changes."""
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    draft = await _load_booking_draft(session, booking_draft_id, tenant.id, for_update=True)
+    _ensure_not_expired(draft)
+    if draft.customer_id is None:
+        raise api_exception(400, "bad_request", "Customer details are required before starting financing.")
+    if draft.financing_started_at is None:
+        draft.financing_started_at = datetime.now(timezone.utc)
+        from app.services.funnel import financing_started
+
+        financing_started(tenant_id=draft.tenant_id, booking_draft_id=draft.id)
+        await session.commit()
+        draft = await _load_booking_draft(session, booking_draft_id, tenant.id)
+    return booking_draft_to_summary(draft)
+
+
 async def get_booking(
     session: AsyncSession,
     tenant_slug: str,

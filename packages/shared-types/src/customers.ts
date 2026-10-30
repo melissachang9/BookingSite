@@ -51,6 +51,21 @@ export type CustomerBookingEntry = {
   balanceDueCents: number;
 };
 
+/** A booking the client started online but never finished, kept for follow-up. */
+export type CustomerBookingAttempt = {
+  id: UUID;
+  /** financing_started: opened the financing page; abandoned: hold lapsed unpaid; in_progress: still held. */
+  outcome: "financing_started" | "abandoned" | "in_progress";
+  serviceName: string;
+  providerName: string;
+  startsAt: ISODateString;
+  createdAt: ISODateString;
+  financingStartedAt?: ISODateString | null;
+  /** The client has since booked this service. */
+  bookedSince: boolean;
+  bookingMethod: string;
+};
+
 export type CustomerPaymentEntry = {
   id: string;
   bookingId: string;
@@ -65,6 +80,7 @@ export type CustomerProfileResponse = {
   customer: CustomerSummary;
   bookings: CustomerBookingEntry[];
   payments: CustomerPaymentEntry[];
+  bookingAttempts?: CustomerBookingAttempt[];
   lifetimeSpendCents: number;
   outstandingBalanceCents: number;
 };

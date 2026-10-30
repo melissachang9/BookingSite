@@ -598,6 +598,7 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("booking_drafts", "created_by_user_id", "VARCHAR(36)"),
     ("booking_drafts", "notes", "TEXT"),
     ("booking_drafts", "payment_requested_at", "TIMESTAMP WITH TIME ZONE"),
+    ("booking_drafts", "financing_started_at", "TIMESTAMP WITH TIME ZONE"),
     ("payments", "external_reference", "VARCHAR(128)"),
     ("payments", "processor", "VARCHAR(16)"),
     ("payments", "processor_channel", "VARCHAR(16)"),

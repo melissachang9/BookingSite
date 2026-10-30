@@ -313,3 +313,138 @@ def test_another_studio_cannot_change_financing_and_does_not_inherit_it(client) 
     other = client.get("/api/v1/tenants/other-financing-studio").json()
     assert other["branding"].get("financing") in (None, {"enabled": False, "buttonText": None, "linkUrl": None, "months": None})
     assert client.get("/api/v1/tenants/brow-beauty-lab").json()["branding"]["financing"]["enabled"] is True
+
+
+def _held_draft(client, headers) -> dict:
+    from datetime import datetime, timedelta, timezone
+
+    api = "/api/v1/tenants/brow-beauty-lab"
+    service = next(s for s in client.get(f"{api}/services").json()["services"] if s["isActive"])
+    providers = client.get(f"{api}/providers/manage", headers=headers).json()["providers"]
+    provider_id = next(p["id"] for p in providers if p["isActive"] and service["id"] in p["serviceIds"])
+    location_id = client.get(f"{api}/locations").json()["locations"][0]["id"]
+    client.put(
+        f"{api}/providers/{provider_id}/schedule",
+        headers=headers,
+        json={"locationId": location_id, "entries": [
+            {"weekday": 0, "locationId": location_id, "startTime": "09:00", "endTime": "17:00", "isActive": True},
+        ]},
+    )
+    today = datetime.now(timezone.utc).date()
+    monday = (today + timedelta(days=(7 - today.weekday()) % 7 or 7)).isoformat()
+    slot = client.get(
+        f"{api}/availability",
+        params={"serviceId": service["id"], "providerId": provider_id, "locationId": location_id, "date": monday, "windowDays": 1},
+    ).json()["slots"][0]
+    draft = client.post(
+        f"{api}/booking-drafts",
+        json={"tenantSlug": "brow-beauty-lab", "serviceId": service["id"], "providerId": provider_id,
+              "locationId": location_id, "startsAt": slot["startAt"]},
+    )
+    assert draft.status_code in (200, 201), draft.json()
+    return draft.json()
+
+
+def test_starting_financing_is_noted_on_the_draft_without_changing_the_hold(client) -> None:
+    headers = _auth_headers(client)
+    draft = _held_draft(client, headers)
+    url = f"/api/v1/tenants/brow-beauty-lab/booking-drafts/{draft['id']}"
+    assert draft["financingStartedAt"] is None
+
+    # Needs contact details first, so staff always have someone to follow up with.
+    assert client.post(f"{url}/financing-started").status_code == 400
+
+    saved = client.patch(url, json={"customer": {"name": "Fin Client", "email": "fin@example.com", "phone": "6045550101"}})
+    assert saved.status_code == 200, saved.json()
+
+    first = client.post(f"{url}/financing-started")
+    assert first.status_code == 200, first.json()
+    stamped = first.json()["financingStartedAt"]
+    assert stamped is not None
+    assert first.json()["status"] == draft["status"]
+    assert first.json()["expiresAt"][:19] == draft["expiresAt"][:19]
+
+    # Only the first click is kept.
+    assert client.post(f"{url}/financing-started").json()["financingStartedAt"][:26] == stamped[:26]
+    assert client.get(url).json()["financingStartedAt"][:26] == stamped[:26]
+
+
+def test_starting_financing_is_scoped_to_the_tenant(client) -> None:
+    headers = _auth_headers(client)
+    draft = _held_draft(client, headers)
+    other = client.post(f"/api/v1/tenants/not-a-studio/booking-drafts/{draft['id']}/financing-started")
+    assert other.status_code == 404
+
+
+def _lapse_draft(draft_id: str) -> None:
+    import asyncio
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import select
+
+    from app.db.models import BookingDraft, SlotHold
+    from app.db.session import get_session_maker
+    from app.services.slot_hold_cleanup import expire_lapsed_booking_drafts
+
+    async def _go():
+        past = datetime.now(timezone.utc) - timedelta(minutes=1)
+        async with get_session_maker()() as session:
+            draft = await session.scalar(select(BookingDraft).where(BookingDraft.id == draft_id))
+            draft.expires_at = past
+            hold = await session.scalar(select(SlotHold).where(SlotHold.booking_draft_id == draft_id))
+            if hold is not None:
+                hold.expires_at = past
+            await session.commit()
+        await expire_lapsed_booking_drafts()
+
+    asyncio.run(_go())
+
+
+def _attempts(client, headers, customer_id: str) -> list[dict]:
+    response = client.get(f"/api/v1/tenants/brow-beauty-lab/customers/{customer_id}", headers=headers)
+    assert response.status_code == 200, response.json()
+    return response.json()["bookingAttempts"]
+
+
+def test_profile_keeps_a_financing_attempt_after_the_hold_lapses(client) -> None:
+    headers = _auth_headers(client)
+    draft = _held_draft(client, headers)
+    url = f"/api/v1/tenants/brow-beauty-lab/booking-drafts/{draft['id']}"
+    saved = client.patch(url, json={"customer": {"name": "Fin Later", "email": "finlater@example.com", "phone": "6045557983"}}).json()
+    customer_id = saved["customer"]["id"]
+
+    # Contact details alone is an unfinished booking still in progress.
+    assert [(a["id"], a["outcome"]) for a in _attempts(client, headers, customer_id)] == [(draft["id"], "in_progress")]
+
+    client.post(f"{url}/financing-started")
+    _lapse_draft(draft["id"])
+
+    # Financing can take days; the hold is long gone but the profile still says what happened.
+    [attempt] = _attempts(client, headers, customer_id)
+    assert attempt["id"] == draft["id"]
+    assert attempt["outcome"] == "financing_started"
+    assert attempt["financingStartedAt"] is not None
+    assert attempt["bookedSince"] is False
+    assert attempt["serviceName"]
+
+
+def test_profile_flags_an_abandoned_booking_that_never_reached_financing(client) -> None:
+    headers = _auth_headers(client)
+    draft = _held_draft(client, headers)
+    url = f"/api/v1/tenants/brow-beauty-lab/booking-drafts/{draft['id']}"
+    customer_id = client.patch(url, json={"customer": {"name": "Left Cart", "email": "leftcart@example.com", "phone": "6045552286"}}).json()["customer"]["id"]
+    _lapse_draft(draft["id"])
+
+    [attempt] = _attempts(client, headers, customer_id)
+    assert attempt["outcome"] == "abandoned"
+    assert attempt["financingStartedAt"] is None
+
+
+def test_booking_attempts_require_customer_access_and_stay_in_the_tenant(client) -> None:
+    headers = _auth_headers(client)
+    draft = _held_draft(client, headers)
+    url = f"/api/v1/tenants/brow-beauty-lab/booking-drafts/{draft['id']}"
+    customer_id = client.patch(url, json={"customer": {"name": "Private Pat", "email": "private@example.com", "phone": "6045555474"}}).json()["customer"]["id"]
+
+    assert client.get(f"/api/v1/tenants/brow-beauty-lab/customers/{customer_id}").status_code in (401, 403)
+    assert client.get(f"/api/v1/tenants/not-a-studio/customers/{customer_id}", headers=headers).status_code in (403, 404)

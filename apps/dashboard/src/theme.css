@@ -4297,6 +4297,8 @@ textarea.cs-note.cs-note--input::placeholder { color: var(--cs-label); font-styl
 .cs-client-history-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .cs-client-history-row { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--cs-hairline); border-radius: var(--cs-r-12); background: var(--cs-surface); }
 .cs-client-history-row.is-muted { opacity: .55; }
+.cs-client-attempts { display: grid; gap: 8px; margin-bottom: 16px; }
+.cs-client-attempts__title { margin: 0; font: 700 11px var(--cs-font); letter-spacing: .08em; text-transform: uppercase; color: var(--cs-label); }
 .cs-client-history-row__date { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 42px; border-radius: var(--cs-r-8); background: var(--cs-canvas); }
 .cs-client-history-row__day { font: 700 16px var(--cs-font); color: var(--cs-ink); line-height: 1; }
 .cs-client-history-row__month { margin-top: 3px; font: 700 9px var(--cs-font); color: var(--cs-label); letter-spacing: .08em; }

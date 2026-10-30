@@ -775,6 +775,47 @@ describe("CalendarPage", () => {
     }
   });
 
+  it("labels a held slot Financing started once the client opened the financing page", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));
+
+    try {
+      const held = {
+        ...baseDraftSummary,
+        id: "draft-financing",
+        customer: { ...baseBooking.customer, name: "Pat Phone" },
+        expiresAt: "2026-05-26T19:25:00.000Z",
+        financingStartedAt: "2026-05-26T18:50:00.000Z",
+        status: "awaiting_payment" as const,
+      };
+      const api = createApi([baseBooking]);
+      const heldApi = {
+        ...api,
+        listBookingDrafts: vi.fn().mockResolvedValue({ items: [held] }),
+        releaseBookingDraft: vi.fn(),
+        confirmBookingDraftWithPayment: vi.fn(),
+      };
+
+      render(
+        <CalendarPage
+          definition={{ eyebrow: "Calendar-first booking", description: "Calendar" }}
+          tenantSlug="brow-beauty-lab"
+          api={heldApi}
+        />,
+      );
+
+      await screen.findByText("24 – 30 May");
+      const chip = await screen.findByRole("button", { name: /Financing started: Pat Phone/ });
+      expect(chip).toHaveTextContent("Financing started · 25m");
+
+      fireEvent.click(chip);
+      const drawer = await screen.findByRole("dialog", { name: "Held slot" });
+      expect(within(drawer).getByText("Financing started, awaiting deposit")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("doesn't break the calendar when held slots can't load", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-05-26T19:00:00.000Z"));

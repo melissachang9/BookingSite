@@ -30,6 +30,25 @@ class CustomerBookingEntry(CamelModel):
     balance_due_cents: int
 
 
+class CustomerBookingAttempt(CamelModel):
+    """A booking the client started online but never finished, kept for follow-up.
+
+    outcome: financing_started (opened the studio's financing page; applying can take days),
+    abandoned (hold lapsed before payment), in_progress (still held), released (staff let it go).
+    """
+
+    id: str
+    outcome: str
+    service_name: str
+    provider_name: str
+    starts_at: datetime
+    created_at: datetime
+    financing_started_at: datetime | None = None
+    # The client has since booked this service, so there is nothing left to chase.
+    booked_since: bool = False
+    booking_method: str
+
+
 class CustomerPaymentEntry(CamelModel):
     id: str
     booking_id: str
@@ -44,6 +63,7 @@ class CustomerProfileResponse(CamelModel):
     customer: CustomerSummaryResponse
     bookings: list[CustomerBookingEntry]
     payments: list[CustomerPaymentEntry] = []
+    booking_attempts: list[CustomerBookingAttempt] = []
     lifetime_spend_cents: int = 0
     outstanding_balance_cents: int = 0
     wallet_balance_cents: int = 0

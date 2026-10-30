@@ -27,6 +27,7 @@ export function PaymentChoice({
   financing,
   depositCta,
   canStartFinancing,
+  onFinancingStart,
   disabledLabel,
   note,
 }: {
@@ -38,6 +39,8 @@ export function PaymentChoice({
   financing: FinancingChoice;
   depositCta: ReactNode;
   canStartFinancing: boolean;
+  /** Called when the client opens the financing page, so staff can see they're mid-financing. */
+  onFinancingStart: () => Promise<void>;
   disabledLabel: string;
   note: string;
 }) {
@@ -100,6 +103,7 @@ export function PaymentChoice({
             href={financing.linkUrl}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => void onFinancingStart()}
           >
             Continue to financing ↗
           </a>

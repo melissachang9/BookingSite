@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
-from app.db.models import Booking, Customer, Payment, Tenant, User
-from app.schemas.customers import CustomerBookingEntry, CustomerListResponse, CustomerLookupResponse, CustomerPaymentEntry, CustomerProfileResponse, UpdateCustomerRequest, UpsertCustomerRequest, UpsertCustomerResponse
+from app.db.models import Booking, BookingDraft, Customer, Payment, Tenant, User
+from app.schemas.customers import CustomerBookingAttempt, CustomerBookingEntry, CustomerListResponse, CustomerLookupResponse, CustomerPaymentEntry, CustomerProfileResponse, UpdateCustomerRequest, UpsertCustomerRequest, UpsertCustomerResponse
 from app.schemas.bookings import PaginationMetaResponse
 from app.services.presenters import (
     booking_amount_paid_cents,
@@ -37,7 +37,77 @@ def _parse_birthday(raw: str) -> date | None:
     return parsed
 
 
-def _build_customer_profile(customer: Customer, bookings: list[Booking]) -> CustomerProfileResponse:
+_LIVE_DRAFT_STATUSES = {"draft", "slot_held", "awaiting_form", "awaiting_payment"}
+
+
+def _booking_attempts(drafts: list[BookingDraft], booked: list[tuple[str, datetime]]) -> list[CustomerBookingAttempt]:
+    """Unfinished online drafts, newest first. Staff releasing a hold on purpose is only worth
+    keeping when the client had opened financing."""
+    now = datetime.now(timezone.utc)
+
+    def aware(value: datetime) -> datetime:
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+    entries: list[CustomerBookingAttempt] = []
+    for draft in drafts:
+        if draft.confirmed_booking_id is not None or draft.status == "confirmed":
+            continue
+        if draft.booking_method == "staff_entered" and draft.financing_started_at is None:
+            continue
+        if draft.financing_started_at is not None:
+            outcome = "financing_started"
+        elif draft.status == "canceled":
+            continue
+        elif draft.status in _LIVE_DRAFT_STATUSES and aware(draft.expires_at) > now:
+            outcome = "in_progress"
+        else:
+            outcome = "abandoned"
+        entries.append(
+            CustomerBookingAttempt(
+                id=draft.id,
+                outcome=outcome,
+                service_name=draft.service.name,
+                provider_name=draft.provider.name,
+                starts_at=draft.starts_at,
+                created_at=draft.created_at,
+                financing_started_at=draft.financing_started_at,
+                booked_since=any(
+                    service_id == draft.service_id and aware(created) >= aware(draft.created_at)
+                    for service_id, created in booked
+                ),
+                booking_method=draft.booking_method,
+            )
+        )
+    return entries
+
+
+async def _load_booking_attempts(session: AsyncSession, tenant_id: str, customer_id: str) -> list[CustomerBookingAttempt]:
+    drafts = (
+        await session.scalars(
+            select(BookingDraft)
+            .options(selectinload(BookingDraft.service), selectinload(BookingDraft.provider))
+            .where(BookingDraft.tenant_id == tenant_id, BookingDraft.customer_id == customer_id)
+            .order_by(BookingDraft.created_at.desc())
+            .limit(25)
+        )
+    ).all()
+    booked = (
+        await session.execute(
+            select(Booking.service_id, Booking.created_at).where(
+                Booking.tenant_id == tenant_id,
+                Booking.customer_id == customer_id,
+                Booking.status.notin_(["canceled"]),
+            )
+        )
+    ).all()
+    return _booking_attempts(list(drafts), [(row[0], row[1]) for row in booked])
+
+
+def _build_customer_profile(
+    customer: Customer,
+    bookings: list[Booking],
+    booking_attempts: list[CustomerBookingAttempt] | None = None,
+) -> CustomerProfileResponse:
     booking_entries = [
         CustomerBookingEntry(
             id=booking.id,
@@ -85,6 +155,7 @@ def _build_customer_profile(customer: Customer, bookings: list[Booking]) -> Cust
         customer=customer_to_summary(customer),
         bookings=booking_entries,
         payments=payment_entries,
+        booking_attempts=booking_attempts or [],
         lifetime_spend_cents=lifetime_spend,
         outstanding_balance_cents=outstanding,
         wallet_balance_cents=customer.wallet_balance_cents,
@@ -200,7 +271,8 @@ async def get_customer_profile(
             .limit(50)
         )
     ).all()
-    return _build_customer_profile(customer, list(bookings))
+    attempts = await _load_booking_attempts(session, tenant.id, customer_id)
+    return _build_customer_profile(customer, list(bookings), attempts)
 
 
 async def update_customer(
@@ -286,7 +358,8 @@ async def update_customer(
             .limit(50)
         )
     ).all()
-    return _build_customer_profile(customer, list(bookings))
+    attempts = await _load_booking_attempts(session, tenant.id, customer_id)
+    return _build_customer_profile(customer, list(bookings), attempts)
 
 
 async def create_or_update_customer(

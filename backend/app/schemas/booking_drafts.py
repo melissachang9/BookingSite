@@ -118,6 +118,8 @@ class BookingDraftSummaryResponse(CamelModel):
     starts_at: datetime
     ends_at: datetime
     expires_at: datetime
+    # First click-through to the studio's financing page (null if never).
+    financing_started_at: datetime | None = None
     price_cents: int
     deposit_cents: int
     duration_minutes: int

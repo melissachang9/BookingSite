@@ -467,6 +467,7 @@ def booking_draft_to_summary(draft: BookingDraft) -> BookingDraftSummaryResponse
         starts_at=draft.starts_at,
         ends_at=draft.ends_at,
         expires_at=draft.expires_at,
+        financing_started_at=draft.financing_started_at,
         price_cents=draft.price_cents,
         deposit_cents=draft.deposit_cents,
         duration_minutes=draft.duration_minutes,

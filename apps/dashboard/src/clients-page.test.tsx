@@ -149,3 +149,60 @@ describe("CustomersPage form responses", () => {
     expect(screen.queryByRole("button", { name: "View answers" })).not.toBeInTheDocument();
   });
 });
+
+describe("CustomersPage unfinished bookings", () => {
+  const attempt = {
+    serviceName: "Signature Facial",
+    providerName: "Maya",
+    startsAt: "2026-06-02T17:00:00.000Z",
+    createdAt: "2026-05-25T18:00:00.000Z",
+    bookedSince: false,
+    bookingMethod: "public_online",
+  };
+
+  it("flags clients who opened financing or abandoned checkout for follow-up", async () => {
+    vi.spyOn(platformApi, "getCustomerProfile").mockResolvedValue({
+      ...profileResponse,
+      bookingAttempts: [
+        { ...attempt, id: "a1", outcome: "financing_started", financingStartedAt: "2026-05-25T18:05:00.000Z" },
+        { ...attempt, id: "a2", outcome: "abandoned", serviceName: "Brow Shape" },
+      ],
+    });
+
+    render(<CustomersPage definition={definition} currentUser={ownerUser} />);
+    await waitFor(() => expect(screen.getByText("Taylor Guest")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /Taylor Guest/ }));
+
+    const section = await screen.findByRole("region", { name: "Unfinished bookings" });
+    expect(section).toHaveTextContent("Signature Facial");
+    expect(section).toHaveTextContent("Follow up: financing");
+    expect(section).toHaveTextContent("opened financing");
+    expect(section).toHaveTextContent("Brow Shape");
+    expect(section).toHaveTextContent("Follow up: abandoned");
+    // Still shows although the client has no confirmed bookings at all.
+    expect(screen.queryByText("No bookings yet.")).not.toBeInTheDocument();
+  });
+
+  it("stops asking for follow-up once the client has booked since", async () => {
+    vi.spyOn(platformApi, "getCustomerProfile").mockResolvedValue({
+      ...profileResponse,
+      bookingAttempts: [{ ...attempt, id: "a3", outcome: "financing_started", bookedSince: true }],
+    });
+
+    render(<CustomersPage definition={definition} currentUser={ownerUser} />);
+    await waitFor(() => expect(screen.getByText("Taylor Guest")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /Taylor Guest/ }));
+
+    const section = await screen.findByRole("region", { name: "Unfinished bookings" });
+    expect(section).toHaveTextContent("Booked since");
+    expect(section).not.toHaveTextContent("Follow up");
+  });
+
+  it("shows no section for a client with nothing unfinished", async () => {
+    render(<CustomersPage definition={definition} currentUser={ownerUser} />);
+    await waitFor(() => expect(screen.getByText("Taylor Guest")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /Taylor Guest/ }));
+    expect(await screen.findByText("No bookings yet.")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Unfinished bookings" })).not.toBeInTheDocument();
+  });
+});

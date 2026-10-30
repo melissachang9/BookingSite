@@ -3538,7 +3538,7 @@ function CalendarBoard({
                             key={`held-${held.id}`}
                             type="button"
                             className="cs-chip cs-chip--hold"
-                            aria-label={`Awaiting deposit: ${clientName}, ${held.service.name}, held ${minutesLeft} more minutes`}
+                            aria-label={`${held.financingStartedAt ? "Financing started" : "Awaiting deposit"}: ${clientName}, ${held.service.name}, held ${minutesLeft} more minutes`}
                             onClick={(event) => {
                               event.stopPropagation();
                               onSelectHeldDraft(held.id);
@@ -3546,7 +3546,7 @@ function CalendarBoard({
                             style={{ "--top": chipTop(startMinutes), "--h": chipHeight(Math.max(15, endMinutes - startMinutes)) } as CSSProperties}
                           >
                             <span className="cs-chip__time">{formatTimeRange(held.startsAt, held.endsAt)}</span>
-                            <span className="cs-chip__client">{`Awaiting deposit · ${minutesLeft}m`}</span>
+                            <span className="cs-chip__client">{`${held.financingStartedAt ? "Financing started" : "Awaiting deposit"} · ${minutesLeft}m`}</span>
                             <span className="cs-chip__treatment">{`${clientName} · ${held.service.name}`}</span>
                           </button>
                         );
@@ -7477,7 +7477,9 @@ function HeldSlotDrawer({
         <div className="cs-drawer__inner">
           <div className="cs-drawer__head">
             <div>
-              <div className="cs-drawer__kicker">Awaiting deposit</div>
+              <div className="cs-drawer__kicker">
+                {draft.financingStartedAt ? "Financing started, awaiting deposit" : "Awaiting deposit"}
+              </div>
               <div className="cs-drawer__title">{draft.customer?.name ?? "Client"}</div>
               <div className="cs-drawer__meta">
                 {draft.service.name} · {draft.provider.name} · {formatTimeRange(draft.startsAt, draft.endsAt)}

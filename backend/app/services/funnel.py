@@ -37,5 +37,9 @@ def form_requirement_submitted(tenant_id: str, booking_draft_id: str, requiremen
     _emit("form_requirement_submitted", tenant_id, booking_draft_id, {"requirement_id": requirement_id, "form_id": form_id})
 
 
+def financing_started(tenant_id: str, booking_draft_id: str) -> None:
+    _emit("financing_started", tenant_id, booking_draft_id)
+
+
 def checkout_session_started(tenant_id: str, booking_draft_id: str, kind: str, amount_cents: int) -> None:
     _emit("checkout_session_started", tenant_id, booking_draft_id, {"kind": kind, "amount_cents": amount_cents})

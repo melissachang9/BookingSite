@@ -123,6 +123,15 @@ export async function confirmBookingDraftAction(formData: FormData) {
   redirect(`/${tenantSlug}/book/${bookingDraftId}/success?bookingId=${booking.id}`);
 }
 
+/** Best effort: noting that financing was opened must never get in the way of opening it. */
+export async function noteFinancingStartedAction(tenantSlug: string, bookingDraftId: string) {
+  try {
+    await storefrontApi.markBookingDraftFinancingStarted(tenantSlug, bookingDraftId);
+  } catch (error) {
+    console.error("Could not record that financing was started", error);
+  }
+}
+
 export async function startDepositCheckoutAction(formData: FormData) {
   const tenantSlug = readRequiredField(formData, "tenantSlug");
   const bookingDraftId = readRequiredField(formData, "bookingDraftId");

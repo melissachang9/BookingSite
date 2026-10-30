@@ -101,6 +101,8 @@ export type BookingDraftSummary = AuditFields &
     startsAt: ISODateString;
     endsAt: ISODateString;
     expiresAt: ISODateString;
+    /** When the customer first opened the studio's financing page; null if they never did. */
+    financingStartedAt?: ISODateString | null;
     priceCents: number;
     depositCents: number;
     durationMinutes: number;
