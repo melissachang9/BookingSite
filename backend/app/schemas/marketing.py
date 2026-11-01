@@ -43,6 +43,20 @@ class MarketingChannelRow(CamelModel):
     cac_cents: int | None = None
 
 
+class FunnelSourceRow(CamelModel):
+    """Online booking carts started from one source, and how far they got. Each step counts distinct carts,
+    and a cart that reaches a later step is not required to have passed through every earlier one."""
+
+    source: str
+    label: str
+    started: int
+    contact_saved: int
+    checkout_started: int
+    confirmed: int
+    # Confirmed ÷ started; null when nothing started.
+    conversion: float | None = None
+
+
 class MarketingReportResponse(CamelModel):
     range: ReportRangeResponse
     channels: list[MarketingChannelRow]
@@ -50,3 +64,4 @@ class MarketingReportResponse(CamelModel):
     total_new_clients: int
     # Spend on every channel divided by every new client, however they found you.
     blended_cac_cents: int | None = None
+    funnel: list[FunnelSourceRow] = []

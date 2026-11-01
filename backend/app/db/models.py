@@ -935,6 +935,29 @@ class Resource(Base, IdMixin, TimestampMixin):
     service_links: Mapped[list[ServiceResource]] = relationship(back_populates="resource", cascade="all, delete-orphan")
 
 
+class FunnelEvent(Base, IdMixin, TimestampMixin):
+    """One step a visitor took on the way to booking, written when it happens.
+
+    Never edited. The marketing attribution of the booking draft is copied onto each event, so conversion by
+    source stays correct even if the draft is later changed or removed."""
+
+    __tablename__ = "funnel_events"
+    __table_args__ = (Index("ix_funnel_events_tenant_kind_occurred_at", "tenant_id", "kind", "occurred_at"),)
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    booking_draft_id: Mapped[str] = mapped_column(String(36), index=True, nullable=False)
+    customer_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    # booking_started | contact_details_saved | form_requirement_submitted | financing_started |
+    # checkout_session_started | booking_confirmed
+    kind: Mapped[str] = mapped_column(String(48), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    booking_method: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    utm_source: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    utm_medium: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    utm_campaign: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    detail_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+
 class MarketingSpend(Base, IdMixin, TimestampMixin):
     """Money spent to win customers on one channel over a period (the cost side of CAC).
 

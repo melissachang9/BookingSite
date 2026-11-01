@@ -16,6 +16,10 @@ const report: MarketingReport = {
   totalSpendCents: 35000,
   totalNewClients: 3,
   blendedCacCents: 11667,
+  funnel: [
+    { source: "instagram", label: "Instagram", started: 10, contactSaved: 6, checkoutStarted: 4, confirmed: 3, conversion: 0.3 },
+    { source: "direct", label: "Direct", started: 4, contactSaved: 1, checkoutStarted: 0, confirmed: 0, conversion: 0 },
+  ],
 };
 
 const entry = {
@@ -42,6 +46,25 @@ describe("MarketingView", () => {
     // A channel that won nobody has spend but no CAC.
     expect(within(table).getByRole("row", { name: /Google/ })).toHaveTextContent("–");
     expect(screen.getByText("Blended CAC").parentElement).toHaveTextContent("$116.67");
+  });
+
+  it("shows how far carts from each source got", async () => {
+    mockApi();
+    render(<MarketingView tenantSlug="brow-beauty-lab" query={query} canManage />);
+
+    const table = await screen.findByRole("table", { name: "Booking funnel by source" });
+    const instagram = within(table).getByRole("row", { name: /Instagram/ });
+    expect(instagram).toHaveTextContent("10");
+    expect(instagram).toHaveTextContent("30%");
+    expect(within(table).getByRole("row", { name: /Direct/ })).toHaveTextContent("0%");
+  });
+
+  it("says so when no carts were started", async () => {
+    vi.spyOn(platformApi, "getMarketingReport").mockResolvedValue({ ...report, funnel: [] });
+    vi.spyOn(platformApi, "listMarketingSpend").mockResolvedValue({ items: [] } as any);
+    render(<MarketingView tenantSlug="brow-beauty-lab" query={query} canManage />);
+
+    expect(await screen.findByText("No online bookings were started in this range.")).toBeInTheDocument();
   });
 
   it("records spend in cents against the chosen channel and period", async () => {

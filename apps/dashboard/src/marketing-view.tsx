@@ -143,6 +143,33 @@ export function MarketingView({
       </div>
 
       <div className="rp-card">
+        <h3 className="rp-card__title">From first visit to booking, by source</h3>
+        <p className="rp-note">
+          Online booking carts started in this range, by where the visitor came from. Visitors with no tagged link
+          or referring site show as Direct.
+        </p>
+        {report.funnel.length === 0 ? (
+          <p className="rp-status">No online bookings were started in this range.</p>
+        ) : (
+          <ReportTable
+            caption="Booking funnel by source"
+            head={["Source", "Started", "Details saved", "Checkout opened", "Booked", "Conversion"]}
+          >
+            {report.funnel.map((row) => (
+              <tr key={row.source}>
+                <th scope="row">{row.label}</th>
+                <td className="is-num">{row.started}</td>
+                <td className="is-num">{row.contactSaved}</td>
+                <td className="is-num">{row.checkoutStarted}</td>
+                <td className="is-num">{row.confirmed}</td>
+                <td className="is-num">{row.conversion == null ? "–" : `${Math.round(row.conversion * 100)}%`}</td>
+              </tr>
+            ))}
+          </ReportTable>
+        )}
+      </div>
+
+      <div className="rp-card">
         <div className="rp-card__head">
           <h3 className="rp-card__title">Spend entries</h3>
           {canManage && !adding ? (

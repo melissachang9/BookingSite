@@ -168,13 +168,9 @@ async def submit_booking_form_requirement(
     requirement.satisfied_by_response_id = response.id
     requirement.draft_answers_json = None
 
-    from app.services.funnel import form_requirement_submitted
-    form_requirement_submitted(
-        tenant_id=tenant.id,
-        booking_draft_id=draft.id,
-        requirement_id=requirement.id,
-        form_id=requirement.form_id,
-    )
+    from app.services.funnel import track
+
+    track(session, draft, "form_requirement_submitted", requirement_id=requirement.id, form_id=requirement.form_id)
 
     pending_requirements = [
         item

@@ -48,6 +48,8 @@
   --cs-quiet-fill: #F0EDEA;  --cs-quiet-text: #6E6862;
 
   --cs-r-desk:  36px;
+  /* Gap between the dashboard panel and the page background. */
+  --cs-desk-pad: 8px;
   --cs-r-panel: 28px;
   --cs-r-card:  24px;
   --cs-r-inner: 20px;
@@ -78,7 +80,7 @@
 /* ------------------------------------------------------------- app shell - */
 .cs-desk {
   background: var(--cs-ground);
-  padding: 18px;
+  padding: var(--cs-desk-pad);
   min-height: 100vh;
   overflow-x: clip; /* clip, not hidden: hidden makes this a scroll container and breaks position: sticky */
   font-family: var(--cs-font);
@@ -90,7 +92,7 @@
   background: var(--cs-surface);
   border-radius: var(--cs-r-panel);
   overflow: clip;
-  min-height: calc(100vh - 36px);
+  min-height: calc(100vh - 2 * var(--cs-desk-pad));
 }
 .cs-shell > * { min-width: 0; }   /* load-bearing: without it the board widens the page */
 
@@ -206,10 +208,13 @@
   letter-spacing: -.035em;
   color: var(--cs-ink);
   white-space: nowrap;
-  /* Reserve enough width for the widest week label (e.g. "30 August – 5 September")
-     so the Today button and steppers to the right stay pinned in place
-     when the visible week changes. */
-  min-width: 300px;
+  /* On wide screens, reserve enough width for the widest week label (e.g. "30 August – 5 September")
+     so the Today button and steppers to the right stay pinned in place when the visible week changes.
+     Narrower screens skip the reservation so the title, steppers and filters stay on one line. */
+  min-width: 0;
+}
+@media (min-width: 1600px) {
+  .cs-range { min-width: 300px; }
 }
 .cs-todaytag {
   background: var(--cs-peach); border-radius: var(--cs-r-pill);

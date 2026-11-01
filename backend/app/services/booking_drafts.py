@@ -36,6 +36,7 @@ from app.db.models import (
 from app.schemas.bookings import BookingListResponse, BookingSummaryResponse, CancelManageBookingRequest, CustomerManageBookingResponse, RescheduleManageBookingRequest
 from app.services.payment_processor import refund_payment_via_processor
 from app.services.audit import record_audit
+from app.services.funnel import track as track_funnel
 from app.services.auth import assert_tenant_permission
 from app.services.state_machine import ACTIVE_BOOKING_DRAFT_STATUSES, guard_transition
 from app.services.wallet import record_wallet_transaction
@@ -471,6 +472,7 @@ async def _promote_draft_to_booking(
     )
     session.add(booking)
     await session.flush()
+    track_funnel(session, draft, "booking_confirmed", booking_id=booking.id)
     # A customer's first booking is recorded once, so "time to first booking" and cohorts stay stable.
     if draft.customer is not None and draft.customer.first_booking_at is None:
         draft.customer.first_booking_id = booking.id
@@ -873,6 +875,7 @@ async def create_booking_draft(
     )
     session.add(draft)
     await session.flush()
+    track_funnel(session, draft, "booking_started")
     if is_staff_draft:
         await record_audit(
             session,
@@ -970,9 +973,7 @@ async def mark_financing_started(
         raise api_exception(400, "bad_request", "Customer details are required before starting financing.")
     if draft.financing_started_at is None:
         draft.financing_started_at = datetime.now(timezone.utc)
-        from app.services.funnel import financing_started
-
-        financing_started(tenant_id=draft.tenant_id, booking_draft_id=draft.id)
+        track_funnel(session, draft, "financing_started")
         await session.commit()
         draft = await _load_booking_draft(session, booking_draft_id, tenant.id)
     return booking_draft_to_summary(draft)
@@ -1289,12 +1290,7 @@ async def update_booking_draft(
         draft.customer_id = customer.id
         draft.customer = customer
 
-        from app.services.funnel import contact_details_saved
-        contact_details_saved(
-            tenant_id=draft.tenant_id,
-            booking_draft_id=draft.id,
-            intake_timing=payload.intake_completion_timing,
-        )
+        track_funnel(session, draft, "contact_details_saved", intake_timing=payload.intake_completion_timing)
 
     if payload.intake_completion_timing is not None:
         if draft.customer_id is None and payload.customer is None:

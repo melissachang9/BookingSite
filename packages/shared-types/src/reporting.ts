@@ -285,10 +285,23 @@ export type MarketingChannelRow = {
   cacCents?: number | null;
 };
 
+/** Online carts started from one source and how far they got. Each step counts distinct carts. */
+export type FunnelSourceRow = {
+  source: string;
+  label: string;
+  started: number;
+  contactSaved: number;
+  checkoutStarted: number;
+  confirmed: number;
+  /** Confirmed ÷ started; null when nothing started. */
+  conversion?: number | null;
+};
+
 export type MarketingReport = {
   range: ReportRange;
   channels: MarketingChannelRow[];
   totalSpendCents: number;
   totalNewClients: number;
   blendedCacCents?: number | null;
+  funnel: FunnelSourceRow[];
 };

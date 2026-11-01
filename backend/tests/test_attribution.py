@@ -150,3 +150,61 @@ def test_clients_report_groups_new_clients_by_first_touch_source(client) -> None
     )
     assert report.status_code == 200, report.json()
     assert "instagram" in {row["key"] for row in report.json()["sources"]}
+
+
+def _funnel_kinds(draft_id: str) -> list[str]:
+    import asyncio
+
+    from sqlalchemy import select
+
+    from app.db.models import FunnelEvent
+    from app.db.session import get_session_maker
+
+    async def _run():
+        async with get_session_maker()() as session:
+            rows = await session.scalars(
+                select(FunnelEvent).where(FunnelEvent.booking_draft_id == draft_id).order_by(FunnelEvent.occurred_at.asc())
+            )
+            return [(row.kind, row.utm_source) for row in rows]
+
+    return asyncio.run(_run())
+
+
+def test_funnel_steps_are_stored_with_the_visitors_source(client) -> None:
+    _, service, slots = _setup(client)
+    created = _draft_with(client, service["id"], slots[0], {"source": "instagram", "medium": "paid"})
+    assert created.status_code in (200, 201), created.json()
+    draft_id = created.json()["id"]
+    _confirm(client, draft_id, "funnel-guest@example.com")
+
+    events = _funnel_kinds(draft_id)
+    kinds = [kind for kind, _ in events]
+    assert kinds[0] == "booking_started"
+    assert "contact_details_saved" in kinds
+    assert kinds[-1] == "booking_confirmed"
+    # Every step carries the source, so conversion by source never depends on the draft still existing.
+    assert {source for _, source in events} == {"instagram"}
+
+
+def test_marketing_report_shows_the_funnel_by_source(client) -> None:
+    from datetime import date, timedelta
+
+    headers, service, slots = _setup(client)
+    done = _draft_with(client, service["id"], slots[0], {"source": "instagram"})
+    _confirm(client, done.json()["id"], "funnel-done@example.com")
+    abandoned = _draft_with(client, service["id"], slots[8], {"source": "instagram"})
+    assert abandoned.status_code in (200, 201), abandoned.json()
+    walk_in = _draft_with(client, service["id"], slots[16], None)
+    assert walk_in.status_code in (200, 201), walk_in.json()
+
+    today = date.today()
+    report = client.get(
+        f"{API}/marketing/report",
+        headers=headers,
+        params={"from": today.isoformat(), "to": (today + timedelta(days=14)).isoformat()},
+    ).json()
+    rows = {row["source"]: row for row in report["funnel"]}
+    assert rows["instagram"]["started"] == 2
+    assert rows["instagram"]["confirmed"] == 1
+    assert rows["instagram"]["conversion"] == 0.5
+    assert rows["direct"]["started"] == 1 and rows["direct"]["confirmed"] == 0

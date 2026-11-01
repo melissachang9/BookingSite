@@ -2409,6 +2409,14 @@ export function CalendarPage({
             <div className="cs-stepper">
               <button
                 type="button"
+                onClick={() => moveFocus(viewMode === "day" ? -1 : -7)}
+                disabled={calendarState.kind !== "ready"}
+                aria-label="Previous"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
                 className="cs-today"
                 onClick={() => {
                   setFocusedDate(toIsoDate(new Date()));
@@ -2417,14 +2425,6 @@ export function CalendarPage({
                 disabled={calendarState.kind !== "ready"}
               >
                 Today
-              </button>
-              <button
-                type="button"
-                onClick={() => moveFocus(viewMode === "day" ? -1 : -7)}
-                disabled={calendarState.kind !== "ready"}
-                aria-label="Previous"
-              >
-                ‹
               </button>
               <button
                 type="button"

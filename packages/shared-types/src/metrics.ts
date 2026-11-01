@@ -145,9 +145,10 @@ export const METRIC_DEFINITIONS: MetricDefinition[] = [
     name: "Funnel by source",
     group: "acquisition",
     meaning: "How many visitors from each source reach each step: lead, booked, paid, completed.",
-    formula: "Counts of each funnel step by first-touch source.",
-    status: "planned",
-    needs: "Persisted funnel events (today they are logged, not stored).",
+    formula:
+      "Online booking carts started in the period, by the source of the visit, and how many saved details, opened checkout and booked. Each step counts distinct carts; Direct means no tagged link or referring site.",
+    status: "reported",
+    where: "Marketing",
   },
   {
     key: "utilization",

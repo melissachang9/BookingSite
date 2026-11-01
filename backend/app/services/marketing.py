@@ -8,9 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.http import api_exception
-from app.db.models import MarketingSpend, User
+from app.db.models import FunnelEvent, MarketingSpend, User
 from app.schemas.marketing import (
     CreateMarketingSpendRequest,
+    FunnelSourceRow,
     MarketingChannelRow,
     MarketingReportResponse,
     MarketingSpendListResponse,
@@ -123,6 +124,54 @@ async def remove_marketing_spend(session: AsyncSession, tenant_slug: str, spend_
     await session.commit()
 
 
+async def _funnel_by_source(session: AsyncSession, tenant, rng: ReportRange) -> list[FunnelSourceRow]:
+    """Online carts started in the range, grouped by where the visitor came from, and how many got each step."""
+    started = (
+        await session.execute(
+            select(FunnelEvent.booking_draft_id, FunnelEvent.utm_source).where(
+                FunnelEvent.tenant_id == tenant.id,
+                FunnelEvent.kind == "booking_started",
+                FunnelEvent.booking_method == "public_online",
+                FunnelEvent.occurred_at >= rng.start_utc,
+                FunnelEvent.occurred_at < rng.end_utc,
+            )
+        )
+    ).all()
+    source_of = {draft_id: (source or "direct") for draft_id, source in started}
+    if not source_of:
+        return []
+    reached: dict[str, set[str]] = {}
+    for draft_id, kind in (
+        await session.execute(
+            select(FunnelEvent.booking_draft_id, FunnelEvent.kind).where(
+                FunnelEvent.tenant_id == tenant.id,
+                FunnelEvent.booking_draft_id.in_(list(source_of)),
+            )
+        )
+    ).all():
+        reached.setdefault(kind, set()).add(draft_id)
+
+    rows: dict[str, dict[str, int]] = {}
+    for draft_id, source in source_of.items():
+        row = rows.setdefault(source, {"started": 0, "contact": 0, "checkout": 0, "confirmed": 0})
+        row["started"] += 1
+        row["contact"] += draft_id in reached.get("contact_details_saved", set())
+        row["checkout"] += draft_id in reached.get("checkout_session_started", set())
+        row["confirmed"] += draft_id in reached.get("booking_confirmed", set())
+    return [
+        FunnelSourceRow(
+            source=source,
+            label=_label(source),
+            started=row["started"],
+            contact_saved=row["contact"],
+            checkout_started=row["checkout"],
+            confirmed=row["confirmed"],
+            conversion=row["confirmed"] / row["started"] if row["started"] else None,
+        )
+        for source, row in sorted(rows.items(), key=lambda item: (-item[1]["started"], item[0]))
+    ]
+
+
 async def build_marketing_report(session: AsyncSession, tenant, rng: ReportRange) -> MarketingReportResponse:
     """Spend and new clients per channel. An entry counts toward the range its period starts in, so a
     month of spend is never split across two reports."""
@@ -156,6 +205,7 @@ async def build_marketing_report(session: AsyncSession, tenant, rng: ReportRange
                 cac_cents=round(cost / won) if won and cost else None,
             )
         )
+    funnel = await _funnel_by_source(session, tenant, rng)
     total_spend = sum(spend.values())
     total_new = clients.summary.new_clients
     return MarketingReportResponse(
@@ -164,4 +214,5 @@ async def build_marketing_report(session: AsyncSession, tenant, rng: ReportRange
         total_spend_cents=total_spend,
         total_new_clients=total_new,
         blended_cac_cents=round(total_spend / total_new) if total_new and total_spend else None,
+        funnel=funnel,
     )
