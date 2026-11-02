@@ -1706,6 +1706,12 @@ function ServicesTab({
     };
     const selectOnFocus = (event: React.FocusEvent<HTMLInputElement>) => event.target.select();
     const keepSelection = (event: React.MouseEvent<HTMLInputElement>) => event.preventDefault();
+    // Like Services → Staff, a blank override shows the treatment's own value (still saved as "inherit").
+    const basePrice = svc.priceCents;
+    const baseDeposit = effectiveDepositCents(svc, svc.priceCents);
+    const shownPrice = ov.priceCents || (basePrice / 100).toFixed(2);
+    const shownDuration = ov.durationMinutes || String(svc.durationMinutes);
+    const shownDeposit = ov.depositCents || (baseDeposit / 100).toFixed(2);
 
     return (
       <div
@@ -1719,7 +1725,7 @@ function ServicesTab({
             className="cs-override-table__field"
             type="text" inputMode="decimal"
             placeholder={formatMoneyShort(svc.priceCents)}
-            value={ov.priceCents}
+            value={shownPrice}
             onFocus={selectOnFocus}
             onMouseUp={keepSelection}
             onChange={(e) => patch({ priceCents: e.target.value })}
@@ -1733,7 +1739,7 @@ function ServicesTab({
             className="cs-override-table__field"
             type="text" inputMode="numeric"
             placeholder={`${svc.durationMinutes} min`}
-            value={ov.durationMinutes}
+            value={shownDuration}
             onFocus={selectOnFocus}
             onMouseUp={keepSelection}
             onChange={(e) => patch({ durationMinutes: e.target.value })}
@@ -1743,7 +1749,7 @@ function ServicesTab({
           <span
             className="cs-override-table__affix"
             aria-hidden="true"
-            style={{ "--chars": ov.durationMinutes.length } as React.CSSProperties}
+            style={{ "--chars": shownDuration.length } as React.CSSProperties}
           >
             min
           </span>
@@ -1753,8 +1759,8 @@ function ServicesTab({
           <input
             className="cs-override-table__field"
             type="text" inputMode="decimal"
-            placeholder={formatMoneyShort(effectiveDepositCents(svc, svc.priceCents))}
-            value={ov.depositCents}
+            placeholder={formatMoneyShort(baseDeposit)}
+            value={shownDeposit}
             onFocus={selectOnFocus}
             onMouseUp={keepSelection}
             onChange={(e) => patch({ depositCents: e.target.value })}
@@ -1881,15 +1887,7 @@ function ServicesTab({
           <p className="cs-staff-svc__empty">No services match that search.</p>
         ) : (
           <div className="cs-override-table">
-            <div className="cs-override-table__columns" aria-hidden="true">
-              <span>Treatment</span>
-              <span>Price</span>
-              <span>Duration</span>
-              <span>Deposit</span>
-              <span>Commission</span>
-            </div>
-
-            {offeredGroups.map((group) => {
+            {offeredGroups.map((group, groupIndex) => {
               const groupIds = group.services.map((svc) => svc.id);
               return (
                 <section key={group.id ?? "uncategorized"} className="cs-override-table__group" aria-label={group.name}>
@@ -1906,6 +1904,16 @@ function ServicesTab({
                       Disable all
                     </button>
                   </header>
+                  {/* Labels sit directly over the first row, under the group's own "Disable all". */}
+                  {groupIndex === 0 ? (
+                    <div className="cs-override-table__columns" aria-hidden="true">
+                      <span>Treatment</span>
+                      <span>Price</span>
+                      <span>Duration</span>
+                      <span>Deposit</span>
+                      <span>Commission</span>
+                    </div>
+                  ) : null}
                   {group.services.map(renderServiceRow)}
                 </section>
               );
