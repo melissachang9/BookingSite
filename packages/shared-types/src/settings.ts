@@ -120,6 +120,11 @@ export type TenantSettings = {
   customPaymentMethods: CustomPaymentMethod[];
   /** How long a held slot waits for a payment link to be paid (30–1440 min). */
   paymentLinkExpiryMinutes?: number;
+  /** Ad-tracking IDs the booking pages load; null/absent = that ad platform is not used. */
+  metaPixelId?: string | null;
+  googleTagId?: string | null;
+  /** Google Ads conversion label for a confirmed booking (the part after the slash in AW-123/abc). */
+  googleConversionLabel?: string | null;
   /** Set by connecting/disconnecting a processor; null = legacy behaviour. */
   paymentProcessor?: "clover" | "stripe" | "none" | null;
 };
@@ -151,6 +156,11 @@ export type UpdateTenantSettingsRequest = {
   autoChargeNoShowFee?: boolean;
   paymentLinkExpiryMinutes?: number;
   customPaymentMethods?: CustomPaymentMethod[];
+  /** Digits only. An empty string turns the Meta Pixel off. */
+  metaPixelId?: string;
+  /** G-, AW- or GT- ID. An empty string turns the Google tag off. */
+  googleTagId?: string;
+  googleConversionLabel?: string;
 };
 
 export type UpdateTenantBusinessRequest = {

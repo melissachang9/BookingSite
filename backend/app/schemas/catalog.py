@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from app.schemas.base import CamelModel
 
@@ -189,6 +189,11 @@ class TenantSettingsResponse(CamelModel):
     country: str = "US"
     currency: str = "USD"
     payment_link_expiry_minutes: int = 30
+    # Public ad-tracking IDs the booking pages load; null = that ad platform is not used.
+    meta_pixel_id: str | None = None
+    google_tag_id: str | None = None
+    # Label of the Google Ads "booking" conversion (the part after the slash in AW-123/abc).
+    google_conversion_label: str | None = None
     # Set only by connecting/disconnecting a processor, never by the settings PATCH.
     payment_processor: str | None = None
     sms_phone: str | None = None
@@ -309,6 +314,20 @@ class UpdateTenantSettingsRequest(CamelModel):
     auto_charge_no_show_fee: bool | None = None
     payment_link_expiry_minutes: int | None = Field(default=None, ge=30, le=1440)
     custom_payment_methods: list[CustomPaymentMethodRequest] | None = None
+    # Meta Pixel ID (digits) and Google tag ID (G-, AW- or GT- prefix). An empty string turns that platform off.
+    meta_pixel_id: str | None = Field(default=None, pattern=r"^(\d{5,20})?$")
+    google_tag_id: str | None = Field(default=None, pattern=r"^((G|AW|GT)-[A-Z0-9]{4,20})?$")
+    google_conversion_label: str | None = Field(default=None, pattern=r"^([A-Za-z0-9_-]{6,40})?$")
+
+    @field_validator("meta_pixel_id", "google_tag_id", mode="before")
+    @classmethod
+    def _clean_tracking_id(cls, value: object) -> object:
+        return value.strip().upper() if isinstance(value, str) else value
+
+    @field_validator("google_conversion_label", mode="before")
+    @classmethod
+    def _clean_conversion_label(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
 
 
 SUPPORTED_CURRENCIES = ("USD", "CAD", "EUR", "GBP", "AUD", "MXN")

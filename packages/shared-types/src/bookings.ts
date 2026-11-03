@@ -245,6 +245,9 @@ export type BookingAttribution = {
   campaign?: string | null;
   referrerUrl?: string | null;
   landingPath?: string | null;
+  /** Google Ads / Meta click IDs from the ad link, kept so conversions can be matched back to the ad. */
+  gclid?: string | null;
+  fbclid?: string | null;
 };
 
 export type CreateBookingDraftRequest = {

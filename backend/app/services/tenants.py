@@ -96,6 +96,9 @@ DEFAULT_TENANT_SETTINGS = {
     "currency": "USD",
     # How long a phone/payment-link hold lasts (Stripe needs >= 30 min links).
     "paymentLinkExpiryMinutes": 30,
+    "metaPixelId": None,
+    "googleTagId": None,
+    "googleConversionLabel": None,
     "smsPhone": None,
     "businessHoursEnabled": False,
     "restrictProvidersToBusinessHours": False,
@@ -204,6 +207,15 @@ async def update_tenant_settings(
 
     if payload.payment_link_expiry_minutes is not None:
         current["paymentLinkExpiryMinutes"] = payload.payment_link_expiry_minutes
+
+    if payload.meta_pixel_id is not None:
+        current["metaPixelId"] = payload.meta_pixel_id or None
+
+    if payload.google_tag_id is not None:
+        current["googleTagId"] = payload.google_tag_id or None
+
+    if payload.google_conversion_label is not None:
+        current["googleConversionLabel"] = payload.google_conversion_label or None
 
     if payload.custom_payment_methods is not None:
         current["customPaymentMethods"] = [

@@ -79,6 +79,8 @@ class Customer(Base, IdMixin, TimestampMixin):
     first_touch_campaign: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     first_touch_referrer_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     first_touch_landing_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    first_touch_gclid: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    first_touch_fbclid: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     first_booking_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     first_booking_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     notes_history: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
@@ -414,6 +416,8 @@ class Booking(Base, IdMixin, TimestampMixin):
     utm_campaign: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     referrer_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     landing_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    gclid: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    fbclid: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     canceled_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)  # staff | customer | system
     cancel_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     no_show_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -718,6 +722,8 @@ class BookingDraft(Base, IdMixin, TimestampMixin):
     utm_campaign: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     referrer_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     landing_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    gclid: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    fbclid: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     # Staff who created the draft from the calendar (null for online bookings).
     created_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     # Staff-only notes; copied to the booking on confirmation, never shown publicly.

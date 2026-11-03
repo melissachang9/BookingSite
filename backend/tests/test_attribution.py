@@ -208,3 +208,36 @@ def test_marketing_report_shows_the_funnel_by_source(client) -> None:
     assert rows["instagram"]["confirmed"] == 1
     assert rows["instagram"]["conversion"] == 0.5
     assert rows["direct"]["started"] == 1 and rows["direct"]["confirmed"] == 0
+
+
+def test_ad_click_ids_follow_the_draft_into_booking_and_customer_first_touch(client) -> None:
+    from app.db.models import Booking, BookingDraft, Customer
+
+    _, service, slots = _setup(client)
+    created = _draft_with(
+        client,
+        service["id"],
+        slots[0],
+        {"source": "google", "medium": "cpc", "gclid": "  Cj0KCQ-abc  ", "fbclid": "IwAR-xyz"},
+    )
+    assert created.status_code in (200, 201), created.json()
+    draft_id = created.json()["id"]
+
+    draft = _row(BookingDraft, draft_id)
+    assert (draft.gclid, draft.fbclid) == ("Cj0KCQ-abc", "IwAR-xyz")
+    customer = _row(Customer, draft.customer_id)
+    assert (customer.first_touch_gclid, customer.first_touch_fbclid) == ("Cj0KCQ-abc", "IwAR-xyz")
+
+    booking = _confirm(client, draft_id, "attr-click-ids@example.com")
+    stored = _row(Booking, booking["id"])
+    assert (stored.gclid, stored.fbclid) == ("Cj0KCQ-abc", "IwAR-xyz")
+
+
+def test_click_ids_are_optional_and_empty_values_are_dropped(client) -> None:
+    from app.db.models import BookingDraft
+
+    _, service, slots = _setup(client)
+    created = _draft_with(client, service["id"], slots[1], {"source": "instagram", "gclid": "   "})
+    assert created.status_code in (200, 201), created.json()
+    draft = _row(BookingDraft, created.json()["id"])
+    assert draft.gclid is None and draft.fbclid is None

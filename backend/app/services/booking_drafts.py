@@ -114,6 +114,9 @@ _ATTRIBUTION_FIELDS = (
     ("utm_campaign", 128),
     ("referrer_url", 500),
     ("landing_path", 255),
+    # Ad-platform click IDs (Google Ads gclid, Meta fbclid): what lets a booking be matched back to an ad.
+    ("gclid", 128),
+    ("fbclid", 128),
 )
 
 
@@ -129,6 +132,8 @@ def _attribution_columns(attribution: object | None) -> dict[str, str | None]:
         "utm_campaign": getattr(attribution, "campaign", None),
         "referrer_url": getattr(attribution, "referrer_url", None),
         "landing_path": getattr(attribution, "landing_path", None),
+        "gclid": getattr(attribution, "gclid", None),
+        "fbclid": getattr(attribution, "fbclid", None),
     }
     for name, limit in _ATTRIBUTION_FIELDS:
         value = (values[name] or "").strip()[:limit]
@@ -177,6 +182,8 @@ async def _upsert_customer(
             customer.first_touch_campaign = first_touch.get("utm_campaign")
             customer.first_touch_referrer_url = first_touch.get("referrer_url")
             customer.first_touch_landing_path = first_touch.get("landing_path")
+            customer.first_touch_gclid = first_touch.get("gclid")
+            customer.first_touch_fbclid = first_touch.get("fbclid")
         _apply_sms_consent(customer, sms_consent, phone)
         session.add(customer)
         await session.flush()

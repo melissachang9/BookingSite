@@ -90,6 +90,13 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
     status: "available",
   },
   {
+    id: "ad-tracking",
+    title: "Ad Tracking",
+    eyebrow: "Marketing",
+    description: "Connect your Meta Pixel and Google tag so your ad accounts see bookings from your booking pages.",
+    status: "available",
+  },
+  {
     id: "calendar",
     title: "Calendar Display",
     eyebrow: "Calendar & appointments",
@@ -306,6 +313,13 @@ export function SettingsPage({
                 />
               ) : section.id === "branding" ? (
                 <BrandingSection
+                  canManageSettings={canManageSettings}
+                  tenant={tenant}
+                  onTenantUpdated={onTenantUpdated}
+                  tenantSlug={currentUser.tenantSlug}
+                />
+              ) : section.id === "ad-tracking" ? (
+                <AdTrackingSection
                   canManageSettings={canManageSettings}
                   tenant={tenant}
                   onTenantUpdated={onTenantUpdated}
@@ -702,6 +716,119 @@ function BusinessPoliciesSection({
         {!canManageSettings ? (
           <p className="cs-permission-note">You do not have permission to edit tenant settings.</p>
         ) : null}
+      </div>
+    </form>
+  );
+}
+
+function AdTrackingSection({
+  canManageSettings,
+  tenant,
+  onTenantUpdated,
+  tenantSlug,
+}: {
+  canManageSettings: boolean;
+  tenant: TenantSummary | null;
+  onTenantUpdated: (tenant: TenantSummary) => void;
+  tenantSlug: string;
+}) {
+  const [metaPixelId, setMetaPixelId] = useState(tenant?.settings.metaPixelId ?? "");
+  const [googleTagId, setGoogleTagId] = useState(tenant?.settings.googleTagId ?? "");
+  const [googleConversionLabel, setGoogleConversionLabel] = useState(tenant?.settings.googleConversionLabel ?? "");
+  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
+
+  useEffect(() => {
+    if (tenant) {
+      setMetaPixelId(tenant.settings.metaPixelId ?? "");
+      setGoogleTagId(tenant.settings.googleTagId ?? "");
+      setGoogleConversionLabel(tenant.settings.googleConversionLabel ?? "");
+    }
+  }, [tenant]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canManageSettings) return;
+    setSaveState({ kind: "submitting" });
+    try {
+      const updated = await platformApi.updateTenantSettings(tenantSlug, {
+        metaPixelId: metaPixelId.trim(),
+        googleTagId: googleTagId.trim(),
+        googleConversionLabel: googleConversionLabel.trim(),
+      });
+      onTenantUpdated(updated);
+      setSaveState({ kind: "success", message: "Ad tracking saved." });
+    } catch (error) {
+      setSaveState({ kind: "error", message: error instanceof Error ? error.message : "Unable to save ad tracking." });
+    }
+  };
+
+  const disabled = !canManageSettings || saveState.kind === "submitting";
+  const googleIsAds = googleTagId.trim().toUpperCase().startsWith("AW-");
+
+  return (
+    <form className="cs-form" onSubmit={handleSubmit}>
+      <p className="cs-settings-help">
+        Leave a field empty if you don't use that platform. Your booking pages report when a visitor starts a booking
+        and when it's confirmed, so each platform can show which ads led to bookings. Visitors in regions that require
+        consent are asked before anything loads.
+      </p>
+
+      <div className="cs-form-row">
+        <label className="cs-field">
+          <span>Meta Pixel ID</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="e.g. 123456789012345"
+            value={metaPixelId}
+            onChange={(event) => setMetaPixelId(event.target.value)}
+            disabled={disabled}
+          />
+          <small>Find it in Meta Events Manager → Data sources. Digits only.</small>
+        </label>
+      </div>
+
+      <div className="cs-form-row">
+        <label className="cs-field">
+          <span>Google tag ID</span>
+          <input
+            type="text"
+            placeholder="e.g. AW-1234567890 or G-ABCDE12345"
+            value={googleTagId}
+            onChange={(event) => setGoogleTagId(event.target.value)}
+            disabled={disabled}
+          />
+          <small>Use the AW- ID from Google Ads (Tools → Conversions), or the G- ID from Google Analytics.</small>
+        </label>
+      </div>
+
+      {googleIsAds ? (
+        <div className="cs-form-row">
+          <label className="cs-field">
+            <span>Google Ads conversion label</span>
+            <input
+              type="text"
+              placeholder="e.g. AbC-dEf_123"
+              value={googleConversionLabel}
+              onChange={(event) => setGoogleConversionLabel(event.target.value)}
+              disabled={disabled}
+            />
+            <small>
+              The text after the slash in your conversion's send_to value (AW-1234567890/<strong>label</strong>). Needed
+              for Google Ads to count confirmed bookings as conversions.
+            </small>
+          </label>
+        </div>
+      ) : null}
+
+      {saveState.kind === "success" ? <p role="status" className="cs-status">{saveState.message}</p> : null}
+      {saveState.kind === "error" ? <p role="alert" className="cs-error">{saveState.message}</p> : null}
+
+      <div className="cs-actions">
+        <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={disabled}>
+          {saveState.kind === "submitting" ? "Saving…" : "Save ad tracking"}
+        </button>
+        {!canManageSettings ? <p className="cs-permission-note">You do not have permission to edit tenant settings.</p> : null}
       </div>
     </form>
   );

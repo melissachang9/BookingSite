@@ -159,6 +159,45 @@ describe("SettingsPage", () => {
     expect(await screen.findByText(/calendar display hours saved/i)).toBeInTheDocument();
   });
 
+  it("saves the Meta Pixel and Google tag IDs, asking for the conversion label only for Google Ads", async () => {
+    const updated = { ...tenant, settings: { ...tenant.settings, metaPixelId: "123456789", googleTagId: "AW-111222333" } };
+    const spy = vi.spyOn(platformApi, "updateTenantSettings").mockResolvedValue(updated);
+    const onTenantUpdated = vi.fn();
+
+    render(<SettingsPage definition={definition} currentUser={ownerUser} tenant={tenant} onTenantUpdated={onTenantUpdated} />);
+
+    expect(screen.queryByLabelText(/conversion label/i)).toBeNull();
+    fireEvent.change(screen.getByLabelText(/meta pixel id/i), { target: { value: " 123456789 " } });
+    fireEvent.change(screen.getByLabelText(/google tag id/i), { target: { value: "AW-111222333" } });
+    fireEvent.change(screen.getByLabelText(/conversion label/i), { target: { value: "AbC-dEf_123" } });
+    fireEvent.click(screen.getByRole("button", { name: /save ad tracking/i }));
+
+    await waitFor(() => {
+      expect(spy).toHaveBeenCalledWith("brow-beauty-lab", {
+        metaPixelId: "123456789",
+        googleTagId: "AW-111222333",
+        googleConversionLabel: "AbC-dEf_123",
+      });
+    });
+    expect(onTenantUpdated).toHaveBeenCalledWith(updated);
+    expect(await screen.findByText(/ad tracking saved/i)).toBeInTheDocument();
+  });
+
+  it("shows the server's message when ad tracking can't be saved, and locks it for read-only staff", async () => {
+    vi.spyOn(platformApi, "updateTenantSettings").mockRejectedValue(new Error("Meta Pixel ID is not valid."));
+    const { unmount } = render(
+      <SettingsPage definition={definition} currentUser={ownerUser} tenant={tenant} onTenantUpdated={() => {}} />,
+    );
+    fireEvent.change(screen.getByLabelText(/meta pixel id/i), { target: { value: "abc" } });
+    fireEvent.click(screen.getByRole("button", { name: /save ad tracking/i }));
+    expect(await screen.findByText(/meta pixel id is not valid/i)).toBeInTheDocument();
+    unmount();
+
+    render(<SettingsPage definition={definition} currentUser={readOnlyUser} tenant={tenant} onTenantUpdated={() => {}} />);
+    expect(screen.getByRole("button", { name: /save ad tracking/i })).toBeDisabled();
+    expect(screen.getByLabelText(/meta pixel id/i)).toBeDisabled();
+  });
+
   it("disables the calendar save button and shows a permission note for read-only staff", () => {
     render(
       <SettingsPage

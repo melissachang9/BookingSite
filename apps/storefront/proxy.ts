@@ -12,7 +12,9 @@ export function proxy(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const utmSource = params.get("utm_source")?.trim() || null;
   const ref = params.get("ref")?.trim() || null;
-  const hasCampaignTag = Boolean(utmSource || ref);
+  const gclid = params.get("gclid")?.trim() || null;
+  const fbclid = params.get("fbclid")?.trim() || null;
+  const hasCampaignTag = Boolean(utmSource || ref || gclid || fbclid);
   if (request.cookies.has(ATTRIBUTION_COOKIE) && !hasCampaignTag) return response;
 
   let referrerHost: string | null = null;
@@ -30,12 +32,21 @@ export function proxy(request: NextRequest) {
     }
   }
 
+  // Ads that are auto-tagged carry only a click ID, so name the source from it. A gclid exists only on
+  // Google Ads clicks ("cpc"); Facebook adds fbclid to organic shares too, so its medium stays "social".
+  const clickSource = gclid ? "google" : fbclid ? "facebook" : null;
+  const clickMedium = gclid ? "cpc" : fbclid ? "social" : null;
+
   const attribution: StoredAttribution = {
-    source: utmSource ?? (ref ? "referral" : referrerHost ?? "direct"),
-    medium: params.get("utm_medium")?.trim() || (ref ? "referral" : referrerHost ? "referral-site" : null),
+    source: utmSource ?? (ref ? "referral" : clickSource ?? referrerHost ?? "direct"),
+    medium:
+      params.get("utm_medium")?.trim() ||
+      (ref ? "referral" : utmSource ? null : clickMedium ?? (referrerHost ? "referral-site" : null)),
     campaign: params.get("utm_campaign")?.trim() || ref,
     referrerUrl,
     landingPath: request.nextUrl.pathname,
+    gclid,
+    fbclid,
   };
   response.cookies.set(ATTRIBUTION_COOKIE, JSON.stringify(attribution), {
     maxAge: ATTRIBUTION_MAX_AGE_SECONDS,

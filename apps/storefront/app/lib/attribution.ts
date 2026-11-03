@@ -9,6 +9,8 @@ export type StoredAttribution = {
   campaign: string | null;
   referrerUrl: string | null;
   landingPath: string | null;
+  gclid: string | null;
+  fbclid: string | null;
 };
 
 /** Reads the cookie written by proxy.ts; anything unreadable counts as no attribution. */
@@ -23,6 +25,8 @@ export function parseAttributionCookie(raw: string | undefined): BookingAttribut
       campaign: pick(value.campaign),
       referrerUrl: pick(value.referrerUrl),
       landingPath: pick(value.landingPath),
+      gclid: pick(value.gclid),
+      fbclid: pick(value.fbclid),
     };
   } catch {
     return undefined;

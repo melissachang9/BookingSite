@@ -144,3 +144,48 @@ def test_update_settings_rejects_excessive_min_lead_time(client) -> None:
         headers=headers,
     )
     assert response.status_code == 422
+
+
+def test_owner_can_set_and_clear_ad_tracking_ids(client) -> None:
+    headers = _auth_headers(client)
+    defaults = client.get("/api/v1/tenants/brow-beauty-lab").json()["settings"]
+    assert defaults.get("metaPixelId") is None
+    assert defaults.get("googleTagId") is None
+
+    response = client.patch(
+        "/api/v1/tenants/brow-beauty-lab/settings",
+        json={"metaPixelId": " 123456789012345 ", "googleTagId": "aw-1234567890", "googleConversionLabel": "AbC-dEf_123"},
+        headers=headers,
+    )
+    assert response.status_code == 200, response.json()
+    settings = client.get("/api/v1/tenants/brow-beauty-lab").json()["settings"]
+    assert settings["metaPixelId"] == "123456789012345"
+    assert settings["googleTagId"] == "AW-1234567890"
+    assert settings["googleConversionLabel"] == "AbC-dEf_123"
+
+    # Updating one leaves the others alone; an empty string turns a platform off.
+    cleared = client.patch(
+        "/api/v1/tenants/brow-beauty-lab/settings", json={"metaPixelId": ""}, headers=headers
+    )
+    assert cleared.status_code == 200, cleared.json()
+    after = client.get("/api/v1/tenants/brow-beauty-lab").json()["settings"]
+    assert after["metaPixelId"] is None
+    assert after["googleTagId"] == "AW-1234567890"
+
+
+def test_ad_tracking_ids_reject_malformed_values(client) -> None:
+    headers = _auth_headers(client)
+    for body in (
+        {"metaPixelId": "abc"},
+        {"metaPixelId": "<script>alert(1)</script>"},
+        {"googleTagId": "UA-1234"},
+        {"googleTagId": "G-12 34\"); evil()"},
+        {"googleConversionLabel": "bad label!"},
+    ):
+        response = client.patch("/api/v1/tenants/brow-beauty-lab/settings", json=body, headers=headers)
+        assert response.status_code == 422, (body, response.json())
+
+
+def test_ad_tracking_ids_need_the_settings_permission(client) -> None:
+    response = client.patch("/api/v1/tenants/brow-beauty-lab/settings", json={"metaPixelId": "123456789"})
+    assert response.status_code in (401, 403)

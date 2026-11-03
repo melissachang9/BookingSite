@@ -66,6 +66,8 @@ class AttributionInput(CamelModel):
     campaign: str | None = Field(default=None, max_length=128)
     referrer_url: str | None = Field(default=None, max_length=500)
     landing_path: str | None = Field(default=None, max_length=255)
+    gclid: str | None = Field(default=None, max_length=128)
+    fbclid: str | None = Field(default=None, max_length=128)
 
 
 class CreateBookingDraftRequest(CamelModel):

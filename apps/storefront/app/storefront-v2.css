@@ -891,3 +891,28 @@ html { background: #ebe7e3; }
 .sf-paychoice__links a { color: var(--sf-ink); font-weight: 600; text-decoration: underline; }
 a.sf-summary__cta { text-decoration: none; text-align: center; }
 a.sf-summary__cta[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }
+
+/* Consent banner for ad cookies; only shown to visitors in regions that require an opt-in. */
+.ad-consent {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: min(640px, calc(100vw - 32px));
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: var(--sf-canvas, #fff);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+  font-size: 0.875rem;
+}
+.ad-consent p { margin: 0; }
+.ad-consent__actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+@media (max-width: 560px) {
+  .ad-consent { flex-direction: column; align-items: stretch; }
+  .ad-consent__actions { justify-content: flex-end; }
+}

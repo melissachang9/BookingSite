@@ -1,3 +1,4 @@
+import { AdEvent } from "../../../../components/ad-event";
 import { BookingSteps } from "../../../../components/booking-steps";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -69,6 +70,12 @@ export default async function BookingSuccessPage({ params, searchParams }: Booki
 
       return (
         <main className="page-stack">
+          <AdEvent
+            name="booking_confirmed"
+            eventId={booking.id}
+            value={(booking.priceCents ?? booking.service.priceCents ?? 0) / 100}
+            currency={tenant.settings.currency}
+          />
           <BookingSteps current={5} />
           <section className="state-panel state-panel--success">
             <p className="store-eyebrow">Booking confirmed</p>

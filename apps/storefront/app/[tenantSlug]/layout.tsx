@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { AdTags } from "../components/ad-tags";
 import { storefrontApi, isApiNotFoundError } from "../lib/storefront-api";
 import { titleFromSlug } from "../lib/storefront-shell";
 import { TenantBackButton } from "./tenant-back-button";
@@ -15,11 +16,19 @@ export default async function TenantLayout({ children, params }: TenantLayoutPro
   const { tenantSlug } = await params;
   let tenantName = titleFromSlug(tenantSlug);
   let homepageUrl: string | undefined;
+  let adIds = { metaPixelId: null as string | null, googleTagId: null as string | null, googleConversionLabel: null as string | null };
+  let country: string | null = null;
 
   try {
     const tenant = await storefrontApi.getTenantBySlug(tenantSlug);
     tenantName = tenant.name;
     homepageUrl = tenant.branding.homepageUrl;
+    adIds = {
+      metaPixelId: tenant.settings.metaPixelId ?? null,
+      googleTagId: tenant.settings.googleTagId ?? null,
+      googleConversionLabel: tenant.settings.googleConversionLabel ?? null,
+    };
+    country = tenant.settings.country ?? null;
   } catch (error) {
     if (isApiNotFoundError(error)) {
       notFound();
@@ -33,6 +42,7 @@ export default async function TenantLayout({ children, params }: TenantLayoutPro
 
   return (
     <div className="tenant-shell">
+      <AdTags {...adIds} country={country} />
       <div className="tenant-frame">
         <header className="tenant-header tenant-header--minimal">
           <TenantBackButton ariaLabel={`Back within ${tenantName} booking`} fallbackHref={`/${tenantSlug}`} />

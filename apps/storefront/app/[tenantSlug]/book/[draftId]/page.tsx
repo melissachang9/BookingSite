@@ -1,3 +1,4 @@
+import { AdEvent } from "../../../components/ad-event";
 import { BookingSteps } from "../../../components/booking-steps";
 import { notFound } from "next/navigation";
 
@@ -419,6 +420,7 @@ export default async function BookingDraftPage({ params, searchParams }: Booking
 
     return (
       <main className="sf-flow">
+        <AdEvent name="booking_started" eventId={draft.id} value={visitTotalCents / 100} currency={tenant.settings.currency} />
         <BookingSteps current={4} />
         <div className="sf-flow__grid sf-flow__grid--aside">
           <div className="sf-details">
