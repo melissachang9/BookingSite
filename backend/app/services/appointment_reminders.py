@@ -16,6 +16,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models import Booking, Tenant
 from app.services.notifications import send_transactional_email, send_transactional_sms
+from app.services.timezones import LocalTimeLookup, as_utc
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +24,6 @@ logger = logging.getLogger(__name__)
 _APPOINTMENT_REMINDER_MIN_GAP = timedelta(hours=6)
 
 
-def _format_booking_start(starts_at: datetime) -> str:
-    return starts_at.strftime("%a, %b %d at %I:%M %p %Z")
 
 
 async def send_due_appointment_reminders(session: AsyncSession) -> dict[str, int]:
@@ -35,6 +34,7 @@ async def send_due_appointment_reminders(session: AsyncSession) -> dict[str, int
     Enforces a 6-hour minimum gap between reminders.
     """
     now = datetime.now(timezone.utc)
+    local_times = await LocalTimeLookup.load(session)
 
     tenants = (await session.scalars(select(Tenant))).all()
     tenant_by_id: dict[str, Tenant] = {t.id: t for t in tenants}
@@ -93,14 +93,14 @@ async def send_due_appointment_reminders(session: AsyncSession) -> dict[str, int
             if isinstance(raw_channels, list):
                 channels = [c for c in raw_channels if isinstance(c, str)]
 
-        hours_until_start = (booking.starts_at - now).total_seconds() / 3600.0
+        hours_until_start = (as_utc(booking.starts_at) - now).total_seconds() / 3600.0
         if hours_until_start > reminder_hours:
             continue  # Not yet within the reminder window
 
         customer_name = booking.customer.name or "there"
         service_name = booking.service.name if booking.service is not None else "your appointment"
         provider_name = booking.provider.name if booking.provider is not None else "your provider"
-        appointment_label = _format_booking_start(booking.starts_at)
+        appointment_label = local_times.label(booking.tenant_id, booking.location_id, booking.starts_at)
 
         if "email" in channels and booking.customer.email:
             subject = f"Upcoming: {service_name} with {provider_name}"

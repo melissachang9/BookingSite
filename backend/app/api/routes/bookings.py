@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.auth import require_tenant_permission
 from app.db.models import User
+from app.services.audit import ActorRef, record_audit
 from app.db.session import get_db_session
 from app.schemas.bookings import (
     AddBookingItemRequest,
@@ -44,6 +45,34 @@ from app.services.bookings import complete_bookings_as_one_sale, record_booking_
 
 
 router = APIRouter(tags=["bookings"])
+
+
+async def _audit_booking(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    booking_id: str,
+    action: str,
+    actor: User | None,
+    payload: object | None = None,
+    **extra: object,
+) -> None:
+    """Record who did what to a booking. Money moves also keep their own payment events; this is the
+    who/when/why trail, and it covers customer-initiated changes (actor None) as well as staff ones."""
+    changes: dict[str, object] = {}
+    if payload is not None and hasattr(payload, "model_dump"):
+        changes.update(payload.model_dump(mode="json", exclude_none=True))
+    changes.update({key: value for key, value in extra.items() if value is not None})
+    await record_audit(
+        session,
+        tenant_id=tenant_id,
+        entity_type="booking",
+        entity_id=booking_id,
+        action=action,
+        actor=actor,
+        changes=changes or None,
+        notes=None if actor is not None else "Customer, via manage link",
+    )
 
 
 @router.get(
@@ -114,7 +143,17 @@ async def reschedule_manage_booking_route(
     payload: RescheduleManageBookingRequest,
     session: AsyncSession = Depends(get_db_session),
 ) -> CustomerManageBookingResponse:
-    return await reschedule_manage_booking(session, token, payload)
+    result = await reschedule_manage_booking(session, token, payload)
+    await _audit_booking(
+        session,
+        tenant_id=result.tenant.id,
+        booking_id=result.booking.id,
+        action="booking_rescheduled",
+        actor=None,
+        payload=payload,
+        by="customer",
+    )
+    return result
 
 
 @router.get(
@@ -154,7 +193,17 @@ async def record_manual_payment_route(
     current_user: User = Depends(require_tenant_permission("bookings.collect_payment")),
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingSummaryResponse:
-    return await record_manual_payment(session, tenant_slug, booking_id, payload, current_user)
+    actor_ref = ActorRef.from_user(current_user)
+    result = await record_manual_payment(session, tenant_slug, booking_id, payload, current_user)
+    await _audit_booking(
+        session,
+        tenant_id=actor_ref.tenant_id,
+        booking_id=booking_id,
+        action="payment_recorded",
+        actor=actor_ref,
+        payload=payload,
+    )
+    return result
 
 
 @router.post(
@@ -169,7 +218,17 @@ async def add_booking_item_route(
     current_user: User = Depends(require_tenant_permission("bookings.collect_payment")),
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingSummaryResponse:
-    return await add_booking_item(session, tenant_slug, booking_id, payload, current_user)
+    actor_ref = ActorRef.from_user(current_user)
+    result = await add_booking_item(session, tenant_slug, booking_id, payload, current_user)
+    await _audit_booking(
+        session,
+        tenant_id=actor_ref.tenant_id,
+        booking_id=booking_id,
+        action="item_added",
+        actor=actor_ref,
+        payload=payload,
+    )
+    return result
 
 
 @router.delete(
@@ -184,7 +243,18 @@ async def remove_booking_item_route(
     current_user: User = Depends(require_tenant_permission("bookings.collect_payment")),
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingSummaryResponse:
-    return await remove_booking_item(session, tenant_slug, booking_id, item_id, current_user)
+    actor_ref = ActorRef.from_user(current_user)
+    result = await remove_booking_item(session, tenant_slug, booking_id, item_id, current_user)
+    await _audit_booking(
+        session,
+        tenant_id=actor_ref.tenant_id,
+        booking_id=booking_id,
+        action="item_removed",
+        actor=actor_ref,
+        payload=None,
+        itemId=item_id,
+    )
+    return result
 
 
 @router.post(
@@ -199,7 +269,17 @@ async def apply_wallet_credit_route(
     current_user: User = Depends(require_tenant_permission("bookings.collect_payment")),
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingSummaryResponse:
-    return await apply_wallet_credit(session, tenant_slug, booking_id, payload, current_user)
+    actor_ref = ActorRef.from_user(current_user)
+    result = await apply_wallet_credit(session, tenant_slug, booking_id, payload, current_user)
+    await _audit_booking(
+        session,
+        tenant_id=actor_ref.tenant_id,
+        booking_id=booking_id,
+        action="wallet_credit_applied",
+        actor=actor_ref,
+        payload=payload,
+    )
+    return result
 
 
 @router.post(
@@ -215,7 +295,18 @@ async def refund_payment_route(
     current_user: User = Depends(require_tenant_permission("bookings.collect_payment")),
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingSummaryResponse:
-    return await refund_payment(session, tenant_slug, booking_id, payment_id, payload, current_user)
+    actor_ref = ActorRef.from_user(current_user)
+    result = await refund_payment(session, tenant_slug, booking_id, payment_id, payload, current_user)
+    await _audit_booking(
+        session,
+        tenant_id=actor_ref.tenant_id,
+        booking_id=booking_id,
+        action="payment_refunded",
+        actor=actor_ref,
+        payload=payload,
+        paymentId=payment_id,
+    )
+    return result
 
 
 @router.post(
@@ -229,7 +320,18 @@ async def group_checkout_route(
     current_user: User = Depends(require_tenant_permission("bookings.complete")),
     session: AsyncSession = Depends(get_db_session),
 ) -> GroupCheckoutResponse:
-    return await complete_bookings_as_one_sale(session, tenant_slug, payload, current_user)
+    actor_ref = ActorRef.from_user(current_user)
+    result = await complete_bookings_as_one_sale(session, tenant_slug, payload, current_user)
+    await record_audit(
+        session,
+        tenant_id=actor_ref.tenant_id,
+        entity_type="sale",
+        entity_id=result.sale_id,
+        action="group_checkout",
+        actor=actor_ref,
+        changes=payload.model_dump(mode="json", exclude_none=True),
+    )
+    return result
 
 
 @router.post(
@@ -244,7 +346,17 @@ async def update_booking_status_route(
     current_user: User = Depends(require_tenant_permission("bookings.complete")),
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingSummaryResponse:
-    return await update_booking_status(session, tenant_slug, booking_id, payload, current_user)
+    actor_ref = ActorRef.from_user(current_user)
+    result = await update_booking_status(session, tenant_slug, booking_id, payload, current_user)
+    await _audit_booking(
+        session,
+        tenant_id=actor_ref.tenant_id,
+        booking_id=booking_id,
+        action="status_changed",
+        actor=actor_ref,
+        payload=payload,
+    )
+    return result
 
 
 @router.post(
@@ -274,7 +386,17 @@ async def update_booking_route(
     current_user: User = Depends(require_tenant_permission("bookings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingSummaryResponse:
-    return await update_booking(session, tenant_slug, booking_id, payload, current_user)
+    actor_ref = ActorRef.from_user(current_user)
+    result = await update_booking(session, tenant_slug, booking_id, payload, current_user)
+    await _audit_booking(
+        session,
+        tenant_id=actor_ref.tenant_id,
+        booking_id=booking_id,
+        action="booking_updated",
+        actor=actor_ref,
+        payload=payload,
+    )
+    return result
 
 
 @router.post(

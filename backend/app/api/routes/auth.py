@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.auth import get_current_user
+from app.core.client_ip import client_ip
+from app.core.rate_limit import enforce_rate_limit, rate_limit
 from app.db.session import get_db_session
 from app.schemas.auth import (
     LoginRequest,
@@ -21,15 +23,31 @@ from app.services.auth import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/login", response_model=SessionResponse, summary="Create an operator session")
+@router.post(
+    "/login",
+    response_model=SessionResponse,
+    summary="Create an operator session",
+    dependencies=[Depends(rate_limit("login", limit=20, window_seconds=300))],
+)
 async def login(
     payload: LoginRequest,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
 ) -> SessionResponse:
+    # Guessing one account's password from one address is capped tighter than the address overall, without
+    # letting a stranger lock the real owner out from elsewhere.
+    enforce_rate_limit(
+        "login-account", f"{client_ip(request)}|{payload.email.strip().lower()}", limit=8, window_seconds=900
+    )
     return await login_user(session, payload.email, payload.password)
 
 
-@router.post("/refresh", response_model=SessionResponse, summary="Refresh an operator session")
+@router.post(
+    "/refresh",
+    response_model=SessionResponse,
+    summary="Refresh an operator session",
+    dependencies=[Depends(rate_limit("refresh", limit=60, window_seconds=60))],
+)
 async def refresh_session(
     payload: RefreshSessionRequest,
     session: AsyncSession = Depends(get_db_session),

@@ -1041,6 +1041,16 @@ async def cancel_manage_booking(
     booking.canceled_at = datetime.now(timezone.utc)
     booking.canceled_by = "customer"
     booking.cancel_reason = reason
+    await record_audit(
+        session,
+        tenant_id=booking.tenant_id,
+        entity_type="booking",
+        entity_id=booking.id,
+        action="booking_canceled",
+        actor=None,
+        changes={"by": "customer", **({"reason": reason} if reason else {})},
+        notes="Customer, via manage link",
+    )
 
     if refundable and not credit_deposit:
         for payment in deposit_payments:

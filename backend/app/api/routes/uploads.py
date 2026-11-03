@@ -11,6 +11,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings, Settings
+from app.core.rate_limit import rate_limit
 from app.db.models import Tenant
 from app.db.session import get_db_session
 
@@ -66,6 +67,7 @@ def _is_uuid(value: str) -> bool:
 @router.post(
     "/forms/upload",
     summary="Upload a file attachment for a form field",
+    dependencies=[Depends(rate_limit("upload", limit=30, window_seconds=600))],
 )
 async def upload_form_file(
     file: UploadFile,

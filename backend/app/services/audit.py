@@ -7,11 +7,30 @@ services, providers, forms, users, permissions, tenant settings, etc.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import AuditEvent, User
+
+
+@dataclass(frozen=True)
+class ActorRef:
+    """Who acted, copied out of the User row up front.
+
+    Services call session.expire_all(), which makes a User object lazy-load on its next attribute read, and
+    that fails outside the session's own await. Routes that record an audit after the service ran take this
+    snapshot before calling it.
+    """
+
+    id: str
+    name: str
+    tenant_id: str
+
+    @classmethod
+    def from_user(cls, user: User) -> "ActorRef":
+        return cls(id=user.id, name=user.name, tenant_id=user.tenant_id)
 
 
 async def record_audit(
@@ -21,7 +40,7 @@ async def record_audit(
     entity_type: str,
     entity_id: str,
     action: str,
-    actor: User | None = None,
+    actor: User | ActorRef | None = None,
     changes: dict[str, Any] | None = None,
     notes: str | None = None,
 ) -> None:

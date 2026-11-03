@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.timezones import LocalTimeLookup, as_utc
 from app.db.models import (
     Booking,
     BookingDraft,
@@ -20,8 +21,6 @@ from app.services.notifications import send_transactional_email, send_transactio
 logger = logging.getLogger(__name__)
 
 
-def _format_booking_start(starts_at: datetime) -> str:
-    return starts_at.strftime("%a, %b %d at %I:%M %p %Z")
 
 
 async def send_due_intake_reminders(session: AsyncSession) -> dict[str, int]:
@@ -30,6 +29,7 @@ async def send_due_intake_reminders(session: AsyncSession) -> dict[str, int]:
     Returns a summary dict with counts of sent, skipped, and failed reminders.
     """
     now = datetime.now(timezone.utc)
+    local_times = await LocalTimeLookup.load(session)
 
     # Email reminders
     due_plans = (
@@ -65,7 +65,7 @@ async def send_due_intake_reminders(session: AsyncSession) -> dict[str, int]:
         customer_name = draft.customer.name or "there"
         service_name = draft.service.name if draft.service is not None else "your appointment"
         provider_name = draft.provider.name if draft.provider is not None else "your provider"
-        appointment_label = _format_booking_start(draft.starts_at)
+        appointment_label = local_times.label(draft.tenant_id, draft.location_id, draft.starts_at)
 
         subject = f"Reminder: {service_name} with {provider_name}"
         text_body = "\n".join([
@@ -131,7 +131,7 @@ async def send_due_intake_reminders(session: AsyncSession) -> dict[str, int]:
         customer_name = draft.customer.name or "there"
         service_name = draft.service.name if draft.service is not None else "your appointment"
         provider_name = draft.provider.name if draft.provider is not None else "your provider"
-        appointment_label = _format_booking_start(draft.starts_at)
+        appointment_label = local_times.label(draft.tenant_id, draft.location_id, draft.starts_at)
 
         sms_body = (
             f"Hi {customer_name}, reminder about your {service_name} appointment "
@@ -186,6 +186,7 @@ async def send_due_confirmed_booking_form_reminders(session: AsyncSession) -> di
     from app.core.security import create_customer_manage_token
 
     now = datetime.now(timezone.utc)
+    local_times = await LocalTimeLookup.load(session)
 
     # Load all tenants so we can read per-tenant reminder settings.
     tenants = (
@@ -245,7 +246,7 @@ async def send_due_confirmed_booking_form_reminders(session: AsyncSession) -> di
                 skipped += 1
                 continue
 
-        hours_until_start = (booking.starts_at - now).total_seconds() / 3600.0
+        hours_until_start = (as_utc(booking.starts_at) - now).total_seconds() / 3600.0
         # Use the booking's tenant reminder windows.
         tenant = tenant_by_id.get(booking.tenant_id)
         tenant_windows = _get_reminder_windows(tenant.settings_json) if tenant is not None else _FALLBACK_REMINDER_WINDOWS_HOURS
@@ -277,7 +278,12 @@ async def send_due_confirmed_booking_form_reminders(session: AsyncSession) -> di
         try:
             token, _ = create_customer_manage_token({"bookingId": booking.id, "tenantId": booking.tenant_id})
             manage_url = _build_form_manage_url(token)
-            subject, text_body, html_body = _build_form_reminder_content(booking, pending_count, manage_url)
+            subject, text_body, html_body = _build_form_reminder_content(
+                booking,
+                pending_count,
+                manage_url,
+                local_times.label(booking.tenant_id, booking.location_id, booking.starts_at),
+            )
             await send_transactional_email(
                 recipient_email=booking.customer.email,
                 subject=subject,

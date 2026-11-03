@@ -34,6 +34,13 @@ def get_session_maker() -> async_sessionmaker[AsyncSession]:
 async def get_db_session() -> AsyncIterator[AsyncSession]:
     async with get_session_maker()() as session:
         yield session
+        # Routes record audit events after the service has already committed its change. Without this
+        # those events were added to the session and then discarded when it closed. Only audit events
+        # are committed here, and only when the request finished without an error.
+        from app.db.models import AuditEvent
+
+        if any(isinstance(pending, AuditEvent) for pending in session.new):
+            await session.commit()
 
 
 async def _ensure_postgres_schema_compatibility() -> None:

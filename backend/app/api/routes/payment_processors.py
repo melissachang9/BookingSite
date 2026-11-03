@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.rate_limit import rate_limit
 from app.api.dependencies.auth import require_tenant_permission
 from app.db.models import User
 from app.db.session import get_db_session
@@ -220,6 +221,7 @@ async def get_checkout_session_view_route(
 
 @router.post(
     "/tenants/{tenant_slug}/payments/checkout-sessions/{session_id}/card-charge",
+    dependencies=[Depends(rate_limit("card-charge", limit=10, window_seconds=60))],
     response_model=BookingSummaryResponse,
     summary="Pay a deposit or balance with a card tokenized by Clover's secure form",
 )

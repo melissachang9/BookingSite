@@ -235,14 +235,23 @@ async def update_tenant_business(
     current_settings = dict(tenant.settings_json or {})
     current_branding = dict(tenant.branding_json or {})
     changes: dict[str, dict[str, object]] = {}
+    identity_changes: dict[str, dict[str, object]] = {}
 
     if payload.name is not None:
-        tenant.name = payload.name.strip()
+        new_name = payload.name.strip()
+        if new_name != tenant.name:
+            identity_changes["name"] = {"from": tenant.name, "to": new_name}
+        tenant.name = new_name
     if payload.homepage_url is not None:
         homepage = payload.homepage_url.strip()
+        if (homepage or None) != current_branding.get("homepageUrl"):
+            identity_changes["homepageUrl"] = {"from": current_branding.get("homepageUrl"), "to": homepage or None}
         current_branding["homepageUrl"] = homepage or None
     if payload.country is not None:
-        current_settings["country"] = payload.country.strip().upper()
+        new_country = payload.country.strip().upper()
+        if new_country != current_settings.get("country"):
+            identity_changes["country"] = {"from": current_settings.get("country"), "to": new_country}
+        current_settings["country"] = new_country
     if payload.currency is not None:
         new_currency = payload.currency.strip().upper()
         old_currency = tenant_currency(tenant)
@@ -258,10 +267,22 @@ async def update_tenant_business(
             tenant.timezone = new_timezone
     if payload.sms_phone is not None:
         sms = payload.sms_phone.strip()
+        if (sms or None) != current_settings.get("smsPhone"):
+            identity_changes["smsPhone"] = {"from": current_settings.get("smsPhone"), "to": sms or None}
         current_settings["smsPhone"] = sms or None
 
     tenant.branding_json = current_branding
     tenant.settings_json = current_settings
+    if identity_changes:
+        await record_audit(
+            session,
+            tenant_id=tenant.id,
+            entity_type="tenant",
+            entity_id=tenant.id,
+            action="update_business",
+            actor=actor,
+            changes=identity_changes,
+        )
     if changes:
         # Sensitive: it changes how every time and amount is read. Audited in the same transaction.
         await record_audit(

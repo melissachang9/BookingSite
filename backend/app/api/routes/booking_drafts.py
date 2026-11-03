@@ -3,6 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.rate_limit import rate_limit
 from app.api.dependencies.auth import get_optional_current_user, require_tenant_permission
 from app.db.models import User
 from app.db.session import get_db_session
@@ -34,6 +35,7 @@ router = APIRouter(tags=["booking-drafts"])
 
 @router.post(
     "/tenants/{tenant_slug}/booking-drafts",
+    dependencies=[Depends(rate_limit("create-draft", limit=60, window_seconds=60))],
     response_model=BookingDraftSummaryResponse,
     summary="Create a booking draft and slot hold (online, or staff-entered from the calendar)",
 )

@@ -12,6 +12,7 @@ from app.core.http import api_exception
 from app.db.models import Booking, BookingDraft, BookingItem, BookingPaymentEvent, Payment, PaymentEvent, Provider, ResourceAllocation, Service, ServiceAddOn, Tenant, User
 from app.schemas.bookings import AddBookingItemRequest, BookingListResponse, BookingProgressRequest, BookingSummaryResponse, CancelBookingRequest, GroupCheckoutRequest, GroupCheckoutResponse, PaginationMetaResponse, UpdateBookingRequest, UpdateBookingStatusRequest
 from app.schemas.payments import ApplyWalletCreditRequest, RecordManualPaymentRequest, RefundPaymentRequest
+from app.services.audit import record_audit
 from app.services.booking_drafts import (
     _cancellation_policy_for_booking,
     _load_booking,
@@ -1205,6 +1206,15 @@ async def cancel_booking(
     booking.canceled_at = datetime.now(timezone.utc)
     booking.canceled_by = "staff"
     booking.cancel_reason = reason
+    await record_audit(
+        session,
+        tenant_id=tenant.id,
+        entity_type="booking",
+        entity_id=booking.id,
+        action="booking_canceled",
+        actor=actor,
+        changes={"reason": reason} if reason else None,
+    )
 
     if refundable and not credit_deposit:
         for payment in deposit_payments:

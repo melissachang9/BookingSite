@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.rate_limit import rate_limit
 from app.api.dependencies.auth import require_tenant_permission
 from app.db.models import User
 from app.db.session import get_db_session
@@ -41,7 +42,7 @@ from app.schemas.catalog import (
     UpdateTenantWalletMembershipRequest,
 )
 from app.schemas.reporting import DashboardReportResponse
-from app.services.audit import record_audit
+from app.services.audit import ActorRef, record_audit
 from app.services.availability import list_availability
 from app.services.reporting import get_dashboard_report
 from app.services.tenants import (
@@ -78,7 +79,13 @@ from app.services.tenants import (
 router = APIRouter(prefix="/tenants", tags=["tenants"])
 
 
-@router.post("", response_model=CreateTenantResponse, status_code=status.HTTP_201_CREATED, summary="Create a tenant")
+@router.post(
+    "",
+    response_model=CreateTenantResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a tenant",
+    dependencies=[Depends(rate_limit("create-tenant", limit=5, window_seconds=3600))],
+)
 async def create_tenant(
     payload: CreateTenantRequest,
     session: AsyncSession = Depends(get_db_session),
@@ -957,10 +964,16 @@ async def delete_service_category(
 async def put_service_categories_reorder(
     tenant_slug: str,
     payload: ReorderRequest,
-    _: object = Depends(require_tenant_permission("services.manage")),
+    actor: User = Depends(require_tenant_permission("services.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ServiceCategoryListResponse:
-    return await reorder_tenant_service_categories(session, tenant_slug, payload)
+    actor_ref = ActorRef.from_user(actor)
+    result = await reorder_tenant_service_categories(session, tenant_slug, payload)
+    await record_audit(
+        session, tenant_id=actor_ref.tenant_id, entity_type="service_category", entity_id=actor_ref.tenant_id,
+        action="reorder", actor=actor_ref, changes=payload.model_dump(mode="json"),
+    )
+    return result
 
 
 @router.put(
@@ -971,10 +984,16 @@ async def put_service_categories_reorder(
 async def put_services_reorder(
     tenant_slug: str,
     payload: ReorderRequest,
-    _: object = Depends(require_tenant_permission("services.manage")),
+    actor: User = Depends(require_tenant_permission("services.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ServiceListResponse:
-    return await reorder_tenant_services(session, tenant_slug, payload)
+    actor_ref = ActorRef.from_user(actor)
+    result = await reorder_tenant_services(session, tenant_slug, payload)
+    await record_audit(
+        session, tenant_id=actor_ref.tenant_id, entity_type="service", entity_id=actor_ref.tenant_id,
+        action="reorder", actor=actor_ref, changes=payload.model_dump(mode="json"),
+    )
+    return result
 
 
 @router.patch(
@@ -1051,12 +1070,19 @@ async def put_service_provider_variants(
     tenant_slug: str,
     service_id: str,
     payload: ReplaceProviderServiceVariantsRequest,
-    _: object = Depends(require_tenant_permission("services.manage")),
+    actor: User = Depends(require_tenant_permission("services.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ProviderServiceVariantListResponse:
-    return await replace_tenant_service_provider_variants(
+    actor_ref = ActorRef.from_user(actor)
+    result = await replace_tenant_service_provider_variants(
         session, tenant_slug, service_id, payload
     )
+    # Variants carry per-provider price, duration, deposit and commission, so who changed them matters.
+    await record_audit(
+        session, tenant_id=actor_ref.tenant_id, entity_type="service", entity_id=service_id,
+        action="replace_provider_variants", actor=actor_ref, changes=payload.model_dump(mode="json"),
+    )
+    return result
 
 
 # === Service resources ===
@@ -1088,7 +1114,13 @@ async def put_service_resources(
     tenant_slug: str,
     service_id: str,
     payload: ReplaceServiceResourcesRequest,
-    _: object = Depends(require_tenant_permission("services.manage")),
+    actor: User = Depends(require_tenant_permission("services.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ServiceResourceListResponse:
-    return await replace_service_resources(session, tenant_slug, service_id, payload)
+    actor_ref = ActorRef.from_user(actor)
+    result = await replace_service_resources(session, tenant_slug, service_id, payload)
+    await record_audit(
+        session, tenant_id=actor_ref.tenant_id, entity_type="service", entity_id=service_id,
+        action="replace_resources", actor=actor_ref, changes=payload.model_dump(mode="json"),
+    )
+    return result

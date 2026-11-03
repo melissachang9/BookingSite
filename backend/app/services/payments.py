@@ -20,6 +20,7 @@ from app.schemas.payments import (
     DepositPaymentFollowUpListResponse,
     SendPaymentReminderResponse,
 )
+from app.services.timezones import LocalTimeLookup
 from app.services.payment_processor import (
     resolve_payment_processor,
     simulated_checkout_allowed,
@@ -177,10 +178,12 @@ def _format_booking_start(starts_at: datetime) -> str:
     return _ensure_aware(starts_at).strftime("%a, %b %d at %I:%M %p %Z")
 
 
-def _build_deposit_reminder_content(draft: BookingDraft, checkout_url: str) -> tuple[str, str, str]:
+def _build_deposit_reminder_content(
+    draft: BookingDraft, checkout_url: str, appointment_label: str | None = None
+) -> tuple[str, str, str]:
     customer_name = draft.customer.name if draft.customer is not None else "there"
     service_name = draft.service.name
-    appointment_label = _format_booking_start(draft.starts_at)
+    appointment_label = appointment_label or _format_booking_start(draft.starts_at)
     deposit_label = _format_money(draft.deposit_cents)
     subject = f"{service_name} deposit reminder"
     text_body = "\n".join(
@@ -595,7 +598,8 @@ async def send_deposit_payment_reminder(
     )
     payment = await _load_checkout_payment(session, tenant_id=tenant.id, session_id=checkout_session.session_id)
 
-    subject, text_body, html_body = _build_deposit_reminder_content(draft, checkout_session.checkout_url)
+    local_label = (await LocalTimeLookup.load(session)).label(draft.tenant_id, draft.location_id, draft.starts_at)
+    subject, text_body, html_body = _build_deposit_reminder_content(draft, checkout_session.checkout_url, local_label)
     delivery = await send_transactional_email(
         recipient_email=draft.customer.email,
         subject=subject,

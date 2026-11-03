@@ -84,9 +84,25 @@ async def lifespan(_: FastAPI):
 
     conversion_task = asyncio.create_task(_run_conversion_sender())
 
+    # Appointment, form and intake reminders. These must run in every deployment, so they live here
+    # rather than behind the test-only /testing/cron routes.
+    from app.services.background_jobs import REMINDER_INTERVAL_SECONDS, run_reminder_cycle
+
+    async def _run_reminders() -> None:
+        while True:
+            try:
+                await asyncio.sleep(REMINDER_INTERVAL_SECONDS)
+                await run_reminder_cycle()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.exception("Reminder cycle failed, will retry")
+
+    reminder_task = asyncio.create_task(_run_reminders())
+
     yield
 
-    for task in (cleanup_task, token_refresh_task, conversion_task):
+    for task in (cleanup_task, token_refresh_task, conversion_task, reminder_task):
         task.cancel()
         try:
             await task
@@ -104,6 +120,8 @@ def _error_code_for_status(status_code: int) -> str:
         return "not_found"
     if status_code == 409:
         return "conflict"
+    if status_code == 429:
+        return "rate_limited"
     return "bad_request"
 
 
@@ -127,7 +145,7 @@ def create_application() -> FastAPI:
             "message": detail.get("message") if detail else str(exc.detail),
             "issues": detail.get("issues") if detail else [],
         }
-        return JSONResponse(status_code=exc.status_code, content={"error": error_payload})
+        return JSONResponse(status_code=exc.status_code, content={"error": error_payload}, headers=exc.headers)
 
     @application.exception_handler(RequestValidationError)
     async def validation_exception_handler(_, exc: RequestValidationError) -> JSONResponse:

@@ -31,6 +31,7 @@ from app.schemas.forms import (
     SendFormReminderResponse,
     SubmitFormRequirementRequest,
 )
+from app.services.timezones import LocalTimeLookup
 from app.services.booking_drafts import _ensure_aware, _ensure_not_expired, _is_pending_pre_booking_requirement, _load_booking, _load_booking_draft
 from app.services.notifications import send_transactional_email
 from app.services.state_machine import guard_transition
@@ -534,10 +535,12 @@ def _build_form_reminder_content(
     booking: Booking,
     pending_count: int,
     manage_url: str,
+    appointment_label: str | None = None,
 ) -> tuple[str, str, str]:
     customer_name = booking.customer.name if booking.customer is not None else "there"
     service_name = booking.service.name if booking.service is not None else "your appointment"
-    appointment_label = _format_visit_start(booking.starts_at)
+    # Callers pass the business-local time; the UTC fallback is only for a caller that has none.
+    appointment_label = appointment_label or _format_visit_start(booking.starts_at)
     forms_word = "form" if pending_count == 1 else "forms"
     subject = f"Action needed: complete your {forms_word} before {service_name}"
     text_body = "\n".join(
@@ -624,7 +627,8 @@ async def send_booking_form_reminder(
     token, _ = create_customer_manage_token({"bookingId": booking.id, "tenantId": booking.tenant_id})
     manage_url = _build_form_manage_url(token)
 
-    subject, text_body, html_body = _build_form_reminder_content(booking, pending_count, manage_url)
+    local_label = (await LocalTimeLookup.load(session)).label(booking.tenant_id, booking.location_id, booking.starts_at)
+    subject, text_body, html_body = _build_form_reminder_content(booking, pending_count, manage_url, local_label)
 
     settings = get_settings()
     if not settings.resend_api_key or not settings.resend_from_email:

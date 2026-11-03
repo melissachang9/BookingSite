@@ -18,6 +18,8 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")
     monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("TOKEN_SECRET_KEY", "test-secret-key")
+    # Most tests log in and book many times from one address; the limiter has its own tests.
+    monkeypatch.setenv("RATE_LIMIT_ENABLED", "false")
     monkeypatch.delenv("TEST_RESET_TOKEN", raising=False)
     monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
     monkeypatch.delenv("STRIPE_WEBHOOK_SECRET", raising=False)

@@ -56,6 +56,9 @@ class Settings(BaseSettings):
         "http://localhost:3001,http://127.0.0.1:3001"
     )
 
+    # Per-IP limits on login, signup, uploads and other public endpoints. Turn off only for local e2e runs.
+    rate_limit_enabled: bool = True
+
     # Creates the demo business and owner login. On by default only in development and test.
     seed_demo_data: Optional[bool] = None
 
