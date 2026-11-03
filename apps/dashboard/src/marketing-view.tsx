@@ -25,10 +25,12 @@ export function MarketingView({
   tenantSlug,
   query,
   canManage,
+  canExport = false,
 }: {
   tenantSlug: string;
   query: ReportQuery;
   canManage: boolean;
+  canExport?: boolean;
 }) {
   const [load, setLoad] = useState<Load>({ kind: "loading" });
   const [adding, setAdding] = useState(false);
@@ -36,6 +38,28 @@ export function MarketingView({
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
+
+  const downloadGoogleConversions = async () => {
+    setGoogleBusy(true);
+    setGoogleError(null);
+    try {
+      const csv = await platformApi.exportGoogleConversionsCsv(tenantSlug, query);
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `google-conversions-${query.from}-to-${query.to}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setGoogleError(readError(error, "Unable to build the Google Ads file."));
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
 
   const refresh = useCallback(async () => {
     try {
@@ -168,6 +192,22 @@ export function MarketingView({
           </ReportTable>
         )}
       </div>
+
+      {canExport ? (
+        <div className="rp-card">
+          <div className="rp-card__head">
+            <h3 className="rp-card__title">Send bookings back to Google Ads</h3>
+            <button type="button" className="rp-chip" onClick={downloadGoogleConversions} disabled={googleBusy}>
+              {googleBusy ? "Preparing…" : "Download Google Ads file"}
+            </button>
+          </div>
+          <p className="rp-status">
+            Bookings from Google ad clicks in this range, ready to upload in Google Ads under Tools → Conversions →
+            Uploads. Create a conversion action named “Booking confirmed” first.
+          </p>
+          {googleError ? <p className="cs-error" role="alert">{googleError}</p> : null}
+        </div>
+      ) : null}
 
       <div className="rp-card">
         <div className="rp-card__head">

@@ -418,6 +418,8 @@ class Booking(Base, IdMixin, TimestampMixin):
     landing_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     gclid: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     fbclid: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # Whether the visitor accepted ad cookies on the booking page (null = never asked / not recorded).
+    ad_consent: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     canceled_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)  # staff | customer | system
     cancel_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     no_show_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -724,6 +726,8 @@ class BookingDraft(Base, IdMixin, TimestampMixin):
     landing_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     gclid: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     fbclid: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # Whether the visitor accepted ad cookies on the booking page (null = never asked / not recorded).
+    ad_consent: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     # Staff who created the draft from the calendar (null for online bookings).
     created_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     # Staff-only notes; copied to the booking on confirmation, never shown publicly.
@@ -1047,3 +1051,44 @@ class AuditEvent(Base, IdMixin, TimestampMixin):
     actor_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     changes_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+class AdPlatformCredential(Base, IdMixin, TimestampMixin):
+    """A business's server-side API credential for an ad platform (Meta Conversions API).
+
+    The token is stored encrypted (services/payment_secrets.py) and is never returned by any API.
+    """
+
+    __tablename__ = "ad_platform_credentials"
+    __table_args__ = (UniqueConstraint("tenant_id", "platform", name="uq_ad_platform_credential_tenant"),)
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    platform: Mapped[str] = mapped_column(String(16), nullable=False)  # meta
+    access_token_enc: Mapped[str] = mapped_column(Text, nullable=False)
+    # Meta's "Test events" code; while set, events show in Events Manager's test tab, not in live data.
+    test_event_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    updated_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+
+
+class ConversionEvent(Base, IdMixin, TimestampMixin):
+    """One booking conversion queued for an ad platform's server-side API.
+
+    Written in the same transaction that confirms the booking, so it exists exactly when the booking does.
+    `event_id` is the booking ID, the same ID the browser pixel sends, so the platform counts it once.
+    """
+
+    __tablename__ = "conversion_events"
+    __table_args__ = (UniqueConstraint("tenant_id", "booking_id", "platform", name="uq_conversion_event_booking"),)
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    booking_id: Mapped[str] = mapped_column(String(36), ForeignKey("bookings.id"), index=True, nullable=False)
+    platform: Mapped[str] = mapped_column(String(16), nullable=False)
+    event_name: Mapped[str] = mapped_column(String(32), nullable=False)
+    event_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    value_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")  # pending | sent | failed
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    next_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)

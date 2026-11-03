@@ -36,6 +36,7 @@ from app.db.models import (
 from app.schemas.bookings import BookingListResponse, BookingSummaryResponse, CancelManageBookingRequest, CustomerManageBookingResponse, RescheduleManageBookingRequest
 from app.services.payment_processor import refund_payment_via_processor
 from app.services.audit import record_audit
+from app.services.ad_conversions import queue_conversion_events
 from app.services.funnel import track as track_funnel
 from app.services.auth import assert_tenant_permission
 from app.services.state_machine import ACTIVE_BOOKING_DRAFT_STATUSES, guard_transition
@@ -475,10 +476,12 @@ async def _promote_draft_to_booking(
         deposit_cents=draft.deposit_cents,
         source_channel=_booking_source_channel(draft),
         notes=draft.notes,
+        ad_consent=draft.ad_consent,
         **{name: getattr(draft, name) for name, _ in _ATTRIBUTION_FIELDS},
     )
     session.add(booking)
     await session.flush()
+    await queue_conversion_events(session, booking)
     track_funnel(session, draft, "booking_confirmed", booking_id=booking.id)
     # A customer's first booking is recorded once, so "time to first booking" and cohorts stay stable.
     if draft.customer is not None and draft.customer.first_booking_at is None:
@@ -867,6 +870,7 @@ async def create_booking_draft(
         starts_at=resolved_start_at,
         ends_at=resolved_end_at,
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
+        ad_consent=None if is_staff_draft else getattr(payload.attribution, "ad_consent", None),
         **attribution,
         price_cents=terms.price_cents,
         # Taken at booking per the service's payment mode, on the full visit

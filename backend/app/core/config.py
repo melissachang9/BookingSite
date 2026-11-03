@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     resend_from_email: Optional[str] = None
     resend_reply_to_email: Optional[str] = None
     resend_api_base_url: str = "https://api.resend.com"
+    meta_graph_api_base_url: str = "https://graph.facebook.com/v21.0"
     stripe_secret_key: Optional[str] = None
     stripe_webhook_secret: Optional[str] = None
     stripe_webhook_tolerance_seconds: int = 300

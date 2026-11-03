@@ -362,7 +362,7 @@ export function ReportsSection({
       {!rangeInvalid && tab === "appointments" ? <AppointmentsView tenantSlug={tenantSlug} query={query} /> : null}
       {!rangeInvalid && tab === "tax" && canViewFinancial ? <TaxView tenantSlug={tenantSlug} query={query} /> : null}
       {!rangeInvalid && tab === "marketing" && canViewFinancial ? (
-        <MarketingView tenantSlug={tenantSlug} query={query} canManage={canManageMarketing} />
+        <MarketingView tenantSlug={tenantSlug} query={query} canManage={canManageMarketing} canExport={canExport} />
       ) : null}
     </div>
   );

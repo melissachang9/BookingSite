@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 TOKEN_REFRESH_INTERVAL_SECONDS = 30 * 60
+CONVERSION_SEND_INTERVAL_SECONDS = 30
 
 
 @asynccontextmanager
@@ -62,9 +63,24 @@ async def lifespan(_: FastAPI):
 
     token_refresh_task = asyncio.create_task(_run_token_refresh())
 
+    # Send queued ad-platform conversions (Meta Conversions API) and retry failures.
+    from app.services.ad_conversions import send_pending_conversions
+
+    async def _run_conversion_sender() -> None:
+        while True:
+            try:
+                await asyncio.sleep(CONVERSION_SEND_INTERVAL_SECONDS)
+                await send_pending_conversions()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.exception("Ad conversion sending failed, will retry")
+
+    conversion_task = asyncio.create_task(_run_conversion_sender())
+
     yield
 
-    for task in (cleanup_task, token_refresh_task):
+    for task in (cleanup_task, token_refresh_task, conversion_task):
         task.cancel()
         try:
             await task

@@ -121,4 +121,28 @@ describe("MarketingView", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("boom");
   });
+
+  it("downloads the Google Ads conversion file only for people who can export", async () => {
+    mockApi();
+    const exportSpy = vi.spyOn(platformApi, "exportGoogleConversionsCsv").mockResolvedValue("Parameters:TimeZone=+0000;\n");
+    URL.createObjectURL = vi.fn(() => "blob:test");
+    URL.revokeObjectURL = vi.fn();
+
+    const { unmount } = render(<MarketingView tenantSlug="brow-beauty-lab" query={query} canManage />);
+    await screen.findByRole("heading", { name: /spend entries/i });
+    expect(screen.queryByRole("button", { name: /download google ads file/i })).toBeNull();
+    unmount();
+
+    render(<MarketingView tenantSlug="brow-beauty-lab" query={query} canManage canExport />);
+    fireEvent.click(await screen.findByRole("button", { name: /download google ads file/i }));
+    await waitFor(() => expect(exportSpy).toHaveBeenCalledWith("brow-beauty-lab", query));
+  });
+
+  it("shows the server's message when the Google Ads file can't be built", async () => {
+    mockApi();
+    vi.spyOn(platformApi, "exportGoogleConversionsCsv").mockRejectedValue(new Error("Report ranges are limited."));
+    render(<MarketingView tenantSlug="brow-beauty-lab" query={query} canManage canExport />);
+    fireEvent.click(await screen.findByRole("button", { name: /download google ads file/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/report ranges are limited/i);
+  });
 });

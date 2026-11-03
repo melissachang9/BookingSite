@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import csv
+import io
 from datetime import date, datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.http import api_exception
-from app.db.models import FunnelEvent, MarketingSpend, User
+from app.db.models import Booking, FunnelEvent, MarketingSpend, User
 from app.schemas.marketing import (
     CreateMarketingSpendRequest,
     FunnelSourceRow,
@@ -216,3 +218,42 @@ async def build_marketing_report(session: AsyncSession, tenant, rng: ReportRange
         blended_cac_cents=round(total_spend / total_new) if total_new and total_spend else None,
         funnel=funnel,
     )
+
+
+GOOGLE_CONVERSION_NAME = "Booking confirmed"
+
+
+async def google_offline_conversions_csv(session: AsyncSession, tenant, rng: ReportRange) -> str:
+    """Bookings that came from a Google Ads click, in the file format Google Ads accepts for offline
+    conversion import (Tools > Conversions > Uploads). Times are UTC. The conversion name must match the
+    conversion action you create in Google Ads. Canceled bookings are left out."""
+    bookings = (
+        await session.scalars(
+            select(Booking)
+            .where(
+                Booking.tenant_id == tenant.id,
+                Booking.gclid.is_not(None),
+                Booking.status != "canceled",
+                Booking.created_at >= rng.start_utc,
+                Booking.created_at < rng.end_utc,
+            )
+            .order_by(Booking.created_at)
+        )
+    ).all()
+    currency = str((tenant.settings_json or {}).get("currency") or "USD").upper()
+    out = io.StringIO()
+    out.write("Parameters:TimeZone=+0000;\n")
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow(["Google Click ID", "Conversion Name", "Conversion Time", "Conversion Value", "Conversion Currency"])
+    for booking in bookings:
+        created = booking.created_at if booking.created_at.tzinfo else booking.created_at.replace(tzinfo=timezone.utc)
+        writer.writerow(
+            [
+                booking.gclid,
+                GOOGLE_CONVERSION_NAME,
+                created.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                f"{(booking.price_cents or 0) / 100:.2f}",
+                currency,
+            ]
+        )
+    return out.getvalue()

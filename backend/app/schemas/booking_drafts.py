@@ -68,6 +68,8 @@ class AttributionInput(CamelModel):
     landing_path: str | None = Field(default=None, max_length=255)
     gclid: str | None = Field(default=None, max_length=128)
     fbclid: str | None = Field(default=None, max_length=128)
+    # True when the visitor accepted ad cookies on the booking page; server-side ad reporting needs it in some regions.
+    ad_consent: bool | None = None
 
 
 class CreateBookingDraftRequest(CamelModel):

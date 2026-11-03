@@ -1,4 +1,4 @@
-import type { AuditFields, TenantScoped, UUID } from "./common";
+import type { AuditFields, ISODateString, TenantScoped, UUID } from "./common";
 
 export type ServiceCatalogMode = "flat" | "categories";
 
@@ -271,4 +271,19 @@ export type CreateTenantResponse = {
   tenant: TenantSummary;
   ownerEmail: string;
   locationId: UUID;
+};
+/** Where server-side ad reporting stands. The access token itself is never returned. */
+export type AdTrackingStatus = {
+  metaConnected: boolean;
+  metaTestMode: boolean;
+  metaSentCount: number;
+  metaPendingCount: number;
+  metaFailedCount: number;
+  metaLastSentAt: ISODateString | null;
+  metaLastError: string | null;
+};
+
+export type UpdateMetaConversionsRequest = {
+  accessToken: string;
+  testEventCode?: string | null;
 };

@@ -1204,3 +1204,25 @@ class UpdateProviderTimeOffRequest(CamelModel):
     end_time: str | None = None
     location_id: str | None = None
     blocked_service_ids: list[str] | None = None
+
+
+class UpdateMetaConversionsRequest(CamelModel):
+    """The Meta Conversions API token for the business's Pixel. Write-only: it is never returned."""
+
+    access_token: str = Field(min_length=20, max_length=1000, pattern=r"^[A-Za-z0-9_\-|.]+$")
+    test_event_code: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9_-]*$")
+
+    @field_validator("access_token", "test_event_code", mode="before")
+    @classmethod
+    def _strip(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+
+class AdTrackingStatusResponse(CamelModel):
+    meta_connected: bool = False
+    meta_test_mode: bool = False
+    meta_sent_count: int = 0
+    meta_pending_count: int = 0
+    meta_failed_count: int = 0
+    meta_last_sent_at: datetime | None = None
+    meta_last_error: str | None = None

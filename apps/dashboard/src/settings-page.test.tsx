@@ -198,6 +198,35 @@ describe("SettingsPage", () => {
     expect(screen.getByLabelText(/meta pixel id/i)).toBeDisabled();
   });
 
+  it("offers Meta server-side reporting only once a Pixel ID is saved, and never shows the token back", async () => {
+    const status = { metaConnected: false, metaTestMode: false, metaSentCount: 0, metaPendingCount: 0, metaFailedCount: 0, metaLastSentAt: null, metaLastError: null };
+    const statusSpy = vi.spyOn(platformApi, "getAdTrackingStatus").mockResolvedValue(status);
+    const connectSpy = vi.spyOn(platformApi, "connectMetaConversions").mockResolvedValue({ ...status, metaConnected: true, metaSentCount: 3 });
+
+    const { unmount } = render(<SettingsPage definition={definition} currentUser={ownerUser} tenant={tenant} onTenantUpdated={() => {}} />);
+    expect(screen.queryByLabelText(/conversions api access token/i)).toBeNull();
+    unmount();
+
+    const withPixel = { ...tenant, settings: { ...tenant.settings, metaPixelId: "123456789012345" } };
+    render(<SettingsPage definition={definition} currentUser={ownerUser} tenant={withPixel} onTenantUpdated={() => {}} />);
+    await waitFor(() => expect(statusSpy).toHaveBeenCalledWith("brow-beauty-lab"));
+    const token = await screen.findByLabelText(/conversions api access token/i);
+    expect(token).toHaveAttribute("type", "password");
+    const turnOn = screen.getByRole("button", { name: /turn on/i });
+    expect(turnOn).toBeDisabled();
+
+    fireEvent.change(token, { target: { value: "EAAB" + "x".repeat(30) } });
+    fireEvent.change(screen.getByLabelText(/test event code/i), { target: { value: "TEST123" } });
+    fireEvent.click(turnOn);
+    await waitFor(() =>
+      expect(connectSpy).toHaveBeenCalledWith("brow-beauty-lab", { accessToken: "EAAB" + "x".repeat(30), testEventCode: "TEST123" }),
+    );
+    expect(await screen.findByText(/server-side reporting is on/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 sent/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/replace access token/i)).toHaveValue("");
+    expect(screen.getByRole("button", { name: /turn off/i })).toBeInTheDocument();
+  });
+
   it("disables the calendar save button and shows a permission note for read-only staff", () => {
     render(
       <SettingsPage

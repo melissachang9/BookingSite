@@ -11,6 +11,7 @@ import {
   type SessionResponse,
   type TenantBranding,
   type CancellationRefundMethod,
+  type AdTrackingStatus,
   type TenantSummary,
 } from "@booking/shared-types";
 
@@ -766,6 +767,7 @@ function AdTrackingSection({
   const googleIsAds = googleTagId.trim().toUpperCase().startsWith("AW-");
 
   return (
+    <>
     <form className="cs-form" onSubmit={handleSubmit}>
       <p className="cs-settings-help">
         Leave a field empty if you don't use that platform. Your booking pages report when a visitor starts a booking
@@ -831,6 +833,120 @@ function AdTrackingSection({
         {!canManageSettings ? <p className="cs-permission-note">You do not have permission to edit tenant settings.</p> : null}
       </div>
     </form>
+    {canManageSettings && tenant?.settings.metaPixelId ? <MetaServerSideCard tenantSlug={tenantSlug} /> : null}
+    </>
+  );
+}
+
+function MetaServerSideCard({ tenantSlug }: { tenantSlug: string }) {
+  const [status, setStatus] = useState<AdTrackingStatus | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState("");
+  const [testEventCode, setTestEventCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<SaveState>({ kind: "idle" });
+
+  useEffect(() => {
+    let active = true;
+    platformApi
+      .getAdTrackingStatus(tenantSlug)
+      .then((next) => active && setStatus(next))
+      .catch((error) => active && setLoadError(error instanceof Error ? error.message : "Unable to load status."));
+    return () => {
+      active = false;
+    };
+  }, [tenantSlug]);
+
+  const connect = async () => {
+    setBusy(true);
+    setMessage({ kind: "idle" });
+    try {
+      const next = await platformApi.connectMetaConversions(tenantSlug, {
+        accessToken: accessToken.trim(),
+        testEventCode: testEventCode.trim() || null,
+      });
+      setStatus(next);
+      setAccessToken("");
+      setMessage({ kind: "success", message: "Meta server-side reporting is on." });
+    } catch (error) {
+      setMessage({ kind: "error", message: error instanceof Error ? error.message : "Unable to save the token." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disconnect = async () => {
+    setBusy(true);
+    setMessage({ kind: "idle" });
+    try {
+      setStatus(await platformApi.disconnectMetaConversions(tenantSlug));
+      setMessage({ kind: "success", message: "Meta server-side reporting is off." });
+    } catch (error) {
+      setMessage({ kind: "error", message: error instanceof Error ? error.message : "Unable to disconnect." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="cs-form" aria-label="Meta server-side reporting">
+      <h5>Meta server-side reporting</h5>
+      <p className="cs-settings-help">
+        Also sends each confirmed online booking to Meta from our server, so it's counted even when a visitor's browser
+        blocks the Pixel. Name, email and phone are hashed before they leave. In Events Manager, create a Conversions
+        API access token for this Pixel and paste it here. It's stored encrypted and can't be viewed again.
+      </p>
+      {loadError ? <p role="alert" className="cs-error">{loadError}</p> : null}
+      {status?.metaConnected ? (
+        <p role="status" className="cs-status">
+          Connected{status.metaTestMode ? " (test mode: events appear only in Events Manager's Test events tab)" : ""}.{" "}
+          {status.metaSentCount} sent, {status.metaPendingCount} waiting, {status.metaFailedCount} failed.
+          {status.metaLastError ? ` Last problem: ${status.metaLastError}` : ""}
+        </p>
+      ) : null}
+      <div className="cs-form-row">
+        <label className="cs-field">
+          <span>{status?.metaConnected ? "Replace access token" : "Conversions API access token"}</span>
+          <input
+            type="password"
+            autoComplete="off"
+            value={accessToken}
+            onChange={(event) => setAccessToken(event.target.value)}
+            disabled={busy}
+          />
+        </label>
+      </div>
+      <div className="cs-form-row">
+        <label className="cs-field">
+          <span>Test event code (optional)</span>
+          <input
+            type="text"
+            placeholder="e.g. TEST12345"
+            value={testEventCode}
+            onChange={(event) => setTestEventCode(event.target.value)}
+            disabled={busy}
+          />
+          <small>While set, events show only in Events Manager's Test events tab. Clear it to go live.</small>
+        </label>
+      </div>
+      {message.kind === "success" ? <p role="status" className="cs-status">{message.message}</p> : null}
+      {message.kind === "error" ? <p role="alert" className="cs-error">{message.message}</p> : null}
+      <div className="cs-actions">
+        <button
+          type="button"
+          className="cs-btn cs-btn--primary cs-btn--sm"
+          onClick={connect}
+          disabled={busy || accessToken.trim().length < 20}
+        >
+          {busy ? "Saving…" : status?.metaConnected ? "Update token" : "Turn on"}
+        </button>
+        {status?.metaConnected ? (
+          <button type="button" className="cs-btn cs-btn--sm" onClick={disconnect} disabled={busy}>
+            Turn off
+          </button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

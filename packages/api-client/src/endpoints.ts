@@ -137,6 +137,8 @@ import type {
   UpdateTenantClientOwnershipRequest,
   UpdateTenantCustomEmailRequest,
   UpdateTenantSettingsRequest,
+  UpdateMetaConversionsRequest,
+  AdTrackingStatus,
   UpdateTenantWalletMembershipRequest,
   UpdateCustomerRequest,
   UpsertCustomerRequest,
@@ -184,6 +186,13 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.post<MarketingSpendEntry, CreateMarketingSpendRequest>(`tenants/${tenantSlug}/marketing/spend`, body),
   removeMarketingSpend: (tenantSlug: string, spendId: string) =>
     client.delete<void>(`tenants/${tenantSlug}/marketing/spend/${spendId}`),
+  getAdTrackingStatus: (tenantSlug: string) => client.get<AdTrackingStatus>(`tenants/${tenantSlug}/ad-tracking`),
+  connectMetaConversions: (tenantSlug: string, body: UpdateMetaConversionsRequest) =>
+    client.put<AdTrackingStatus, UpdateMetaConversionsRequest>(`tenants/${tenantSlug}/ad-tracking/meta`, body),
+  disconnectMetaConversions: (tenantSlug: string) =>
+    client.delete<AdTrackingStatus>(`tenants/${tenantSlug}/ad-tracking/meta`),
+  exportGoogleConversionsCsv: (tenantSlug: string, query: Pick<ReportQuery, "from" | "to">) =>
+    client.getText(`tenants/${tenantSlug}/marketing/google-conversions`, { query: { from: query.from, to: query.to } }),
   exportReportCsv: (tenantSlug: string, kind: "sales" | "team" | "clients" | "appointments" | "tax", query: ReportQuery) =>
     client.getText(`tenants/${tenantSlug}/reports/${kind}`, { query: { ...reportQuery(query), format: "csv" } }),
   updateTenantSettings: (tenantSlug: string, body: UpdateTenantSettingsRequest) =>

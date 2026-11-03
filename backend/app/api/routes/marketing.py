@@ -17,6 +17,7 @@ from app.schemas.marketing import (
 from app.services.marketing import (
     build_marketing_report,
     create_marketing_spend,
+    google_offline_conversions_csv,
     list_marketing_spend,
     remove_marketing_spend,
 )
@@ -68,3 +69,21 @@ async def marketing_report(
 ) -> MarketingReportResponse:
     tenant = await get_tenant_by_slug(session, tenant_slug)
     return await build_marketing_report(session, tenant, build_range(tenant, start_date, end_date))
+
+
+@router.get("/google-conversions", summary="Google Ads offline conversion file for bookings from Google ad clicks")
+async def google_conversions(
+    tenant_slug: str,
+    start_date: date = Query(alias="from"),
+    end_date: date = Query(alias="to"),
+    _: User = Depends(require_tenant_permission("reports.export")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    tenant = await get_tenant_by_slug(session, tenant_slug)
+    rng = build_range(tenant, start_date, end_date)
+    body = await google_offline_conversions_csv(session, tenant, rng)
+    return Response(
+        content=body,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="google-conversions-{rng.start}-to-{rng.end}.csv"'},
+    )

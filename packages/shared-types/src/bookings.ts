@@ -248,6 +248,8 @@ export type BookingAttribution = {
   /** Google Ads / Meta click IDs from the ad link, kept so conversions can be matched back to the ad. */
   gclid?: string | null;
   fbclid?: string | null;
+  /** True when the visitor accepted ad cookies; null/absent when they were never asked. */
+  adConsent?: boolean | null;
 };
 
 export type CreateBookingDraftRequest = {

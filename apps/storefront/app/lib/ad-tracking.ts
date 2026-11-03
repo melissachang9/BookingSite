@@ -50,6 +50,8 @@ export function storeConsent(value: "granted" | "denied") {
   } catch {
     // Without storage the choice only lasts for this page view.
   }
+  // The booking server action reads this cookie, so server-side reporting honours the same choice.
+  document.cookie = `${AD_CONSENT_KEY}=${value}; Max-Age=${60 * 60 * 24 * 180}; Path=/; SameSite=Lax`;
 }
 
 /**
