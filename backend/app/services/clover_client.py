@@ -103,7 +103,7 @@ def default_environment() -> str:
     """The environment new connections use. 'fake' is refused in production."""
     settings = get_settings()
     environment = settings.clover_environment
-    if environment == "fake" and settings.app_env == "production":
+    if environment == "fake" and settings.is_production:
         return "sandbox"
     return environment if environment in _HOSTS else "sandbox"
 

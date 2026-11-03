@@ -54,3 +54,10 @@ __pycache__/
 supabase/.branches
 supabase/.temp
 test_output.txt
+
+# Python
+backend/venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

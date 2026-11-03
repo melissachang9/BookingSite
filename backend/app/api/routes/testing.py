@@ -22,7 +22,7 @@ def require_e2e_reset_access(
     x_e2e_reset_token: Annotated[Optional[str], Header(alias="X-E2E-Reset-Token")] = None,
     settings: Settings = Depends(get_settings),
 ) -> None:
-    if settings.app_env == "production":
+    if settings.is_production:
         raise api_exception(404, "not_found", "Testing endpoint was not found.")
 
     configured_reset_token = settings.test_reset_token or os.getenv("TEST_RESET_TOKEN")

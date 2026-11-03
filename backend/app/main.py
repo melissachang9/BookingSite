@@ -28,9 +28,15 @@ CONVERSION_SEND_INTERVAL_SECONDS = 30
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    settings = get_settings()
+    problems = settings.production_problems()
+    if problems:
+        # Refuse to serve traffic with unsafe settings rather than run quietly with a known secret.
+        raise RuntimeError("Unsafe production configuration:\n - " + "\n - ".join(problems))
     await initialize_database()
-    async with get_session_maker()() as session:
-        await seed_demo_data(session)
+    if settings.should_seed_demo_data:
+        async with get_session_maker()() as session:
+            await seed_demo_data(session)
 
     # Start background slot hold cleanup
     from app.services.slot_hold_cleanup import run_hold_sweep, run_periodic_cleanup
