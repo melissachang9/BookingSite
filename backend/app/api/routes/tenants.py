@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import rate_limit
+from app.core.signup_access import require_signup_access
 from app.api.dependencies.auth import require_tenant_permission
 from app.db.models import User
 from app.db.session import get_db_session
@@ -79,12 +80,19 @@ from app.services.tenants import (
 router = APIRouter(prefix="/tenants", tags=["tenants"])
 
 
+async def _send_invite(session: AsyncSession, user_id: str, invited_by: str) -> bool:
+    from app.services.account_emails import send_password_link
+
+    user = await session.get(User, user_id)
+    return user is not None and await send_password_link(session, user, "invite", invited_by=invited_by)
+
+
 @router.post(
     "",
     response_model=CreateTenantResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a tenant",
-    dependencies=[Depends(rate_limit("create-tenant", limit=5, window_seconds=3600))],
+    dependencies=[Depends(require_signup_access), Depends(rate_limit("create-tenant", limit=5, window_seconds=3600))],
 )
 async def create_tenant(
     payload: CreateTenantRequest,
@@ -263,8 +271,11 @@ async def post_tenant_user(
     actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantUserSummaryResponse:
+    actor_ref = ActorRef.from_user(actor)
     result = await create_tenant_user(session, tenant_slug, payload)
-    await record_audit(session, tenant_id=actor.tenant_id, entity_type="user", entity_id=result.id, action="create", actor=actor, notes=result.email)
+    await record_audit(session, tenant_id=actor_ref.tenant_id, entity_type="user", entity_id=result.id, action="create", actor=actor_ref, notes=result.email)
+    if not payload.initial_password:
+        result.invite_sent = await _send_invite(session, result.id, actor_ref.name)
     return result
 
 
@@ -597,8 +608,11 @@ async def post_tenant_staff(
     actor: User = Depends(require_tenant_permission("settings.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> CreateStaffResponse:
+    actor_ref = ActorRef.from_user(actor)
     result = await create_tenant_staff(session, tenant_slug, payload)
-    await record_audit(session, tenant_id=actor.tenant_id, entity_type="staff", entity_id=result.user.id, action="create", actor=actor, notes=result.user.email)
+    await record_audit(session, tenant_id=actor_ref.tenant_id, entity_type="staff", entity_id=result.user.id, action="create", actor=actor_ref, notes=result.user.email)
+    if not payload.initial_password:
+        result.user.invite_sent = await _send_invite(session, result.user.id, actor_ref.name)
     return result
 
 # === Phase C: Provider weekly schedule ===

@@ -56,6 +56,10 @@ class Settings(BaseSettings):
         "http://localhost:3001,http://127.0.0.1:3001"
     )
 
+    # Creating a business needs this value in the X-Platform-Admin-Token header (invite-only signup). Left
+    # unset, signup is open in development and test, and production refuses to start.
+    platform_admin_token: Optional[str] = None
+
     # Per-IP limits on login, signup, uploads and other public endpoints. Turn off only for local e2e runs.
     rate_limit_enabled: bool = True
 
@@ -90,6 +94,8 @@ class Settings(BaseSettings):
                     Fernet(key.encode())
             except (ValueError, TypeError):
                 problems.append("PAYMENT_SECRETS_KEY is not a valid Fernet key.")
+        if not self.platform_admin_token or len(self.platform_admin_token) < 16:
+            problems.append("PLATFORM_ADMIN_TOKEN must be set (16+ characters); creating a business is invite-only.")
         if self.test_reset_token:
             problems.append("TEST_RESET_TOKEN must not be set in production.")
         if self.clover_environment == "fake":

@@ -428,6 +428,8 @@ export type TenantUserSummary = {
   createdAt: string;
   phone?: string | null;
   avatarUrl?: string | null;
+  /** Only on a just-created person with no password: whether their invitation email went out. */
+  inviteSent?: boolean | null;
 };
 
 export type TenantUserListResponse = {
@@ -438,7 +440,8 @@ export type CreateTenantUserRequest = {
   email: string;
   name: string;
   role: string;
-  initialPassword: string;
+  /** Leave out to email the person an invitation to choose their own password. */
+  initialPassword?: string;
   phone?: string | null;
   avatarUrl?: string | null;
 };
@@ -488,7 +491,8 @@ export type CreateStaffRequest = {
   email: string;
   name: string;
   role: string;
-  initialPassword: string;
+  /** Leave out to email the person an invitation to choose their own password. */
+  initialPassword?: string;
   phone?: string | null;
   avatarUrl?: string | null;
   provider?: ProviderProfileRequest;

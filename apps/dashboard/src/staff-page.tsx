@@ -4040,13 +4040,14 @@ function AddStaffModal({
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createdWithoutInvite, setCreatedWithoutInvite] = useState(false);
 
   const disabled = useMemo(
     () =>
       submitting ||
       !form.email.trim() ||
       !form.name.trim() ||
-      form.initialPassword.length < 8,
+      (form.initialPassword.length > 0 && form.initialPassword.length < 8),
     [form, submitting],
   );
 
@@ -4062,7 +4063,7 @@ function AddStaffModal({
         email: form.email.trim(),
         name: form.name.trim(),
         role: form.role,
-        initialPassword: form.initialPassword,
+        initialPassword: form.initialPassword || undefined,
         phone: form.phone.trim() || null,
         avatarUrl: form.avatarUrl.trim() || null,
       };
@@ -4073,7 +4074,15 @@ function AddStaffModal({
           isBookableOnline: form.isBookableOnline,
         };
       }
-      await platformApi.createTenantStaff(tenantSlug, payload);
+      const created = await platformApi.createTenantStaff(tenantSlug, payload);
+      if (created.user.inviteSent === false) {
+        // They exist but no email went out; keep the dialog open so this is not missed.
+        setError(
+          `${created.user.name} was added, but the invitation email could not be sent. Ask them to use "Forgot your password?" on the sign-in page, or set a password for them.`,
+        );
+        setCreatedWithoutInvite(true);
+        return;
+      }
       onSaved();
     } catch (err) {
       setError(readErrorMessage(err, "Unable to create staff member."));
@@ -4126,15 +4135,17 @@ function AddStaffModal({
           />
         </label>
         <label>
-          <span>Initial password</span>
+          <span>Initial password (optional)</span>
           <input
             type="text"
             value={form.initialPassword}
             onChange={(event) => setForm({ ...form, initialPassword: event.target.value })}
             minLength={8}
-            required
           />
-          <small className="cs-settings-form-help">Minimum 8 characters. Share securely.</small>
+          <small className="cs-settings-form-help">
+            Leave blank to email them an invitation so they choose their own password. Or enter one (8+ characters)
+            and share it securely.
+          </small>
         </label>
         <label className="cs-settings-toggle">
           <input
@@ -4208,12 +4219,20 @@ function AddStaffModal({
           </p>
         ) : null}
         <div className="cs-modal__actions">
-          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={disabled}>
-            {submitting ? "Saving…" : "Create staff"}
-          </button>
+          {createdWithoutInvite ? (
+            <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={onSaved}>
+              Done
+            </button>
+          ) : (
+            <>
+              <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={onClose}>
+                Cancel
+              </button>
+              <button type="submit" className="cs-btn cs-btn--primary cs-btn--sm" disabled={disabled}>
+                {submitting ? "Saving…" : "Create staff"}
+              </button>
+            </>
+          )}
         </div>
       </form>
     </ModalShell>

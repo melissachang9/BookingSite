@@ -7,7 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
-from app.core.security import create_access_token, create_refresh_token, decode_token, verify_password
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+    hash_password,
+    password_fingerprint,
+    verify_password,
+)
 from app.db.models import Tenant, User, UserPermissionOverride
 from app.schemas.auth import AuthenticatedUserResponse, PermissionGrantResponse, SessionResponse
 
@@ -256,3 +263,43 @@ async def refresh_user_session(session: AsyncSession, refresh_token: str) -> Ses
         raise api_exception(401, "unauthorized", "User session is no longer active.")
     grants = await _grants_for_user(session, user)
     return _session_response_for_user(user, grants)
+
+
+async def request_password_reset(session: AsyncSession, email: str) -> None:
+    """Email a reset link if the address belongs to an active account. Says nothing either way."""
+    from app.services.account_emails import send_password_link
+
+    user = await session.scalar(select(User).where(User.email == email.strip().lower()))
+    if user is not None and user.is_active:
+        await send_password_link(session, user, "reset")
+
+
+async def complete_password_reset(session: AsyncSession, token: str, new_password: str) -> None:
+    """Set a new password from a reset or invite link. The link works once: it is tied to the old password."""
+    from app.services.audit import ActorRef, record_audit
+
+    invalid = api_exception(400, "invalid_token", "This link is invalid or has expired. Request a new one.")
+    try:
+        payload = decode_token(token)
+    except Exception as error:  # noqa: BLE001
+        raise invalid from error
+    if payload.get("tokenType") != "password":
+        raise invalid
+
+    user = await session.scalar(select(User).where(User.id == payload.get("sub")))
+    if user is None or not user.is_active or payload.get("pw") != password_fingerprint(user.password_hash):
+        raise invalid
+    if len(new_password) < 8:
+        raise api_exception(422, "validation_error", "Password must be at least 8 characters long.")
+
+    user.password_hash = hash_password(new_password)
+    await record_audit(
+        session,
+        tenant_id=user.tenant_id,
+        entity_type="user",
+        entity_id=user.id,
+        action="password_set",
+        actor=ActorRef(id=user.id, name=user.name, tenant_id=user.tenant_id),
+        notes="Invite accepted" if payload.get("purpose") == "invite" else "Password reset by email link",
+    )
+    await session.commit()

@@ -14,6 +14,7 @@ GOOD = dict(
     app_env="production",
     token_secret_key="x" * 40,
     payment_secrets_key=Fernet.generate_key().decode(),
+    platform_admin_token="p" * 24,
     storefront_public_base_url="https://book.example.com",
     dashboard_public_base_url="https://app.example.com",
     media_base_url="https://api.example.com/api/v1/forms/files",

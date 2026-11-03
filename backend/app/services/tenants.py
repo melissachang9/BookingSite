@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.http import api_exception
-from app.core.security import hash_password
+from app.core.security import hash_password, unusable_password_hash
 from app.db.models import (
     Booking,
     BookingDraft,
@@ -871,7 +871,7 @@ async def create_tenant_user(
         email=payload.email,
         name=payload.name.strip(),
         role=payload.role,
-        password_hash=hash_password(payload.initial_password),
+        password_hash=hash_password(payload.initial_password) if payload.initial_password else unusable_password_hash(),
         is_active=True,
         phone=payload.phone,
         avatar_url=payload.avatar_url,
@@ -1271,7 +1271,7 @@ async def create_tenant_staff(
         email=payload.email,
         name=payload.name.strip(),
         role=payload.role,
-        password_hash=hash_password(payload.initial_password),
+        password_hash=hash_password(payload.initial_password) if payload.initial_password else unusable_password_hash(),
         is_active=True,
         phone=payload.phone,
         avatar_url=payload.avatar_url,

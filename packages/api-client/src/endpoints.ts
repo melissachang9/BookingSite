@@ -167,7 +167,16 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.post<SessionResponse, typeof body>("auth/login", body),
   refreshSession: (body: { refreshToken: string }) =>
     client.post<SessionResponse, typeof body>("auth/refresh", body),
-  createTenant: (body: CreateTenantRequest) => client.post<CreateTenantResponse, CreateTenantRequest>("tenants", body),
+  /** Creating a business is invite-only in production: `inviteCode` is the platform's invite code. */
+  createTenant: (body: CreateTenantRequest, inviteCode?: string) =>
+    client.post<CreateTenantResponse, CreateTenantRequest>(
+      "tenants",
+      body,
+      inviteCode ? { headers: { "X-Platform-Admin-Token": inviteCode } } : undefined,
+    ),
+  forgotPassword: (body: { email: string }) => client.post<{ ok: boolean }, typeof body>("auth/forgot-password", body),
+  resetPassword: (body: { token: string; newPassword: string }) =>
+    client.post<{ ok: boolean }, typeof body>("auth/reset-password", body),
   getTenantBySlug: (tenantSlug: string) => client.get<TenantSummary>(`tenants/${tenantSlug}`),
   getDashboardReport: (tenantSlug: string) => client.get<DashboardReport>(`tenants/${tenantSlug}/report`),
   getSalesReport: (tenantSlug: string, query: ReportQuery, compare?: ReportCompareMode) =>

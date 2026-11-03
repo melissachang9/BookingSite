@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from pydantic import Field
+
 from app.schemas.base import CamelModel
 
 
@@ -67,3 +69,16 @@ class UserPermissionsResponse(CamelModel):
 
 class ReplaceUserPermissionsRequest(CamelModel):
     overrides: list[UserPermissionOverrideEntry]
+
+
+class ForgotPasswordRequest(CamelModel):
+    email: str = Field(min_length=3, max_length=255)
+
+
+class ResetPasswordRequest(CamelModel):
+    token: str = Field(min_length=20, max_length=2000)
+    new_password: str = Field(min_length=8, max_length=255)
+
+
+class OkResponse(CamelModel):
+    ok: bool = True

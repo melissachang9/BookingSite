@@ -35,6 +35,7 @@ import { CustomersPage } from "./clients-page";
 
 import { FormsPage } from "./forms-page";
 import { ResourcesPage } from "./resources-page";
+import { ForgotPasswordPage, ResetPasswordPage } from "./password-pages";
 import "./theme.css";
 
 type RouteGroupKey = "settings-management";
@@ -835,6 +836,8 @@ export function App() {
     <Routes>
       <Route path="/" element={<Navigate to={session === null ? "/login" : "/calendar"} replace />} />
       <Route path="/login" element={<LoginPage session={session} onSessionCreated={handleSessionCreated} />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route
         path="/onboarding"
         element={
@@ -933,6 +936,8 @@ function OnboardingPage({
   const navigate = useNavigate();
   const [saveState, setSaveState] = useState<OnboardingSaveState>({ kind: "idle" });
   const [ownerSignInState, setOwnerSignInState] = useState<OwnerSignInState>({ kind: "idle" });
+  // Creating a business is invite-only in production; this is the code the platform gave them.
+  const [inviteCode, setInviteCode] = useState("");
   const [formState, setFormState] = useState<OnboardingFormState>({
     name: "",
     slug: "",
@@ -971,7 +976,7 @@ function OnboardingPage({
         cancellationWindowHours: formState.cancellationWindowHours,
         cancellationRefundMethod: formState.cancellationRefundMethod,
       };
-      const result = await platformApi.createTenant(payload);
+      const result = await platformApi.createTenant(payload, inviteCode.trim() || undefined);
 
       startTransition(() => {
         setSaveState({
@@ -1080,6 +1085,16 @@ function OnboardingPage({
               <label>
                 <span>Launch location</span>
                 <input value={formState.locationName} onChange={(event) => updateFormField("locationName", event.target.value)} required />
+              </label>
+
+              <label>
+                <span>Invite code</span>
+                <input
+                  value={inviteCode}
+                  onChange={(event) => setInviteCode(event.target.value)}
+                  autoComplete="off"
+                  placeholder="Needed if signup is invite-only"
+                />
               </label>
 
               <label>
@@ -1261,8 +1276,9 @@ function LoginPage({
   onSessionCreated: (session: SessionResponse) => void;
 }) {
   const dashboardDefinition = pageByPath.get("dashboard");
-  const [email, setEmail] = useState(demoOwnerEmail);
-  const [password, setPassword] = useState(demoOwnerPassword);
+  // The demo owner is prefilled only on a local dev build; a production build opens with empty fields.
+  const [email, setEmail] = useState(import.meta.env.DEV ? demoOwnerEmail : "");
+  const [password, setPassword] = useState(import.meta.env.DEV ? demoOwnerPassword : "");
   const [authNotice, setAuthNotice] = useState<string | null>(() => getAuthNoticeMessage());
   const [loginState, setLoginState] = useState<LoginState>({ kind: "idle" });
 
@@ -1302,13 +1318,13 @@ function LoginPage({
         <span className="cs-login__brand">BB</span>
         <p className="cs-eyebrow">Operator access</p>
         <h2>Sign in to Studio OS</h2>
-        <p>
-          Backend-issued sessions now gate the operator shell. The demo owner account is prefilled for the current local stack.
-        </p>
-        <div className="cs-login__meta">
-          <span>{apiBaseUrl}/auth/login</span>
-          <strong>{dashboardDefinition?.title ?? "Overview"}</strong>
-        </div>
+        <p>Sign in with the email and password for your business account.</p>
+        {import.meta.env.DEV ? (
+          <div className="cs-login__meta">
+            <span>{apiBaseUrl}/auth/login</span>
+            <strong>{dashboardDefinition?.title ?? "Overview"}</strong>
+          </div>
+        ) : null}
 
         {loginState.kind === "error" ? <div className="cs-banner cs-banner--error">{loginState.message}</div> : null}
   {authNotice !== null ? <div className="cs-banner cs-banner--muted">{authNotice}</div> : null}
@@ -1332,6 +1348,9 @@ function LoginPage({
               Set up a new business
             </NavLink>
           </div>
+          <p className="cs-login__help">
+            <NavLink to="/forgot-password">Forgot your password?</NavLink>
+          </p>
         </form>
       </section>
     </main>

@@ -196,6 +196,58 @@ describe("StaffPage", () => {
     });
   });
 
+  it("invites a staff member by email when no password is typed", async () => {
+    mockListEndpoints();
+    const createSpy = vi
+      .spyOn(platformApi, "createTenantStaff")
+      .mockResolvedValue({ user: { ...baseUsers[0], inviteSent: true }, provider: null } as any);
+
+    renderStaffPage(ownerUser);
+    await waitFor(() => screen.getByRole("button", { name: "Add staff" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add staff" }));
+    const dialog = within(screen.getByRole("dialog"));
+
+    fireEvent.change(dialog.getByLabelText("Name"), { target: { value: "New Hire" } });
+    fireEvent.change(dialog.getByLabelText("Email"), { target: { value: "hire@browbeautylab.test" } });
+    fireEvent.click(dialog.getByRole("button", { name: "Create staff" }));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy.mock.calls[0][1]).toMatchObject({ email: "hire@browbeautylab.test", initialPassword: undefined });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("keeps the dialog open and says so when the invitation email could not be sent", async () => {
+    mockListEndpoints();
+    vi.spyOn(platformApi, "createTenantStaff").mockResolvedValue({
+      user: { ...baseUsers[0], name: "New Hire", inviteSent: false },
+      provider: null,
+    } as any);
+
+    renderStaffPage(ownerUser);
+    await waitFor(() => screen.getByRole("button", { name: "Add staff" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add staff" }));
+    const dialog = within(screen.getByRole("dialog"));
+    fireEvent.change(dialog.getByLabelText("Name"), { target: { value: "New Hire" } });
+    fireEvent.change(dialog.getByLabelText("Email"), { target: { value: "hire@browbeautylab.test" } });
+    fireEvent.click(dialog.getByRole("button", { name: "Create staff" }));
+
+    expect(await dialog.findByRole("alert")).toHaveTextContent(/invitation email could not be sent/i);
+    expect(dialog.queryByRole("button", { name: "Create staff" })).toBeNull();
+    expect(dialog.getByRole("button", { name: "Done" })).toBeInTheDocument();
+  });
+
+  it("refuses a typed password that is too short", async () => {
+    mockListEndpoints();
+    renderStaffPage(ownerUser);
+    await waitFor(() => screen.getByRole("button", { name: "Add staff" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add staff" }));
+    const dialog = within(screen.getByRole("dialog"));
+    fireEvent.change(dialog.getByLabelText("Name"), { target: { value: "A" } });
+    fireEvent.change(dialog.getByLabelText("Email"), { target: { value: "a@b.co" } });
+    fireEvent.change(dialog.getByLabelText(/Initial password/), { target: { value: "short" } });
+    expect(dialog.getByRole("button", { name: "Create staff" })).toBeDisabled();
+  });
+
   it("creates a staff member with provider sub-payload when toggle on", async () => {
     mockListEndpoints();
     const createSpy = vi

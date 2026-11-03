@@ -917,6 +917,8 @@ class TenantUserSummaryResponse(CamelModel):
     created_at: datetime
     phone: str | None = None
     avatar_url: str | None = None
+    # Only set when the person was just created without a password: whether their invitation email went out.
+    invite_sent: bool | None = None
 
 
 class TenantUserListResponse(CamelModel):
@@ -959,7 +961,8 @@ class CreateTenantUserRequest(CamelModel):
     email: str = Field(min_length=3, max_length=255)
     name: str = Field(min_length=1, max_length=255)
     role: str = Field(min_length=1, max_length=32)
-    initial_password: str = Field(min_length=8, max_length=255)
+    # Left out, the person is emailed an invitation to choose their own password.
+    initial_password: str | None = Field(default=None, min_length=8, max_length=255)
     phone: str | None = Field(default=None, max_length=40)
     avatar_url: str | None = Field(default=None, max_length=2000)
 
@@ -967,7 +970,7 @@ class CreateTenantUserRequest(CamelModel):
     def _validate(self) -> "CreateTenantUserRequest":
         self.email = _validate_email(self.email)
         self.role = _validate_role(self.role)
-        self.initial_password = _validate_password(self.initial_password)
+        self.initial_password = _validate_password(self.initial_password) if self.initial_password else None
         self.phone = _normalize_optional(self.phone)
         self.avatar_url = _normalize_optional(self.avatar_url)
         return self
@@ -1045,7 +1048,8 @@ class CreateStaffRequest(CamelModel):
     email: str = Field(min_length=3, max_length=255)
     name: str = Field(min_length=1, max_length=255)
     role: str = Field(min_length=1, max_length=32)
-    initial_password: str = Field(min_length=8, max_length=255)
+    # Left out, the person is emailed an invitation to choose their own password.
+    initial_password: str | None = Field(default=None, min_length=8, max_length=255)
     phone: str | None = Field(default=None, max_length=40)
     avatar_url: str | None = Field(default=None, max_length=2000)
     provider: ProviderProfileRequest | None = None
@@ -1054,7 +1058,7 @@ class CreateStaffRequest(CamelModel):
     def _validate(self) -> "CreateStaffRequest":
         self.email = _validate_email(self.email)
         self.role = _validate_role(self.role)
-        self.initial_password = _validate_password(self.initial_password)
+        self.initial_password = _validate_password(self.initial_password) if self.initial_password else None
         self.phone = _normalize_optional(self.phone)
         self.avatar_url = _normalize_optional(self.avatar_url)
         return self

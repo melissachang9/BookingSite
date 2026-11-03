@@ -31,6 +31,8 @@ services:
       APP_PORT: 8000
       DATABASE_URL: postgresql+asyncpg://booking:booking@db:5432/booking_platform
       TEST_RESET_TOKEN: ${TEST_RESET_TOKEN:-local-e2e-reset}
+      # Invite code for creating businesses. Empty keeps local signup open.
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
       RESEND_REPLY_TO_EMAIL: ${RESEND_REPLY_TO_EMAIL:-}
