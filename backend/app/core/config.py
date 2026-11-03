@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     clover_environment: str = "sandbox"
     # Comma-separated Fernet keys (newest first) used to encrypt stored processor secrets.
     payment_secrets_key: Optional[str] = None
+    # Error reporting. Unset disables it.
+    sentry_dsn: Optional[str] = None
     media_root: str = "/media"
     media_base_url: str = "http://localhost:8000/api/v1/forms/files"
     cors_origins: str = (

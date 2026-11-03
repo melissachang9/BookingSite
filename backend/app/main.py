@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.db.seed import seed_demo_data
+from app.db.migrate import upgrade_database
 from app.db.session import dispose_engine, get_session_maker, initialize_database
 
 logging.basicConfig(
@@ -33,7 +34,11 @@ async def lifespan(_: FastAPI):
     if problems:
         # Refuse to serve traffic with unsafe settings rather than run quietly with a known secret.
         raise RuntimeError("Unsafe production configuration:\n - " + "\n - ".join(problems))
-    await initialize_database()
+    if settings.is_production:
+        # Production schema changes only ever come from reviewed Alembic migrations.
+        await upgrade_database()
+    else:
+        await initialize_database()
     if settings.should_seed_demo_data:
         async with get_session_maker()() as session:
             await seed_demo_data(session)
@@ -125,8 +130,24 @@ def _error_code_for_status(status_code: int) -> str:
     return "bad_request"
 
 
+def _init_error_reporting() -> None:
+    settings = get_settings()
+    if not settings.sentry_dsn:
+        return
+    import sentry_sdk
+
+    # Request bodies and cookies carry customer data, so none of it is sent with an error.
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.app_env,
+        send_default_pii=False,
+        traces_sample_rate=0.0,
+    )
+
+
 def create_application() -> FastAPI:
     settings = get_settings()
+    _init_error_reporting()
     application = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
 
     application.add_middleware(

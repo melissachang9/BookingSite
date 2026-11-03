@@ -1,0 +1,23 @@
+# Public entry point. Caddy gets and renews HTTPS certificates automatically once the DNS names below
+# point at this server and ports 80 and 443 are open.
+{
+	email {$ACME_EMAIL}
+}
+
+{$DASHBOARD_DOMAIN} {
+	encode gzip
+	reverse_proxy dashboard:80
+}
+
+{$BOOKING_DOMAIN} {
+	encode gzip
+	reverse_proxy storefront:3000
+}
+
+{$API_DOMAIN} {
+	encode gzip
+	request_body {
+		max_size 12MB
+	}
+	reverse_proxy backend:8000
+}

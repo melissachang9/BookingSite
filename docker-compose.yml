@@ -23,6 +23,8 @@ services:
     container_name: booking-platform-backend
     restart: unless-stopped
     mem_limit: 1g
+    # The image runs unprivileged; local volumes created earlier are owned by root.
+    user: "0:0"
     environment:
       APP_NAME: Booking Platform API
       APP_ENV: development

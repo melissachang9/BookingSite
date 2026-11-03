@@ -1,0 +1,117 @@
+# Production stack. Start with:
+#   docker compose -f docker-compose.prod.yml --env-file deploy/.env.production up -d --build
+# See docs/deployment.md.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: booking_platform
+      POSTGRES_USER: booking
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U booking -d booking_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      APP_NAME: Booking Platform API
+      DATABASE_URL: postgresql+asyncpg://booking:${POSTGRES_PASSWORD}@db:5432/booking_platform
+      TOKEN_SECRET_KEY: ${TOKEN_SECRET_KEY:?set TOKEN_SECRET_KEY}
+      PAYMENT_SECRETS_KEY: ${PAYMENT_SECRETS_KEY:?set PAYMENT_SECRETS_KEY}
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN:?set PLATFORM_ADMIN_TOKEN}
+      STOREFRONT_PUBLIC_BASE_URL: https://${BOOKING_DOMAIN}
+      DASHBOARD_PUBLIC_BASE_URL: https://${DASHBOARD_DOMAIN}
+      MEDIA_BASE_URL: https://${API_DOMAIN}/api/v1/forms/files
+      CORS_ORIGINS: https://${DASHBOARD_DOMAIN},https://${BOOKING_DOMAIN}
+      # Only Caddy can reach the backend, so its forwarded client address is trustworthy.
+      TRUST_PROXY_HEADERS: "true"
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
+      RESEND_REPLY_TO_EMAIL: ${RESEND_REPLY_TO_EMAIL:-}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      CLOVER_APP_ID: ${CLOVER_APP_ID:-}
+      CLOVER_APP_SECRET: ${CLOVER_APP_SECRET:-}
+      CLOVER_ENVIRONMENT: ${CLOVER_ENVIRONMENT:-production}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - media_data:/media
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: apps/dashboard/Dockerfile.prod
+      args:
+        VITE_PUBLIC_API_BASE_URL: https://${API_DOMAIN}/api/v1
+        VITE_PUBLIC_STOREFRONT_BASE_URL: https://${BOOKING_DOMAIN}
+    restart: unless-stopped
+
+  storefront:
+    build:
+      context: .
+      dockerfile: apps/storefront/Dockerfile
+    restart: unless-stopped
+    environment:
+      API_BASE_URL: http://backend:8000/api/v1
+      NEXT_PUBLIC_API_BASE_URL: https://${API_DOMAIN}/api/v1
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+      DASHBOARD_DOMAIN: ${DASHBOARD_DOMAIN:?set DASHBOARD_DOMAIN}
+      BOOKING_DOMAIN: ${BOOKING_DOMAIN:?set BOOKING_DOMAIN}
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - dashboard
+      - storefront
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: booking
+      POSTGRES_DB: booking_platform
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    volumes:
+      - ./deploy/backup.sh:/backup.sh:ro
+      - db_backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  media_data:
+  caddy_data:
+  caddy_config:
+  db_backups:

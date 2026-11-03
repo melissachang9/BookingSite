@@ -1,0 +1,9 @@
+:80 {
+	root * /srv
+	encode gzip
+	# Single-page app: unknown paths load index.html so client routes (/reset-password, /calendar) work.
+	try_files {path} /index.html
+	file_server
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+	header /index.html Cache-Control "no-cache"
+}
