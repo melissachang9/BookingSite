@@ -472,9 +472,16 @@ async def update_tenant_business_hours(
     return tenant_to_summary(tenant)
 
 
+# Top-level storefront pages. A business using one of these as its address would hide that page.
+RESERVED_TENANT_SLUGS = frozenset({"terms", "privacy", "cancel", "forms", "api", "admin", "app", "login", "static", "health"})
+
+
 async def create_tenant_account(session: AsyncSession, payload: CreateTenantRequest) -> CreateTenantResponse:
     normalized_slug = payload.slug.strip().lower()
     normalized_email = payload.owner_email.strip().lower()
+
+    if normalized_slug in RESERVED_TENANT_SLUGS:
+        raise api_exception(409, "conflict", "That address is reserved. Choose a different one.")
 
     existing_tenant_id = await session.scalar(select(Tenant.id).where(Tenant.slug == normalized_slug))
     if existing_tenant_id is not None:

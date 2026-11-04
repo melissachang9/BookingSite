@@ -68,6 +68,8 @@ services:
     restart: unless-stopped
     environment:
       API_BASE_URL: http://backend:8000/api/v1
+      PLATFORM_LEGAL_NAME: ${PLATFORM_LEGAL_NAME:-}
+      PLATFORM_CONTACT_EMAIL: ${PLATFORM_CONTACT_EMAIL:-}
       NEXT_PUBLIC_API_BASE_URL: https://${API_DOMAIN}/api/v1
     depends_on:
       backend:

@@ -100,3 +100,20 @@ def test_create_tenant_rejects_unknown_refund_method(client) -> None:
 def test_create_tenant_rejects_out_of_range_cancellation_window(client) -> None:
     response = client.post("/api/v1/tenants", json=_create_payload("bad-window-studio", cancellationWindowHours=500))
     assert response.status_code == 422
+
+
+def test_create_tenant_rejects_addresses_that_collide_with_storefront_pages(client) -> None:
+    for slug in ("terms", "privacy"):
+        response = client.post(
+            "/api/v1/tenants",
+            json={
+                "name": "Collision Studio",
+                "slug": slug,
+                "timezone": "America/Los_Angeles",
+                "locationName": "Main Room",
+                "ownerName": "Jamie Lee",
+                "ownerEmail": f"owner-{slug}@collision.test",
+                "ownerPassword": "StudioSetup123",
+            },
+        )
+        assert response.status_code == 409

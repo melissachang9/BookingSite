@@ -69,7 +69,7 @@ function formatAnswerValue(value: unknown, field: FormField): string {
       if (isAttachmentArray(value)) {
         return `${value.length} file${value.length !== 1 ? "s" : ""}`;
       }
-      return "Attachment preview coming soon";
+      return "\u2014";
     case "section":
     case "static_text":
       return "";

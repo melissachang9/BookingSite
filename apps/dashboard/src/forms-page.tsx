@@ -28,9 +28,9 @@ type LoadState =
   | { kind: "ready" }
   | { kind: "error"; message: string };
 
-type EditorStep = "details" | "fields" | "preview" | "advanced";
+type EditorStep = "details" | "fields" | "preview";
 
-type FormTabKey = "details" | "fields" | "preview" | "advanced";
+type FormTabKey = "details" | "fields" | "preview";
 
 type BuilderModal =
   | { kind: "none" }
@@ -844,7 +844,6 @@ function FormDetail({
     { key: "details", label: "Details" },
     { key: "fields", label: "Form Fields" },
     { key: "preview", label: "Preview" },
-    { key: "advanced", label: "Advanced" },
   ];
 
   const saveLabel = activeTab === "details" ? "Save details" : activeTab === "fields" ? "Save fields" : "Save form";
@@ -911,10 +910,9 @@ function FormDetail({
           <FormPreviewCard name={form.name} description={form.schema?.description ?? ""} fields={localFields} />
         ) : null}
 
-        {activeTab === "advanced" ? <p className="fm-empty">Advanced settings coming soon.</p> : null}
       </div>
 
-      {canManage && activeTab !== "advanced" ? (
+      {canManage ? (
         <div className="fm-actions">
           <button type="button" className="fm-btn fm-btn--primary" disabled={tabSaving} onClick={() => { void saveCurrentTab(activeTab); }}>
             {tabSaving ? "Saving..." : saveLabel}
@@ -1037,7 +1035,6 @@ function FormBuilderEditor({
     { key: "details", label: "1 · Details" },
     { key: "fields", label: formId ? "2 · Form Fields" : "2 · Form Fields — create form first", disabled: !formId },
     { key: "preview", label: "3 · Preview" },
-    { key: "advanced", label: "Advanced — coming soon", disabled: true, muted: true },
   ];
 
   return (

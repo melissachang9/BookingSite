@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { AdTags } from "../components/ad-tags";
+import { LegalLinks } from "../lib/legal";
 import { storefrontApi, isApiNotFoundError } from "../lib/storefront-api";
 import { titleFromSlug } from "../lib/storefront-shell";
 import { TenantBackButton } from "./tenant-back-button";
@@ -11,6 +13,17 @@ type TenantLayoutProps = {
   children: ReactNode;
   params: Promise<{ tenantSlug: string }>;
 };
+
+export async function generateMetadata({ params }: Pick<TenantLayoutProps, "params">): Promise<Metadata> {
+  const { tenantSlug } = await params;
+  let tenantName = titleFromSlug(tenantSlug);
+  try {
+    tenantName = (await storefrontApi.getTenantBySlug(tenantSlug)).name;
+  } catch {
+    // The layout itself handles an unknown business; fall back to the slug here.
+  }
+  return { title: `Book online · ${tenantName}`, description: `Book an appointment with ${tenantName}.` };
+}
 
 export default async function TenantLayout({ children, params }: TenantLayoutProps) {
   const { tenantSlug } = await params;
@@ -62,6 +75,9 @@ export default async function TenantLayout({ children, params }: TenantLayoutPro
         </header>
 
         <div className="tenant-content">{children}</div>
+        <footer className="tenant-footer">
+          <LegalLinks />
+        </footer>
       </div>
     </div>
   );

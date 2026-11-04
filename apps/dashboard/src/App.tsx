@@ -1351,6 +1351,9 @@ function LoginPage({
           <p className="cs-login__help">
             <NavLink to="/forgot-password">Forgot your password?</NavLink>
           </p>
+          <p className="cs-login__help">
+            <a href={`${storefrontBaseUrl}/terms`}>Terms</a> · <a href={`${storefrontBaseUrl}/privacy`}>Privacy</a>
+          </p>
         </form>
       </section>
     </main>

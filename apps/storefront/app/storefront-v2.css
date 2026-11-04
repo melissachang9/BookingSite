@@ -916,3 +916,13 @@ a.sf-summary__cta[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }
   .ad-consent { flex-direction: column; align-items: stretch; }
   .ad-consent__actions { justify-content: flex-end; }
 }
+
+/* Legal pages and footer links */
+.legal-page { max-width: 720px; margin: 0 auto; padding: 48px 20px 80px; line-height: 1.6; color: var(--sf-ink, #1f1a17); }
+.legal-page h1 { margin: 8px 0 4px; }
+.legal-page h2 { margin: 28px 0 8px; font-size: 1.1rem; }
+.legal-page ul { padding-left: 20px; }
+.legal-updated { margin: 0 0 24px; opacity: 0.7; font-size: 0.9rem; }
+.legal-links { display: flex; gap: 16px; font-size: 0.85rem; }
+.legal-links a { color: inherit; opacity: 0.7; }
+.tenant-footer { display: flex; justify-content: center; padding: 24px 0 8px; }

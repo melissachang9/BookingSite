@@ -77,7 +77,7 @@ describe("FormResponseViewer", () => {
 
     // file upload placeholder
     expect(screen.getByText("Photo")).toBeInTheDocument();
-    expect(screen.getByText("Attachment preview coming soon")).toBeInTheDocument();
+    expect(screen.queryByText(/coming soon/i)).not.toBeInTheDocument();
   });
 
   it("renders section headings inline within the answer list", () => {

@@ -5,8 +5,8 @@ import "./storefront-v2.css";
 
 
 export const metadata = {
-  title: "Brow Beauty Lab Booking",
-  description: "Luxury beauty studio booking, intake, deposits, and appointment management.",
+  title: { default: "Online booking", template: "%s" },
+  description: "Book appointments online with required forms, deposits and reminders.",
 };
 
 
