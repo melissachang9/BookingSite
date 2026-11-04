@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.routes.auth import router as auth_router
 from app.api.routes.bookings import router as bookings_router
 from app.api.routes.booking_drafts import router as booking_drafts_router
+from app.api.routes.client_photos import router as client_photos_router
 from app.api.routes.customers import router as customers_router
 from app.api.routes.forms import router as forms_router
 from app.api.routes.health import router as health_router
@@ -38,6 +39,7 @@ api_router.include_router(tenants_router)
 api_router.include_router(bookings_router)
 api_router.include_router(booking_drafts_router)
 api_router.include_router(customers_router)
+api_router.include_router(client_photos_router)
 api_router.include_router(forms_router)
 api_router.include_router(payments_router)
 api_router.include_router(sales_router)

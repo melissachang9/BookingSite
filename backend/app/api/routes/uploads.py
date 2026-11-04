@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -14,48 +13,16 @@ from app.core.config import get_settings, Settings
 from app.core.rate_limit import rate_limit
 from app.db.models import Tenant
 from app.db.session import get_db_session
+from app.services.media import (
+    EXTENSION_BY_MIME,
+    MAX_FILE_SIZE_BYTES,
+    MIME_BY_EXTENSION,
+    READ_CHUNK_BYTES,
+    detect_mime as _detect_mime,
+    media_dir as _media_dir,
+)
 
 router = APIRouter(tags=["uploads"])
-
-# Detected from the file's own bytes, never from the client's filename or Content-Type.
-EXTENSION_BY_MIME = {
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-    "image/gif": ".gif",
-    "image/webp": ".webp",
-    "image/heic": ".heic",
-    "image/heif": ".heif",
-    "application/pdf": ".pdf",
-}
-MIME_BY_EXTENSION = {ext: mime for mime, ext in EXTENSION_BY_MIME.items()} | {".jpeg": "image/jpeg"}
-HEIF_BRANDS = {b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"mif1", b"msf1"}
-MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
-READ_CHUNK_BYTES = 1024 * 1024
-
-
-def _media_dir(settings: Settings) -> Path:
-    path = Path(settings.media_root)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def _detect_mime(head: bytes) -> str | None:
-    if head.startswith(b"\xff\xd8\xff"):
-        return "image/jpeg"
-    if head.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "image/png"
-    if head.startswith((b"GIF87a", b"GIF89a")):
-        return "image/gif"
-    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
-        return "image/webp"
-    if head.startswith(b"%PDF-"):
-        return "application/pdf"
-    if head[4:8] == b"ftyp":
-        brand = head[8:12]
-        if brand in HEIF_BRANDS:
-            return "image/heic" if brand.startswith(b"hei") or brand == b"hevc" else "image/heif"
-    return None
-
 
 def _is_uuid(value: str) -> bool:
     try:

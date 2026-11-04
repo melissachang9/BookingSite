@@ -218,3 +218,31 @@ def test_other_businesses_cannot_see_or_fill_in_these_forms(client) -> None:
     assert cross.status_code == 404
     # And the other business's login cannot reach this business's records.
     assert client.get(f"{BASE}/customers/{customer_id}/internal-form-responses", headers=other).status_code in (401, 403, 404)
+
+
+def test_internal_forms_are_never_requested_from_the_customer_when_booking(client) -> None:
+    owner = _auth_headers(client)
+    created = client.post(
+        f"{BASE}/forms",
+        headers=owner,
+        json={"name": "Staff only", "scope": "internal", "isActive": True, "appliesToAllServices": True, "schema": SCHEMA},
+    )
+    assert created.status_code == 201
+
+    from tests.test_public_booking import _next_weekday, _service_by_name
+
+    service = _service_by_name(client, "Brow Shape and Tint")
+    slot = client.get(f"{BASE}/availability", params={"serviceId": service["id"], "date": _next_weekday(4)}).json()["slots"][0]
+    draft = client.post(
+        f"{BASE}/booking-drafts",
+        json={
+            "tenantSlug": "brow-beauty-lab",
+            "serviceId": service["id"],
+            "providerId": slot["providerId"],
+            "locationId": slot["locationId"],
+            "startsAt": slot["startAt"],
+        },
+    ).json()
+
+    assert all(requirement["scope"] == "customer" for requirement in draft["formRequirements"])
+    assert "Staff only" not in str(draft["formRequirements"])

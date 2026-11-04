@@ -231,3 +231,19 @@ def test_move_booking_start_is_tenant_safe(client) -> None:
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "not_found"
+
+def test_reset_e2e_data_clears_completed_sales(client) -> None:
+    from tests.test_booking_operations import _auth_headers, _confirm_paid_deposit_booking
+
+    booking_id = _confirm_paid_deposit_booking(client)["booking"]["id"]
+    completed = client.post(
+        f"/api/v1/tenants/brow-beauty-lab/bookings/{booking_id}/status",
+        headers=_auth_headers(client),
+        json={"status": "completed", "paymentResolution": "follow_up"},
+    )
+    assert completed.status_code == 200
+
+    reset_response = client.post("/api/v1/testing/e2e/reset")
+
+    assert reset_response.status_code == 200, reset_response.text
+    assert reset_response.json()["bookingsDeleted"] >= 1

@@ -16,6 +16,10 @@ import type {
   AvailabilityResponse,
   BookingDraftSummary,
   BookingFormResponseList,
+  ClientPhoto,
+  ClientPhotoCategories,
+  ClientPhotoList,
+  UpdateClientPhotoRequest,
   InternalFormOptionList,
   InternalFormResponseEntry,
   InternalFormResponseList,
@@ -720,6 +724,29 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.patch<CustomerProfileResponse, UpdateCustomerRequest>(`tenants/${tenantSlug}/customers/${customerId}`, body),
   listCustomerFormResponses: (tenantSlug: string, customerId: string) =>
     client.get<BookingFormResponseList>(`tenants/${tenantSlug}/customers/${customerId}/form-responses`),
+  listPhotoCategories: (tenantSlug: string) =>
+    client.get<ClientPhotoCategories>(`tenants/${tenantSlug}/photo-categories`),
+  listClientPhotos: (tenantSlug: string, customerId: string) =>
+    client.get<ClientPhotoList>(`tenants/${tenantSlug}/customers/${customerId}/photos`),
+  uploadClientPhoto: (
+    tenantSlug: string,
+    customerId: string,
+    file: File,
+    fields: { kind: string; caption?: string; bookingId?: string },
+  ) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("kind", fields.kind);
+    if (fields.caption) form.append("caption", fields.caption);
+    if (fields.bookingId) form.append("bookingId", fields.bookingId);
+    return client.postForm<ClientPhoto>(`tenants/${tenantSlug}/customers/${customerId}/photos`, form);
+  },
+  getClientPhotoFile: (tenantSlug: string, customerId: string, photoId: string) =>
+    client.getBlob(`tenants/${tenantSlug}/customers/${customerId}/photos/${photoId}/file`),
+  updateClientPhoto: (tenantSlug: string, customerId: string, photoId: string, body: UpdateClientPhotoRequest) =>
+    client.patch<ClientPhoto, UpdateClientPhotoRequest>(`tenants/${tenantSlug}/customers/${customerId}/photos/${photoId}`, body),
+  deleteClientPhoto: (tenantSlug: string, customerId: string, photoId: string) =>
+    client.delete<void>(`tenants/${tenantSlug}/customers/${customerId}/photos/${photoId}`),
   listInternalForms: (tenantSlug: string) =>
     client.get<InternalFormOptionList>(`tenants/${tenantSlug}/internal-forms`),
   listCustomerInternalFormResponses: (tenantSlug: string, customerId: string) =>

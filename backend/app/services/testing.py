@@ -7,18 +7,8 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.http import api_exception
-from app.db.models import (
-    Booking,
-    BookingDraft,
-    BookingDraftFormRequirement,
-    BookingDraftIntakePlan,
-    BookingPaymentEvent,
-    Customer,
-    FormResponse,
-    Payment,
-    PaymentEvent,
-    SlotHold,
-)
+from app.db.base import Base
+from app.db.models import Booking
 from app.schemas.testing import MoveBookingStartResponse, ResetE2EDataResponse
 from app.services.tenants import get_tenant_by_slug
 
@@ -27,27 +17,43 @@ def _deleted_count(result: CursorResult) -> int:
     return int(result.rowcount or 0)
 
 
+# Everything a visit, sale or client can leave behind. Catalog and settings tables are untouched.
+_TRANSACTIONAL_ROOTS = frozenset({"bookings", "booking_drafts", "customers", "payments", "sales", "slot_holds"})
+
+
+def _transactional_tables() -> list:
+    """The roots plus every table that points at them, children first, so rows delete without FK errors.
+
+    Derived from the schema so a table added later is cleared too, instead of silently breaking the reset."""
+    from sqlalchemy.sql.ddl import sort_tables
+
+    names = set(_TRANSACTIONAL_ROOTS)
+    grew = True
+    while grew:
+        grew = False
+        for table in Base.metadata.tables.values():
+            if table.name not in names and any(fk.column.table.name in names for fk in table.foreign_keys):
+                names.add(table.name)
+                grew = True
+    tables = [Base.metadata.tables[name] for name in names]
+    return list(reversed(sort_tables(tables)))
+
+
 async def reset_e2e_data(session: AsyncSession, tenant_slug: str) -> ResetE2EDataResponse:
     tenant = await get_tenant_by_slug(session, tenant_slug)
 
-    slot_holds_result = await session.execute(delete(SlotHold).where(SlotHold.tenant_id == tenant.id))
-    await session.execute(delete(BookingDraftIntakePlan).where(BookingDraftIntakePlan.tenant_id == tenant.id))
-    await session.execute(delete(BookingDraftFormRequirement).where(BookingDraftFormRequirement.tenant_id == tenant.id))
-    await session.execute(delete(FormResponse).where(FormResponse.tenant_id == tenant.id))
-    await session.execute(delete(PaymentEvent).where(PaymentEvent.tenant_id == tenant.id))
-    await session.execute(delete(Payment).where(Payment.tenant_id == tenant.id))
-    booking_drafts_result = await session.execute(delete(BookingDraft).where(BookingDraft.tenant_id == tenant.id))
-    await session.execute(delete(BookingPaymentEvent).where(BookingPaymentEvent.tenant_id == tenant.id))
-    bookings_result = await session.execute(delete(Booking).where(Booking.tenant_id == tenant.id))
-    customers_result = await session.execute(delete(Customer).where(Customer.tenant_id == tenant.id))
+    deleted: dict[str, int] = {}
+    for table in _transactional_tables():
+        result = await session.execute(delete(table).where(table.c.tenant_id == tenant.id))
+        deleted[table.name] = _deleted_count(result)
     await session.commit()
 
     return ResetE2EDataResponse(
         tenant_slug=tenant.slug,
-        slot_holds_deleted=_deleted_count(slot_holds_result),
-        booking_drafts_deleted=_deleted_count(booking_drafts_result),
-        bookings_deleted=_deleted_count(bookings_result),
-        customers_deleted=_deleted_count(customers_result),
+        slot_holds_deleted=deleted.get("slot_holds", 0),
+        booking_drafts_deleted=deleted.get("booking_drafts", 0),
+        bookings_deleted=deleted.get("bookings", 0),
+        customers_deleted=deleted.get("customers", 0),
     )
 
 

@@ -71,6 +71,10 @@ PERMISSION_CATALOG: list[PermissionDefinition] = [
     PermissionDefinition("forms.submit_internal", "Forms", "Fill in internal forms", "Complete internal forms (such as treatment notes) from a client's profile."),
     PermissionDefinition("forms.view_internal", "Forms", "View internal form responses", "Read internal forms that staff have filled in for a client."),
 
+    # Client photos
+    PermissionDefinition("photos.view", "Customers", "View client photos", "See before/after photos on a client's profile."),
+    PermissionDefinition("photos.manage", "Customers", "Add and remove client photos", "Upload client photos, edit captions, and remove photos."),
+
     # Catalog: services, providers, locations
     PermissionDefinition("services.view", "Services", "View services", "Browse the service catalog."),
     PermissionDefinition("services.manage", "Services", "Edit services", "Create or update services, prices, deposits, durations."),
@@ -125,6 +129,8 @@ ROLE_PERMISSION_ALLOWLIST: dict[str, set[str]] = {
         "forms.view",
         "forms.submit_internal",
         "forms.view_internal",
+        "photos.view",
+        "photos.manage",
         "services.view",
         "providers.view",
         "locations.view",
@@ -144,6 +150,8 @@ ROLE_PERMISSION_ALLOWLIST: dict[str, set[str]] = {
         "forms.view",
         "forms.submit_internal",
         "forms.view_internal",
+        "photos.view",
+        "photos.manage",
         "services.view",
         "providers.view",
         "locations.view",

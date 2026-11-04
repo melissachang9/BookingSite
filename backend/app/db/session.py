@@ -743,10 +743,22 @@ async def _migrate_location_tax_rates(connection) -> None:
         )
 
 
+async def _widen_client_photo_kind(connection) -> None:
+    length = await connection.scalar(
+        text(
+            "SELECT character_maximum_length FROM information_schema.columns WHERE table_schema = 'public' "
+            "AND table_name = 'client_photos' AND column_name = 'kind'"
+        )
+    )
+    if isinstance(length, int) and length < 40:
+        await connection.execute(text("ALTER TABLE client_photos ALTER COLUMN kind TYPE VARCHAR(40)"))
+
+
 async def _ensure_added_columns() -> None:
     async with get_engine().begin() as connection:
         await _migrate_category_online_booking(connection)
         await _migrate_location_tax_rates(connection)
+        await _widen_client_photo_kind(connection)
         for table, column, column_type in _ADDED_COLUMNS:
             exists = await connection.scalar(
                 text(

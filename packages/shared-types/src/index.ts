@@ -2,6 +2,7 @@ export * from "./bookings";
 export * from "./catalog";
 export * from "./common";
 export * from "./customers";
+export * from "./client-photos";
 export * from "./forms";
 export * from "./health";
 export * from "./metrics";

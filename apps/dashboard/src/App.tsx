@@ -14,7 +14,7 @@ import {
   clearStoredAuthNotice,
   clearStoredRedirectPath,
   clearStoredSession,
-  ensureActiveStoredSession,
+  refreshStoredSessionOnLoad,
   platformApi,
   readStoredAuthNotice,
   readStoredRedirectPath,
@@ -767,7 +767,7 @@ export function App() {
       setSession(readStoredSession());
     };
 
-    void ensureActiveStoredSession().then((nextSession) => {
+    void refreshStoredSessionOnLoad().then((nextSession) => {
       if (isCancelled) {
         return;
       }

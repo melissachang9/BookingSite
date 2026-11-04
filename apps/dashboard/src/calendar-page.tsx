@@ -46,6 +46,7 @@ import type {
 } from "@booking/shared-types";
 
 import { FormResponseViewer } from "./form-response-viewer";
+import { ClientPhotos } from "./client-photos";
 import { CollectDepositStep, type CollectDepositApi } from "./collect-deposit-step";
 import { CloverDevicePaymentPicker } from "./clover-device-payment-picker";
 import { BalanceCardPanel } from "./collect-card-panels";
@@ -2717,6 +2718,7 @@ export function CalendarPage({
           completionState={completionState}
           api={api}
           tenantSlug={tenantSlug}
+          currentUser={currentUser}
           storefrontBaseUrl={storefrontBaseUrl}
           customPaymentMethods={customPaymentMethods}
           onPaymentRecorded={() => setReloadKey((k) => k + 1)}
@@ -4616,11 +4618,16 @@ type AppointmentDetailsDrawerProps = {
   completionState?: CompletionState;
   api?: CalendarPageApi;
   tenantSlug: string;
+  currentUser?: AuthenticatedUser;
   storefrontBaseUrl: string;
   customPaymentMethods: CustomPaymentMethod[];
   onPaymentRecorded?: () => void;
   paymentCapabilities?: PaymentCapabilities | null;
 };
+
+function hasGrant(user: AuthenticatedUser | undefined, key: string): boolean {
+  return Boolean(user?.permissions.some((grant) => grant.key === key && grant.allowed));
+}
 
 function AppointmentDetailsDrawer({
   selectedAppointment,
@@ -4645,6 +4652,7 @@ function AppointmentDetailsDrawer({
   completionState,
   api,
   tenantSlug,
+  currentUser,
   storefrontBaseUrl,
   customPaymentMethods,
   onPaymentRecorded,
@@ -5173,7 +5181,13 @@ function AppointmentDetailsDrawer({
                 ) : clientCardTab === "forms" ? (
                   <ClientCardForms state={formResponsesState} onViewForm={setViewingFormEntry} />
                 ) : clientCardTab === "photos" ? (
-                  <p className="cs-empty">Before/after photos aren't stored yet. Placeholder for a future phase.</p>
+                  <ClientPhotos
+                    tenantSlug={tenantSlug}
+                    customerId={selectedAppointment.customerId}
+                    canView={hasGrant(currentUser, "photos.view")}
+                    canManage={hasGrant(currentUser, "photos.manage")}
+                    bookingId={selectedAppointment.id}
+                  />
                 ) : clientCardTab === "notes" ? (
                   <p className="cs-empty">{staffNote ? staffNote : "No staff note for this client."}</p>
                 ) : (
@@ -5809,7 +5823,13 @@ function AppointmentDetailsDrawer({
                       ) : clientCardTab === "forms" ? (
                         <ClientCardForms state={formResponsesState} onViewForm={setViewingFormEntry} />
                       ) : clientCardTab === "photos" ? (
-                        <p className="cs-empty">Before/after photos aren't stored yet. Placeholder for a future phase.</p>
+                        <ClientPhotos
+                          tenantSlug={tenantSlug}
+                          customerId={selectedAppointment.customerId}
+                          canView={hasGrant(currentUser, "photos.view")}
+                          canManage={hasGrant(currentUser, "photos.manage")}
+                          bookingId={selectedAppointment.id}
+                        />
                       ) : clientCardTab === "notes" ? (
                         <p className="cs-empty">{selectedAppointment.customerNotes ? selectedAppointment.customerNotes : "No staff note for this client."}</p>
                       ) : (

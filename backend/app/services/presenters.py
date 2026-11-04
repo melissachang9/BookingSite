@@ -476,7 +476,9 @@ def booking_draft_to_summary(draft: BookingDraft) -> BookingDraftSummaryResponse
         provider=provider_to_summary(draft.provider, tenant),
         customer=customer_to_summary(draft.customer) if draft.customer is not None else None,
         intake_plan=intake_plan_to_summary(draft.intake_plan, reminder_hours_before) if draft.intake_plan is not None else None,
-        form_requirements=[form_requirement_to_summary(requirement) for requirement in draft.form_requirements],
+        form_requirements=[
+            form_requirement_to_summary(requirement) for requirement in draft.form_requirements if requirement.scope == "customer"
+        ],
         add_ons=[
             BookingDraftAddOnResponse(
                 add_on_id=add_on.add_on_id,

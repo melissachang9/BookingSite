@@ -200,6 +200,17 @@ export async function ensureActiveStoredSession(): Promise<SessionResponse | nul
   return refreshStoredSession();
 }
 
+/** Pull a fresh copy of the signed-in user's permissions (and a new token) from the server. A stored session
+ * keeps the permission list from when it was created, so newly added permissions would otherwise not appear
+ * until the person signed out and back in. */
+export async function refreshStoredSessionOnLoad(): Promise<SessionResponse | null> {
+  if (readStoredSession() === null) {
+    return null;
+  }
+
+  return refreshStoredSession();
+}
+
 async function getSessionAccessToken(): Promise<string | null> {
   const activeSession = await ensureActiveStoredSession();
   return activeSession?.accessToken ?? null;

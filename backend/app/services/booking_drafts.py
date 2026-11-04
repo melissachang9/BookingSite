@@ -312,6 +312,9 @@ async def _attach_form_requirements(session: AsyncSession, draft: BookingDraft) 
 
     for attachment in attachments:
         scope = attachment.form.scope if attachment.form is not None else "customer"
+        if scope != "customer":
+            # Internal forms are filled in by staff from the client's profile, never requested from the client.
+            continue
         if scope == "customer" and (attachment.customer_prompt_timing or "pre_booking") == "pre_booking":
             needs_pre_booking_form = True
         session.add(
@@ -334,6 +337,8 @@ async def _attach_form_requirements(session: AsyncSession, draft: BookingDraft) 
         if form_def.id in seen_form_ids:
             continue
         seen_form_ids.add(form_def.id)
+        if form_def.scope != "customer":
+            continue
         if latest_version is None:
             latest_version = next(
                 (v for v in sorted(form_def.versions, key=lambda v: v.version_number, reverse=True)),

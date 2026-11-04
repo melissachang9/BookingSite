@@ -913,6 +913,32 @@ class FormResponse(Base, IdMixin, TimestampMixin):
     form_version: Mapped[FormVersion] = relationship()
 
 
+class ClientPhoto(Base, IdMixin, TimestampMixin):
+    """A before/after or progress photo staff keep on a client's profile.
+
+    Private: the file is only served to signed-in staff with permission. Removing a photo hides it and records
+    who removed it and when; the file stays on disk."""
+
+    __tablename__ = "client_photos"
+    __table_args__ = (Index("ix_client_photos_tenant_customer", "tenant_id", "customer_id"),)
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True, nullable=False)
+    customer_id: Mapped[str] = mapped_column(String(36), ForeignKey("customers.id"), index=True, nullable=False)
+    booking_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("bookings.id"), nullable=True)
+    # before | after | other, or a category the business made up (free text, up to 40 characters)
+    kind: Mapped[str] = mapped_column(String(40), nullable=False, default="other")
+    caption: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    stored_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    original_file_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    mime_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    uploaded_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    uploaded_by_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    deleted_by_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+
 class BookingDraftFormRequirement(Base, IdMixin, TimestampMixin):
     __tablename__ = "booking_draft_form_requirements"
     __table_args__ = (UniqueConstraint("booking_draft_id", "form_version_id", name="uq_booking_draft_form_requirement"),)

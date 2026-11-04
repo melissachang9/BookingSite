@@ -152,8 +152,57 @@ export const createApiClient = (options: ApiClientOptions) => {
     return response.text();
   };
 
+  /** Send a multipart form (file uploads) with the same auth/refresh handling as JSON requests. */
+  const postForm = async <TResponse>(path: string, form: FormData, requestOptions?: Pick<RequestOptions, "signal">): Promise<TResponse> => {
+    const run = async () => {
+      const headers = await buildHeaders(options);
+      // The browser sets the multipart boundary itself.
+      headers.delete("Content-Type");
+      return fetch(buildUrl(options.baseUrl, path), { method: "POST", headers, body: form, signal: requestOptions?.signal });
+    };
+    let response = await run();
+    if (response.status === 401 && options.refreshAccessToken !== undefined) {
+      const refreshed = await options.refreshAccessToken();
+      if (refreshed) response = await run();
+    }
+    if (!response.ok) {
+      const payload = await parseJsonSafely<ErrorResponse>(response);
+      throw new ApiClientError(
+        payload?.error?.message ?? `Request failed with status ${response.status}`,
+        response.status,
+        payload,
+      );
+    }
+    return (await response.json()) as TResponse;
+  };
+
+  /** GET a binary body (e.g. a private image) with the same auth/refresh handling. */
+  const getBlob = async (path: string, requestOptions?: Pick<RequestOptions, "signal">): Promise<Blob> => {
+    const run = async () => {
+      const headers = await buildHeaders(options);
+      headers.set("Accept", "*/*");
+      return fetch(buildUrl(options.baseUrl, path), { method: "GET", headers, signal: requestOptions?.signal });
+    };
+    let response = await run();
+    if (response.status === 401 && options.refreshAccessToken !== undefined) {
+      const refreshed = await options.refreshAccessToken();
+      if (refreshed) response = await run();
+    }
+    if (!response.ok) {
+      const payload = await parseJsonSafely<ErrorResponse>(response);
+      throw new ApiClientError(
+        payload?.error?.message ?? `Request failed with status ${response.status}`,
+        response.status,
+        payload,
+      );
+    }
+    return response.blob();
+  };
+
   return {
     request,
+    postForm,
+    getBlob,
     getText: requestText,
     get: <TResponse>(path: string, requestOptions?: Omit<RequestOptions, "body" | "method">) =>
       request<TResponse>(path, { ...requestOptions, method: "GET" }),
