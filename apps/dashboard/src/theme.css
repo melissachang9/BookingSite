@@ -7514,3 +7514,18 @@ select:disabled {
   .cs-receipt-print { position: absolute; inset: 0; box-shadow: none; }
   .cs-receipt__actions, .cs-receipt__bar, .cs-scrim { display: none !important; }
 }
+
+/* Internal forms on a client's profile */
+.cs-internal-forms { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--cs-line, rgba(20, 17, 15, .1)); }
+.cs-internal-forms__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.cs-internal-forms__header h4 { margin: 0 0 2px; }
+.cs-internal-forms__filler { display: flex; flex-direction: column; gap: 14px; margin-bottom: 16px; padding: 16px; border-radius: 12px; background: var(--cs-surface-2, rgba(20, 17, 15, .03)); }
+.cs-internal-forms__actions { display: flex; justify-content: flex-end; gap: 8px; }
+.fm-preview__choice { display: flex; align-items: center; gap: 6px; font: 500 13px var(--cs-font); }
+.cs-internal-forms__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.cs-internal-forms__item { padding: 12px 14px; border-radius: 12px; background: var(--cs-surface-2, rgba(20, 17, 15, .03)); }
+.cs-internal-forms__item-head { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.cs-internal-forms__meta { font: 500 12px var(--cs-font); color: var(--cs-label); }
+.cs-internal-forms__item .cs-customer-form-response-row__viewer { align-self: stretch; width: 100%; margin-top: 8px; }
+.fm-preview__choice { justify-content: flex-start; }
+.fm-preview__choice input[type="radio"], .fm-preview__choice input[type="checkbox"] { width: 16px; height: 16px; flex: none; margin: 0; padding: 0; accent-color: var(--cs-ink); }

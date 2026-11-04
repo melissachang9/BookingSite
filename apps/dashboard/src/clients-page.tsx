@@ -13,6 +13,7 @@ import type {
 
 import { platformApi } from "./platform-api";
 import { FormResponseViewer } from "./form-response-viewer";
+import { ClientInternalForms } from "./internal-forms";
 import { ClientPaymentsTab } from "./client-payments-tab";
 import { dismissReasonLabel } from "./follow-up-panel";
 import { ContactIcon, buildContactRows, memberMonthsSince } from "./client-profile-parts";
@@ -40,7 +41,7 @@ type FormResponsesState =
   | { kind: "ready"; items: BookingFormResponseEntry[] }
   | { kind: "error"; message: string };
 
-type ClientTab = "history" | "payments" | "forms" | "photos" | "notes" | "messages";
+type ClientTab = "history" | "payments" | "forms" | "notes";
 
 function hasPermission(user: AuthenticatedUser, key: string): boolean {
   return user.permissions.some(
@@ -334,9 +335,7 @@ export function CustomersPage({
               ["history", "History"],
               ["payments", "Payments"],
               ["forms", "Forms"],
-              ["photos", "Photos"],
               ["notes", "Notes"],
-              ["messages", "Messages"],
             ] as [ClientTab, string][]
           ).map(([tab, label]) => (
             <button
@@ -366,17 +365,15 @@ export function CustomersPage({
               canManagePayments={hasPermission(currentUser, "payments.manage")}
             />
           ) : activeTab === "forms" ? (
-            <ClientFormsTab formResponsesState={formResponsesState} />
-          ) : activeTab === "photos" ? (
-            <ClientPlaceholderTab
-              title="Photos"
-              message="Before/after photos aren't stored yet. This tab is a placeholder for a future phase."
-            />
-          ) : activeTab === "messages" ? (
-            <ClientPlaceholderTab
-              title="Messages"
-              message="Client messaging isn't implemented yet. This tab is a placeholder for a future phase."
-            />
+            <>
+              <ClientFormsTab formResponsesState={formResponsesState} />
+              <ClientInternalForms
+                tenantSlug={tenantSlug}
+                customerId={selectedCustomer.id}
+                canView={currentUser !== null && hasPermission(currentUser, "forms.view_internal")}
+                canSubmit={currentUser !== null && hasPermission(currentUser, "forms.submit_internal")}
+              />
+            </>
           ) : (
             <ClientNotesTab
               customer={selectedCustomer}
@@ -1105,21 +1102,6 @@ function ClientEditForm({
           {error}
         </p>
       ) : null}
-    </div>
-  );
-}
-
-function ClientPlaceholderTab({
-  title,
-  message,
-}: {
-  title: string;
-  message: string;
-}) {
-  return (
-    <div className="cs-client-placeholder-tab">
-      <h4 className="cs-client-placeholder-tab__title">{title}</h4>
-      <p className="cs-client-placeholder-tab__message">{message}</p>
     </div>
   );
 }

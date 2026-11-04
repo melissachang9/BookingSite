@@ -683,6 +683,8 @@ async def list_customer_form_responses(
             .where(
                 FormResponse.tenant_id == tenant.id,
                 FormResponse.customer_id == customer_id,
+                # Internal forms have their own permission-gated list.
+                FormResponse.scope != "internal",
             )
             .order_by(FormResponse.submitted_at.desc())
             .limit(50)

@@ -598,6 +598,8 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("bookings", "cancel_reason", "TEXT"),
     ("bookings", "no_show_at", "TIMESTAMP WITH TIME ZONE"),
     ("bookings", "rescheduled_from_starts_at", "TIMESTAMP WITH TIME ZONE"),
+    ("form_responses", "submitted_by_user_id", "VARCHAR(36)"),
+    ("form_responses", "submitted_by_name", "VARCHAR(255)"),
     ("bookings", "reschedule_count", "INTEGER NOT NULL DEFAULT 0"),
     ("bookings", "checked_in_at", "TIMESTAMP WITH TIME ZONE"),
     ("bookings", "service_started_at", "TIMESTAMP WITH TIME ZONE"),

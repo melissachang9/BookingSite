@@ -200,6 +200,34 @@ export type BookingFormResponseList = {
   items: BookingFormResponseEntry[];
 };
 
+/** An internal form staff can fill in for a client, at its current version. */
+export type InternalFormOption = {
+  id: UUID;
+  name: string;
+  description?: string | null;
+  formVersionId: UUID;
+  versionNumber: number;
+  schema: FormSchema;
+};
+
+export type InternalFormOptionList = {
+  items: InternalFormOption[];
+};
+
+export type SubmitInternalFormRequest = {
+  answers: FormAnswers;
+  bookingId?: UUID | null;
+};
+
+export type InternalFormResponseEntry = BookingFormResponseEntry & {
+  bookingId?: UUID | null;
+  submittedByName?: string | null;
+};
+
+export type InternalFormResponseList = {
+  items: InternalFormResponseEntry[];
+};
+
 export type BookingFormRequirementSummary = {
   id: UUID;
   formId: UUID;

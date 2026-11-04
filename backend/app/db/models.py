@@ -906,6 +906,9 @@ class FormResponse(Base, IdMixin, TimestampMixin):
     customer_prompt_timing: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     answers_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    # Set for internal forms filled in by staff. The name is copied so it survives the account being removed.
+    submitted_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    submitted_by_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     form_version: Mapped[FormVersion] = relationship()
 

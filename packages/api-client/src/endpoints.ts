@@ -16,6 +16,10 @@ import type {
   AvailabilityResponse,
   BookingDraftSummary,
   BookingFormResponseList,
+  InternalFormOptionList,
+  InternalFormResponseEntry,
+  InternalFormResponseList,
+  SubmitInternalFormRequest,
   BookingListQuery,
   BookingProgressRequest,
   BookingListResponse,
@@ -716,6 +720,15 @@ export const createPlatformApi = (client: ApiClient) => ({
     client.patch<CustomerProfileResponse, UpdateCustomerRequest>(`tenants/${tenantSlug}/customers/${customerId}`, body),
   listCustomerFormResponses: (tenantSlug: string, customerId: string) =>
     client.get<BookingFormResponseList>(`tenants/${tenantSlug}/customers/${customerId}/form-responses`),
+  listInternalForms: (tenantSlug: string) =>
+    client.get<InternalFormOptionList>(`tenants/${tenantSlug}/internal-forms`),
+  listCustomerInternalFormResponses: (tenantSlug: string, customerId: string) =>
+    client.get<InternalFormResponseList>(`tenants/${tenantSlug}/customers/${customerId}/internal-form-responses`),
+  submitInternalForm: (tenantSlug: string, customerId: string, formId: string, body: SubmitInternalFormRequest) =>
+    client.post<InternalFormResponseEntry, SubmitInternalFormRequest>(
+      `tenants/${tenantSlug}/customers/${customerId}/internal-forms/${formId}/responses`,
+      body,
+    ),
   listForms: (tenantSlug: string) =>
     client.get<FormListResponse>(`tenants/${tenantSlug}/forms`),
   createForm: (tenantSlug: string, body: CreateFormRequest) =>

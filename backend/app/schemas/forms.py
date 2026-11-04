@@ -164,3 +164,33 @@ class SendFormReminderResponse(CamelModel):
     provider_message_id: str
     sent_at: datetime
     manage_url: str
+
+
+class InternalFormOption(CamelModel):
+    """An internal form staff can fill in for a client, at its current version."""
+
+    id: str
+    name: str
+    description: str | None = None
+    form_version_id: str
+    version_number: int
+    schema: dict[str, Any]
+
+
+class InternalFormOptionListResponse(CamelModel):
+    items: list[InternalFormOption] = Field(default_factory=list)
+
+
+class SubmitInternalFormRequest(CamelModel):
+    answers: dict[str, Any]
+    # Optionally ties the note to a visit; it must belong to the same client.
+    booking_id: str | None = None
+
+
+class InternalFormResponseEntry(BookingFormResponseEntry):
+    booking_id: str | None = None
+    submitted_by_name: str | None = None
+
+
+class InternalFormResponseListResponse(CamelModel):
+    items: list[InternalFormResponseEntry] = Field(default_factory=list)

@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.core.http import api_exception
 from app.db.models import (
     FormDefinition,
+    FormResponse,
     FormVersion,
     Service,
     ServiceCategory,
@@ -336,6 +337,13 @@ async def delete_tenant_form(
     )
     if form is None:
         raise api_exception(404, "not_found", "Form was not found for this tenant.")
+
+    has_responses = await session.scalar(
+        select(FormResponse.id).where(FormResponse.tenant_id == tenant.id, FormResponse.form_id == form_id).limit(1)
+    )
+    if has_responses is not None:
+        # Submitted responses are permanent records; keep the form they were answered against.
+        raise api_exception(409, "conflict", "This form has submitted responses and cannot be deleted. Deactivate it instead.")
 
     # Delete service attachments first (FK constraint)
     attachments = await session.scalars(

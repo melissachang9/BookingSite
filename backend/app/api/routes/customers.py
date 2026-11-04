@@ -8,10 +8,17 @@ from app.core.http import api_exception
 from app.db.models import User
 from app.db.session import get_db_session
 from app.schemas.customers import CustomerBookingAttempt, CustomerBookingAttemptListResponse, CustomerListResponse, DismissBookingAttemptRequest, MarkBookingAttemptFollowedUpRequest, CustomerLookupResponse, CustomerProfileResponse, UpdateCustomerRequest, UpsertCustomerRequest, UpsertCustomerResponse
-from app.schemas.forms import BookingFormResponseListResponse
+from app.schemas.forms import (
+    BookingFormResponseListResponse,
+    InternalFormOptionListResponse,
+    InternalFormResponseEntry,
+    InternalFormResponseListResponse,
+    SubmitInternalFormRequest,
+)
 from app.schemas.catalog import TenantUserListResponse
 from app.services.auth import ROLE_PERMISSION_ALLOWLIST
 from app.services.booking_forms import list_customer_form_responses
+from app.services.internal_forms import list_customer_internal_responses, list_internal_forms, submit_internal_form
 from app.services.customers import create_or_update_customer, dismiss_booking_attempt, get_customer_profile, list_booking_attempts, list_tenant_customers, mark_booking_attempt_followed_up, lookup_tenant_customers, update_customer
 from app.services.audit import record_audit
 from app.services.tenants import list_tenant_users
@@ -178,3 +185,47 @@ async def list_customer_form_responses_route(
     session: AsyncSession = Depends(get_db_session),
 ) -> BookingFormResponseListResponse:
     return await list_customer_form_responses(session, tenant_slug, customer_id)
+
+
+@router.get(
+    "/tenants/{tenant_slug}/internal-forms",
+    response_model=InternalFormOptionListResponse,
+    summary="List the internal forms staff can fill in",
+)
+async def list_internal_forms_route(
+    tenant_slug: str,
+    _: object = Depends(require_tenant_permission("forms.submit_internal")),
+    session: AsyncSession = Depends(get_db_session),
+) -> InternalFormOptionListResponse:
+    return await list_internal_forms(session, tenant_slug)
+
+
+@router.get(
+    "/tenants/{tenant_slug}/customers/{customer_id}/internal-form-responses",
+    response_model=InternalFormResponseListResponse,
+    summary="List internal forms staff filled in for a customer",
+)
+async def list_customer_internal_responses_route(
+    tenant_slug: str,
+    customer_id: str,
+    _: object = Depends(require_tenant_permission("forms.view_internal")),
+    session: AsyncSession = Depends(get_db_session),
+) -> InternalFormResponseListResponse:
+    return await list_customer_internal_responses(session, tenant_slug, customer_id)
+
+
+@router.post(
+    "/tenants/{tenant_slug}/customers/{customer_id}/internal-forms/{form_id}/responses",
+    response_model=InternalFormResponseEntry,
+    status_code=201,
+    summary="Fill in an internal form for a customer",
+)
+async def submit_internal_form_route(
+    tenant_slug: str,
+    customer_id: str,
+    form_id: str,
+    payload: SubmitInternalFormRequest,
+    actor: User = Depends(require_tenant_permission("forms.submit_internal")),
+    session: AsyncSession = Depends(get_db_session),
+) -> InternalFormResponseEntry:
+    return await submit_internal_form(session, tenant_slug, customer_id, form_id, payload, actor)
